@@ -1,0 +1,24 @@
+{% extends 'base.html.twig' %}
+
+
+{% block body %}
+
+<div>
+        <form action="/choice" method="post">
+        <p>Votre choix cadeau</p>
+            <div>
+                <input type="radio" id=AsimovChoice name="author" value="asimov">
+                <label for="asimovChoice">Science Fiction - Asimov</label>
+
+                <input type="radio" id=EtchebestChoice name="author" value="etchesbest" >
+                <label for="etchebestChoice">Gastronomie - Etchebest</label>
+                
+                <input type="radio" id=ZiaChoice name="author" value="zia" >
+                <label for="ziaChoice">Plante Interieur - Zia Allaway</label>
+            </div>
+            <div>
+                <button type="submit" name="valider">Envoyer</button>
+            </div>
+    </form>
+</div>
+{% endblock %}

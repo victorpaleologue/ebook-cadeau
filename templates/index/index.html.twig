@@ -4,21 +4,16 @@
 {% block body %}
 
 <div>
-        <form action="/choice" method="post">
-        <p>Votre choix cadeau</p>
-            <div>
-                <input type="radio" id=AsimovChoice name="author" value="asimov">
-                <label for="asimovChoice">Science Fiction - Asimov</label>
+    <p>Collez ci-dessous l'URL de votre ePub </p>
 
-                <input type="radio" id=EtchebestChoice name="author" value="etchesbest" >
-                <label for="etchebestChoice">Gastronomie - Etchebest</label>
-                
-                <input type="radio" id=ZiaChoice name="author" value="zia" >
-                <label for="ziaChoice">Plante Interieur - Zia Allaway</label>
-            </div>
-            <div>
-                <button type="submit" name="valider">Envoyer</button>
-            </div>
-    </form>
+        <div><img class="finger" src="img/finger-down.png" alt="" title="" /></div> <br>
+            <form action="/choice" method="post">
+                <div>
+                    <input type="text" id="" name="epub" value="" placeholder="URL de votre ePub">
+                </div>
+                <div>
+                    <button type="submit" name="valider">Envoyer</button>
+                </div>
+            </form>
 </div>
 {% endblock %}

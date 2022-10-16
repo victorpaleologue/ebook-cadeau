@@ -11,14 +11,16 @@ class ChoiceController extends AbstractController
     #[Route('/choice', name: 'app_choice')]
     public function index(): Response
     {
-        if(isset ($_POST['author']))
+        if(isset ($_POST['epub']))
         {   
-        $author=htmlentities($_POST['author']);
-        echo "Votre auteur selectionné est $author" ;
+        $epub=htmlentities($_POST['epub']);
+        return $this->render('choice/index.html.twig', [
+            'epub' => $epub,
+        ]);
         }
 
-        return $this->render('choice/index.html.twig', [
-            'controller_name' => 'ChoiceController',
-        ]);
+        // return $this->render('choice/index.html.twig', [
+        //     'controller_name' => 'ChoiceController',
+        // ]);
     }
 }

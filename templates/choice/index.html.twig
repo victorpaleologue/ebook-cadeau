@@ -1,10 +1,11 @@
 {% extends 'base.html.twig' %}
 
-{% block title %}Hello ChoiceController!{% endblock %}
+{% block title %}hyperlink QR generator{% endblock %}
 
 {% block body %}
 
-<h1>Hello</h1>
+<p>Voici le QR code a scanner pour acceder a l'URL</p> <br>
 
+<img src="https://api.qrserver.com/v1/create-qr-code/?data={{ epub }}" alt="" title="" />
 
 {% endblock %}

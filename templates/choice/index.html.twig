@@ -1,0 +1,11 @@
+{% extends 'base.html.twig' %}
+
+{% block title %}hyperlink QR generator{% endblock %}
+
+{% block body %}
+
+<p>Voici le QR code a scanner pour acceder a l'URL</p> <br>
+
+<img src="https://api.qrserver.com/v1/create-qr-code/?data={{ epub }}" alt="" title="" />
+
+{% endblock %}

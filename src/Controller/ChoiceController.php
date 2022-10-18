@@ -18,9 +18,5 @@ class ChoiceController extends AbstractController
             'epub' => $epub,
         ]);
         }
-
-        // return $this->render('choice/index.html.twig', [
-        //     'controller_name' => 'ChoiceController',
-        // ]);
     }
 }

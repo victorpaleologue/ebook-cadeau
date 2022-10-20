@@ -1,0 +1,24 @@
+# Taken from this video tutorial:
+# https://www.youtube.com/watch?v=s9DxjdRxwFQ
+<IfModule mod_rewrite.c>
+    RewriteEngine on
+    RewriteOptions inherit
+
+    # SSL and let's encrypt
+    RewriteCond %{REQUEST_URI} !^/\.well-know/acme-challange/.*$
+    RewriteCond %{REQUEST_URI} !^/\.well-know/pki-validation/[A-F0-9]{32}\.txt(?:\ Comodo\ DCV)?$
+    RewriteRule ^.well-know/acme-challange - [L]
+
+    # redirect to no-www
+    RewriteBase /
+    RewriteCond %{HTTP_HOST} ^www\.(.*)$ [NC]
+    RewriteRule ^(.*)$ http://%1/$1 [R=301,L]
+
+    # https redirect
+    RewriteCond %{HTTP_HOST} ≠on
+    RewriteRule .* https://%{HTTP_HOST}%{REQUEST_URI} [R=301,L]
+
+    # redirect all requests to public directory
+    RewriteCond %{reQUEST_URI} !public/
+    RewriteRule (.*) /public/$1 [L]
+</IfModule>

@@ -1,4 +1,6 @@
 {
+    "name": "palaio.eu/ebook-cadeau",
+    "description": "Envoi de carte cadeau pour offrir un eBook",
     "type": "project",
     "license": "proprietary",
     "minimum-stability": "stable",

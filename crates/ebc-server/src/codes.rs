@@ -27,7 +27,7 @@ pub fn hex(bytes: &[u8]) -> String {
 #[must_use]
 pub fn unhex(text: &str) -> Option<Vec<u8>> {
     let bytes = text.as_bytes();
-    if bytes.len() % 2 != 0 {
+    if !bytes.len().is_multiple_of(2) {
         return None;
     }
     let nibble = |b: u8| match b {
@@ -125,10 +125,10 @@ pub fn random_gift_code(entropy: &dyn Entropy) -> Result<GiftCode, EntropyError>
     for _ in 0..64 {
         let mut bytes = [0u8; 32];
         entropy.fill(&mut bytes)?;
-        if let Ok(code) = GiftCode::from_random_bytes(&bytes) {
-            if !code.has_unfortunate_letters() {
-                return Ok(code);
-            }
+        if let Ok(code) = GiftCode::from_random_bytes(&bytes)
+            && !code.has_unfortunate_letters()
+        {
+            return Ok(code);
         }
     }
     Err(EntropyError("could not draw an acceptable gift code".to_owned()))

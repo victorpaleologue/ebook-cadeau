@@ -54,7 +54,7 @@ pub(crate) fn parse_device_address(input: &str, allowed_domains: &[String]) -> O
         && !local.ends_with('.')
         && !local.contains("..");
     let domain = domain.to_ascii_lowercase();
-    if !local_ok || !allowed_domains.iter().any(|allowed| *allowed == domain) {
+    if !local_ok || !allowed_domains.contains(&domain) {
         return None;
     }
     Address::new(local, domain).ok()

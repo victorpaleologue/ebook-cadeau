@@ -127,10 +127,11 @@ async fn fallback(
         return ApiError::not_found("no such endpoint").into_response();
     }
     let segment = path.trim_matches('/');
-    if method == Method::GET && !segment.contains('/') {
-        if let Ok(code) = GiftCode::parse(segment) {
-            return see_other(&format!("/k/{}", code.compact()));
-        }
+    if method == Method::GET
+        && !segment.contains('/')
+        && let Ok(code) = GiftCode::parse(segment)
+    {
+        return see_other(&format!("/k/{}", code.compact()));
     }
     let chrome = visitor.chrome(&state, visitor.locale(), None);
     let text = s(chrome.locale, S::NotFound);

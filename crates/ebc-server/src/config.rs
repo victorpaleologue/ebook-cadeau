@@ -458,10 +458,10 @@ fn is_development_url(public_url: &str) -> bool {
 /// Loads the development secret from the data directory, creating it on first use.
 fn dev_secret(data_dir: &Path) -> Result<Vec<u8>, ServerError> {
     let path = data_dir.join(DEV_SECRET_FILE);
-    if let Ok(existing) = std::fs::read(&path) {
-        if existing.len() >= 32 {
-            return Ok(existing);
-        }
+    if let Ok(existing) = std::fs::read(&path)
+        && existing.len() >= 32
+    {
+        return Ok(existing);
     }
     use crate::clock::Entropy;
     let mut bytes = [0u8; 32];

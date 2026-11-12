@@ -605,10 +605,10 @@ impl Database {
     /// Deletes each of `candidates` that no record needs any more.
     pub fn delete_unused_blobs(&self, candidates: &[String]) {
         for sha256 in candidates {
-            if !self.view(|db| db.blob_in_use(sha256)) {
-                if let Err(error) = self.store.delete_blob(sha256) {
-                    tracing::warn!(%error, "could not delete an unused file");
-                }
+            if !self.view(|db| db.blob_in_use(sha256))
+                && let Err(error) = self.store.delete_blob(sha256)
+            {
+                tracing::warn!(%error, "could not delete an unused file");
             }
         }
     }

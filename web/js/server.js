@@ -2,9 +2,10 @@
 // page was configured with; nothing else is contacted.
 //
 // The core service removed this API together with file hosting (docs/api.md v0.3): gifts
-// are created by partners only (a store, or a shelf service hosting files). The designer
-// no longer reaches `createGift` or `orderPrint` (the upload mode is hidden), and the
-// server answers 404 to these routes. TODO(shelf): point both at the shelf service.
+// are created by partners only (a store, or a shelf service hosting files — the shelf
+// owns uploads; the designer only links to it, see `shelf_url` in web/README.md). The
+// designer no longer reaches `orderPrint` (no gift is created on this server any more);
+// print orders go through the partner API (docs/api.md §4.6), from the partner.
 
 /**
  * An error answered by the server (`code` from its JSON body), or `unreachable`.
@@ -44,27 +45,6 @@ async function send(url, init) {
     throw new ServerError(code, message, response.status, details);
   }
   return response.json();
-}
-
-/**
- * Uploads the eBook file with its rights declaration, then creates the gift.
- * Returns the creation response: `{id, code, code_display, claim_url, manage_token}`.
- */
-export async function createGift(serverUrl, file, rightsBasis, gift) {
-  const upload = await send(new URL('api/v1/uploads', serverUrl), {
-    method: 'POST',
-    headers: {
-      'Content-Type': file.type || 'application/octet-stream',
-      'X-File-Name': encodeURIComponent(file.name),
-      'X-Rights-Basis': rightsBasis,
-    },
-    body: file,
-  });
-  return send(new URL('api/v1/gifts', serverUrl), {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ ...gift, delivery: { type: 'hosted_file', upload_id: upload.upload_id } }),
-  });
 }
 
 /**

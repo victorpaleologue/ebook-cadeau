@@ -8,6 +8,11 @@
 //!   beyond font obfuscation) and encrypted PDFs are refused.
 //! * [`RightsBasis`] — the declaration an uploader must make (own work, public domain,
 //!   open licence, licensed distributor); deliberately no value for a purchased copy.
+//! * [`check_upload`] — [`sniff`] behind a size limit: what a hosting service runs on
+//!   every upload.
+//! * [`package_metadata`] — title, creators, identifiers (ISBNs), language and rights
+//!   statement read from an EPUB's package document, so that a service can check the
+//!   identifiers *inside* the file against its blocklist, not only the declared ones.
 //! * [`decode_file_name`] — a percent-encoded `X-File-Name` header made into a safe plain
 //!   file name.
 //!
@@ -120,6 +125,12 @@ pub enum UploadError {
     /// The file is protected by DRM and could not be opened by the recipient.
     #[error("the file is protected by DRM ({0}); only unprotected files can be gifted here")]
     DrmProtected(String),
+    /// The file is larger than the service accepts.
+    #[error("the file is larger than {max_bytes} bytes")]
+    TooLarge {
+        /// The limit that was exceeded, in bytes.
+        max_bytes: u64,
+    },
 }
 
 /// Offset of the file name in the first local file header of a ZIP archive.
@@ -258,6 +269,111 @@ fn sniff_pdf(bytes: &[u8]) -> Result<FileKind, UploadError> {
         return Err(UploadError::DrmProtected("encrypted PDF".to_owned()));
     }
     Ok(FileKind::Pdf)
+}
+
+/// [`sniff`] behind a size limit: a file longer than `max_bytes` is refused with
+/// [`UploadError::TooLarge`] before anything else is looked at.
+///
+/// # Errors
+/// See [`UploadError`].
+pub fn check_upload(bytes: &[u8], max_bytes: u64) -> Result<FileKind, UploadError> {
+    if u64::try_from(bytes.len()).unwrap_or(u64::MAX) > max_bytes {
+        return Err(UploadError::TooLarge { max_bytes });
+    }
+    sniff(bytes)
+}
+
+/// What an EPUB's package document says about the book (Dublin Core elements of the
+/// `<metadata>` of the OPF named by `META-INF/container.xml`). Every value is trimmed,
+/// stripped of control characters and at most 500 characters long; at most 32 values
+/// per list.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PackageMetadata {
+    /// The first `dc:title`.
+    pub title: Option<String>,
+    /// Every `dc:creator`, in order.
+    pub creators: Vec<String>,
+    /// Every `dc:identifier`, as written (`urn:isbn:978…`, `978-2-…`, a UUID…).
+    pub identifiers: Vec<String>,
+    /// The first `dc:language`.
+    pub language: Option<String>,
+    /// The first `dc:rights`.
+    pub rights: Option<String>,
+}
+
+/// Most values kept per list of [`PackageMetadata`].
+const MAX_META_VALUES: usize = 32;
+/// Longest value kept in [`PackageMetadata`], in characters.
+const MAX_META_CHARS: usize = 500;
+
+/// Reads the package metadata of an EPUB (see [`PackageMetadata`]). `None` when `bytes`
+/// is not a readable EPUB or has no readable package document. Run [`sniff`] first: this
+/// function does not look for DRM. Never panics on hostile input and reads at most
+/// 1 MiB out of any archive entry.
+#[must_use]
+pub fn package_metadata(bytes: &[u8]) -> Option<PackageMetadata> {
+    if !looks_like_epub(bytes) {
+        return None;
+    }
+    let mut archive = zip::ZipArchive::new(Cursor::new(bytes)).ok()?;
+    let container = read_entry(&mut archive, "META-INF/container.xml")?;
+    let options = || roxmltree::ParsingOptions {
+        allow_dtd: false,
+        nodes_limit: 200_000,
+        ..Default::default()
+    };
+    let document = roxmltree::Document::parse_with_options(&container, options()).ok()?;
+    let opf_path = document
+        .descendants()
+        .find(|node| node.is_element() && node.tag_name().name() == "rootfile")
+        .and_then(|node| node.attribute("full-path"))?
+        .to_owned();
+    let opf = read_entry(&mut archive, &opf_path)?;
+    let document = roxmltree::Document::parse_with_options(&opf, options()).ok()?;
+    let metadata = document
+        .descendants()
+        .find(|node| node.is_element() && node.tag_name().name() == "metadata")?;
+    let mut found = PackageMetadata::default();
+    for node in metadata.descendants().filter(roxmltree::Node::is_element) {
+        if node.tag_name().namespace() != Some("http://purl.org/dc/elements/1.1/") {
+            continue;
+        }
+        let text: String = node
+            .descendants()
+            .filter(roxmltree::Node::is_text)
+            .filter_map(|t| t.text())
+            .collect::<String>()
+            .chars()
+            .filter(|c| !c.is_control())
+            .take(MAX_META_CHARS)
+            .collect();
+        let text = text.trim().to_owned();
+        if text.is_empty() {
+            continue;
+        }
+        let push = |list: &mut Vec<String>| {
+            if list.len() < MAX_META_VALUES {
+                list.push(text.clone());
+            }
+        };
+        match node.tag_name().name() {
+            "title" if found.title.is_none() => found.title = Some(text.clone()),
+            "creator" => push(&mut found.creators),
+            "identifier" => push(&mut found.identifiers),
+            "language" if found.language.is_none() => found.language = Some(text.clone()),
+            "rights" if found.rights.is_none() => found.rights = Some(text.clone()),
+            _ => {}
+        }
+    }
+    Some(found)
+}
+
+/// One archive entry as text, at most [`MAX_META_BYTES`]; `None` if absent or unreadable.
+fn read_entry(archive: &mut zip::ZipArchive<Cursor<&[u8]>>, name: &str) -> Option<String> {
+    let entry = archive.by_name(name).ok()?;
+    let mut text = String::new();
+    entry.take(MAX_META_BYTES).read_to_string(&mut text).ok()?;
+    Some(text)
 }
 
 /// Decodes the `X-File-Name` header (percent-encoded UTF-8) into a safe plain file name:
@@ -514,6 +630,98 @@ mod tests {
         body.extend_from_slice(b"\n%%EOF\n");
         assert_eq!(sniff(&body), Ok(FileKind::Pdf));
         assert_eq!(sniff(b"%PDF-"), Ok(FileKind::Pdf));
+    }
+
+    #[test]
+    fn uploads_above_the_limit_are_refused_before_anything_else() {
+        let book = epub();
+        let size = u64::try_from(book.len()).unwrap();
+        assert_eq!(check_upload(&book, size), Ok(FileKind::Epub));
+        assert_eq!(
+            check_upload(&book, size - 1),
+            Err(UploadError::TooLarge { max_bytes: size - 1 })
+        );
+        assert_eq!(check_upload(b"MZ", 1), Err(UploadError::TooLarge { max_bytes: 1 }));
+        assert_eq!(check_upload(b"MZ", 10), Err(UploadError::UnsupportedType));
+        let drm = epub_with(&[("META-INF/rights.xml", b"<rights/>")]);
+        assert!(matches!(check_upload(&drm, 1 << 20), Err(UploadError::DrmProtected(_))));
+    }
+
+    const OPF: &str = r#"<?xml version="1.0"?>
+<package xmlns="http://www.idpf.org/2007/opf" version="3.0">
+  <metadata xmlns:dc="http://purl.org/dc/elements/1.1/">
+    <dc:title> Le Horla </dc:title>
+    <dc:creator>Guy de Maupassant</dc:creator>
+    <dc:creator>Second Author</dc:creator>
+    <dc:identifier id="uid">urn:isbn:9782070360024</dc:identifier>
+    <dc:identifier>urn:uuid:0b0e3a3a-1111-2222-3333-444455556666</dc:identifier>
+    <dc:language>fr</dc:language>
+    <dc:rights>Domaine public</dc:rights>
+    <title>not dublin core</title>
+  </metadata>
+</package>"#;
+
+    #[test]
+    fn package_metadata_is_read_from_the_opf() {
+        let book = zip_of(&[
+            ("mimetype", b"application/epub+zip", false),
+            ("META-INF/container.xml", CONTAINER_XML.as_bytes(), true),
+            ("OEBPS/package.opf", OPF.as_bytes(), true),
+        ]);
+        let meta = package_metadata(&book).unwrap();
+        assert_eq!(meta.title.as_deref(), Some("Le Horla"));
+        assert_eq!(meta.creators, ["Guy de Maupassant", "Second Author"]);
+        assert_eq!(meta.identifiers.len(), 2);
+        assert_eq!(meta.identifiers[0], "urn:isbn:9782070360024");
+        assert_eq!(meta.language.as_deref(), Some("fr"));
+        assert_eq!(meta.rights.as_deref(), Some("Domaine public"));
+        // No metadata to read: an empty record, not an error.
+        assert_eq!(package_metadata(&epub()), None, "the minimal fixture has no <metadata>");
+    }
+
+    #[test]
+    fn package_metadata_survives_hostile_archives() {
+        assert_eq!(package_metadata(&pdf()), None);
+        assert_eq!(package_metadata(b""), None);
+        let no_opf = zip_of(&[
+            ("mimetype", b"application/epub+zip", false),
+            ("META-INF/container.xml", CONTAINER_XML.as_bytes(), true),
+        ]);
+        assert_eq!(package_metadata(&no_opf), None);
+        let entity =
+            OPF.replace("<?xml version=\"1.0\"?>", "<!DOCTYPE p [<!ENTITY a \"aaaaaaaa\">]>");
+        let bomb = zip_of(&[
+            ("mimetype", b"application/epub+zip", false),
+            ("META-INF/container.xml", CONTAINER_XML.as_bytes(), true),
+            ("OEBPS/package.opf", entity.as_bytes(), true),
+        ]);
+        assert_eq!(package_metadata(&bomb), None, "no DTD, no entity expansion");
+        let many = format!(
+            "<package><metadata xmlns:dc=\"http://purl.org/dc/elements/1.1/\">{}<dc:title>{}</dc:title></metadata></package>",
+            "<dc:identifier>x</dc:identifier>".repeat(100),
+            "t\t".repeat(1000)
+        );
+        let crowded = zip_of(&[
+            ("mimetype", b"application/epub+zip", false),
+            ("META-INF/container.xml", CONTAINER_XML.as_bytes(), true),
+            ("OEBPS/package.opf", many.as_bytes(), true),
+        ]);
+        let meta = package_metadata(&crowded).unwrap();
+        assert_eq!(meta.identifiers.len(), MAX_META_VALUES);
+        assert_eq!(meta.title.unwrap().chars().count(), MAX_META_CHARS);
+        let good = zip_of(&[
+            ("mimetype", b"application/epub+zip", false),
+            ("META-INF/container.xml", CONTAINER_XML.as_bytes(), true),
+            ("OEBPS/package.opf", OPF.as_bytes(), true),
+        ]);
+        for position in (0..good.len()).step_by(5) {
+            let mut mutated = good.clone();
+            mutated[position] ^= 0xff;
+            let _ = package_metadata(&mutated);
+        }
+        for cut in (0..good.len()).step_by(9) {
+            let _ = package_metadata(&good[..cut]);
+        }
     }
 
     #[test]

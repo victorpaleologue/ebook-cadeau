@@ -214,36 +214,23 @@
         <h2 id="h-ebook" data-i18n="ui_step_ebook"></h2>
         <fieldset class="choices">
           <legend class="sr-only" data-i18n="ui_step_ebook"></legend>
-          <!-- The core service no longer hosts book files (docs/architecture.md, "two-service
+          <!-- The core service never hosts book files (docs/architecture.md, "two-service
                model"): a file is only ever served by a registered partner — a store, or a
-               shelf service hosting files for their rights holders. The upload path is
-               hidden until it is wired to a shelf.
-               TODO(shelf): upload to the shelf service, which creates the gift through the
-               core's partner API and returns the code. -->
-          <label class="choice" hidden><input type="radio" name="ebook-mode" value="upload" disabled> <span data-i18n="ui_ebook_upload"></span></label>
+               shelf service hosting files for their rights holders. When config.json names a
+               shelf (`shelf_url`), this choice links to it: the shelf owns uploads, rights
+               declarations and moderation, creates the gift with the core and shows its
+               code, which comes back here through "I already have a code". -->
+          <label id="shelf-choice" class="choice" hidden><input type="radio" name="ebook-mode" value="shelf"> <span id="shelf-choice-text"></span></label>
           <label class="choice"><input type="radio" name="ebook-mode" value="code"> <span data-i18n="ui_ebook_code"></span></label>
           <label class="choice"><input type="radio" name="ebook-mode" value="demo"> <span data-i18n="ui_ebook_demo"></span></label>
         </fieldset>
 
         <p id="ebook-source-note" class="note" data-i18n="upload_purchased_notice"></p>
 
-        <div id="ebook-upload" class="sub-panel" hidden>
-          <p id="upload-help" class="hint"></p>
+        <div id="ebook-shelf" class="sub-panel" hidden>
           <p class="note" data-i18n="upload_purchased_notice"></p>
-          <div class="field">
-            <label for="ebook-file" data-i18n="field_file"></label>
-            <input id="ebook-file" type="file" accept=".epub,.pdf,application/epub+zip,application/pdf">
-          </div>
-          <fieldset id="ebook-rights" class="choices compact">
-            <legend data-i18n="rights_basis_label"></legend>
-            <label class="choice"><input type="radio" name="ebook-rights" value="own_work"> <span data-i18n="rights_own_work"></span></label>
-            <label class="choice"><input type="radio" name="ebook-rights" value="public_domain"> <span data-i18n="rights_public_domain"></span></label>
-            <label class="choice"><input type="radio" name="ebook-rights" value="open_licence"> <span data-i18n="rights_open_licence"></span></label>
-            <label class="choice"><input type="radio" name="ebook-rights" value="licensed_distributor"> <span data-i18n="rights_licensed_distributor"></span></label>
-          </fieldset>
-          <label class="check"><input id="ebook-confirm" type="checkbox"> <span data-i18n="rights_confirm"></span></label>
-          <button type="button" id="create-gift" class="primary" data-i18n="ui_create_gift"></button>
-          <p id="create-status" class="status" role="status" aria-live="polite"></p>
+          <p id="shelf-help" class="hint"></p>
+          <p><a id="shelf-link" class="button" href="./" rel="noopener"></a></p>
         </div>
 
         <div id="ebook-code" class="sub-panel" hidden>

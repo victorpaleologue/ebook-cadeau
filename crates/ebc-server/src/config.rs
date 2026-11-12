@@ -627,9 +627,10 @@ mod tests {
     fn the_development_partners_file_of_the_readme_is_valid() {
         let file = PartnersFile::parse(include_str!("../partners.dev.toml")).unwrap();
         let ids: Vec<&str> = file.partners.iter().map(|p| p.id.as_str()).collect();
-        assert_eq!(ids, ["septante", "grande-enseigne"]);
+        assert_eq!(ids, ["septante", "grande-enseigne", "etagere"]);
         assert!(file.partners[0].allows_url("http://127.0.0.1:8101/cadeau/activer"));
         assert!(!file.partners[0].allows_url("http://127.0.0.1:8102/cadeau/activer"));
+        assert!(file.partners[2].allows_url("http://127.0.0.1:8104/api/ebc/link"));
         assert!(file.partners.iter().all(|p| p.name.contains("démo")), "demo names say so");
     }
 

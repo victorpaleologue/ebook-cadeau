@@ -145,6 +145,31 @@ struct State {
     held: Vec<Held>,
     records: Vec<MailRecord>,
     next_id: u64,
+    mailboxes: Vec<String>,
+    inbox: Vec<MailboxMessage>,
+}
+
+/// A message received for a plain mailbox (see [`MailDevice::add_mailbox`]): not a
+/// device delivery, just a mail someone reads — e.g. a sign-in link sent by a shelf.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct MailboxMessage {
+    /// Sequence number, shared with [`MailRecord::id`].
+    pub id: u64,
+    /// The mailbox address it was delivered to (lower-case).
+    pub to: String,
+    /// `From:` header (else the envelope sender), lower-case.
+    pub from: String,
+    /// `Subject:` header.
+    pub subject: String,
+    /// The first text part of the body.
+    pub text: String,
+}
+
+/// Whether `address` is one of `mailboxes` (a full address, or `@domain`).
+fn is_mailbox(mailboxes: &[String], address: &str) -> bool {
+    mailboxes.iter().any(|entry| {
+        entry == address || (entry.starts_with('@') && address.ends_with(entry.as_str()))
+    })
 }
 
 struct Shared {
@@ -311,6 +336,32 @@ impl MailDevice {
         state.records.iter().filter(|r| state.held.iter().any(|h| h.id == r.id)).cloned().collect()
     }
 
+    /// Also accepts mail for `address` (a full address, or `@domain` for every address of
+    /// a domain) as a **plain mailbox**: such messages are kept as text
+    /// ([`MailDevice::mailbox`]) and never reach the device. For the demo shelf's
+    /// sign-in links and notices; the device rules are untouched.
+    pub fn add_mailbox(&self, address: &str) {
+        let address = address.trim().to_ascii_lowercase();
+        let mut state = self.shared.state();
+        if !address.is_empty() && !state.mailboxes.contains(&address) && state.mailboxes.len() < 100
+        {
+            state.mailboxes.push(address);
+        }
+    }
+
+    /// Messages received for the mailbox `address`, oldest first (every mailbox when
+    /// `address` is empty).
+    pub fn mailbox(&self, address: &str) -> Vec<MailboxMessage> {
+        let address = address.trim().to_ascii_lowercase();
+        self.shared
+            .state()
+            .inbox
+            .iter()
+            .filter(|m| address.is_empty() || m.to == address)
+            .cloned()
+            .collect()
+    }
+
     /// Delivers a parked message as if the account owner had approved it (the "verify this
     /// sender" / "confirm this delivery" click). Returns the updated record.
     pub fn release(&self, id: u64) -> Result<MailRecord, MailError> {
@@ -384,6 +435,39 @@ fn receive(shared: &Shared, envelope_from: &str, raw: Vec<u8>) {
             size_bytes,
             outcome,
         });
+    }
+}
+
+/// Keeps a message for plain mailboxes as text.
+fn to_mailboxes(shared: &Shared, envelope_from: &str, raw: &[u8], mailboxes: &[String]) {
+    let parsed = MessageParser::default().parse(raw);
+    let from = parsed
+        .as_ref()
+        .and_then(|m| m.from())
+        .and_then(|a| a.first())
+        .and_then(|a| a.address())
+        .map(|a| a.trim().to_ascii_lowercase())
+        .unwrap_or_else(|| envelope_from.to_owned());
+    let subject: String =
+        parsed.as_ref().and_then(|m| m.subject()).unwrap_or("").chars().take(300).collect();
+    let text: String = parsed
+        .as_ref()
+        .and_then(|m| m.body_text(0))
+        .map(|t| t.chars().take(64 * 1024).collect())
+        .unwrap_or_default();
+    let mut state = shared.state();
+    for to in mailboxes {
+        state.next_id += 1;
+        let id = state.next_id;
+        if state.inbox.len() < MAX_RECORDS {
+            state.inbox.push(MailboxMessage {
+                id,
+                to: to.clone(),
+                from: from.clone(),
+                subject: subject.clone(),
+                text: text.clone(),
+            });
+        }
     }
 }
 
@@ -698,7 +782,8 @@ async fn session(stream: TcpStream, shared: &Shared) -> std::io::Result<()> {
                     errors += 1;
                     reply(&mut writer, "503 5.5.1 MAIL first").await?;
                 } else if let Some((address, _)) = parse_path(&argument, "TO:") {
-                    if address != shared.address {
+                    let mailbox = is_mailbox(&shared.state().mailboxes, &address);
+                    if address != shared.address && !mailbox {
                         reply(&mut writer, "550 5.1.1 no such device address").await?;
                     } else if recipients.len() >= 16 {
                         reply(&mut writer, "452 4.5.3 too many recipients").await?;
@@ -720,12 +805,18 @@ async fn session(stream: TcpStream, shared: &Shared) -> std::io::Result<()> {
                 reply(&mut writer, "354 end data with <CR><LF>.<CR><LF>").await?;
                 let end = read_data(&mut reader, shared.service.max_message_bytes, idle).await;
                 sender = None;
-                recipients.clear();
+                let (device, mailboxes): (Vec<String>, Vec<String>) =
+                    recipients.drain(..).partition(|r| *r == shared.address);
                 match end {
                     DataEnd::Complete(raw) => {
                         // The service rules run before the reply, so a client that has seen
                         // "250" can rely on the device state being up to date.
-                        receive(shared, &envelope_from, raw);
+                        if !mailboxes.is_empty() {
+                            to_mailboxes(shared, &envelope_from, &raw, &mailboxes);
+                        }
+                        if !device.is_empty() {
+                            receive(shared, &envelope_from, raw);
+                        }
                         reply(&mut writer, "250 2.0.0 message accepted").await?;
                     }
                     DataEnd::TooBig => {
@@ -1055,5 +1146,41 @@ mod tests {
         let device = MailDevice::start(kindle, " Sacha_42@Kindle.com ").await.unwrap();
         assert_eq!(device.address(), "sacha_42@kindle.com");
         assert!(device.smtp_url().starts_with("smtp://127.0.0.1:"));
+    }
+
+    #[tokio::test]
+    async fn plain_mailboxes_keep_text_and_leave_the_device_alone() {
+        let device = MailDevice::start(DeviceProfile::kindle_paperwhite(), "sacha@kindle.com")
+            .await
+            .unwrap();
+        let text = b"From: etagere@exemple.fr\r\nTo: autrice@exemple.fr\r\nSubject: Lien\r\n\r\nOuvrez http://x/connexion/abc\r\n";
+        let refused = send_mail(
+            device.smtp_addr(),
+            "etagere@exemple.fr",
+            "autrice@exemple.fr",
+            text,
+            Duration::from_secs(5),
+        )
+        .await;
+        assert!(refused.is_err(), "not a mailbox yet");
+        device.add_mailbox("@Exemple.fr");
+        send_mail(
+            device.smtp_addr(),
+            "etagere@exemple.fr",
+            "autrice@exemple.fr",
+            text,
+            Duration::from_secs(5),
+        )
+        .await
+        .unwrap();
+        let inbox = device.mailbox("autrice@exemple.fr");
+        assert_eq!(inbox.len(), 1);
+        assert_eq!(
+            (inbox[0].from.as_str(), inbox[0].subject.as_str()),
+            ("etagere@exemple.fr", "Lien")
+        );
+        assert!(inbox[0].text.contains("/connexion/abc"));
+        assert!(device.records().is_empty() && device.library().entries().is_empty());
+        assert!(device.mailbox("autre@ailleurs.fr").is_empty());
     }
 }

@@ -34,7 +34,8 @@ Two modes:
   pages, pairs devices, sends to Kindle, forwards print orders and keeps **gift records
   only**. It never stores a book file: there is no upload route and no creator API.
 - A **file is only ever served by a registered partner**: a store (Septante in the demo
-  serves its own stamped EPUBs), or a **shelf** — a separate service (next step) that
+  serves its own stamped EPUBs), or a **shelf** — a separate service (`crates/ebc-shelf`,
+  binary `ebc-shelf`) that
   hosts files for their rights holders and carries the hosting duties: uploader identity
   and rights declaration, DRM refusal (`crates/ebc-epub`), notice and action (DSA art. 16),
   statements of reasons, repeat-infringer policy. The shelf registers with the core exactly
@@ -91,12 +92,13 @@ ebc-card       compose the whole card                             -> all of the 
 ebc-wasm       wasm-bindgen facade                                -> card, catalog, covers, fontid, qr, isbn
 ebc-cli        `ebc` command line                                 -> everything
 ebc-server     the core: axum service, no file hosting            -> model, i18n, isbn (+ card for server-side render)
+ebc-shelf      the shelf: hosts rights holders' files, a partner  -> epub, isbn, model (HTTP to the core's partner API)
 demo/stores    two fictional eBook stores                         -> server's partner API (HTTP)
 demo/printer   fictional print-on-demand API                      -> ebc-preflight
 demo/ereaders  simulated e-readers                                (HTTP clients)
 ```
 
-All library crates except `ebc-server`, `ebc-cli` and the demos must build for
+All library crates except `ebc-server`, `ebc-shelf`, `ebc-cli` and the demos must build for
 `wasm32-unknown-unknown`.
 
 ## 4. Shared conventions

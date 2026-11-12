@@ -2,6 +2,8 @@
   "server": null,
   "base_url": null,
   "print_orders": false,
+  "shelf_url": null,
+  "shelf_name": null,
   "catalog": {
     "base_urls": {},
     "enable": [],

@@ -29,7 +29,7 @@ by a professional printer, and folds at two creases around the spine.
 | Mode | Who | How the book is delivered |
 |---|---|---|
 | **Reseller-integrated** (the main business case) | An eBook store adds an "Offer this eBook" option at checkout | The store keeps the content, the DRM and the customer account. eBook Cadeau issues the code, renders the card and sends the recipient back to the store to claim the book — or, for a store that serves DRM-free files, redirects the recipient's device to a short-lived download link the store issues on each claim (`partner_file`) |
-| **Standalone** | Authors, publishers, individuals | Only for files the person may distribute (own work, public domain, open licence, or as a licensed distributor), and only through a **shelf**: a separate service that hosts those files and is registered with eBook Cadeau exactly like a store (next step; see below). Covers need a declared rights basis |
+| **Standalone** | Authors, publishers, individuals | Only for files the person may distribute (own work, public domain, open licence, or as a licensed distributor), and only through a **shelf**: a separate service that hosts those files and is registered with eBook Cadeau exactly like a store (`crates/ebc-shelf`; see below). Covers need a declared rights basis |
 
 **Two services (owner decision, contract v0.3).** The core eBook Cadeau service — codes,
 cards, redemption pages — **never holds a book file**. A file is only ever served by a
@@ -40,6 +40,23 @@ policy) and a fragile liability exemption when it knows which work each file is
 records only, with a contact point and short retention (names and message deleted 12
 months after the first claim). Details: `docs/architecture.md` §1.1, `docs/api.md` §3 and
 §4.5.
+
+**The shelf** (`crates/ebc-shelf`, done 2026-11-12) is that second service: run by an
+author or publisher for their own books (`own` mode, one account) or by an operator for
+many rights holders (`multi`). Rights holders sign in by an e-mail link, give the
+identification data the LCEN asks hosts to keep, and upload an EPUB or PDF through the
+upload gate (`ebc-epub`: type sniffing, DRM refused, size limit; a mandatory rights
+declaration recorded with time and account; a blocklist by SHA-256 and ISBN; quotas).
+They then make gifts: the shelf creates `partner_file` gifts with the core's signed API,
+answers the core's link request on each claim with a five-minute link on its own host,
+and hands out the core's card PDF and a designer link. A public notice form (DSA art. 16)
+feeds an operator review page; upholding deletes the file, cancels every gift at the core
+(codes answer `410`), blocklists the hash and ISBN and mails a statement of reasons with
+the redress options; two upheld notices or one false declaration suspend the account.
+Terms, legal notice and contact pages are drafts; retention periods are configurable.
+**What needs counsel**: the identification field list (décret 2021-1362, from memory), every
+retention period, the shelf's status (host vs online platform: arts 20 and 23 bind
+platforms only), and all legal wording (`crates/ebc-shelf/README.md`).
 
 **Market:** France first (all defaults are French), then the EU. Seven interface languages:
 French, English, German, Spanish, Italian, Dutch, Portuguese.
@@ -115,7 +132,7 @@ code runs on the server, in the command line and in the browser.
 | `ebc-fontid` | Identifies the typeface of a cover's title from the image (classical image analysis, no AI model) and suggests the closest open font |
 | `ebc-spine` | Designs the 10 mm spine: flat colour from the cover, title and author typeset along it |
 | `ebc-card` | Composes the whole card (both pages) and enforces the rights and print rules |
-| `ebc-epub` | Checks for a service that stores eBook files (the shelf, not the core): EPUB/PDF sniffing, DRM refusal, rights declaration, safe file names |
+| `ebc-epub` | Checks for a service that stores eBook files (the shelf, not the core): EPUB/PDF sniffing behind a size limit, DRM refusal, rights declaration, the package metadata (ISBNs inside the file), safe file names |
 
 ### 3.2 The programs
 
@@ -123,8 +140,9 @@ code runs on the server, in the command line and in the browser.
 |---|---|
 | `ebc-server` | The core web service: redemption pages, partner API (stores and shelves), OPDS feeds, pairing, send-to-device, print orders, serving the web app at `/app/`. No file hosting, no creator API. One binary, configured by environment variables (`crates/ebc-server/README.md`) |
 | `ebc` (`ebc-cli`) | Command line: `isbn`, `lookup`, `cover`, `fontid`, `card`, `preflight`, `qr` |
-| `ebc-wasm` + `web/` | The **card designer** in the browser: type or look up a book, choose the cover and spine, write the message, preview both sides live, download the PDF — generated on the user's device, no cookies, no trackers. Its former "upload a file" path is hidden until the shelf exists |
-| `ebc-demo` | Starts the whole demo world on local ports: the server, two stores, a printer, a Kindle mail sink |
+| `ebc-shelf` | The shelf: hosts rights holders' files and creates their gifts as a partner of the core; accounts by e-mail link, upload gate, notice and action, statements of reasons, repeat-infringer policy, retention (`crates/ebc-shelf/README.md`) |
+| `ebc-wasm` + `web/` | The **card designer** in the browser: type or look up a book, choose the cover and spine, write the message, preview both sides live, download the PDF — generated on the user's device, no cookies, no trackers. When `config.json` names a shelf it offers "Host your own book on ‹shelf›" as a link (the shelf owns uploads); a shelf's gift links open it with the code, title and author filled in |
+| `ebc-demo` | Starts the whole demo world on local ports: the server, two stores, a printer, the shelf with a demo webmail, a Kindle mail sink |
 
 ### 3.3 The demo world (`demo/`)
 
@@ -136,6 +154,9 @@ Fictional, clearly labelled ("demo — not affiliated"):
 - **Grande Enseigne** — models a large retailer whose eBooks live in an e-reader account (the
   Fnac/Kobo kind). Gifts are claimed into the recipient's account and synced.
 - **Imprimerie du Dos Carré** — a print-on-demand API that preflights every PDF.
+- **Étagère des autrices** — the real shelf (`ebc-shelf`) in `multi` mode, registered with
+  the server as a partner; its sign-in links and notices go to demo mailboxes
+  (`…@exemple.fr`) read on a demo webmail.
 - **Simulated e-readers** — Kobo, Kindle, PocketBook, tolino profiles with limited browsers
   (no JavaScript), an OPDS client, a Send-to-Kindle mail sink with sender approval, an
   account-sync device, a simplified LCP licence flow.
@@ -148,14 +169,14 @@ Fictional, clearly labelled ("demo — not affiliated"):
 never do I/O; output is deterministic (same input, same bytes); print correctness is a tested
 property; e-reader pages need no JavaScript; legally conservative defaults.
 
-**Tests.** About 1 865 automated Rust tests, plus:
+**Tests.** About 1 930 automated Rust tests, plus:
 
 | Layer | What it proves |
 |---|---|
 | Unit and property tests | Each crate's logic, including hostile input (malformed PDFs, fonts, images, HTML) |
 | PDF validation | Generated cards pass our preflight and independent tools: qpdf, pdffonts, Ghostscript, MuPDF; the QR code is decoded back from the rendered page |
-| 21 integration journeys (`demo/integration`) | The real server, both stores, the printer and simulated devices talking over HTTP: checkout → card → redemption on each device type, account sync, printing, and the failure paths |
-| 10 browser tests (`e2e/`) | The same journeys in Chromium, including e-reader browsers with JavaScript off and the designer app |
+| 27 integration journeys (`demo/integration`) | The real server, both stores, the shelf, the printer and simulated devices talking over HTTP: checkout → card → redemption on each device type, account sync, printing, an author's upload on the shelf → gift → Kobo and PocketBook, takedown and suspension, and the failure paths |
+| 13 browser tests (`e2e/`) | The same journeys in Chromium, including e-reader browsers and the shelf's pages with JavaScript off, and the designer app |
 | Web package tests | The PDF made in the browser is **byte-identical** to the one made natively |
 | Print check | Every format × print profile rendered and validated |
 
@@ -284,7 +305,7 @@ A reproducible model (`tools/bizmodel/`, 97 inputs with ranges, 2 000 Monte Carl
 cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 
-# The demo world: server + two stores + printer (URLs printed at start)
+# The demo world: server + two stores + shelf + printer (URLs printed at start)
 EBC_WEB_DIR=web cargo run -p ebc-demo-integration --bin ebc-demo
 
 # The card designer (build the WebAssembly first), served at http://127.0.0.1:8080/app/
@@ -311,7 +332,8 @@ Sample cards (PDF and page images) are in `docs/samples/`.
 - No real e-reader has been used (devices are simulated).
 - The 13 ISBN sources have never been queried live (the development sandbox blocked them).
 - Font identification is measured on synthetic covers only.
-- No lawyer has reviewed the legal studies; no native speaker the translations.
+- No lawyer has reviewed the legal studies or the shelf's legal pages and statements of
+  reasons; no native speaker the translations.
 - No store has been approached; all business volumes are assumptions.
 
 **Known technical gaps** (full list in `docs/STATUS.md`): per-printer profile records (only

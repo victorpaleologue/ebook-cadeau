@@ -26,12 +26,15 @@ ebc-demo-ereaders.workspace = true
 ebc-demo-printer.workspace = true
 ebc-demo-stores.workspace = true
 ebc-server.workspace = true
+ebc-shelf.workspace = true
+serde.workspace = true
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider"] }
 serde_json.workspace = true
 thiserror.workspace = true
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "time", "signal", "sync"] }
 
 [dev-dependencies]
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "multipart"] }
 ebc-layout.workspace = true
 ebc-model.workspace = true
 ebc-pdf.workspace = true

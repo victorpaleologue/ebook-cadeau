@@ -1,7 +1,7 @@
 // eBook cadeau — the card creator. Plain ES module, no dependency, no external request
 // of its own: the WebAssembly engine runs in ./worker.js; the only network calls are the
-// catalogue lookup (when the user asks for it), the preview image of a looked-up cover
-// (never drawn into the card), and the server's creator API (when configured).
+// catalogue lookup (when the user asks for it) and the preview image of a looked-up cover
+// (never drawn into the card). A configured shelf (`shelf_url`) is only linked to.
 //
 // Every text inserted into the page goes through `textContent` or an attribute: book
 // metadata from catalogues is attacker-controlled.
@@ -9,7 +9,7 @@
 import { Engine } from './js/engine.js';
 import { Strings, applyStrings, matchLocale } from './js/i18n.js';
 import { lookupBook } from './js/lookup.js';
-import { ServerError, createGift, orderPrint } from './js/server.js';
+import { ServerError, orderPrint } from './js/server.js';
 
 const $ = (id) => document.getElementById(id);
 const TOTAL_STEPS = 6;
@@ -54,7 +54,6 @@ const state = {
   gift: null, // {code, display, base_url, claim_url?, id?, manage_token?, server}
   demoGift: null,
   codeGift: null,
-  serverGift: null,
   fontidAvailable: true,
   warnings: [],
 };
@@ -149,7 +148,68 @@ async function loadConfig() {
   // deploys the page). A query parameter used to override them, which let any crafted
   // link send the ISBN look-ups — and put what they return on the card — to any host.
   const catalog = { base_urls: {}, enable: [], disable: [], ...(loaded.catalog || {}) };
-  return { ...loaded, catalog };
+  return { ...loaded, catalog, shelf: shelfOf(loaded) };
+}
+
+/**
+ * The shelf named by config.json (`shelf_url`, optional `shelf_name`): an http(s) URL, or
+ * nothing. The designer only links to it: uploads, rights declarations and moderation
+ * belong to the shelf (no cross-origin upload from here).
+ */
+function shelfOf(loaded) {
+  if (!loaded || typeof loaded.shelf_url !== 'string' || !loaded.shelf_url) return null;
+  try {
+    const url = new URL(loaded.shelf_url, location.href);
+    if (url.protocol !== 'https:' && url.protocol !== 'http:') return null;
+    const name = typeof loaded.shelf_name === 'string' && loaded.shelf_name.trim() ? loaded.shelf_name.trim() : url.host;
+    return { url: url.href, name };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Values passed by a link, e.g. from a shelf's gift list:
+ * `/app/#code=XXXX-XXXX-XXXX&title=…&author=…&lang=fr`. The fragment is preferred (a
+ * browser never sends it to a server, so the code stays out of access logs); the same
+ * names in the query string are accepted too. They are removed from the address bar
+ * once read.
+ */
+function linkParams() {
+  const query = new URLSearchParams(location.search);
+  const hash = new URLSearchParams(location.hash.replace(/^#/, ''));
+  const pick = (name) => {
+    const value = hash.get(name) || query.get(name);
+    return value ? value.slice(0, 300) : '';
+  };
+  return { code: pick('code'), title: pick('title'), author: pick('author'), lang: pick('lang') };
+}
+
+/** Removes the prefilled values from the address bar (the code is a bearer secret). */
+function forgetLinkParams() {
+  const url = new URL(location.href);
+  for (const name of ['code', 'title', 'author']) url.searchParams.delete(name);
+  url.hash = '';
+  history.replaceState(null, '', url);
+}
+
+/** Applies `linkParams()` once the controls exist. */
+async function applyLinkParams(params) {
+  if (params.title) {
+    $('title').value = params.title;
+    $('title').dispatchEvent(new Event('input'));
+  }
+  if (params.author) {
+    $('author').value = params.author;
+    $('author').dispatchEvent(new Event('input'));
+  }
+  if (params.code) {
+    const radio = document.querySelector('input[name="ebook-mode"][value="code"]');
+    radio.checked = true;
+    $('code').value = params.code;
+    await onCodeInput();
+  }
+  if (params.code || params.title || params.author) forgetLinkParams();
 }
 
 async function main() {
@@ -168,7 +228,8 @@ async function main() {
     options = await engine.json('card_options');
     const supported = options.locales.map((l) => l.code);
     const params = new URLSearchParams(location.search);
-    state.uiLocale = matchLocale(params.get('lang'), supported) || options.defaults.locale;
+    const linked = linkParams();
+    state.uiLocale = matchLocale(params.get('lang') || linked.lang, supported) || options.defaults.locale;
     const sample = await engine.json('gift_code_parse', SAMPLE_CODE).catch(() => null);
     if (sample) sampleCode = sample.code;
     const probe = await engine.json('fontid_identify', new Uint8Array(0), '', '', null).catch(() => null);
@@ -176,6 +237,7 @@ async function main() {
     buildControls();
     await setLocale(state.uiLocale);
     bindEvents();
+    await applyLinkParams(linked);
   } catch (error) {
     fatal(String(error && error.message || error));
     return;
@@ -599,15 +661,22 @@ function siteAddress() {
 function refreshEbook() {
   state.ebookMode = radioValue('ebook-mode');
   const mode = state.ebookMode;
-  // The "upload" mode is hidden and disabled in index.html: the core no longer hosts
-  // files. TODO(shelf): send the file to the shelf service instead.
-  show($('ebook-upload'), mode === 'upload');
+  // A configured shelf is offered as a link: the shelf owns uploads, rights declarations
+  // and moderation; it creates the gift with the core and shows its code, which the user
+  // brings back here with "I already have a code" (or a link that fills it in).
+  const shelf = config.shelf;
+  show($('shelf-choice'), shelf !== null && shelf !== undefined);
+  show($('ebook-shelf'), Boolean(shelf) && mode === 'shelf');
+  if (shelf) {
+    $('shelf-choice-text').textContent = t('ui_ebook_shelf', { shelf: shelf.name });
+    $('shelf-help').textContent = t('ui_ebook_shelf_help', { shelf: shelf.name });
+    $('shelf-link').textContent = t('ui_shelf_open', { shelf: shelf.name });
+    $('shelf-link').href = shelf.url;
+  }
   show($('ebook-code'), mode === 'code');
   show($('ebook-demo'), mode === 'demo');
   show($('site-field'), mode === 'code' || mode === 'demo');
-  const server = serverUrl();
-  $('upload-help').textContent = t('ui_ebook_upload_help', { host: server ? server.host : '—' });
-  state.gift = mode === 'upload' ? state.serverGift : mode === 'code' ? state.codeGift : mode === 'demo' ? state.demoGift : null;
+  state.gift = mode === 'code' ? state.codeGift : mode === 'demo' ? state.demoGift : null;
   const result = $('gift-result');
   show(result, state.gift !== null);
   if (state.gift) {
@@ -690,61 +759,6 @@ async function onSiteInput() {
     const base = await validBase(state.demoGift.code, DEMO_BASE_URL);
     state.demoGift.base_url = base && siteAddress() ? base : '';
     refreshEbook();
-    schedulePreview();
-  }
-}
-
-/**
- * Uploads the file and creates the gift on the core's creator API. That API was removed
- * with file hosting (docs/api.md v0.3): this path is unreachable while the upload mode is
- * hidden. TODO(shelf): create the gift through the shelf service.
- */
-async function onCreateGift() {
-  const status = $('create-status');
-  const file = $('ebook-file').files[0];
-  const basis = radioValue('ebook-rights');
-  if (!file || !basis || !$('ebook-confirm').checked) {
-    setText(status, t('ui_need_file_and_basis'), 'error');
-    return;
-  }
-  if (!validateTitle(true)) {
-    setText(status, t('ui_title_required'), 'error');
-    $('title').focus();
-    return;
-  }
-  const server = serverUrl();
-  if (!server) {
-    setText(status, t('ui_server_unreachable'), 'error');
-    return;
-  }
-  setText(status, t('ui_uploading'));
-  $('create-gift').disabled = true;
-  try {
-    const created = await createGift(server, file, basis, {
-      book: bookJson(),
-      giver_name: $('giver').value.trim() || undefined,
-      recipient_name: $('recipient').value.trim() || undefined,
-      message: $('message').value.trim() || undefined,
-      locale: state.cardLocale || state.uiLocale,
-    });
-    const claim = String(created.claim_url || '');
-    const cut = claim.search(/\/k\/[^/]*$/i);
-    state.serverGift = {
-      code: created.code,
-      display: created.code_display,
-      claim_url: claim || undefined,
-      base_url: cut > 0 ? claim.slice(0, cut) : server.origin,
-      id: created.id,
-      manage_token: created.manage_token,
-      server: true,
-    };
-    setText(status, '');
-  } catch (error) {
-    setText(status, errorText(error), 'error');
-  } finally {
-    $('create-gift').disabled = false;
-    refreshEbook();
-    refreshCardStep();
     schedulePreview();
   }
 }
@@ -1107,7 +1121,6 @@ function bindEvents() {
   }
   $('code').addEventListener('input', onCodeInput);
   $('site').addEventListener('change', onSiteInput);
-  $('create-gift').addEventListener('click', onCreateGift);
   for (const id of ['format', 'profile']) {
     $(id).addEventListener('change', async () => {
       refreshCardStep();

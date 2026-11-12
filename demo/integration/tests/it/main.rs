@@ -6,6 +6,7 @@
 mod support;
 
 mod card;
+mod etagere;
 mod grande_enseigne;
 mod licence;
 mod negative;

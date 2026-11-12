@@ -20,6 +20,7 @@ TARGET="wasm32-unknown-unknown"
 # Package names of the crates that are host-only.
 NOT_WASM=(
     ebc-server        # crates/ebc-server  — axum service
+    ebc-shelf         # crates/ebc-shelf   — the shelf: axum service, files on disk, SMTP
     ebc-cli           # crates/ebc-cli     — command line, file and network I/O
     ebc-demo-stores   # demo/stores        — fictional eBook stores (HTTP servers)
     ebc-demo-printer  # demo/printer       — fictional print-on-demand API (HTTP server)

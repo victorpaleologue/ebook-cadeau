@@ -8,7 +8,7 @@ book-shaped card: the book's cover on the front, a **1 cm spine** with the title
 stand on a shelf, and inside, a **QR code and a short code** that put the eBook on the
 recipient's e-reader in a few steps.
 
-> **Status: first complete version.** The workspace builds, 1 865 tests pass, and a card goes
+> **Status: first complete version.** The workspace builds, about 1 930 tests pass, and a card goes
 > end to end: a store sells an eBook as a gift, the card PDF is generated with its QR code,
 > and a simulated e-reader redeems it. Nothing has been tested with real printers, e-readers
 > or live ISBN services yet. **Start with [`docs/OVERVIEW.md`](docs/OVERVIEW.md)**, the full
@@ -20,7 +20,7 @@ recipient's e-reader in a few steps.
 ## Try it
 
 ```sh
-cargo run -p ebc-demo-integration --bin ebc-demo     # server, two fictional stores, printer
+cargo run -p ebc-demo-integration --bin ebc-demo     # server, two fictional stores, the shelf, printer
 scripts/build-wasm.sh && EBC_WEB_DIR=web cargo run -p ebc-server   # card designer at /app/
 cargo run -p ebc-cli -- card --title "Les Vagues du soir" --author "Jeanne Roy" \
     --random-code --base-url https://ebk.example --typographic -o card.pdf
@@ -30,7 +30,7 @@ cargo run -p ebc-cli -- card --title "Les Vagues du soir" --author "Jeanne Roy" 
 
 | Path | Content |
 |---|---|
-| `crates/` | Rust libraries (`ebc-*`) — pure, wasm-compatible — plus the server and CLI |
+| `crates/` | Rust libraries (`ebc-*`) — pure, wasm-compatible — plus the core server, the shelf (hosting rights holders' files) and the CLI |
 | `web/` | Static frontend running the heavy work in the browser through WebAssembly |
 | `demo/` | Fictional eBook stores, a fictional printer and simulated e-readers for tests |
 | `e2e/` | Playwright end-to-end tests |

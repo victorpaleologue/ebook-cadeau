@@ -4,7 +4,9 @@
 //! [`World`] starts, on loopback ports, the **real** `ebc-server`, the two fictional stores
 //! of `demo/stores` ("Septante", a DRM-free store serving its own files as `partner_file`, and "Grande
 //! Enseigne", an ecosystem store using `reseller_redirect`), the fictional printer of
-//! `demo/printer` and, on request, a mail-to-device gateway of `demo/ereaders` — wired to
+//! `demo/printer`, the **real** shelf `ebc-shelf` ("Étagère des autrices", hosting
+//! rights holders' own files, registered as a partner) with a demo webmail for its
+//! sign-in links, and, on request, a mail-to-device gateway of `demo/ereaders` — wired to
 //! each other exactly as a deployment would be: the stores sign partner requests with the
 //! secrets the server knows, the server delivers webhooks to the stores, redirects
 //! recipients to them, sends mail to the gateway and forwards print orders to the printer.
@@ -41,9 +43,11 @@
 
 pub mod partner;
 pub mod shop;
+mod webmail;
 mod world;
 
 pub use world::{
-    PrinterHandle, ServerHandle, StoreHandle, T0, World, WorldBuilder, WorldClock, WorldError,
+    MAILBOX_DOMAIN, PrinterHandle, SHELF_OPERATOR, SHELF_PARTNER_ID, SHELF_PARTNER_SECRET,
+    ServerHandle, ShelfHandle, StoreHandle, T0, World, WorldBuilder, WorldClock, WorldError,
     WorldPorts,
 };

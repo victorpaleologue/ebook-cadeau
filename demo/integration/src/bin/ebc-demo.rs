@@ -1,5 +1,6 @@
 //! `ebc-demo`: the whole demo constellation on fixed local ports — the real eBook Cadeau
-//! server, the two fictional stores, the fictional printer and a Send-to-Kindle mail sink —
+//! server, the two fictional stores, the fictional printer, the shelf (with its demo
+//! webmail) and a Send-to-Kindle mail sink —
 //! with a printed table of URLs. For manual demos and for browser-driven (Playwright)
 //! tests. Everything is in memory and fictional; stop it with Ctrl-C.
 //!
@@ -9,6 +10,8 @@
 //! | `EBC_DEMO_SEPTANTE_PORT` | `8101` | store "Septante" (`partner_file`) |
 //! | `EBC_DEMO_GRANDE_ENSEIGNE_PORT` | `8102` | store "Grande Enseigne" (`reseller_redirect`) |
 //! | `EBC_DEMO_PRINTER_PORT` | `8103` | printer |
+//! | `EBC_DEMO_SHELF_PORT` | `8104` | shelf "Étagère des autrices" (`ebc-shelf`, a `partner_file` partner) |
+//! | `EBC_DEMO_WEBMAIL_PORT` | `8105` | demo webmail: the shelf's sign-in links for any `…@exemple.fr` |
 //! | `EBC_DEMO_KINDLE_ADDRESS` | `demo@kindle.com` | device address of the mail sink |
 //! | `EBC_DEMO_PRINTER_TICK_MS` | `2000` | time between two steps of a print order (`0` = manual) |
 //! | `EBC_WEB_DIR` | unset | directory of the static card designer, served at `/app/` (e.g. `web`) |
@@ -42,6 +45,8 @@ async fn run() -> Result<(), String> {
         septante: port("EBC_DEMO_SEPTANTE_PORT", WorldPorts::DEMO.septante)?,
         grande_enseigne: port("EBC_DEMO_GRANDE_ENSEIGNE_PORT", WorldPorts::DEMO.grande_enseigne)?,
         printer: port("EBC_DEMO_PRINTER_PORT", WorldPorts::DEMO.printer)?,
+        shelf: port("EBC_DEMO_SHELF_PORT", WorldPorts::DEMO.shelf)?,
+        webmail: port("EBC_DEMO_WEBMAIL_PORT", WorldPorts::DEMO.webmail)?,
     };
     let kindle_address =
         env("EBC_DEMO_KINDLE_ADDRESS").unwrap_or_else(|| "demo@kindle.com".to_owned());
@@ -107,6 +112,12 @@ async fn run() -> Result<(), String> {
         out,
         "  5. At {} the gift is added to a store account instead; a device syncs it through /api/device/*.",
         world.grande_enseigne.base
+    )
+    .map_err(io)?;
+    writeln!(
+        out,
+        "  6. Host your own book at {}: sign in with any …@exemple.fr address, open the link at {}, upload an EPUB you wrote, make a gift.",
+        world.shelf.base, world.webmail
     )
     .map_err(io)?;
     writeln!(out, "\nState hooks: <store>/__test/state, <printer>/__test/orders. Ctrl-C to stop.")

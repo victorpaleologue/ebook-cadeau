@@ -42,6 +42,7 @@ ebc-catalog = { path = "crates/ebc-catalog", version = "0.1.0" }
 ebc-covers = { path = "crates/ebc-covers", version = "0.1.0" }
 ebc-card = { path = "crates/ebc-card", version = "0.1.0" }
 ebc-server = { path = "crates/ebc-server", version = "0.1.0" }
+ebc-shelf = { path = "crates/ebc-shelf", version = "0.1.0" }
 ebc-demo-stores = { path = "demo/stores", version = "0.1.0" }
 ebc-demo-ereaders = { path = "demo/ereaders", version = "0.1.0" }
 

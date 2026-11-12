@@ -15,7 +15,7 @@ and action, art. 16; statements of reasons; contact points; a repeat-infringer p
 evidence of diligence) whose liability exemption is fragile when it knows which work each
 file is — the core renders the title and ISBN on the card, so it would
 (`docs/research/09-legal-gifting-and-commerce.md` §2.6 and §3.3). Those duties belong to
-the service that stores the files: the shelf (next step), or the store itself. The core
+the service that stores the files: the shelf (`crates/ebc-shelf`), or the store itself. The core
 only keeps gift records, for which it offers a contact point (`EBC_CONTACT_EMAIL`).
 
 It is a library plus a thin binary. Tests and demos mount it in-process:

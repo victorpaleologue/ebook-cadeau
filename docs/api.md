@@ -134,6 +134,24 @@ DRM detection, rights declaration, safe file names) are the library `crates/ebc-
 What a shelf must implement to be a partner: the signed requests of §4.1 (as client), a
 `partner_file` endpoint answering §4.5 (as server), and, optionally, webhooks (§4.4).
 
+### 3.1 The reference shelf (`crates/ebc-shelf`)
+
+The repository's shelf is a separate binary (`ebc-shelf`) registered in `EBC_PARTNERS`
+like any store: `id` = its `EBC_SHELF_PARTNER_ID`, `redirect_hosts` = its own public host,
+no webhook. What it sends and answers, in contract terms:
+
+| Direction | Request | Shelf specifics |
+|---|---|---|
+| shelf → core | `POST /api/partner/v1/gifts` (§4.2) | `order_ref` and `Idempotency-Key` = the shelf's gift id (`c_…`); `book` = declared title, author, ISBN-13 and language; `delivery = {"type": "partner_file", "format": "epub"\|"pdf", "url": "{shelf}/api/ebc/link"}`; optional `giver_name`, `recipient_name`, `message`, `reveal_at` |
+| shelf → core | `POST …/gifts/{id}/reissue?nonce=…`, `POST …/gifts/{id}/cancel`, `GET …/gifts/{id}/card.pdf` | reissue carries a signed `nonce` (two reissues in one second stay distinct); a cancellation the core does not confirm is retried; the card PDF is handed to the rights holder |
+| core → shelf | `GET {shelf}/api/ebc/link?ebc_gift&ebc_order&ebc_ts&ebc_sig` (§4.5) | `200` JSON link `{shelf}/f/{128-bit token}/{file}` valid 300 s, with `file_name`, `media_type`, `size_bytes`, `sha256` (of the stored file, served byte-identical), `expires_at`; `400 malformed`, `401 stale_timestamp`, `403 bad_signature`, `404 unknown_gift` (the core's gift id and the order reference must both match), `410 gift_gone` (cancelled gift, deleted or taken-down book) |
+| device → shelf | `GET\|HEAD {shelf}/f/{token}/{file}` | `Content-Disposition: attachment`, `Content-Length`, `Accept-Ranges`, single `Range`; neither the link nor `Referer` is logged |
+
+A takedown on the shelf (an upheld notice) cancels every gift of the book through
+`POST …/cancel`: their codes answer `410` at the core. The shelf's own pages (accounts,
+upload gate, notice and action, retention) are not part of this contract; they are
+described in `crates/ebc-shelf/README.md`.
+
 ## 4. Partner API (stores and shelves)
 
 ### 4.1 Authentication

@@ -76,7 +76,7 @@ pub use lcp::{
 };
 pub use library::{ImportSource, IncomingFile, Library, LibraryEntry};
 pub use lint::{LintConfig, LintFinding, LintReport, Severity};
-pub use mail::{MailDevice, MailDeviceConfig, MailOutcome, MailRecord};
+pub use mail::{MailDevice, MailDeviceConfig, MailOutcome, MailRecord, MailboxMessage};
 pub use net::{Exchange, NetConfig};
 pub use opds::{OpdsClient, OpdsConfig};
 pub use page::Page;

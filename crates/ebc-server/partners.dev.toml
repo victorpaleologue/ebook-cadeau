@@ -1,5 +1,5 @@
-# Development partners for `EBC_PARTNERS` — the two fictional demo stores of demo/stores
-# (demo — not affiliated with any real retailer). Never use these secrets in production.
+# Development partners for `EBC_PARTNERS` — the two fictional demo stores of demo/stores and
+# the demo shelf of crates/ebc-shelf (demo — not affiliated). Never use these secrets in production.
 
 [[partners]]
 id = "septante"                               # value of X-EBC-Partner
@@ -14,3 +14,11 @@ name = "Grande Enseigne (démo)"
 secret = "dev-secret-grande-enseigne-0123456789"
 webhook_url = "http://127.0.0.1:8102/webhooks/ebc"
 redirect_hosts = ["127.0.0.1:8102"]
+
+# The shelf (crates/ebc-shelf): hosts rights holders' own files, registered exactly like a
+# store. Its download links are on its own host; no webhook.
+[[partners]]
+id = "etagere"
+name = "Étagère des autrices (démo)"
+secret = "dev-secret-etagere-0123456789"
+redirect_hosts = ["127.0.0.1:8104"]

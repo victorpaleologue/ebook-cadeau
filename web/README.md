@@ -46,17 +46,19 @@ From `file://` the page does not work in most browsers (module workers need an o
    colours appear only after ticking "I am authorised to adapt this cover", and only for a
    statement that allows it.
 4. **The message** — giver, recipient, text, language of the card.
-5. **The eBook** — enter an existing code (from a store, or later from a shelf service)
-   and the address of the site where it is redeemed, or take a demonstration code. The
-   former "upload a file" path is **hidden**: the core service no longer hosts book files
-   and its creator API is gone (`docs/api.md` v0.3); a file is only ever served by a
-   registered partner. TODO(shelf): upload to the shelf service, which creates the gift
-   through the partner API. The note under the choices says to use the store's gift
-   option for a bought eBook.
+5. **The eBook** — enter an existing code (from a store, or from a shelf service) and
+   the address of the site where it is redeemed, or take a demonstration code. The core
+   service never hosts book files (`docs/api.md` v0.3): a file is only ever served by a
+   registered partner. When `config.json` names a **shelf** (`shelf_url`), a third choice
+   "Host your own book on ‹shelf›" links to it: the shelf owns uploads, rights
+   declarations and moderation (`crates/ebc-shelf`), creates the gift with the core and
+   shows its code — there is **no cross-origin upload from the designer**. The shelf's
+   gift list links back here with the code, title and author filled in (below). The
+   note under the choices says to use the store's gift option for a bought eBook.
 6. **The card** — size and printing (professional profiles are disabled, with the reason,
    for a private copy), warnings, "Download the PDF". "Order a printed card" needed a gift
-   created on this server; it is unreachable until the shelf step (print orders now go
-   through the partner API, `docs/api.md` §4.6).
+   created on this server, which no longer happens: print orders go through the partner
+   API (`docs/api.md` §4.6), from the store or the shelf that created the gift.
 
 Seven languages (fr, en, de, es, it, nl, pt), French by default, `?lang=en` to choose; all
 strings come from the package (`i18n_catalog`).
@@ -70,7 +72,19 @@ strings come from the package (`i18n_catalog`).
 | `server` | base URL of the creator API; default: this origin when served under `/app/`, else none |
 | `base_url` | default for "address of the site where the code is entered" |
 | `print_orders` | offer "Order a printed card" (needs a gift created on this server) |
+| `shelf_url` | a shelf service (`crates/ebc-shelf`, e.g. `https://etagere.example`): step 5 offers "Host your own book on ‹shelf›", a plain link to it. `null`: no such choice |
+| `shelf_name` | the name shown for it (default: its host) |
 | `catalog` | passed to `catalog_lookup_requests`: `base_urls` `{provider: url}`, `enable`, `disable`, `contact_email` |
+
+### Prefilled from a link
+
+`/app/#code=XXXX-XXXX-XXXX&title=…&author=…&lang=fr` opens the designer with the code
+entered ("I already have a code"), the title and the author filled in, in that language
+(values percent-encoded). This is what a shelf's gift list links to. The values are
+read from the URL **fragment**, which browsers never send to a server, so the code (a
+bearer secret) stays out of every access log; the same names in the query string are
+accepted too. Once read, they are removed from the address bar. The claim-URL base is the
+designer's own origin when it is served by the core under `/app/`.
 
 Catalogue base URLs are taken from `config.json` only: a relay of the deployment or a
 fixture server in tests is configured there. (Query parameters are deliberately not

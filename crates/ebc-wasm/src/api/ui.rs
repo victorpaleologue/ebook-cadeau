@@ -934,6 +934,42 @@ pub const UI_STRINGS: &[(&str, [&str; LOCALES])] = &[
         ],
     ),
     (
+        "ui_ebook_shelf",
+        [
+            "Héberger votre propre livre sur {shelf}",
+            "Host your own book on {shelf}",
+            "Eigenes Buch auf {shelf} hosten",
+            "Alojar tu propio libro en {shelf}",
+            "Ospita il tuo libro su {shelf}",
+            "Je eigen boek op {shelf} zetten",
+            "Alojar o seu próprio livro em {shelf}",
+        ],
+    ),
+    (
+        "ui_ebook_shelf_help",
+        [
+            "Pour un livre dont vous détenez les droits (le vôtre, une œuvre du domaine public ou sous licence libre)\u{a0}: déposez-le sur {shelf}, qui l’héberge, crée le cadeau et vous donne son code. Revenez ensuite ici avec ce code pour composer la carte.",
+            "For a book you hold the rights to (your own, a public-domain or openly licensed work): upload it to {shelf}, which hosts it, creates the gift and gives you its code. Then come back here with that code to design the card.",
+            "Für ein Buch, dessen Rechte Sie besitzen (Ihr eigenes, ein gemeinfreies oder frei lizenziertes Werk): Laden Sie es auf {shelf} hoch; dort wird es gehostet, das Geschenk angelegt und Ihnen der Code angezeigt. Mit diesem Code gestalten Sie dann hier die Karte.",
+            "Para un libro cuyos derechos tienes (el tuyo, una obra de dominio público o con licencia libre): súbelo a {shelf}, que lo aloja, crea el regalo y te da su código. Después vuelve aquí con ese código para diseñar la tarjeta.",
+            "Per un libro di cui detieni i diritti (il tuo, un’opera di pubblico dominio o con licenza libera): caricalo su {shelf}, che lo ospita, crea il regalo e ti dà il codice. Poi torna qui con quel codice per comporre il biglietto.",
+            "Voor een boek waarvan je de rechten hebt (je eigen boek, een werk in het publiek domein of onder een open licentie): upload het op {shelf}, dat het bewaart, het cadeau maakt en je de code geeft. Kom daarna met die code terug om de kaart te maken.",
+            "Para um livro cujos direitos detém (o seu, uma obra no domínio público ou com licença livre): carregue-o em {shelf}, que o aloja, cria a oferta e lhe dá o código. Depois volte aqui com esse código para compor o cartão.",
+        ],
+    ),
+    (
+        "ui_shelf_open",
+        [
+            "Ouvrir {shelf}",
+            "Open {shelf}",
+            "{shelf} öffnen",
+            "Abrir {shelf}",
+            "Apri {shelf}",
+            "{shelf} openen",
+            "Abrir {shelf}",
+        ],
+    ),
+    (
         "ui_ebook_upload_help",
         [
             "EPUB ou PDF sans DRM, 50\u{a0}Mo au plus. Le fichier est envoyé à {host}, qui le remet au destinataire.",

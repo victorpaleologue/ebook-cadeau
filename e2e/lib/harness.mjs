@@ -106,8 +106,8 @@ export function freePort() {
 
 /**
  * Starts a fresh `ebc-demo` constellation on ports chosen by the operating system and
- * returns the base URLs it printed: `{ server, septante, grandeEnseigne, printer, smtp,
- * webApp, stop() }`. `webApp` is the URL of the card designer (`/app/`): the constellation's
+ * returns the base URLs it printed: `{ server, septante, grandeEnseigne, printer, shelf,
+ * webmail, smtp, webApp, stop() }`. `webApp` is the URL of the card designer (`/app/`): the constellation's
  * own when it serves it, else a separate `ebc-server` started with `EBC_WEB_DIR` (see
  * the README: `ebc-demo` does not read `EBC_WEB_DIR` at the time of writing).
  */
@@ -117,6 +117,8 @@ export async function startConstellation({ webApp = false } = {}) {
     EBC_DEMO_SEPTANTE_PORT: '0',
     EBC_DEMO_GRANDE_ENSEIGNE_PORT: '0',
     EBC_DEMO_PRINTER_PORT: '0',
+    EBC_DEMO_SHELF_PORT: '0',
+    EBC_DEMO_WEBMAIL_PORT: '0',
     EBC_DEMO_PRINTER_TICK_MS: '0',
     EBC_WEB_DIR: join(ROOT, 'web'),
     RUST_LOG: 'warn',
@@ -133,6 +135,8 @@ export async function startConstellation({ webApp = false } = {}) {
       septante: url('Septante'),
       grandeEnseigne: url('Grande Enseigne'),
       printer: url('Imprimerie'),
+      shelf: url('Étagère des autrices'),
+      webmail: url('Webmail'),
       smtp: url('Mail-to-device'),
     };
   });

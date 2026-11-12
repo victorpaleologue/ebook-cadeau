@@ -24,13 +24,58 @@ like a reseller.** Done in this step:
 - Names and message are deleted 12 months after the first claim
   (`EBC_RETENTION_AFTER_CLAIM_DAYS`); the core shows a contact point (`EBC_CONTACT_EMAIL`).
 - The demo store Septante serves its own watermarked EPUB (stamped at claim time) through
-  a signed download endpoint; Grande Enseigne is unchanged. The web designer's upload path
-  is hidden (TODO: the shelf).
+  a signed download endpoint; Grande Enseigne is unchanged.
 
-**Next step — the shelf** (a separate service, registered as a partner): uploads with
-identity and rights declaration (`ebc-epub`), storage, the `partner_file` endpoint of
-§4.5, notice and action (DSA art. 16), statements of reasons, repeat-infringer policy, and
-the designer's upload and print-order paths pointed at it.
+## The shelf (2026-11-12) — done
+
+`crates/ebc-shelf` (binary `ebc-shelf`, `crates/ebc-shelf/README.md`): the second service,
+registered with the core as partner `etagere` exactly like a store. It is the **host** in
+law, so the hosting duties live there.
+
+- **Modes**: `own` (default; only the operator's account — an author self-hosting) and
+  `multi` (open sign-up; the operator moderates).
+- **Accounts**: sign-in by e-mail link (256-bit, single use, 15 min, stored hashed; a
+  confirmation button so mail scanners cannot spend it), verified address required,
+  LCEN identification (person or organisation, name or company name, representative,
+  postal address, optional phone and birth data) before the first upload; sessions in an
+  `HttpOnly`, `SameSite=Strict`, `__Host-` cookie with form tokens and an `Origin` check.
+- **Upload gate** through `ebc-epub` only (new: `check_upload` with a size limit,
+  `package_metadata` for the ISBNs inside the file): sniffing, DRM refused; mandatory
+  declaration from the closed list with details (death year for public domain — life + 70
+  —, a closed CC list, licensor and contract for distributors), title, author, ISBN,
+  recorded with time, account, name, e-mail, text version and hash; blocklist by SHA-256
+  and ISBN (declared and embedded); quotas per account and global; files stored by hash.
+- **Gifts**: 1–50 per form (giver optional, recipient, message, locale, reveal date),
+  created with the core's signed API (idempotent, retried when the core is down), reissue
+  and cancel through the core; the §4.5 endpoint verifies signature and timestamp and
+  answers a five-minute 128-bit link on the shelf's host; the file is served byte-identical
+  with `Content-Disposition`, `Range` and `HEAD`; deliveries counted per gift, downloads
+  logged with a network pseudonym; no code, token, signed URL or `Referer` in logs. Card
+  PDFs come from the core's partner `card.pdf`; the designer link puts code, title and
+  author in the URL fragment (`/app/#code=…`), which the designer now reads.
+- **Notice and action**: public form with the art. 16(2) elements and the (c) exception,
+  acknowledgement, operator review; upholding deletes every copy of the file, cancels every
+  gift at the core (`410`), blocklists hash and ISBN, mails a statement of reasons (art. 17)
+  with redress; an internal complaint (kept although art. 20 binds platforms only);
+  suspension after 2 upheld notices or 1 false declaration (configurable), ban on
+  recurrence. Terms, legal notice and contact pages: **drafts, not reviewed by counsel**.
+- **Retention** (configurable, to confirm with counsel): identity 5 years after closure,
+  IP of content creation 1 year, declarations 5 years after the file is deleted, notices 6
+  years, download pseudonyms 6 months, delivery records 5 years, files deleted on
+  deletion, takedown, closure, ban, or 30 days after a book's last gift was cancelled; a
+  record-of-processing template in the README.
+- **Designer**: `config.json` `shelf_url` (and `shelf_name`) adds "Host your own book on
+  ‹shelf›" as a link; the dead upload code is removed; strings in seven languages.
+- **Demo**: the shelf is in `ebc-demo` and `World` (port 8104), its mail goes to demo
+  mailboxes (`…@exemple.fr`, a new feature of the demo mail sink) read on a demo webmail
+  (8105). Journeys in `demo/integration/tests/it/etagere.rs`, browser scenario
+  `e2e/tests/shelf.test.mjs`, HTTP tests in `crates/ebc-shelf/tests/http.rs`.
+
+**Needs counsel**: the identification field list (décret 2021-1362, recalled from memory),
+every retention period, whether the shelf is a plain host or an online platform (arts 20,
+23), the wording of the terms, legal notice and statements of reasons, and the
+remaining upload safeguards of research 09 (retailer-watermark detection, ISBN-registrant
+check with a review state for `own_work`, translator's death year, "mort pour la France").
 
 Known caveat: e-reader browsers that ignore `Referrer-Policy` send the gift page URL (with
 the code) as `Referer` to the partner's download host when following the redirect. That
@@ -44,11 +89,11 @@ Run on the whole workspace, locally, after the adversarial review fixes:
 |---|---|
 | `cargo fmt --all -- --check` | clean |
 | `cargo clippy --workspace --all-targets --locked -- -D warnings` | clean |
-| `cargo test --workspace` | **1 884 passed, 0 failed**, 19 ignored (opt-in live and reference tests); re-run 2026-11-12 after the two-service change (hosted-file and creator-API tests replaced by `partner_file`, shelf stand-in, retention and contact tests; sniffing tests moved to `ebc-epub`) |
+| `cargo test --workspace` | **1 933 passed, 0 failed**, 19 ignored (opt-in live and reference tests); re-run 2026-11-12 after the shelf (`ebc-shelf` unit and HTTP tests, 5 shelf journeys, mail-sink mailboxes, `ebc-epub` size limit and package metadata) |
 | `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps` | clean |
-| `scripts/wasm-crates.sh build` (all pure libraries for `wasm32-unknown-unknown`) | clean before the two-service change; since then only the new `ebc-epub` was checked for wasm (`cargo check --target wasm32-unknown-unknown`, clean) |
-| `cargo deny check` | advisories, bans, licences, sources: ok (not re-run after the two-service change; no new third-party crate was added) |
-| `e2e/run.sh` (10 Playwright tests in Chromium) | 10 passed (scenario 6 now checks the designer without upload) |
+| `scripts/wasm-crates.sh build` (all pure libraries for `wasm32-unknown-unknown`; `ebc-shelf` is host-only) | clean |
+| `cargo deny check` | advisories, bans, licences, sources: ok (the shelf adds no new third-party crate; `axum`'s `multipart` feature brings `multer`, MIT) |
+| `e2e/run.sh` (13 Playwright tests in Chromium) | 13 passed (scenario 7: the shelf with JavaScript off, the designer's shelf link and prefill) |
 | `e2e/print-check.sh` (every format × profile through preflight, qpdf, pdffonts, gs) | 21 PDFs, 0 failures |
 | `python3 -m unittest` in `tools/bizmodel` | 48 passed |
 | `CI=1 node --test web/tests/*.test.mjs` (incl. wasm output byte-identical to native for four golden cards, one through the ink-limited FOGRA39 transform) | 9 passed |
@@ -89,13 +134,13 @@ the native-vs-wasm golden cards.
 | Card composer (outside + inside, rights gate) | `crates/ebc-card` | done; samples in `docs/samples/` |
 | Command line `ebc` | `crates/ebc-cli` | done |
 | Browser bindings (3.8 MiB wasm, 1.5 MiB gzip) | `crates/ebc-wasm` | done |
-| Card designer web app | `web/` | done; upload and print-order paths hidden until the shelf |
+| Card designer web app | `web/` | done; links to a configured shelf (`shelf_url`), prefilled from a shelf's gift link; print orders only through partners |
 | Web service (the core): redemption pages, partner API with `partner_file`, OPDS, pairing, send-to-device, print orders — no file hosting | `crates/ebc-server` | done (v0.3) |
-| eBook file checks for a hosting service (sniffing, DRM, rights declaration, names) | `crates/ebc-epub` | done; used by nobody until the shelf |
-| Shelf service (files of rights holders, notice and action) | — | **not started** (next step) |
+| eBook file checks for a hosting service (sniffing, size limit, DRM, rights declaration, package metadata, names) | `crates/ebc-epub` | done; used by the shelf |
+| Shelf service (files of rights holders, notice and action, retention) | `crates/ebc-shelf` | done; legal wording and periods **not reviewed by counsel**; strings not reviewed by native speakers |
 | Fictional stores "Septante" and "Grande Enseigne", printer, e-readers | `demo/` | done |
-| 22 Rust end-to-end journeys + `ebc-demo` binary | `demo/integration` | done |
-| 9 browser end-to-end tests | `e2e/` | done |
+| 27 Rust end-to-end journeys + `ebc-demo` binary (with the shelf and a demo webmail) | `demo/integration` | done |
+| 13 browser end-to-end tests | `e2e/` | done |
 | Business model, charts | `tools/bizmodel/`, `docs/business/` | done; inputs are estimates |
 | Research 01–12 | `docs/research/` | all written; fact-check status per document below |
 | CI, Dependabot, daily audit, sparring review | `.github/`, `.claude/` | written; see "Owner actions" |
@@ -149,6 +194,11 @@ in 07–09 and every vendor price except La Poste's remain unverified at source.
   warning (`SpineOutsideTextRange`).
 - **Font identification** is the classical v0; the learned embedding (research 10, training
   plan) is not built. Connected scripts and stencils are not recognised.
+- **The shelf**: one JSON snapshot like the core; uploads held in memory while checked
+  (bounded by size and concurrency); gift codes kept in clear in its database (the
+  rights holder prints cards from them); no print orders and no webhook receiver; not
+  implemented from research 09: retailer-watermark detection, the ISBN-registrant check
+  and review state for `own_work`, translator's death year and "mort pour la France".
 - **Server storage** is one JSON snapshot rewritten per change; request bodies (covers, card
   PDFs) are buffered in memory; rate-limit state and partners' download links are in memory.
 - **Mailed cards**: the cheapest postal API (research 04) takes one image per card, so the
@@ -177,6 +227,11 @@ in 07–09 and every vendor price except La Poste's remain unverified at source.
    as Scribus ships). ECI's own profiles may not be bundled.
 6. `jpeg-encoder` (IJG licence) accepted as a test-only dependency.
 7. Font stack migrated from the unmaintained `ttf-parser`/`rustybuzz` to `harfrust`/`read-fonts`.
+8. The shelf: `own` is the default mode; its UI name is "Étagère"; a takedown removes every
+   hosted copy of the same file (all uploaders are told; only the noticed uploader gets a
+   strike); a suspended account's other gifts keep working; a further upheld notice while
+   suspended bans; closed or banned addresses cannot sign up again until their identity is
+   erased; the designer link carries the code in the URL fragment, not the query string.
 
 ## Owner actions
 
@@ -185,6 +240,10 @@ in 07–09 and every vendor price except La Poste's remain unverified at source.
   `github-actions`, `javascript`; protect `main` requiring `ci-ok`.
 - **Network** for live validation of the catalogue: allow the provider hosts, then
   `EBC_LIVE=1 cargo test -p ebc-catalog --features client -- --ignored`.
+- **Shelf before going public**: set `EBC_SHELF_CONTACT_EMAIL` and the `EBC_SHELF_LEGAL_*`
+  identities, a real SMTP relay, EU hosting; have counsel confirm the identification
+  fields, retention periods, the host-vs-platform status and the legal wording
+  (`crates/ebc-shelf/README.md`, "Legal duties").
 - **Reviews**: a lawyer on `docs/research/07`–`09`; native speakers on the UI strings; a real
   printer quote and a test print.
 

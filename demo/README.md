@@ -9,7 +9,8 @@ are public and all data lives in memory. Every page of the stores says so.
 | `demo/stores` (`ebc-demo-stores`) | Two fictional eBook stores offering the "eBook cadeau" option at checkout | `ebc-demo-stores` | 8101, 8102 |
 | `demo/printer` (`ebc-demo-printer`) | "Imprimerie du Dos Carré", a fictional print-on-demand API that preflights card PDFs (`docs/api.md` §5) | `ebc-demo-printer` | 8103 |
 | `demo/ereaders` (`ebc-demo-ereaders`) | Simulated e-readers: script-less browsers per device profile, OPDS client, mail-to-device SMTP sink, account sync, simulated LCP reader | `ebc-ereader` (CLI) | — |
-| `demo/integration` (`ebc-demo-integration`) | The whole constellation in one process, plus the end-to-end journeys | `ebc-demo` | 8080 + the above |
+| `crates/ebc-shelf` (`ebc-shelf`, not a demo crate) | "Étagère des autrices": the **real** shelf, hosting rights holders' own files, registered with the server as a partner | `ebc-shelf` | 8104 |
+| `demo/integration` (`ebc-demo-integration`) | The whole constellation in one process (plus a demo webmail for the shelf's mail), and the end-to-end journeys | `ebc-demo` | 8080 + the above, webmail 8105 |
 
 The two stores model two *kinds* of reseller (the archetypes are named here only, never in
 the user interface):
@@ -27,6 +28,14 @@ the user interface):
   ecosystem account (the way a Fnac/Kobo-like pairing works). Gifts are `reseller_redirect`:
   the recipient adds the book to their store account and their e-reader syncs it.
 
+The **shelf** "Étagère des autrices (démo)" is not a demo crate but the real `ebc-shelf`
+(`crates/ebc-shelf/README.md`) in `multi` mode: authors sign in by an e-mail link, upload
+their own EPUB with a rights declaration and make gifts; it registers with the server as
+partner `etagere` (`partner_file`, download links on its own host). Its mail (sign-in
+links, acknowledgements, decisions) goes to a mail sink where **every `…@exemple.fr`
+address is a demo mailbox**, readable on the demo webmail; `moderation@exemple.fr` is its
+operator (the moderation pages).
+
 ## The whole thing at once: `ebc-demo`
 
 ```sh
@@ -42,6 +51,8 @@ SMTP), and prints where everything listens:
   Septante (démo)                 http://127.0.0.1:8101  fictional DRM-free store — gifts as partner_file (it serves the file)
   Grande Enseigne (démo)          http://127.0.0.1:8102  fictional ecosystem store — gifts as reseller_redirect
   Imprimerie du Dos Carré (démo)  http://127.0.0.1:8103  fictional printer — GET /v1/products, /__test/orders
+  Étagère des autrices (démo)     http://127.0.0.1:8104  fictional shelf — hosts authors' own books, gifts as partner_file; operator moderation@exemple.fr
+  Webmail (démo)                  http://127.0.0.1:8105  demo mailboxes @exemple.fr — the shelf's sign-in links
   Mail-to-device gateway          smtp://127.0.0.1:…     SMTP sink for demo@kindle.com
 ```
 
@@ -51,6 +62,8 @@ SMTP), and prints where everything listens:
 | `EBC_DEMO_SEPTANTE_PORT` | `8101` | Septante |
 | `EBC_DEMO_GRANDE_ENSEIGNE_PORT` | `8102` | Grande Enseigne |
 | `EBC_DEMO_PRINTER_PORT` | `8103` | printer |
+| `EBC_DEMO_SHELF_PORT` | `8104` | the shelf |
+| `EBC_DEMO_WEBMAIL_PORT` | `8105` | the demo webmail of the shelf's mail |
 | `EBC_DEMO_KINDLE_ADDRESS` | `demo@kindle.com` | device address the mail sink answers for (the sender is pre-approved) |
 | `EBC_DEMO_PRINTER_TICK_MS` | `2000` | time between two steps of a print order (`0`: only `POST /__test/advance` moves orders) |
 
@@ -87,6 +100,13 @@ A walk-through:
    serves it to a linked reader.
 5. On an order page, **"Obtenir un nouveau code"** replaces a lost card's code (the old one
    answers `410`), **"Annuler le cadeau"** refunds an unused gift.
+6. **Host your own book** at the shelf (`http://127.0.0.1:8104`): "Se connecter" with any
+   `…@exemple.fr` address, open the link on the webmail (`http://127.0.0.1:8105`), fill in
+   the identification, upload an EPUB **you wrote** with the rights declaration, then
+   "Créer" a gift: the book page shows the code, the card PDFs (rendered by the server)
+   and a link to the card designer with the code filled in. Redeem it as in step 3. To see
+   notice and action: report it at "Signaler un contenu" (the code printed on the card is a
+   valid location), sign in as `moderation@exemple.fr` and decide at "Modération".
 
 For browser-driven tests (Playwright): the ports are fixed, the pages carry stable element
 ids (`docs/api.md` §2 for the server; `demo/stores/src/views.rs` for the stores), nothing
@@ -96,12 +116,14 @@ needs JavaScript, and the test hooks above expose the state.
 
 ```sh
 EBC_PARTNERS=crates/ebc-server/partners.dev.toml EBC_PRINTER_URL=http://127.0.0.1:8103 cargo run -p ebc-server
+EBC_SHELF_MODE=multi EBC_SHELF_OPERATOR_EMAIL=moderation@exemple.fr EBC_SHELF_PARTNER_SECRET=dev-secret-etagere-0123456789 \
+  EBC_SMTP_URL=smtp://127.0.0.1:2525 cargo run -p ebc-shelf    # needs an SMTP sink of your own on :2525
 DEMO_TEST_HOOKS=1 EBC_PRINTER_URL=http://127.0.0.1:8103 cargo run -p ebc-demo-stores    # both stores
 DEMO_TEST_HOOKS=1 cargo run -p ebc-demo-printer
 ```
 
-The stores' default partner identifiers and secrets (`septante` / `grande-enseigne`,
-`dev-secret-…`) are those of `crates/ebc-server/partners.dev.toml`, whose `redirect_hosts`
+The stores' and the shelf's default partner identifiers and secrets (`septante` /
+`grande-enseigne` / `etagere`, `dev-secret-…`) are those of `crates/ebc-server/partners.dev.toml`, whose `redirect_hosts`
 and webhook URLs are the stores' default addresses — so the three commands above work
 together unchanged. The stores read `EBC_URL` (default `http://127.0.0.1:8080`),
 `EBC_PRINTER_URL`, `DEMO_{SEPTANTE,GRANDE_ENSEIGNE}_{BIND,PUBLIC_URL,PARTNER_ID,PARTNER_SECRET,DELIVERY}`
@@ -131,6 +153,7 @@ none of our own components is mocked:
 | The printed card: the order page's PDF is rendered (`pdftoppm`), its QR code decoded (`zbarimg`) and compared with the upper-cased claim URL, the printed code and address read back (`pdftotext`) and used to redeem on a simulated Kobo; reissued card; reseller card; formats and profiles | `tests/it/card.rs` |
 | "Printed and posted": the store sends the server's card to the printer, which accepts it; status callbacks; printer verdicts on a card with and without bleed (via a store's client and via the server's partner print orders, `docs/api.md` §4.6); fallback of a server without card renderer | `tests/it/printing.rs` |
 | A non-store partner standing in for the shelf (`partner_file` from its own file server): reveal date, status, reissue, cancel through the partner API; a download link on an undeclared host is refused, no claim counted, the device sent nowhere | `tests/it/shelf.rs` |
+| The real shelf: an author signs in with the link from the mail sink, identifies herself, uploads her EPUB with a declaration, makes a gift (card PDF from the server); a Kobo types the code, a PocketBook takes a pair code, both get the file byte for byte; a DRM'd EPUB is refused; an upheld notice turns the code to `410` and keeps the hash and the ISBN out; two upheld notices suspend; `own` mode refuses a second account; the §4.5 endpoint refuses forged, stale and foreign requests | `tests/it/etagere.rs` |
 | Typos, unknown codes and the rate limit, cancelled and reissued codes, tampered signatures, hostile text, misleading `User-Agent` + device chooser | `tests/it/negative.rs` |
 
 Keystroke costs of the device journeys are written to `target/tmp/keystrokes-*.txt`.

@@ -4,7 +4,7 @@ use std::net::SocketAddr;
 use std::sync::Arc;
 use std::time::Duration;
 
-use ebc_demo_ereaders::{DeviceProfile, EinkBrowser, MailDevice};
+use ebc_demo_ereaders::{DeviceProfile, EinkBrowser, MailDevice, MailboxMessage};
 use ebc_demo_printer::{PrinterConfig, PrinterState};
 use ebc_demo_stores::{StoreConfig, StoreKind};
 use ebc_server::{AppState, CardRenderer, Clock, Config, ManualClock, Partner, SystemClock};
@@ -45,7 +45,7 @@ pub enum WorldError {
     Journey(String),
 }
 
-/// TCP ports of the four HTTP services (`0` = any free port).
+/// TCP ports of the HTTP services (`0` = any free port).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct WorldPorts {
     /// The eBook Cadeau server.
@@ -56,17 +56,37 @@ pub struct WorldPorts {
     pub grande_enseigne: u16,
     /// The printer.
     pub printer: u16,
+    /// The shelf "Étagère des autrices".
+    pub shelf: u16,
+    /// The demo webmail over the shelf's mailboxes.
+    pub webmail: u16,
 }
 
 impl WorldPorts {
     /// Free ports chosen by the operating system: what tests use.
-    pub const EPHEMERAL: Self = Self { server: 0, septante: 0, grande_enseigne: 0, printer: 0 };
+    pub const EPHEMERAL: Self =
+        Self { server: 0, septante: 0, grande_enseigne: 0, printer: 0, shelf: 0, webmail: 0 };
     /// The documented demo ports: server 8080, Septante 8101, Grande Enseigne 8102,
-    /// printer 8103 (the defaults of the individual binaries and of
-    /// `crates/ebc-server/partners.dev.toml`).
-    pub const DEMO: Self =
-        Self { server: 8080, septante: 8101, grande_enseigne: 8102, printer: 8103 };
+    /// printer 8103, shelf 8104, webmail 8105 (the defaults of the individual binaries and
+    /// of `crates/ebc-server/partners.dev.toml`).
+    pub const DEMO: Self = Self {
+        server: 8080,
+        septante: 8101,
+        grande_enseigne: 8102,
+        printer: 8103,
+        shelf: 8104,
+        webmail: 8105,
+    };
 }
+
+/// The demo shelf's partner identifier at the core.
+pub const SHELF_PARTNER_ID: &str = "etagere";
+/// The demo shelf's partner secret (public: demo only).
+pub const SHELF_PARTNER_SECRET: &str = "dev-secret-etagere-0123456789";
+/// The demo shelf's operator (moderation) address, a demo mailbox.
+pub const SHELF_OPERATOR: &str = "moderation@exemple.fr";
+/// The domain whose every address is a demo mailbox of the webmail.
+pub const MAILBOX_DOMAIN: &str = "@exemple.fr";
 
 /// The time every component of a [`World`] shares.
 #[derive(Debug, Clone)]
@@ -192,7 +212,31 @@ pub struct PrinterHandle {
     pub state: Arc<PrinterState>,
 }
 
+/// The running demo shelf.
+#[derive(Debug, Clone)]
+pub struct ShelfHandle {
+    /// Base URL, e.g. `http://127.0.0.1:40333` (also its public URL).
+    pub base: String,
+    /// The in-process state (records, outbox-free: mail goes to [`World::mailbox`]).
+    pub state: ebc_shelf::AppState,
+}
+
+impl ShelfHandle {
+    /// `base` + `path` (`path` starts with `/`).
+    #[must_use]
+    pub fn url(&self, path: &str) -> String {
+        format!("{}{path}", self.base)
+    }
+
+    /// `host:port` of the shelf, as listed in the server's `redirect_hosts`.
+    #[must_use]
+    pub fn host(&self) -> &str {
+        self.base.split_once("://").map_or(self.base.as_str(), |(_, host)| host)
+    }
+}
+
 type ServerTweak = Box<dyn FnOnce(&mut Config) + Send>;
+type ShelfTweak = Box<dyn FnOnce(&mut ebc_shelf::Config) + Send>;
 type StoreTweak = Box<dyn Fn(StoreConfig) -> StoreConfig + Send>;
 
 /// Configures and starts a [`World`]. Obtain one with [`World::builder`].
@@ -206,6 +250,7 @@ pub struct WorldBuilder {
     card_renderer: Option<Arc<dyn CardRenderer>>,
     printer_tick: Option<Duration>,
     fast_passwords: bool,
+    shelf_tweaks: Vec<ShelfTweak>,
 }
 
 impl std::fmt::Debug for WorldBuilder {
@@ -231,7 +276,19 @@ impl WorldBuilder {
             card_renderer: None,
             printer_tick: None,
             fast_passwords: true,
+            shelf_tweaks: Vec::new(),
         }
+    }
+
+    /// Adjusts the shelf's configuration after the constellation's own wiring (mode,
+    /// thresholds, sizes…).
+    #[must_use]
+    pub fn shelf_config(
+        mut self,
+        tweak: impl FnOnce(&mut ebc_shelf::Config) + Send + 'static,
+    ) -> Self {
+        self.shelf_tweaks.push(Box::new(tweak));
+        self
     }
 
     /// Listens on these ports instead of ephemeral ones.
@@ -318,6 +375,16 @@ impl WorldBuilder {
         let (septante_listener, septante_base) = bind(self.ports.septante).await?;
         let (grande_listener, grande_base) = bind(self.ports.grande_enseigne).await?;
         let (printer_listener, printer_base) = bind(self.ports.printer).await?;
+        let (shelf_listener, shelf_base) = bind(self.ports.shelf).await?;
+        let (webmail_listener, webmail_base) = bind(self.ports.webmail).await?;
+        // The shelf's mail (sign-in links, notices) goes to plain demo mailboxes, read on
+        // the demo webmail. The sink is a Kindle gateway whose device address nobody uses.
+        let mailbox =
+            MailDevice::start(DeviceProfile::kindle_paperwhite(), "boite-aux-lettres@kindle.com")
+                .await
+                .map_err(|e| WorldError::Mail(e.to_string()))?;
+        mailbox.add_mailbox(MAILBOX_DOMAIN);
+        let mailbox = Arc::new(mailbox);
 
         let mail = match &self.mail {
             Some((profile, address)) => Some(
@@ -353,6 +420,13 @@ impl WorldBuilder {
             store_partner(StoreKind::Septante, &septante_base),
             store_partner(StoreKind::GrandeEnseigne, &grande_base),
         ];
+        config.partners.push(Partner {
+            id: SHELF_PARTNER_ID.to_owned(),
+            name: "Étagère des autrices (démo)".to_owned(),
+            secret: SHELF_PARTNER_SECRET.to_owned(),
+            webhook_url: None,
+            redirect_hosts: vec![host_of(&shelf_base).to_owned()],
+        });
         config.partners.extend(self.partners);
         config.printer_url = Some(printer_base.clone());
         config.smtp_url = mail.as_ref().map(MailDevice::smtp_url);
@@ -411,12 +485,60 @@ impl WorldBuilder {
         let septante = start_store(StoreKind::Septante, septante_listener, septante_base);
         let grande_enseigne = start_store(StoreKind::GrandeEnseigne, grande_listener, grande_base);
 
+        // --- the shelf, a partner of the server like the stores ---
+        let mut shelf_config = ebc_shelf::Config::for_tests();
+        shelf_config.bind = host_of(&shelf_base).to_owned();
+        shelf_config.public_url.clone_from(&shelf_base);
+        shelf_config.name = "Étagère des autrices (démo)".to_owned();
+        shelf_config.mode = ebc_shelf::Mode::Multi;
+        shelf_config.operator_email = SHELF_OPERATOR.to_owned();
+        shelf_config.core_url.clone_from(&server_base);
+        shelf_config.core_public_url.clone_from(&server_base);
+        shelf_config.partner_id = SHELF_PARTNER_ID.to_owned();
+        shelf_config.partner_secret = SHELF_PARTNER_SECRET.to_owned();
+        shelf_config.smtp_url = Some(mailbox.smtp_url());
+        shelf_config.mail_from = "etagere@exemple.fr".to_owned();
+        shelf_config.contact_email = Some("contact@exemple.fr".to_owned());
+        shelf_config.legal = ebc_shelf::LegalInfo {
+            operator_name: Some("Étagère des autrices (démo — fictive, non affiliée)".to_owned()),
+            operator_address: Some("1 rue de l’Exemple, 00000 Démoville".to_owned()),
+            operator_registration: None,
+            publication_director: Some("Personne fictive".to_owned()),
+            host_name: Some("Hébergeur fictif (démo)".to_owned()),
+            host_address: Some("2 rue de l’Exemple, 00000 Démoville".to_owned()),
+            host_phone: None,
+        };
+        shelf_config.outbound_timeout_ms = 10_000;
+        for tweak in self.shelf_tweaks {
+            tweak(&mut shelf_config);
+        }
+        let shelf_clock: Arc<dyn ebc_shelf::Clock> = match &self.clock {
+            WorldClock::Manual(clock) => {
+                let clock = Arc::clone(clock);
+                Arc::new(ebc_shelf::FnClock(move || clock.now_unix()))
+            }
+            WorldClock::System => Arc::new(ebc_shelf::SystemClock),
+        };
+        let shelf_state = ebc_shelf::AppState::builder(shelf_config)
+            .clock(shelf_clock)
+            .build()
+            .map_err(|e| WorldError::Server(format!("shelf: {e}")))?;
+        let serving = shelf_state.clone();
+        tasks.push(tokio::spawn(async move {
+            // The shelf's own `serve` (time-outs, connection cap, client addresses).
+            let _ = ebc_shelf::serve(shelf_listener, serving, std::future::pending()).await;
+        }));
+        tasks.push(spawn(webmail_listener, crate::webmail::router(Arc::clone(&mailbox))));
+
         Ok(World {
             clock: self.clock,
             server: ServerHandle { base: server_base, state: server_state },
             septante,
             grande_enseigne,
             printer: PrinterHandle { base: printer_base, state: printer_state },
+            shelf: ShelfHandle { base: shelf_base, state: shelf_state },
+            webmail: webmail_base,
+            mailbox,
             mail,
             tasks,
         })
@@ -456,6 +578,14 @@ pub struct World {
     pub grande_enseigne: StoreHandle,
     /// The print provider both the server and the stores talk to.
     pub printer: PrinterHandle,
+    /// The shelf "Étagère des autrices": hosts rights holders' files, a partner of the
+    /// server (`partner_file`).
+    pub shelf: ShelfHandle,
+    /// Base URL of the demo webmail over [`World::mailbox`].
+    pub webmail: String,
+    /// The mail sink of the shelf's mail: every address of [`MAILBOX_DOMAIN`] is a plain
+    /// mailbox.
+    pub mailbox: Arc<MailDevice>,
     /// The mail-to-device gateway, when [`WorldBuilder::mail_device`] asked for one.
     pub mail: Option<MailDevice>,
     tasks: Vec<JoinHandle<()>>,
@@ -529,6 +659,25 @@ impl World {
         }
     }
 
+    /// Messages of a demo mailbox (`address`), oldest first.
+    #[must_use]
+    pub fn inbox(&self, address: &str) -> Vec<MailboxMessage> {
+        self.mailbox.mailbox(address)
+    }
+
+    /// The last link of the last message sent to `address` that contains `needle`
+    /// (e.g. the shelf's sign-in link: `"/connexion/"`).
+    #[must_use]
+    pub fn link_in_mail(&self, address: &str, needle: &str) -> Option<String> {
+        self.inbox(address).iter().rev().find_map(|m| {
+            m.text
+                .lines()
+                .map(str::trim)
+                .rfind(|l| l.starts_with("http") && l.contains(needle))
+                .map(str::to_owned)
+        })
+    }
+
     /// What runs where, for a printed table: `(name, URL, note)`.
     #[must_use]
     pub fn services(&self) -> Vec<(String, String, String)> {
@@ -552,6 +701,18 @@ impl World {
                 "Imprimerie du Dos Carré (démo)".to_owned(),
                 self.printer.base.clone(),
                 "fictional printer — GET /v1/products, /__test/orders".to_owned(),
+            ),
+            (
+                "Étagère des autrices (démo)".to_owned(),
+                self.shelf.base.clone(),
+                format!(
+                    "fictional shelf — hosts authors' own books, gifts as partner_file; operator {SHELF_OPERATOR}"
+                ),
+            ),
+            (
+                "Webmail (démo)".to_owned(),
+                self.webmail.clone(),
+                format!("demo mailboxes {MAILBOX_DOMAIN} — the shelf's sign-in links"),
             ),
         ];
         if let Some(mail) = &self.mail {

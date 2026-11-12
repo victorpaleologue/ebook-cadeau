@@ -156,20 +156,22 @@ fn fit_honours_shaping_options_and_variation_instances() {
 
 #[test]
 fn spine_titles_fit_a_ten_millimetre_spine() {
-    // The card's spine: 178 mm long and 10 mm thick, with 2 mm clear on each side and
-    // 14 mm at each end: titles get 150 mm x 6 mm, between 6 and 40 pt.
+    // The card's spine is 178 mm long and 10 mm thick. Following
+    // docs/research/08 (implementation item 7): capitals at most 7 mm tall, type
+    // never below 6 pt; 14 mm are kept clear at each end, leaving 150 mm.
     let font = common::bebas();
     let metrics = font.metrics();
-    let fit = |title: &str| fit_size(&font, title, 150.0, 6.0, 6.0, 40.0, &opts());
+    let fit = |title: &str| fit_size(&font, title, 150.0, 7.0, 6.0, 40.0, &opts());
 
-    // A short title is limited by the thickness of the spine: 6 mm capitals.
+    // A short title is limited by the thickness of the spine: 7 mm capitals.
     let short = fit("LA PESTE").expect("fits");
-    assert!(close(metrics.cap_height_mm(short), 6.0, 1e-9));
-    assert!(close(short, 24.297, 0.01), "{short}"); // 6 mm / (0.7 em x 0.3528 mm/pt)
+    assert!(close(metrics.cap_height_mm(short), 7.0, 1e-9));
+    assert!(close(short, 28.346, 0.01), "{short}"); // 7 mm / (0.7 em x 0.3528 mm/pt)
+    assert!(shape(&font, "LA PESTE", short, &opts()).width < 150.0);
     // A long title is limited by the length of the spine.
     let long_title = "LE TOUR DU MONDE EN QUATRE-VINGTS JOURS — ÉDITION ILLUSTRÉE ET ANNOTÉE";
     let long = fit(long_title).expect("fits");
-    assert!(long < short);
+    assert!(long < short && long >= 6.0);
     assert!(close(shape(&font, long_title, long, &opts()).width, 150.0, 1e-6));
     // An absurdly long title does not fit at 6 pt: the caller has to shorten it.
     assert_eq!(fit(&long_title.repeat(4)), None);

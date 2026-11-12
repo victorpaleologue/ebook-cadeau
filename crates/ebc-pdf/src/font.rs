@@ -207,8 +207,13 @@ impl EmbeddedFont {
                         map.insert(glyph, remapper.remap(glyph));
                     }
                 }
-                let subset = subsetter::subset(data, resource.face_index, &remapper)
-                    .map_err(|e| invalid(format!("subsetting failed: {e}")))?;
+                // The subsetter is third-party code working on untrusted bytes: should it
+                // ever panic, report an error instead (where the build can unwind).
+                let subset = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    subsetter::subset(data, resource.face_index, &remapper)
+                }))
+                .map_err(|_| invalid("the font subsetter failed on this font".into()))?
+                .map_err(|e| invalid(format!("subsetting failed: {e}")))?;
                 let program = match outlines {
                     Outlines::Glyf => subset,
                     Outlines::Cff => RawFace::parse(&subset, 0)

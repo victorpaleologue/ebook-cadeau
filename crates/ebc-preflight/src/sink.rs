@@ -70,6 +70,8 @@ pub(crate) struct Budget {
     operations: u64,
     /// Decoded content stream bytes still allowed.
     bytes: usize,
+    /// Form XObject and tiling pattern executions still allowed.
+    nested_runs: u32,
     reported: bool,
 }
 
@@ -81,8 +83,17 @@ impl Budget {
     /// Decoded size of a single stream.
     pub(crate) const MAX_STREAM_BYTES: usize = 32 * 1024 * 1024;
 
+    /// Form XObject and tiling pattern executions per document. Real documents draw a few
+    /// thousand at most; recursion bombs draw billions.
+    pub(crate) const MAX_NESTED_RUNS: u32 = 50_000;
+
     pub(crate) fn new() -> Self {
-        Self { operations: Self::MAX_OPERATIONS, bytes: Self::MAX_CONTENT_BYTES, reported: false }
+        Self {
+            operations: Self::MAX_OPERATIONS,
+            bytes: Self::MAX_CONTENT_BYTES,
+            nested_runs: Self::MAX_NESTED_RUNS,
+            reported: false,
+        }
     }
 
     #[cfg(test)]
@@ -96,6 +107,15 @@ impl Budget {
             return false;
         }
         self.operations -= 1;
+        true
+    }
+
+    /// Consumes one form or pattern execution; `false` when the budget is exhausted.
+    pub(crate) fn take_nested_run(&mut self) -> bool {
+        if self.nested_runs == 0 {
+            return false;
+        }
+        self.nested_runs -= 1;
         true
     }
 
@@ -165,5 +185,8 @@ mod tests {
         assert_eq!(findings[0].severity, Severity::Error);
         budget.charge_bytes(usize::MAX);
         assert_eq!(budget.stream_limit(), 0);
+        let mut budget = Budget::new();
+        let runs = (0..Budget::MAX_NESTED_RUNS + 10).filter(|_| budget.take_nested_run()).count();
+        assert_eq!(runs, Budget::MAX_NESTED_RUNS as usize);
     }
 }

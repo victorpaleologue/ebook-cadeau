@@ -107,23 +107,35 @@ Keep `book`, `http`, `locale`. Add `code`:
 
 ```rust
 /// The human-typed redemption code printed on the card.
-pub struct GiftCode;   // Display = grouped "XXXXX-XXXXX"; FromStr is lenient
+pub struct GiftCode;   // Display = grouped "XXXX-XXXX-XXXX"; FromStr is lenient
 impl GiftCode {
-    pub const ALPHABET: &'static str = "0123456789ABCDEFGHJKMNPQRSTVWXYZ"; // Crockford base32
-    pub const DATA_SYMBOLS: usize = 9;       // 45 bits of entropy
-    pub fn from_random_bytes(bytes: &[u8]) -> Result<Self, CodeError>; // caller supplies >= 6 CSPRNG bytes
-    pub fn parse(input: &str) -> Result<Self, CodeError>; // case-insensitive; maps I,L->1, O->0; ignores '-', ' ', '.', '_'
-    pub fn compact(&self) -> String;         // 10 symbols, no separator: 9 data + 1 check
-    pub fn grouped(&self) -> String;         // "XXXXX-XXXXX"
+    pub const ALPHABET: &'static str = "BCDFGHJKLMNPQRSTVWXZ"; // 20 consonants: letters only, no vowels
+    pub const DATA_SYMBOLS: usize = 11;      // 20^11 ≈ 47.5 bits of entropy
+    pub const LEN: usize = 12;               // 11 data + 1 check
+    pub fn from_random_bytes(bytes: &[u8]) -> Result<Self, CodeError>; // caller supplies >= 8 CSPRNG bytes; unbiased (rejection sampling or wide reduction)
+    pub fn parse(input: &str) -> Result<Self, CodeError>; // case-insensitive; ignores '-', ' ', '.', '_'
+    pub fn compact(&self) -> String;         // 12 symbols, no separator
+    pub fn grouped(&self) -> String;         // "XXXX-XXXX-XXXX"
 }
-/// Builds the URL encoded in the QR code and printed as the fallback, e.g. base "https://ebk.example" -> "https://ebk.example/k/XXXXXXXXXX".
+/// The short code that pairs a phone with an e-reader browser: 6 symbols of the same alphabet, "XXX-XXX", no check symbol.
+pub struct PairCode;   // from_random_bytes, parse (lenient), compact, grouped
+/// The URL printed on the card, e.g. base "https://ebk.example" -> "https://ebk.example/k/BCDFGHJKLMNP".
 pub fn claim_url(base_url: &str, code: &GiftCode) -> String;
+/// The same URL fully upper-cased for the QR code (alphanumeric mode): "HTTPS://EBK.EXAMPLE/K/BCDFGHJKLMNP".
+pub fn claim_url_qr(base_url: &str, code: &GiftCode) -> String;
 ```
 
+Why this alphabet (see `docs/research/05-ereader-distribution-ux.md`): digits cost a layer
+switch on phone and e-ink on-screen keyboards and Shift on AZERTY keyboards, and bring the
+0/O, 1/I/L, 5/S, 8/B confusions; consonants only cannot spell a word on a gift.
+
 The check symbol must detect **every single-symbol substitution and every adjacent
-transposition** (use the Damm algorithm over a totally anti-symmetric quasigroup of order 32,
-or prove another scheme; test exhaustively over a large sample). Parsing must distinguish
-`CodeError::Check` (typo — do not count as a brute-force attempt) from well-formed codes.
+transposition**: use a Damm-style scheme over a totally anti-symmetric quasigroup of order
+20, e.g. the direct product of GF(4) and ℤ/5 with x∘y = a·x + y in each component (a = 2 in
+ℤ/5; a = a generator of GF(4)* with modulus x²+x+1), the check symbol being the one that
+brings the running state to 0. Prove both properties with EXHAUSTIVE tests over the
+quasigroup and randomised whole-code tests. Parsing must distinguish `CodeError::Check`
+(typo — never counted as a brute-force attempt) from well-formed codes.
 
 Also add `gift`: `GiftId`, `Gift { id, code, book: BookMeta, giver_name, recipient_name,
 message, locale, created_unix, expires_unix, delivery: Delivery }`,

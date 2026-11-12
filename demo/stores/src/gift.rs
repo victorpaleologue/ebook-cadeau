@@ -56,8 +56,7 @@ fn fail(state: &AppState, line_ref: &str, message: String) {
 
 async fn process_line(state: &AppState, order: &Order, details: &GiftDetails, index: usize) {
     let Some(line) = order.lines.get(index) else { return };
-    let Some(line_ref) = line.gift.as_ref().map(|g| g.line_ref.clone()) else { return };
-    let line_ref = line_ref.as_str();
+    let Some(line_ref) = line.gift.as_ref().map(|g| g.line_ref.as_str()) else { return };
     // Work on a fresh copy of the record: an earlier, partially successful run may have
     // completed some steps already.
     let current = |state: &AppState| {

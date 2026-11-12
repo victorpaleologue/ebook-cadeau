@@ -157,6 +157,12 @@ fn check_output_intent(doc: &Document) -> Result<Option<&OutputIntent>, PdfError
             reason: "only CMYK (4-component) printing conditions are supported for PDF/X",
         });
     }
+    if is_x && intent.registry_name.trim().is_empty() && intent.info.trim().is_empty() {
+        return Err(PdfError::UnsupportedOutputIntent {
+            reason: "a printing condition that is not in a registry needs a description \
+                     (OutputIntent::info)",
+        });
+    }
     match &intent.icc_profile {
         Some(profile) => {
             let context = || "the output intent".to_owned();

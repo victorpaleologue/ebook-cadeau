@@ -1,5 +1,66 @@
-//! Demo: simulated e-readers (limited browsers, OPDS client, mail-to-device sink) for integration tests.
+//! Simulated e-readers for the eBook Cadeau integration and end-to-end tests.
 //!
-//! Skeleton — see `docs/architecture.md` for the contract this crate must fulfil.
+//! The redemption flow of a gifted eBook only *really* works if it works on the devices people
+//! read on: e-ink readers with decade-old browsers, no camera, no JavaScript worth relying on,
+//! and ecosystems that each accept different files through different doors. This crate
+//! simulates those devices closely enough for tests to prove the flow end to end:
+//!
+//! | Component | Simulates |
+//! |---|---|
+//! | [`EinkBrowser`] | the built-in browser: profile `User-Agent`, **no JavaScript**, links, forms, bounded redirects, downloads into the device [`Library`] |
+//! | [`Page::lint`] | what breaks on old e-reader browsers (script requirements, external resources, weight, labels…) |
+//! | [`TypingCost`] | taps needed on an on-screen e-ink keyboard, for UX budgets |
+//! | [`OpdsClient`] | a reading app's OPDS 1.2 (Atom) / 2.0 (JSON) client |
+//! | [`MailDevice`] | "send to my device by e-mail" (Send to Kindle, Send-to-PocketBook) behind a tiny SMTP server |
+//! | [`SyncDevice`] | an ecosystem-account reader that pulls purchases from a store's device API |
+//! | [`SimulatedLcpReader`] | the *shape* of the Readium LCP flow — **no real cryptography** |
+//!
+//! What each device family can and cannot do is encoded in [`DeviceProfile`]; every capability
+//! carries a [`profile::Claim`] citing `docs/research/notes/ereader-ux.*.md` or marking itself
+//! as an assumption. **No profile was validated on hardware.**
+//!
+//! # Example
+//!
+//! ```no_run
+//! use ebc_demo_ereaders::{DeviceProfile, EinkBrowser};
+//!
+//! # async fn demo() -> Result<(), ebc_demo_ereaders::Error> {
+//! let mut kobo = EinkBrowser::new(DeviceProfile::kobo_clara())?;
+//! kobo.open("http://127.0.0.1:8080/").await?;          // typed on the e-ink keyboard
+//! kobo.type_into("code-input", "abcde-12345")?;
+//! kobo.submit("code-form").await?;                      // -> /k/ABCDE12345
+//! let outcome = kobo.click("download").await?;          // POST -> 303 -> the EPUB
+//! assert!(outcome.download().is_some());
+//! assert!(kobo.total_taps() < 60);
+//! # Ok(()) }
+//! ```
+//!
+//! Everything is bounded: requests have deadlines, bodies have size caps, redirect chains have
+//! a length limit, and no parser panics on hostile input.
 
 #![forbid(unsafe_code)]
+
+pub mod browser;
+mod css;
+pub mod error;
+pub mod fixtures;
+pub mod format;
+pub mod library;
+pub mod lint;
+pub mod net;
+pub mod page;
+pub mod profile;
+pub mod typing;
+
+pub use browser::{BrowserConfig, EinkBrowser, LicenceFile, Outcome};
+pub use error::{
+    BrowserError, DownloadRefusal, Error, ImportError, LcpError, MailError, NetError, OpdsError,
+    Result, SyncError,
+};
+pub use format::FileFormat;
+pub use library::{ImportSource, IncomingFile, Library, LibraryEntry};
+pub use lint::{LintConfig, LintFinding, LintReport, Severity};
+pub use net::{Exchange, NetConfig};
+pub use page::Page;
+pub use profile::{DeviceFamily, DeviceProfile, DrmScheme, MailServiceSpec};
+pub use typing::{Keyboard, TapLog, TypingCost};

@@ -136,8 +136,8 @@ From the cover server ([code.py](https://raw.githubusercontent.com/internetarchi
 - **Sizes** are bounding boxes (maximum width, maximum height): `S` (116, 58), `M` (180, 360), `L` (500, 500) [V1]. A portrait `-L` cover is at most 500 px tall.
 - **No suffix returns the original upload** [V1]. This is the only way past 500 px; how large originals are depends on who uploaded them [M].
 - **`?default=false` returns HTTP 404** instead of a placeholder [V2: Open Library source; hard-coded by [calibre](https://raw.githubusercontent.com/kovidgoyal/calibre/master/src/calibre/ebooks/metadata/sources/openlibrary.py) and [VuFind](https://raw.githubusercontent.com/vufind-org/vufind/dev/module/VuFind/src/VuFind/Content/Covers/OpenLibrary.php)]. `?default=<url>` redirects (303) only to vetted hosts since a security fix ([utils.py](https://raw.githubusercontent.com/internetarchive/openlibrary/master/openlibrary/coverstore/utils.py)) [V1].
-- **`/b/isbn/{isbn}.json`** redirects (302) to `/b/id/{coverid}.json`, whose record includes `width`, `height` and `source_url` [V1]. Use it to learn the pixel size before any image request.
-- **Redirects to archive.org** are common: `L` and original sizes of covers stored in the archive.org cluster, and every size of uploaded covers with an id of 8,000,000 or more, answer with a 302 [V1]. A client must follow redirects and allow `archive.org`.
+- **`/b/isbn/{isbn}.json`** redirects (302) to `/b/id/{coverid}.json`, whose record includes `width`, `height` and `source_url`; an unknown ISBN gets a 404 [V1]. Use it to learn the pixel size before any image request.
+- **Redirects to archive.org** are common: `L` and original sizes of covers stored in the archive.org cluster, and every size of covers with an id of 8,000,000 or more once they have been archived, answer with a 302 [V1]. A client must follow redirects and allow `archive.org`.
 - **Caching**: ISBN-keyed responses carry `Expires` +10 minutes; id-keyed responses "100 years" plus an ETag [V1]. Resolve the ISBN to a cover id once, then use `/b/id/`.
 - **CORS**: the application adds `Access-Control-Allow-Origin: *`, methods GET, HEAD, OPTIONS, to every response, with or without an `Origin` header ([asgi_app.py](https://raw.githubusercontent.com/internetarchive/openlibrary/master/openlibrary/coverstore/asgi_app.py)) [V1]. The JSON endpoints of `openlibrary.org` do the same [V1\*, `notes/isbn-databases.open.md`]. Browser code can therefore call the JSON endpoint and read image bytes served by `covers.openlibrary.org` directly. Whether archive.org sends the header on the redirect target is **not verified**.
 - **Takedowns**: a `blocked_covers` list exists in the server configuration [V1], so removal requests do occur.
@@ -339,7 +339,7 @@ Conclusions:
 
 1. **There is nothing to scrape.** The only API that may return a spine is Amazon's, which we cannot use. "Finding" a spine otherwise means shelf photographs or printer files: routes rated High, with a photographer's right on top.
 2. Many eBooks are digital-only and never had a spine.
-3. **A real spine rarely fits.** Our spine panel is 10 mm wide and as tall as the front. A supplied spine scaled uniformly to the panel height keeps its own proportions: a *poche* spine fits only if the book's spine was 10 mm or less (roughly 150 pages or fewer); a 20 mm spine of a 140 x 205 mm book becomes 17.4 mm at 178 mm height and does not fit [est.]. Re-fitting it is an adaptation that needs consent (doc 07, implication 13).
+3. **A real spine rarely fits.** Our spine panel is 10 mm wide and as tall as the front. A supplied spine scaled uniformly to the panel height keeps its own proportions: a *poche* spine fits only if the book's spine was 10 mm or less (roughly 150–200 pages [M]); a 20 mm spine of a 140 x 205 mm book becomes 17.4 mm at 178 mm height and does not fit [est.]. Re-fitting it is an adaptation that needs consent (doc 07, implication 13).
 4. So: **generate the spine by default** (flat colour, title and author retyped; doc 07, implications 11–12). Accept an optional flat-cover upload from a rights holder; use its spine only when it fits.
 5. Shelf datasets are useful only to learn conventions for the generator: order of title, author and publisher mark; colour continuity with the front.
 6. Reading direction: French and most continental spines read bottom-to-top, English-language spines top-to-bottom [M]. Make it a per-locale default with an override.
@@ -366,7 +366,7 @@ Everything in this section is [M] unless marked. It is a map for French IP couns
 
 ### 6.2 robots.txt and RFC 9309
 
-**The standard.** The Robots Exclusion Protocol was published by the IETF as RFC 9309 in September 2022 ([TDMRep primer](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/docs/robots.md); Google's parser [README](https://raw.githubusercontent.com/google/robotstxt/master/README.md) points to it) [V2]. Points that matter for a compliant fetcher:
+**The standard.** The Robots Exclusion Protocol is specified in RFC 9309 ([TDMRep primer](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/docs/robots.md); Google's parser [README](https://raw.githubusercontent.com/google/robotstxt/master/README.md)) [V2], published by the IETF in September 2022 [V1, the primer]. Points that matter for a compliant fetcher:
 
 - The rules "are not a form of access authorization" and the protocol "is not a substitute for valid content security measures" [M].
 - Longest match wins; on a tie `Allow` wins; user-agent matching is case-insensitive [M].
@@ -393,6 +393,8 @@ Everything in this section is [M] unless marked. It is a map for French IP couns
 - (2) copies "may be retained for as long as is necessary for the purposes of text and data mining";
 - (3) it applies "on condition that the use … has not been expressly reserved by their rightsholders in an appropriate manner, such as machine-readable means in the case of content made publicly available online".
 - Recital 18: for content publicly available online, "it should only be considered appropriate to reserve those rights by the use of machine-readable means, **including metadata and terms and conditions of a website or a service**"; and "rightsholders should be able to apply measures to ensure that their reservations in this regard are respected".
+
+Whether terms written in natural language count as "machine-readable" is disputed (the Hamburg decisions in §6.2 [M, low]). We take the cautious reading: any reservation in a site's terms is treated as effective, in every Member State.
 
 | | DSM art. 3 / CPI L122-5-3 II | DSM art. 4 / CPI L122-5-3 III |
 |---|---|---|
@@ -566,7 +568,7 @@ Display rules for candidates:
 For every server-side fetch, and for every transient analysis:
 
 1. **robots.txt** of the origin: fetch, cache 24 h, parse up to 500 KiB. Match our product token, then `*`. 4xx other than 429 = no restriction; 5xx or unreachable = disallow.
-2. **TDMRep**: `/.well-known/tdmrep.json` of the origin first; then the `tdm-reservation` header of the response; then HTML meta tags. A value of 1 from any of them closes the analysis route for that resource. An image is checked on its own response and its own origin, because the HTML tag does not cover it [V1].
+2. **TDMRep**: `/.well-known/tdmrep.json` of the origin first; then the `tdm-reservation` header of the response; then HTML meta tags, each superseding the previous one as the protocol specifies. An effective value of 1 closes the analysis route for that resource. An image is checked on its own response and its own origin, because the HTML tag does not cover it [V1].
 3. **`X-Robots-Tag` and meta `noai`, `noimageai`**: treated as a reservation.
 4. **Terms of use**: recorded per allow-listed host at review time. For a host that is not reviewed, there is no server-side analysis.
 5. Any reservation means: no fetch for analysis, no facts derived. An inline link by the user's browser is not TDM and stays possible for allow-listed API hosts.
@@ -645,7 +647,7 @@ GPL and AGPL code read for facts only; do not copy.
 - [Kelly v Arriba Soft, 336 F.3d 811](https://m.openjurist.org/336/f3d/811)
 - [CRS RL33810 — search engines and fair use](https://www.everycrsreport.com/reports/RL33810.html)
 - [LibraryThing covers blog](https://blog.librarything.com/category/covers/), [Goodreads — source of book covers](https://www.goodreads.com/topic/show/1277733-source-of-book-covers?page=1) (from `07-legal-covers-and-reseller-rights.md`)
-- [BnF hackathon wiki](https://raw.githubusercontent.com/wiki/hackathonBnF/hackathon2016/Home.md) (from `notes/isbn-databases.open.md`)
+- [BnF hackathon wiki](https://raw.githubusercontent.com/wiki/hackathonBnF/hackathon2016/Home.md), [Open Library processors.py](https://raw.githubusercontent.com/internetarchive/openlibrary/master/openlibrary/plugins/openlibrary/processors.py) (CORS on JSON), [Open Library web_nginx.conf](https://raw.githubusercontent.com/internetarchive/openlibrary/master/docker/web_nginx.conf) (API rate limit) — files read by the ISBN researcher, from `notes/isbn-databases.open.md`
 
 ### 9.5 Authorities cited from memory, by identifier
 
@@ -682,14 +684,14 @@ Numbers marked (proposal) are design choices, not legal thresholds or provider-s
 
 **Open Library adapter**
 
-11. Request `https://covers.openlibrary.org/b/isbn/{isbn13}.json` from the browser, follow the 302 to the id record, read `width` and `height`. A 404 means no cover. Then use id-keyed URLs only: `/b/id/{id}-M.jpg` for the preview, `/b/id/{id}.jpg` (original) as the "open the image" link.
+11. Request `https://covers.openlibrary.org/b/isbn/{isbn13}.json` from the browser, with the ISBN written without hyphens (the JSON route does not strip them), follow the 302 to the id record, read `width` and `height`. A 404 means no cover. Then use id-keyed URLs only: `/b/id/{id}-M.jpg` for the preview, `/b/id/{id}.jpg` (original) as the "open the image" link.
 12. Every image URL built for Open Library carries `?default=false`. Clients follow up to 5 redirects and allow `archive.org` and its subdomains as redirect targets.
 13. ISBN-keyed requests are limited to 1 every 3 seconds per client; id-keyed requests to 1 per second. No request is ever routed through a CloudFront origin fetch.
 
 **Google Books adapter**
 
 14. Disabled unless an API key is configured. Results are held in memory for the session only and never written to a cache or database. The preview uses the `thumbnail` link with `edge=curl` removed, and shows "Google Books" attribution with a link to the volume page.
-15. An image whose MD5 is `0de4383ebad0adad5eeb8975cd796657` or `a64fa89d7ebc97075c1d363fc5fea71f` is a placeholder. Since preview pixels are not read in the hosted service, the adapter instead rejects volumes whose record has no `imageLinks`; the hash check applies in the command-line tool.
+15. An image whose MD5 is `0de4383ebad0adad5eeb8975cd796657` or `a64fa89d7ebc97075c1d363fc5fea71f` is a Google placeholder. Since preview pixels are not read in the hosted service, the adapter rejects volumes whose record has no `imageLinks`; the two digests stay in the fixture list for any code path that does read bytes. Google images are never downloaded by the command-line tool.
 
 **BnF and DNB adapters**
 
@@ -700,7 +702,7 @@ Numbers marked (proposal) are design choices, not legal thresholds or provider-s
 17. Accept only `https` URLs. Resolve the host and refuse private, loopback, link-local and metadata addresses, at connection time as well as before it; re-check after every redirect; at most 5 redirects; 2 MiB body cap; 10 s total timeout.
 18. Before fetching the page: check the denylist, then robots.txt for our user-agent, then `/.well-known/tdmrep.json`. After fetching: check the `tdm-reservation` header, `X-Robots-Tag`, and the HTML meta tags. A disallow or a reservation means the page is not parsed and the user is told to supply the image file directly.
 19. Extraction order: JSON-LD `Book` or `Product` image, `og:image`, `twitter:image`, `link rel="image_src"`, `itemprop="image"`. The page must contain the requested ISBN (or a known sibling ISBN); otherwise the result is flagged "ISBN not found on page".
-20. The extractor returns image URLs and declared dimensions only. The interface shows them as plain links with the source name. No image from a non-allow-listed host is inlined, and the page's image-source policy lists only the allow-listed preview hosts.
+20. The extractor returns image URLs and declared dimensions only. The interface shows them as plain links with the source name. No image from a non-allow-listed host is inlined: the `img-src` directive of the Content-Security-Policy lists only our own origin, `data:`/`blob:` for local files, and the allow-listed preview hosts (`covers.openlibrary.org`, `archive.org` and its subdomains, the Google Books image host, and BnF or DNB once enabled).
 
 **Fetcher behaviour (all server-side and command-line requests)**
 

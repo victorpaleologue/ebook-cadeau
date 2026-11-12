@@ -56,7 +56,9 @@ fn bundled_fonts_carry_the_open_font_licence_and_may_be_embedded() {
         assert_eq!(font.fs_type(), Some(0), "{label}");
         assert_eq!(font.embedding(), EmbeddingPermission::Installable, "{label}");
         assert_eq!(font.embedding_flags(), EmbeddingFlags::default(), "{label}");
-        assert!(font.allows_subset_embedding(), "{label}");
+        assert!(font.allows_bundling() && font.allows_subset_embedding(), "{label}");
+        assert!(font.allows_outlines(), "{label}");
+        assert!(font.version().is_some_and(|v| v.starts_with("Version")), "{label}");
         assert_eq!(font.outline_format(), OutlineFormat::TrueType, "{label}");
         assert!(!font.is_variable(), "{label}");
         assert!(font.axes().is_empty() && font.variations().is_empty(), "{label}");
@@ -212,19 +214,21 @@ fn hostile_name_records_are_cleaned_or_skipped() {
 #[test]
 fn fs_type_is_read_from_the_os2_table() {
     use EmbeddingPermission as P;
-    // (fsType, permission, no_subsetting, bitmap_only, may be subset-embedded)
+    // The table of docs/research/08-legal-fonts-and-genai.md §4.3, row by row:
+    // (fsType, permission, no_subsetting, bitmap_only,
+    //  may be bundled, may be subset-embedded, user font may be outlined)
     let cases = [
-        (0x0000, P::Installable, false, false, true),
-        (0x0002, P::Restricted, false, false, false),
-        (0x0004, P::PreviewAndPrint, false, false, true),
-        (0x0008, P::Editable, false, false, true),
-        (0x0100, P::Installable, true, false, false),
-        (0x0104, P::PreviewAndPrint, true, false, false),
-        (0x0200, P::Installable, false, true, false),
-        (0x0308, P::Editable, true, true, false),
-        (0x0302, P::Restricted, true, true, false),
+        (0x0000, P::Installable, false, false, true, true, true),
+        (0x0004, P::PreviewAndPrint, false, false, false, true, true),
+        (0x0008, P::Editable, false, false, false, true, true),
+        (0x0002, P::Restricted, false, false, false, false, false),
+        (0x0100, P::Installable, true, false, false, false, true),
+        (0x0104, P::PreviewAndPrint, true, false, false, false, true),
+        (0x0200, P::Installable, false, true, false, false, false),
+        (0x0308, P::Editable, true, true, false, false, false),
+        (0x0302, P::Restricted, true, true, false, false, false),
     ];
-    for (fs_type, permission, no_subsetting, bitmap_only, embeddable) in cases {
+    for (fs_type, permission, no_subsetting, bitmap_only, bundle, subset, outline) in cases {
         let patched = common::with_fs_type(common::ATKINSON, fs_type, None);
         let font = Font::from_bytes(patched, 0).expect("patched font parses");
         assert_eq!(font.fs_type(), Some(fs_type));
@@ -234,7 +238,9 @@ fn fs_type_is_read_from_the_os2_table() {
             EmbeddingFlags { no_subsetting, bitmap_only },
             "fsType {fs_type:#06x}"
         );
-        assert_eq!(font.allows_subset_embedding(), embeddable, "fsType {fs_type:#06x}");
+        assert_eq!(font.allows_bundling(), bundle, "fsType {fs_type:#06x}");
+        assert_eq!(font.allows_subset_embedding(), subset, "fsType {fs_type:#06x}");
+        assert_eq!(font.allows_outlines(), outline, "fsType {fs_type:#06x}");
         assert_eq!(font.embedding().allows_embedding(), permission != P::Restricted);
         // The rest of the font is untouched.
         assert_eq!(font.family_name(), "Atkinson Hyperlegible");
@@ -261,17 +267,26 @@ fn conflicting_fs_type_bits_are_read_by_table_version() {
 }
 
 #[test]
-fn a_font_without_os2_states_no_restriction() {
-    let font = synthetic(|_| {});
-    assert_eq!(font.fs_type(), None);
-    assert_eq!(font.embedding(), EmbeddingPermission::Installable);
-    assert_eq!(font.embedding_flags(), EmbeddingFlags::default());
-    assert_eq!(font.weight(), 400);
-
-    let stripped = Font::from_bytes(common::without_table(common::SPECTRAL, b"OS/2"), 0)
-        .expect("font without OS/2");
-    assert_eq!(stripped.fs_type(), None);
-    assert_eq!(stripped.embedding(), EmbeddingPermission::Installable);
+fn a_font_without_os2_has_unknown_permissions_and_is_refused() {
+    // Last row of the table: no OS/2 table → unknown → reject / refuse.
+    for font in [
+        synthetic(|_| {}),
+        Font::from_bytes(common::without_table(common::SPECTRAL, b"OS/2"), 0)
+            .expect("font without OS/2"),
+    ] {
+        assert_eq!(font.fs_type(), None, "\"unknown\" can be told from \"restricted\"");
+        assert_eq!(font.embedding(), EmbeddingPermission::Restricted);
+        assert_eq!(font.embedding_flags(), EmbeddingFlags::default());
+        assert!(!font.allows_bundling());
+        assert!(!font.allows_subset_embedding());
+        assert!(!font.allows_outlines());
+        assert_eq!(font.weight(), 400);
+    }
+    // The same synthetic font with an OS/2 table that says "installable" passes.
+    let declared = synthetic(|f| f.os2 = Some((4, 0, true)));
+    assert_eq!(declared.embedding(), EmbeddingPermission::Installable);
+    assert!(declared.allows_bundling() && declared.allows_subset_embedding());
+    assert!(declared.allows_outlines());
 }
 
 #[test]
@@ -287,7 +302,7 @@ fn a_restriction_in_a_malformed_os2_table_is_still_honoured() {
     let font = Font::from_bytes(bytes, 0).expect("font");
     assert_eq!(font.fs_type(), Some(0x0002));
     assert_eq!(font.embedding(), EmbeddingPermission::Restricted);
-    assert!(!font.allows_subset_embedding());
+    assert!(!font.allows_subset_embedding() && !font.allows_outlines());
 }
 
 // --- metrics -----------------------------------------------------------------------
@@ -423,26 +438,38 @@ fn invisible_and_substitutable_characters_are_not_reported_missing() {
 
 #[test]
 fn decomposable_characters_missing_from_the_cmap_are_composed_by_the_shaper() {
-    // Find, per font, precomposed letters the font does not map but can build from a
-    // base letter and a combining mark; they must not be reported as missing.
-    let candidates = "ẽĩũỹṽǘǜǚǖȫȭṏṍṹṻḗḕṓṑẫẵỗx̃m̃q̃";
-    let mut found = 0;
+    let opts = ShapeOptions::default();
+    // Atkinson Hyperlegible has no "ẽ" (U+1EBD), but it has "e" and a combining tilde:
+    // the shaper draws the letter from the two, so it is not missing.
+    let atkinson = common::atkinson();
+    assert_eq!(atkinson.glyph_id('ẽ'), None);
+    assert!(atkinson.missing_chars("ẽ").is_empty());
+    let run = shape(&atkinson, "ẽ", 10.0, &opts);
+    let ids: Vec<u16> = run.glyphs.iter().map(|g| g.id).collect();
+    assert_eq!(
+        ids,
+        [atkinson.glyph_id('e').expect("e"), atkinson.glyph_id('\u{303}').expect("tilde")]
+    );
+    // One source character, two glyphs: the text sits on the first one.
+    let texts: Vec<&str> = run.glyphs.iter().map(|g| g.text.as_str()).collect();
+    assert_eq!(texts, ["ẽ", ""]);
+
+    // Courier Prime has no combining marks to build it from: there it is missing.
+    let courier = common::courier();
+    assert_eq!(courier.glyph_id('\u{303}'), None);
+    assert_eq!(courier.missing_chars("peẽ"), ['ẽ']);
+    assert!(shape(&courier, "ẽ", 10.0, &opts).glyphs.iter().any(|g| g.id == 0));
+
+    // In general: `missing_chars` agrees with what shaping actually draws.
+    let candidates = "ẽĩũỹṽǘǜǚǖȫȭṏṍṹṻḗḕṓṑẫẵỗǰẗẘẙḧẍṅṁḃċḋėḟġȧṫẋẏżǻǽǿȁȃȅȇ";
     for (label, bytes) in common::ALL {
         let font = common::font(bytes);
-        for c in candidates.chars().filter(|c| font.glyph_id(*c).is_none()) {
-            let run = shape(&font, &c.to_string(), 10.0, &ShapeOptions::default());
-            let drawable = run.glyphs.iter().all(|g| g.id != 0);
-            assert_eq!(
-                font.missing_chars(&c.to_string()).is_empty(),
-                drawable,
-                "{label}: {c:?} — missing_chars must agree with what shaping draws"
-            );
-            found += usize::from(drawable);
+        for c in candidates.chars() {
+            let drawable =
+                shape(&font, &c.to_string(), 10.0, &opts).glyphs.iter().all(|g| g.id != 0);
+            assert_eq!(font.missing_chars(&c.to_string()).is_empty(), drawable, "{label}: {c:?}");
         }
     }
-    // Informational guard: if no bundled font exercises the fallback, the loop above
-    // still proved consistency for every unmapped candidate.
-    let _ = found;
 }
 
 #[test]

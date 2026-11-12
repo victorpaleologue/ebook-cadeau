@@ -85,7 +85,8 @@
 //! Analysis is bounded so that hostile files cost bounded time and memory: see
 //! [`MAX_PDF_BYTES`] for the input, and the report carries a [`codes::LIMIT_EXCEEDED`] error
 //! when a document exceeds an internal budget (20 million content operators, 32 MiB per
-//! decoded content stream and 128 MiB in total, 2 000 pages, form XObjects nested 16 deep).
+//! decoded content stream and 128 MiB in total, 2 000 pages, 50 000 form XObject or pattern
+//! invocations, nested 16 deep at most).
 
 #![forbid(unsafe_code)]
 

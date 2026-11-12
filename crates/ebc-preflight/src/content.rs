@@ -953,6 +953,10 @@ impl<'a, 's> Interpreter<'a, 's> {
                 return;
             }
         }
+        if !self.budget.take_nested_run() {
+            self.budget.report_exhausted(self.sink, Some(self.page), "too many form XObject or pattern invocations");
+            return;
+        }
         let Some(data) = self.decode(stream, what) else { return };
         let matrix = stream
             .dict

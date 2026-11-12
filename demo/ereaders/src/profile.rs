@@ -89,6 +89,9 @@ pub struct Quirks {
     pub download_reported_damaged: bool,
     /// A note attached to every browser download (e.g. "not added to the Kindle library").
     pub download_note: Option<&'static str>,
+    /// The engine predates the `Referrer-Policy` response header and sends `Referer`
+    /// regardless of it.
+    pub ignores_referrer_policy: bool,
 }
 
 /// File-name rules of a mail-to-device service.
@@ -277,6 +280,12 @@ const PAGE_CAP_WHY: &str = "no vendor limit is known; 1 MiB is far above the 30 
 const COOKIES_WHY: &str = "WebKit-class browsers keep cookies by default; not verified per device";
 const KEYBOARD_WHY: &str = "no vendor documents its on-screen layout; see typing::Keyboard";
 const UA_WHY: &str = "exact string recalled from memory; the research only sources substrings";
+const REFERRER_WHY: &str = "the Referrer-Policy header shipped in browsers from 2017; these engines are older, so they are assumed to send Referer whatever the page says (not verified on hardware)";
+const REFERRER_CLAIM: Claim = assumption(
+    Capability::Quirks,
+    "ignores Referrer-Policy: a gift URL leaks through Referer to any other origin the page links to",
+    REFERRER_WHY,
+);
 
 /// A simulated device (or reading application).
 ///
@@ -343,6 +352,7 @@ impl DeviceProfile {
             assumption(C::Keyboard, "three-layer keyboard; 4 taps to reach the beta browser (More → Settings → Beta features → Web browser); 1 tap to confirm a download", KEYBOARD_WHY),
             research(C::Quirks, "the browser has problems on non-standard ports", "devices §3.2", Grade::V1),
             research(C::Quirks, "`.kepub.epub` selects the Kobo WebKit renderer, plain `.epub` the Adobe one", "devices §3.2", Grade::V2),
+            REFERRER_CLAIM,
         ];
         Self {
             id: "kobo-clara",
@@ -367,7 +377,11 @@ impl DeviceProfile {
             keyboard: Keyboard::three_layer(),
             browser_launch_taps: 4,
             download_confirm_taps: 1,
-            quirks: Quirks { standard_ports_only: true, ..Quirks::default() },
+            quirks: Quirks {
+                standard_ports_only: true,
+                ignores_referrer_policy: true,
+                ..Quirks::default()
+            },
             claims: CLAIMS,
         }
     }
@@ -390,6 +404,7 @@ impl DeviceProfile {
             research(C::Screen, "7-inch class (Libra Colour)", "devices §2", Grade::M),
             assumption(C::Keyboard, "as kobo-clara", KEYBOARD_WHY),
             research(C::Quirks, "as kobo-clara", "devices §3.2", Grade::V1),
+            REFERRER_CLAIM,
         ];
         Self {
             id: "kobo-ereader-ua",
@@ -422,6 +437,7 @@ impl DeviceProfile {
             assumption(C::Keyboard, "three-layer keyboard", KEYBOARD_WHY),
             research(C::Quirks, "download file names must be plain ASCII", "devices §3.1", Grade::V1),
             research(C::Quirks, "a browser download is not added to the Kindle library proper and shows no cover", "devices §3.1", Grade::V1),
+            REFERRER_CLAIM,
         ];
         Self {
             id: "kindle-paperwhite",
@@ -451,6 +467,7 @@ impl DeviceProfile {
                 download_note: Some(
                     "opened from a browser download: not in the Kindle library, no cover",
                 ),
+                ignores_referrer_policy: true,
                 ..Quirks::default()
             },
             claims: CLAIMS,
@@ -475,11 +492,13 @@ impl DeviceProfile {
             research(C::Screen, "6-inch class", "devices §2", Grade::M),
             research(C::Keyboard, "as kindle-paperwhite", "devices §3.1", Grade::V1),
             research(C::Quirks, "as kindle-paperwhite", "devices §3.1", Grade::V1),
+            assumption(C::Quirks, "honours Referrer-Policy", "follows from the reportedly Chromium-based engine (devices §2 [M])"),
         ];
         Self {
             id: "kindle-2024",
             name: "Kindle 2024 (UA without \"Kindle\")",
             user_agent: "Mozilla/5.0 (X11; Linux armv7l) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.142 Safari/537.36",
+            quirks: Quirks { ignores_referrer_policy: false, ..Self::kindle_paperwhite().quirks },
             claims: CLAIMS,
             ..Self::kindle_paperwhite()
         }
@@ -502,6 +521,7 @@ impl DeviceProfile {
             research(C::Screen, "6-inch class (Verse)", "devices §2", Grade::M),
             assumption(C::Keyboard, "keyboard with a number row; 2 taps to open the browser; 1 tap to confirm a download", KEYBOARD_WHY),
             assumption(C::Quirks, "none modelled", "nothing sourced"),
+            REFERRER_CLAIM,
         ];
         Self {
             id: "pocketbook",
@@ -534,7 +554,7 @@ impl DeviceProfile {
             keyboard: Keyboard::with_number_row(),
             browser_launch_taps: 2,
             download_confirm_taps: 1,
-            quirks: Quirks::default(),
+            quirks: Quirks { ignores_referrer_policy: true, ..Quirks::default() },
             claims: CLAIMS,
         }
     }
@@ -555,6 +575,7 @@ impl DeviceProfile {
             research(C::Screen, "6-inch class", "devices §2", Grade::M),
             assumption(C::Keyboard, "as PocketBook", KEYBOARD_WHY),
             assumption(C::Quirks, "none modelled", "nothing sourced"),
+            REFERRER_CLAIM,
         ];
         Self {
             id: "vivlio",
@@ -582,6 +603,7 @@ impl DeviceProfile {
             research(C::Screen, "6-inch class (shine)", "devices §2", Grade::M),
             assumption(C::Keyboard, "as Kobo", KEYBOARD_WHY),
             research(C::Quirks, "behaves as a Kobo (detected as one over USB)", "devices §3.3", Grade::V1),
+            REFERRER_CLAIM,
         ];
         Self {
             id: "tolino",
@@ -612,6 +634,7 @@ impl DeviceProfile {
             research(C::Screen, "6-inch class", "devices §2", Grade::M),
             assumption(C::Keyboard, "Android keyboard approximated by the three-layer model", KEYBOARD_WHY),
             research(C::Quirks, "the downloaded file is reported \"damaged\"", "devices §3.3", Grade::V1),
+            REFERRER_CLAIM,
         ];
         Self {
             id: "tolino-legacy-android",
@@ -621,7 +644,11 @@ impl DeviceProfile {
             reading_formats: &[FileFormat::Epub, FileFormat::Pdf, FileFormat::Txt],
             drm: &[DrmScheme::AdobeAdept],
             browser_launch_taps: 2,
-            quirks: Quirks { download_reported_damaged: true, ..Quirks::default() },
+            quirks: Quirks {
+                download_reported_damaged: true,
+                ignores_referrer_policy: true,
+                ..Quirks::default()
+            },
             claims: CLAIMS,
             ..Self::kobo_clara()
         }
@@ -645,6 +672,7 @@ impl DeviceProfile {
             assumption(C::Screen, "6-inch class", WHY),
             assumption(C::Keyboard, "three-layer keyboard; 3 taps to open the browser", WHY),
             assumption(C::Quirks, "ASCII file names only", WHY),
+            REFERRER_CLAIM,
         ];
         Self {
             id: "generic-eink",
@@ -663,7 +691,11 @@ impl DeviceProfile {
             keyboard: Keyboard::three_layer(),
             browser_launch_taps: 3,
             download_confirm_taps: 1,
-            quirks: Quirks { ascii_download_names: true, ..Quirks::default() },
+            quirks: Quirks {
+                ascii_download_names: true,
+                ignores_referrer_policy: true,
+                ..Quirks::default()
+            },
             claims: CLAIMS,
         }
     }

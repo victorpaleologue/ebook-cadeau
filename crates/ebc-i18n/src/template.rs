@@ -191,7 +191,9 @@ mod tests {
 
     #[test]
     fn malformed_braces_are_copied() {
-        for template in ["{", "}", "{{", "}}", "{a", "a}", "{ {a}", "}{", "{a{b}", "{{a}}", "{\u{0}}"] {
+        for template in
+            ["{", "}", "{{", "}}", "{a", "a}", "{ {a}", "}{", "{a{b}", "{{a}}", "{\u{0}}"]
+        {
             // No argument matches: the output is the input.
             assert_eq!(format_template(template, &[]), template, "{template:?}");
         }
@@ -259,9 +261,6 @@ mod tests {
         // Without an argument the placeholder stays, prefix included.
         assert_eq!(format_template("{de:name}", &[]), "{de:name}");
         // The plain placeholder and the eliding one can share an argument.
-        assert_eq!(
-            format_template("{name} / {de:name}", &[("name", "Anna")]),
-            "Anna / d’Anna"
-        );
+        assert_eq!(format_template("{name} / {de:name}", &[("name", "Anna")]), "Anna / d’Anna");
     }
 }

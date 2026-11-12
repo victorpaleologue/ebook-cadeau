@@ -193,24 +193,45 @@ mod tests {
 
     #[test]
     fn language_tags_in_all_their_spellings() {
-        for tag in ["fr", "FR", "fr-FR", "fr-CA", "fr_BE", "fra", "fre", " fr ", "de", "de-AT",
-            "de_CH", "deu", "GER", "it", "ita", "es", "es-MX", "es-419", "spa", "pt", "pt-BR",
-            "por", "ca", "cat", "gl", "eu", "baq"]
-        {
+        for tag in [
+            "fr", "FR", "fr-FR", "fr-CA", "fr_BE", "fra", "fre", " fr ", "de", "de-AT", "de_CH",
+            "deu", "GER", "it", "ita", "es", "es-MX", "es-419", "spa", "pt", "pt-BR", "por", "ca",
+            "cat", "gl", "eu", "baq",
+        ] {
             assert_eq!(known_spine_direction(tag), Some(BottomToTop), "{tag:?}");
         }
-        for tag in ["en", "en-GB", "en_US", "ENG", "nl", "nl-BE", "nld", "dut", "da", "sv",
-            "sv-FI", "nb", "nn", "no", "nor"]
-        {
+        for tag in [
+            "en", "en-GB", "en_US", "ENG", "nl", "nl-BE", "nld", "dut", "da", "sv", "sv-FI", "nb",
+            "nn", "no", "nor",
+        ] {
             assert_eq!(known_spine_direction(tag), Some(TopToBottom), "{tag:?}");
         }
     }
 
     #[test]
     fn unknown_or_malformed_tags_use_the_iso_default() {
-        for tag in ["", " ", "-", "_", "ja", "zh-Hant", "ru", "pl", "fi", "xx", "fren", "french",
-            "f", "frfr", "é", "fr\u{0}", "-fr", "\u{0}", "🙂", "en\u{301}"]
-        {
+        for tag in [
+            "",
+            " ",
+            "-",
+            "_",
+            "ja",
+            "zh-Hant",
+            "ru",
+            "pl",
+            "fi",
+            "xx",
+            "fren",
+            "french",
+            "f",
+            "frfr",
+            "é",
+            "fr\u{0}",
+            "-fr",
+            "\u{0}",
+            "🙂",
+            "en\u{301}",
+        ] {
             assert_eq!(known_spine_direction(tag), None, "{tag:?}");
             assert_eq!(spine_direction_for_language(tag), TopToBottom, "{tag:?}");
         }
@@ -246,7 +267,10 @@ mod tests {
         // A French novel on a Dutch site: bottom-to-top.
         assert_eq!(spine_direction_for_book(&book(Some("fr"), None, &[]), Locale::Nl), BottomToTop);
         // An English novel on a French site: top-to-bottom.
-        assert_eq!(spine_direction_for_book(&book(Some("en-GB"), None, &[]), Locale::Fr), TopToBottom);
+        assert_eq!(
+            spine_direction_for_book(&book(Some("en-GB"), None, &[]), Locale::Fr),
+            TopToBottom
+        );
         // Language beats ISBN: an English-language book from a French publisher.
         assert_eq!(
             spine_direction_for_book(&book(Some("en"), Some("9782070360024"), &[]), Locale::Fr),
@@ -284,15 +308,24 @@ mod tests {
         );
         // An ISBN group without a known convention (Japan), then a related ISBN that has one.
         let japan = "9784873113364";
-        assert_eq!(spine_direction_for_book(&book(None, Some(japan), &[]), Locale::Fr), BottomToTop);
-        assert_eq!(spine_direction_for_book(&book(None, Some(japan), &[]), Locale::En), TopToBottom);
+        assert_eq!(
+            spine_direction_for_book(&book(None, Some(japan), &[]), Locale::Fr),
+            BottomToTop
+        );
+        assert_eq!(
+            spine_direction_for_book(&book(None, Some(japan), &[]), Locale::En),
+            TopToBottom
+        );
         assert_eq!(
             spine_direction_for_book(&book(None, Some(japan), &["9780306406157"]), Locale::Fr),
             TopToBottom
         );
         // Nothing at all: the site's convention.
         for locale in Locale::ALL {
-            assert_eq!(spine_direction_for_book(&book(None, None, &[]), locale), spine_direction(locale));
+            assert_eq!(
+                spine_direction_for_book(&book(None, None, &[]), locale),
+                spine_direction(locale)
+            );
         }
     }
 }

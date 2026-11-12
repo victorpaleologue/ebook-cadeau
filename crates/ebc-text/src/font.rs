@@ -19,7 +19,9 @@ pub(crate) fn mm_per_unit(units_per_em: u16, size_pt: f64) -> f64 {
 /// the usage-permission bits (0–3) of the `OS/2` table's `fsType` field.
 ///
 /// The two independent modifier bits (*no subsetting*, *bitmap embedding only*) are
-/// reported separately as [`EmbeddingFlags`].
+/// reported separately as [`EmbeddingFlags`]. The product rules built on both are
+/// [`Font::allows_bundling`], [`Font::allows_subset_embedding`] and
+/// [`Font::allows_outlines`].
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum EmbeddingPermission {
     /// `fsType & 0x000F == 0`: the font may be embedded and permanently installed.
@@ -396,6 +398,12 @@ impl Font {
         self.inner.info.licence_url.clone()
     }
 
+    /// The version string stored in the font, e.g. `"Version 2.001"` (name ID 5).
+    #[must_use]
+    pub fn version(&self) -> Option<String> {
+        self.name(name_id::VERSION)
+    }
+
     /// Any string of the `name` table by its name ID (0 = copyright, 5 = version,
     /// 9 = designer, …), preferring an English, Unicode-encoded record.
     #[must_use]
@@ -410,36 +418,56 @@ impl Font {
     }
 
     /// The embedding permission from `OS/2.fsType` (see
-    /// [`EmbeddingPermission::from_os2`]). A font without an `OS/2` table states no
-    /// restriction and is reported as [`EmbeddingPermission::Installable`]; use
-    /// [`fs_type`](Self::fs_type) to tell the two cases apart.
+    /// [`EmbeddingPermission::from_os2`]).
+    ///
+    /// A font **without an `OS/2` table** states nothing about embedding. Its
+    /// permission is unknown, and — the project's rule being to refuse what it cannot
+    /// verify (`docs/research/08-legal-fonts-and-genai.md` §4.3) — it is reported as
+    /// [`EmbeddingPermission::Restricted`]. [`fs_type`](Self::fs_type) returns `None`
+    /// in that case, for callers that need to tell "forbidden" from "unknown".
     #[must_use]
     pub fn embedding(&self) -> EmbeddingPermission {
         match self.inner.info.os2 {
             Some((fs_type, version)) => EmbeddingPermission::from_os2(fs_type, version),
-            None => EmbeddingPermission::Installable,
+            None => EmbeddingPermission::Restricted,
         }
     }
 
-    /// The *no subsetting* and *bitmap only* modifier bits of `OS/2.fsType`.
+    /// The *no subsetting* and *bitmap only* modifier bits of `OS/2.fsType` (both
+    /// `false` when the font has no `OS/2` table).
     #[must_use]
     pub fn embedding_flags(&self) -> EmbeddingFlags {
         EmbeddingFlags::from_fs_type(self.fs_type().unwrap_or(0))
     }
 
-    /// `true` when the outlines of this font may be embedded **as a subset** in a PDF
-    /// meant for printing: the permission is not *restricted* and neither the
-    /// *no subsetting* nor the *bitmap only* bit is set.
-    ///
-    /// Drawing the text as vector outlines ([`ShapedText::to_outline`]) embeds no font
-    /// program, but a *restricted* licence usually forbids that use as well — check the
-    /// licence rather than relying on this flag.
-    ///
-    /// [`ShapedText::to_outline`]: crate::ShapedText::to_outline
+    /// The rule for fonts **shipped with the product or listed in its font index**:
+    /// `fsType` must be exactly 0 (installable embedding, no modifier bit).
+    #[must_use]
+    pub fn allows_bundling(&self) -> bool {
+        self.fs_type() == Some(0)
+    }
+
+    /// `true` when a subset of this font may be embedded in a PDF meant for printing:
+    /// the font has an `OS/2` table, the permission is not *restricted*, and neither
+    /// the *no subsetting* nor the *bitmap only* bit is set.
     #[must_use]
     pub fn allows_subset_embedding(&self) -> bool {
         let flags = self.embedding_flags();
         self.embedding().allows_embedding() && !flags.no_subsetting && !flags.bitmap_only
+    }
+
+    /// The rule for a **font supplied by the user**: `true` when its text may be drawn
+    /// as vector outlines ([`ShapedText::to_outline`]) — the font has an `OS/2` table
+    /// and sets neither the *restricted* nor the *bitmap only* bit. (*No subsetting*
+    /// does not matter here: outlines embed no font program at all.)
+    ///
+    /// This reads the font's own flags only. `fsType` states the foundry's intent; the
+    /// licence text prevails, and outlining does not cure a missing licence.
+    ///
+    /// [`ShapedText::to_outline`]: crate::ShapedText::to_outline
+    #[must_use]
+    pub fn allows_outlines(&self) -> bool {
+        self.embedding().allows_embedding() && !self.embedding_flags().bitmap_only
     }
 
     /// Global metrics of this face (of the selected instance for variable fonts).

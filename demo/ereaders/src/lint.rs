@@ -601,7 +601,7 @@ mod tests {
         assert!(!spa.passed());
         assert!(spa.has("js-only-page"), "{spa}");
 
-        let onclick = lint(r#"<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"></head><body>
+        let onclick = lint(r##"<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"></head><body>
             <p>Votre livre vous attend, appuyez sur le bouton pour le recevoir sur la liseuse.</p>
             <button id="download" onclick="go()">Télécharger</button>
             <a id="alt" href="javascript:send()">Envoyer</a>
@@ -609,7 +609,7 @@ mod tests {
             <span id="alt3" onclick="x()">Encore</span>
             <form id="f" onsubmit="return send()"><label>Code <input name="code"></label><input type="submit" value="OK"></form>
             <form id="g" action="/x"><label>Code <input name="code"></label><button type="button">OK</button></form>
-            </body></html>"#);
+            </body></html>"##);
         assert!(!onclick.passed());
         let js: Vec<_> = onclick.errors().filter(|f| f.code == "js-required").collect();
         let elements: Vec<_> = js.iter().filter_map(|f| f.element.as_deref()).collect();

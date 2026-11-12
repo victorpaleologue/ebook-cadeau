@@ -22,9 +22,13 @@ use crate::shape::{MAX_SIZE_PT, ShapeOptions, shape_units};
 /// ```
 /// # fn demo(font: &ebc_text::Font) {
 /// use ebc_text::{ShapeOptions, fit_size};
-/// // A title along a 178 mm tall, 10 mm thick spine with 2 mm clear on each side.
-/// let size = fit_size(font, "L'Étranger", 150.0, 6.0, 6.0, 28.0, &ShapeOptions::default());
-/// # let _ = size; }
+/// // A title along a 178 mm long, 10 mm thick spine: capitals at most 7 mm tall, the
+/// // line at most 150 mm long, never below the 6 pt that printers ask for.
+/// match fit_size(font, "L'Étranger", 150.0, 7.0, 6.0, 40.0, &ShapeOptions::default()) {
+///     Some(size_pt) => { /* shape at size_pt and draw the outlines */ }
+///     None => { /* too long even at 6 pt: shorten the title */ }
+/// }
+/// # }
 /// ```
 #[must_use]
 pub fn fit_size(

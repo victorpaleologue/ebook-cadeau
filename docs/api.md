@@ -1,8 +1,12 @@
 # eBook Cadeau — HTTP contract (server, partner API, redemption pages)
 
-_Status: v0.1 — the contract the server, the demo stores, the simulated e-readers and the
+_Status: v0.2 — the contract the server, the demo stores, the simulated e-readers and the
 end-to-end tests are all built against. The redemption UX is justified in
 `docs/research/05-ereader-distribution-ux.md`._
+
+_Changes in v0.2 (from the UX research): letters-only 12-symbol code; upper-case QR payload and
+case-insensitive `/k/`; 6-letter pair code with a global failure budget; explicit device chooser
+(user-agent sniffing is brittle); claim count shown on the gift page; reissue; optional reveal date._
 
 Conventions: JSON bodies are UTF-8; timestamps are Unix seconds; errors are
 `{"error": {"code": "snake_case", "message": "…"}}` with a matching HTTP status. HTML pages
@@ -13,13 +17,13 @@ work **without JavaScript** and carry stable element `id`s (listed below) used b
 | Term | Meaning |
 |---|---|
 | **Gift** | One gifted eBook: metadata, a redemption **code**, and a **delivery** method |
-| **Code** | `GiftCode`: 10 Crockford-base32 symbols (9 data + 1 check), shown as `XXXXX-XXXXX` |
-| **Claim URL** | `{PUBLIC_URL}/k/{CODE}` — encoded in the QR code and printed in clear on the card |
+| **Code** | `GiftCode`: 12 symbols from the 20-consonant alphabet `BCDFGHJKLMNPQRSTVWXZ` (11 random + 1 check, 47.5 bits), shown as `XXXX-XXXX-XXXX`. Letters only: no keyboard layer switch on e-ink or phone keyboards, no 0/O or 1/I confusion, no vowels so no accidental words. Input is case-insensitive and ignores spaces, hyphens, dots and underscores |
+| **Claim URL** | `{PUBLIC_URL}/k/{CODE}` — printed in clear on the card (lower-case host). The QR code encodes the same URL fully upper-cased (`HTTPS://HOST/K/CODE`) to stay in QR alphanumeric mode, so the server treats `/K/` and `/k/` alike and `PUBLIC_URL` must have a letters-only path-less host |
 | **Giver / recipient** | The buyer and the person who receives the card |
 | **Partner** | An eBook reseller integrating the "eBook cadeau" option |
 | **Delivery** | `hosted_file` (we serve the file), `reseller_redirect` (the reseller adds the book to the recipient's account), `reseller_licence` (we hand over a licence file such as `.lcpl`/`.acsm` issued by the reseller) |
 | **Download session** | A random 128-bit URL token minted after a successful claim, short-lived |
-| **Pair number** | A 6-digit number that links a phone that scanned the QR to an e-reader's browser |
+| **Pair code** | 6 letters from the same alphabet, shown as `XXX-XXX`: links a phone that scanned the QR to an e-reader's browser. Single use, 15 minutes |
 
 ## 2. Redemption pages (recipient side, no JavaScript required)
 
@@ -34,12 +38,13 @@ weight < 30 kB excluding the optional cover thumbnail).
 |---|---|---|
 | `GET /` | Home with the code form (for people typing the short URL on an e-reader) | `code-form`, `code-input` (name `code`), `code-submit` |
 | `GET /k?code=…` | Normalises the typed code and 303-redirects to `/k/{CODE}` | — |
-| `GET /k/{code}` | The gift page: title, author, giver, message, and the primary action for this device | `gift-title`, `gift-author`, `gift-from`, `gift-message`, `primary-action`, `other-ways` |
+| `GET /aide` | Help page: the three ways to get the book, per device | `help` |
+| `GET /k/{code}` (`/K/` too; optional `?device=`) | The gift page: title, author, giver, message, the primary action for this device, the device chooser, and how many times the gift was already claimed | `gift-title`, `gift-author`, `gift-from`, `gift-message`, `primary-action`, `other-ways`, `device-chooser` (links `device-kobo`, `device-kindle`, `device-pocketbook`, `device-tolino`, `device-phone`, `device-computer`), `claim-count` |
 | `POST /k/{code}/download` | `hosted_file` only. Mints a download session and 303-redirects to `/d/{session}/{file-name}` | form id `download-form`, button id `download` |
 | `GET /d/{session}/{file-name}` | The file. `Content-Type` per format (`application/epub+zip`), `Content-Disposition: attachment` with ASCII fallback + `filename*`, `Content-Length`, `Accept-Ranges`. `HEAD` supported | — |
-| `POST /k/{code}/pair` | From a phone: creates a pair number and shows it with the e-reader instructions | `pair-number`, `pair-url` |
-| `GET /e` | On the e-reader: form asking for the pair number | `pair-form`, `pair-input` (name `n`), `pair-submit` |
-| `POST /e` | Validates the pair number and 303-redirects to `/d/{session}/{file-name}` | — |
+| `POST /k/{code}/pair` | From a phone: creates a pair code and shows it with the e-reader instructions and its expiry time | `pair-code`, `pair-url`, `pair-expires` |
+| `GET /e` | On the e-reader: form asking for the pair code | `pair-form`, `pair-input` (name `p`), `pair-submit` |
+| `POST /e` | Validates the pair code and 303-redirects to `/d/{session}/{file-name}`. Wrong codes count against a per-client **and a global** failure budget (`429` + `Retry-After`) | — |
 | `POST /k/{code}/send` | Sends the file to a device address (`device_email`), e.g. Send-to-Kindle; allowed domains are configured | form id `send-form`, input id `device-email`, result id `send-result` |
 | `POST /k/{code}/redeem` | `reseller_redirect`: 303 to the partner URL with signed parameters (§4.3). `reseller_licence`: 303 to a download session serving the licence file | button id `redeem` |
 | `GET /o/{session}/catalog.xml` | OPDS 1.2 acquisition feed containing the one publication | — |
@@ -49,25 +54,39 @@ weight < 30 kB excluding the optional cover thumbnail).
 Status codes on `/k/{code}`: `200`; `400` malformed code (bad check symbol — the page says it
 looks like a typo and **does not** count as an attempt); `404` well-formed but unknown (counts
 towards the rate limit); `410` cancelled or expired; `429` too many unknown codes from this
-client (`Retry-After`).
+client (`Retry-After`). Error pages say how many attempts remain and how long to wait.
+Before an optional reveal date (`reveal_at`) the gift page shows the date and no action.
 
 ### Device classes
 
-The server classifies the `User-Agent` into `kobo`, `kindle`, `pocketbook`, `tolino`,
-`eink_other`, `mobile`, `desktop` and picks the primary action:
+The server classifies the request into `kobo`, `kindle`, `pocketbook`, `tolino`,
+`eink_other`, `mobile`, `desktop`. **User-agent sniffing is a hint, never the only way**: it
+broke twice between 2024 and 2026 (newer Kobo and Kobo-based tolino firmware report `eReader`;
+some recent Kindle firmware no longer says `Kindle`). So every gift page carries a device
+chooser, and `?device=kobo|kindle|pocketbook|tolino|phone|computer` overrides the detection
+(the choice is carried in links and forms; no cookie).
 
-| Class | Primary action for `hosted_file` | Notes |
+| Class | Primary action for `hosted_file` | Then |
 |---|---|---|
 | `kobo`, `pocketbook`, `tolino`, `eink_other` | Direct **download** button | the built-in browser saves EPUB to the library |
-| `kindle` | **Send to Kindle** form (the Kindle browser cannot save EPUB); download offered only for formats Kindle accepts | explain the approved-sender step |
-| `mobile` | "Send to my e-reader" (**pair number**) first, then "Read on this phone" (download), then "Send to Kindle" | the phone is usually just the scanner |
-| `desktop` | Download, then pairing and email | |
+| `kindle` | If the file is in a format the Kindle browser saves (AZW3/MOBI/TXT): download. For EPUB: instructions to use **Send to Kindle** — from a phone via the Kindle app share sheet, or the e-mail form (explain the approved-sender step) | — |
+| `mobile` | **Read on this phone or send to an app** (download; the OS share sheet reaches the Kindle, Kobo or Books apps) | "On your e-reader": open `{host}` in its browser and type the code printed on the card (the default e-reader path, no phone needed) → pair code (shorter to type) → Send to Kindle by e-mail |
+| `desktop` | Download | e-reader instructions, pairing, e-mail, USB copy hint |
+
+For `reseller_redirect` gifts the primary action on every class is "add to my {store} library"
+(nothing is typed on the e-reader: the phone signs in, the e-reader syncs).
 
 ### Claim semantics
 
-- A gift is **re-downloadable by whoever holds the card** until it expires (default: none)
-  or a limit of download sessions is reached (default 10); the first successful claim sets
-  `redeemed_at`.
+- States: `created` → `redeemed` (first claim) → `exhausted` (hosted file: session limit
+  reached) or `fulfilled` (reseller confirmed); plus `cancelled`, `expired`, `reissued`.
+- A hosted-file gift is **re-downloadable by whoever holds the card** until it expires
+  (default: never) or a limit of download sessions is reached (default 10). The gift page
+  shows "claimed n times, last on …" so misuse is visible to the holder.
+- **Reissue**: the giver (manage token) or the partner can void the code and get a new one
+  for the same gift (lost card): the old code answers `410`.
+- No account, e-mail address or cookie is needed for hosted files: holding the card is the
+  credential.
 - `reseller_redirect` gifts are single-recipient: once the partner confirms fulfilment
   (§4.4) the gift page only says the book is already in an account and links to the store.
 - Codes are stored hashed (HMAC-SHA-256 with a server secret); the clear code exists only
@@ -93,11 +112,13 @@ EPUBs carrying DRM (`META-INF/encryption.xml` with a non-font-obfuscation algori
 }
 ```
 
-→ `201 {"id": "g_…", "code": "ABCDE12345", "code_display": "ABCDE-12345", "claim_url": "https://…/k/ABCDE12345", "manage_token": "…"}`
+→ `201 {"id": "g_…", "code": "BCDFGHJKLMNP", "code_display": "BCDF-GHJK-LMNP", "claim_url": "https://…/k/BCDFGHJKLMNP", "manage_token": "…"}`
 
 `GET /api/v1/gifts/{id}` (header `Authorization: Bearer {manage_token}`) →
 `{"id", "status": "created|redeemed|fulfilled|cancelled|expired", "created_at", "redeemed_at", "downloads"}`.
 `DELETE /api/v1/gifts/{id}` cancels the gift (the code stops working, hosted file deleted).
+`POST /api/v1/gifts/{id}/reissue` → `200 {"code", "code_display", "claim_url"}` (the previous
+code is voided). The creation body accepts an optional `"reveal_at": <unix>`.
 
 `POST /api/v1/gifts/{id}/print-orders` (Bearer) — body `{"product": "card-poche", "pdf_sha256": "…", "address": {…}}`
 plus the PDF uploaded beforehand via `PUT /api/v1/gifts/{id}/card.pdf`. The server forwards
@@ -148,6 +169,7 @@ print (JPEG/PNG/WebP, ≤ 20 MB). The server never fetches third-party URLs itse
 
 `GET /api/partner/v1/gifts/{id}` → status as in §3 plus `order_ref`.
 `POST /api/partner/v1/gifts/{id}/cancel` → voids the code (refund path).
+`POST /api/partner/v1/gifts/{id}/reissue` → new code, as in §3.
 
 ### 4.3 Redemption redirect (`reseller_redirect`)
 
@@ -193,3 +215,6 @@ Deliveries are retried with backoff; receivers must be idempotent.
 | `EBC_SEND_DOMAINS` | `kindle.com,pbsync.com` | allowed device e-mail domains |
 | `EBC_PRINTER_URL` | — | print provider base URL |
 | `EBC_RATE_UNKNOWN_PER_10MIN` | `10` | unknown-code attempts per client before `429` |
+| `EBC_RATE_UNKNOWN_GLOBAL_PER_10MIN` | `500` | unknown gift or pair codes from all clients together before every further wrong guess gets `429` (codes are bearer secrets not tied to an account, so a guess is a guess against all live codes) |
+| `EBC_WEB_DIR` | — | directory of the static web app, served at `/app/` (`.wasm` as `application/wasm`) |
+| `EBC_TRUST_PROXY` | `0` | honour `X-Forwarded-For` for client identification (only behind a trusted reverse proxy) |

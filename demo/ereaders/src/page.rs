@@ -447,6 +447,13 @@ impl Page {
             .collect())
     }
 
+    /// Replaces the status and headers (used when the page is synthesised around a
+    /// non-HTML response).
+    pub(crate) fn set_response(&mut self, status: u16, headers: Vec<(String, String)>) {
+        self.status = status;
+        self.headers = headers;
+    }
+
     pub(crate) fn text_in(&self, range: &Range<usize>) -> &str {
         self.text.get(range.clone()).unwrap_or("").trim()
     }

@@ -4,6 +4,7 @@
 use std::borrow::Cow;
 
 use ebc_scene::{ImageData, ImageId, ImageResource, PdfStandard, PixelFormat};
+use pdf_writer::types::Predictor;
 use pdf_writer::{Chunk, Filter, Finish, Ref};
 
 use crate::error::PdfError;
@@ -87,6 +88,7 @@ pub(crate) enum ImageSpace {
 /// An image ready to be written.
 #[derive(Debug)]
 pub(crate) struct PreparedImage<'a> {
+    id: ImageId,
     /// Name of the image in page resource dictionaries, e.g. `Im0`.
     pub(crate) resource_name: Vec<u8>,
     width: i32,
@@ -94,12 +96,98 @@ pub(crate) struct PreparedImage<'a> {
     /// The stream data, already encoded with `filter`.
     data: Cow<'a, [u8]>,
     filter: Option<Filter>,
+    /// Number of colour channels in `data` when it was PNG-predicted before deflating.
+    predicted: Option<u8>,
     pub(crate) space: ImageSpace,
     /// Adobe-style CMYK JPEG: samples are stored inverted.
     pub(crate) inverted: bool,
-    /// 8-bit alpha channel (encoded with `mask_filter`) written as a soft mask.
-    mask: Option<Vec<u8>>,
-    mask_filter: Option<Filter>,
+    /// 8-bit alpha channel written as a soft mask.
+    mask: Option<Encoded>,
+}
+
+/// Lossless sample data ready for a stream.
+#[derive(Debug)]
+struct Encoded {
+    data: Vec<u8>,
+    /// `true` when `data` is deflated.
+    deflated: bool,
+    /// `true` when the rows were PNG-predicted before deflating.
+    predicted: bool,
+}
+
+impl Encoded {
+    /// Encodes rows of `row_len` bytes with `channels` bytes per pixel: deflated, with
+    /// PNG row prediction when that makes the stream smaller, or stored when `compress`
+    /// is off.
+    fn new(raw: &[u8], row_len: usize, channels: usize, compress: bool) -> Self {
+        if !compress {
+            return Self { data: raw.to_vec(), deflated: false, predicted: false };
+        }
+        let plain = deflate(raw);
+        let predicted = deflate(&png_predict(raw, row_len, channels));
+        if predicted.len() < plain.len() {
+            Self { data: predicted, deflated: true, predicted: true }
+        } else {
+            Self { data: plain, deflated: true, predicted: false }
+        }
+    }
+}
+
+/// Applies PNG row filters (the `/Predictor 15` encoding of `FlateDecode`): every row is
+/// prefixed with the filter type that minimises the sum of absolute residuals, the usual
+/// heuristic of PNG encoders. Photographs and gradients deflate much better this way.
+fn png_predict(raw: &[u8], row_len: usize, bpp: usize) -> Vec<u8> {
+    if row_len == 0 || bpp == 0 {
+        return raw.to_vec();
+    }
+    let rows = raw.len() / row_len;
+    let mut out = Vec::with_capacity(raw.len() + rows);
+    let zero_row = vec![0u8; row_len];
+    let mut candidates: [Vec<u8>; 5] = std::array::from_fn(|_| vec![0u8; row_len]);
+    for (index, row) in raw.chunks_exact(row_len).enumerate() {
+        let above =
+            if index == 0 { &zero_row[..] } else { &raw[(index - 1) * row_len..index * row_len] };
+        for i in 0..row_len {
+            let x = row[i];
+            let a = if i >= bpp { row[i - bpp] } else { 0 };
+            let b = above[i];
+            let c = if i >= bpp { above[i - bpp] } else { 0 };
+            candidates[0][i] = x;
+            candidates[1][i] = x.wrapping_sub(a);
+            candidates[2][i] = x.wrapping_sub(b);
+            candidates[3][i] = x.wrapping_sub(((u16::from(a) + u16::from(b)) / 2) as u8);
+            candidates[4][i] = x.wrapping_sub(paeth(a, b, c));
+        }
+        let cost = |bytes: &[u8]| -> u64 {
+            bytes.iter().map(|&v| u64::from((v as i8).unsigned_abs())).sum()
+        };
+        let mut best = 0;
+        let mut best_cost = cost(&candidates[0]);
+        for (kind, candidate) in candidates.iter().enumerate().skip(1) {
+            let c = cost(candidate);
+            if c < best_cost {
+                best = kind;
+                best_cost = c;
+            }
+        }
+        out.push(best as u8);
+        out.extend_from_slice(&candidates[best]);
+    }
+    out
+}
+
+/// The Paeth predictor of the PNG specification.
+fn paeth(a: u8, b: u8, c: u8) -> u8 {
+    let (ia, ib, ic) = (i16::from(a), i16::from(b), i16::from(c));
+    let p = ia + ib - ic;
+    let (pa, pb, pc) = ((p - ia).abs(), (p - ib).abs(), (p - ic).abs());
+    if pa <= pb && pa <= pc {
+        a
+    } else if pb <= pc {
+        b
+    } else {
+        c
+    }
 }
 
 impl<'a> PreparedImage<'a> {
@@ -121,10 +209,12 @@ impl<'a> PreparedImage<'a> {
         if width == 0 || height == 0 {
             return Err(invalid("the image has a zero dimension".into()));
         }
+        let width_usize = usize::try_from(width_px).unwrap_or(usize::MAX);
 
         let channels: u8;
         let data: Cow<'a, [u8]>;
         let filter;
+        let mut predicted = None;
         let mut inverted = false;
         let mut mask = None;
 
@@ -191,13 +281,16 @@ impl<'a> PreparedImage<'a> {
                         }
                         if !opaque {
                             let alpha: Vec<u8> = pixels.chunks_exact(4).map(|p| p[3]).collect();
-                            mask = Some(if compress { deflate(&alpha) } else { alpha });
+                            mask = Some(Encoded::new(&alpha, width_usize, 1, compress));
                         }
                         Cow::Owned(rgb)
                     }
                 };
                 if compress {
-                    data = Cow::Owned(deflate(&raw));
+                    let row_len = width_usize * usize::from(channels);
+                    let encoded = Encoded::new(&raw, row_len, usize::from(channels), true);
+                    predicted = encoded.predicted.then_some(channels);
+                    data = Cow::Owned(encoded.data);
                     filter = Some(Filter::FlateDecode);
                 } else {
                     data = raw;
@@ -242,14 +335,15 @@ impl<'a> PreparedImage<'a> {
 
         stream_len(data.len(), "an image")?;
         Ok(Self {
+            id,
             resource_name: format!("Im{index}").into_bytes(),
             width,
             height,
             data,
             filter,
+            predicted,
             space,
             inverted,
-            mask_filter: if compress && mask.is_some() { Some(Filter::FlateDecode) } else { None },
             mask,
         })
     }
@@ -264,13 +358,20 @@ impl<'a> PreparedImage<'a> {
         let image_ref = refs.next()?;
         let mask_ref = match &self.mask {
             Some(alpha) => {
-                stream_len(alpha.len(), "an image mask")?;
+                stream_len(alpha.data.len(), "an image mask")?;
                 let mask_ref = refs.next()?;
-                let mut mask = chunk.image_xobject(mask_ref, alpha);
+                let mut mask = chunk.image_xobject(mask_ref, &alpha.data);
                 mask.width(self.width).height(self.height).bits_per_component(8);
                 mask.color_space().device_gray();
-                if let Some(filter) = self.mask_filter {
-                    mask.filter(filter);
+                if alpha.deflated {
+                    mask.filter(Filter::FlateDecode);
+                }
+                if alpha.predicted {
+                    mask.decode_parms()
+                        .predictor(Predictor::PngOptimum)
+                        .colors(1)
+                        .bits_per_component(8)
+                        .columns(self.width);
                 }
                 mask.finish();
                 Some(mask_ref)
@@ -288,7 +389,7 @@ impl<'a> PreparedImage<'a> {
                 Some(profile_ref) => image.color_space().icc_based(*profile_ref),
                 None => {
                     return Err(PdfError::InvalidImage {
-                        image: ImageId(u32::MAX),
+                        image: self.id,
                         reason: "internal error: ICC profile was not written".into(),
                     });
                 }
@@ -302,6 +403,15 @@ impl<'a> PreparedImage<'a> {
         }
         if let Some(filter) = self.filter {
             image.filter(filter);
+        }
+        if let Some(channels) = self.predicted {
+            // `channels` is 1, 3 or 4 by construction.
+            image
+                .decode_parms()
+                .predictor(Predictor::PngOptimum)
+                .colors(i32::from(channels))
+                .bits_per_component(8)
+                .columns(self.width);
         }
         image.finish();
         Ok(image_ref)

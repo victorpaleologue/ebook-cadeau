@@ -6,7 +6,7 @@
 //! | Need | Use |
 //! |---|---|
 //! | load a font, read its names and licence | [`Font::from_bytes`], [`Font::family_name`], [`Font::licence_description`] |
-//! | may this font go into a PDF? | [`Font::embedding`], [`Font::embedding_flags`] (`OS/2.fsType`) |
+//! | may this font go into a PDF? | [`Font::embedding`], [`Font::embedding_flags`] (`OS/2.fsType`); rules: [`Font::allows_bundling`], [`Font::allows_subset_embedding`], [`Font::allows_outlines`] |
 //! | line metrics, cap height | [`Font::metrics`] → [`FontMetrics`] and its `*_mm(size_pt)` helpers |
 //! | pick an instance of a variable font | [`Font::with_variations`] |
 //! | can the font draw this text? | [`Font::missing_chars`] |
@@ -29,9 +29,9 @@
 //!
 //! let font = Font::from_bytes(font_bytes, 0)?;
 //! let opts = ShapeOptions::default();
-//! // The largest size between 6 and 24 pt at which the title is at most 150 mm long
-//! // with capitals at most 6 mm tall.
-//! let size = fit_size(&font, "L'Étranger", 150.0, 6.0, 6.0, 24.0, &opts).unwrap_or(6.0);
+//! // The largest size between 6 and 40 pt at which the title is at most 150 mm long
+//! // with capitals at most 7 mm tall.
+//! let size = fit_size(&font, "L'Étranger", 150.0, 7.0, 6.0, 40.0, &opts).unwrap_or(6.0);
 //! let run = shape(&font, "L'Étranger", size, &opts);
 //! let item = Item::fill(run.to_outline(&font, Point::new(20.0, 100.0)), Color::BLACK);
 //! # let _ = item; Ok(()) }

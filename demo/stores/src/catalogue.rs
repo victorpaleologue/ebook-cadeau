@@ -42,6 +42,15 @@ pub struct Book {
     pub cover: CoverDesign,
 }
 
+/// Books are identified by their [`Book::id`].
+impl PartialEq for Book {
+    fn eq(&self, other: &Self) -> bool {
+        self.id == other.id
+    }
+}
+
+impl Eq for Book {}
+
 impl Book {
     /// Title and subtitle joined, as sent to the partner API and written in the EPUB.
     #[must_use]

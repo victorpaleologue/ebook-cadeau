@@ -1,6 +1,6 @@
 # Legal: fonts on covers — identification, reuse, look-alikes, and generative AI reproduction
 
-_Status: draft — research date 2026-11-12_
+_Status: fact-check corrections applied (the fact-check had limited web access) — research date 2026-11-12_
 
 This document is research to brief a lawyer. It is not legal advice. A French IP lawyer should review it before commercial launch.
 
@@ -10,6 +10,7 @@ This document is research to brief a lawyer. It is not legal advice. A French IP
 - For that reason no URL is cited for statutes, cases, licence terms or prices. None appeared in a search result, and guessing URLs is not allowed. Formal citations (article, case name, court, date) are given so that each item can be looked up. Section 10 lists what to verify first.
 - **Verified in this session, against files in this repository:** the OFL 1.1 licence texts and the eight font binaries in `/home/user/ebook-cadeau/assets/fonts/` (checksums, `fsType`, `name` table). The lead analyst re-ran these checks on 2026-11-12.
 - **No price was obtained** for any commercial font licence (server, web-to-print, application). Section 4 says so again where it matters.
+- **Fact-check pass (2026-11-12, `factcheck/legal-fonts-genai.md`).** The checker's five web searches were all refused. It checked the repository (fonts, licence files, code) and sibling notes verified earlier, and otherwise gave its own recollection, which is quoted here as "checker's recall" and stays unverified. Seven errors found against the repository and the sibling notes are corrected in place. The editor then ran two web searches (AI Act Digital Omnibus; *Cox v. Sony*), whose result summaries confirm the checker's recall on both points; they are cited where used. Everything else in this banner still holds: **the Findings, the Product rules and the Implications rest on unverified law** and must be read with this section.
 
 Confidence markers:
 
@@ -32,15 +33,15 @@ Source notes: `/home/user/ebook-cadeau/docs/research/notes/legal-fonts-genai.fon
 2. **Lawful in the USA does not mean lawful in France.** In the USA the letter shapes are free and only the font software is protected. In the EU the shapes can be protected by a registered design (up to 25 years), by the unregistered EU design (3 years, against copying only) and, in France, by copyright if the design is original (author's life + 70 years). The law of the country where protection is claimed applies. [M]
 3. **Identifying the font on a cover is lawful.** The risks are in the training data of the classifier and in how the result is presented (trade marks, "imitation of X" wording). [M]
 4. **Setting the spine in the same commercial font is a licence problem.** A desktop licence or an Adobe Fonts subscription does not cover a service that renders documents for third parties. The service would need a server or web-to-print licence, sold per family and on quote. No price could be obtained. With hundreds of different title fonts in a catalogue, this route does not scale. [M]
-5. **Bring-your-own-font, in the browser only, is the one route to a commercial font that needs no licence held by us.** The user's own licence covers it; the file is never uploaded; the text is converted to outlines. [M]
+5. **Bring-your-own-font, in the browser only, is the one route to a commercial font that needs no licence held by us.** Our hypothesis, not a finding: the user's own desktop licence may cover it, because the file is never uploaded and the text is converted to outlines; question 6 asks counsel whether that is true (downgraded by the fact-check). [M]
 6. **Open-licence fonts are the workable default.** The OFL 1.1 text in the repository allows bundling, embedding, subsetting and selling with software, and states that documents made with the font are not bound by the licence. [L] The eight bundled font files are all OFL 1.1, all `fsType` 0x0000, and none declares a Reserved Font Name. [L]
 7. **Custom lettering cannot be "retyped".** Tracing it, cropping it out or re-drawing it with AI reproduces or adapts a graphic work. Fall back to a house face, or use artwork supplied by the publisher. [M]
 8. **The spine title is the same string as the cover title.** An AI "style transfer" therefore re-draws the same letters in the same forms. Legally this is close to reproducing the lettering, not to borrowing a style. [M, reasoning]
-9. **Extending the artwork onto the spine is the riskiest operation in the product.** Outpainting, stretching and mirroring all alter the work. In France the right of integrity belongs to the artist and a publisher cannot waive it. Only a flat colour sampled from the cover is clean without consent. [M; French case law on cropping and mirroring: V2, sibling note, see §6]
+9. **Extending the artwork onto the spine is the riskiest operation in the product.** Outpainting, stretching and mirroring all alter the work. In France the right of integrity belongs to the artist and a publisher cannot waive it. Only a flat colour sampled from the cover is clean without consent. [M; French case law on cropping and mirroring is reported by secondary sources only (a trade-press column and a practical guide; no decision identified), and a 2024 counter-example exists where such claims failed — the outcome is not automatic; see §6.2]
 10. **Train only on open-licence fonts.** The OFL grants "use, study, copy, merge, embed, modify" with no field-of-use limit. [L] A EULA clause against machine-learning use is a valid reservation under the EU text-and-data-mining exception for commercial users. [M] The published font-generation checkpoints have undocumented training data. [M]
 11. **Running the model in the browser helps in one case only.** For print-at-home, the user makes the copy. It gives no "mere tool" shelter for a feature built to imitate covers, it does not remove AI Act duties, and it stops helping when the PDF is sent to us or to a printer. It also makes us the distributor of the model weights. [M]
-12. **No court ruling on AI-generated fonts or lettering is known**, anywhere, as of mid-2026. [M?] The analysis of AI output is reasoning from general rules.
-13. **The gain is small and the legal difference is large.** On a 10 mm spine the title's cap height is about 5–7 mm. At that size a good open look-alike is hard to tell from the original. The step from rung 2 to rung 5 of the ladder below buys little and costs a lot. [M, reasoning]
+12. **No court ruling on AI-generated fonts or lettering is known to the researchers**, as of mid-2026, but no search for one could be run, so this is an absence of knowledge, not a finding. [M?] The analysis of AI output is reasoning from general rules.
+13. **The gain is small and the legal difference is large.** On a 10 mm spine the text band is 6 mm (2 mm clear each side, doc 03). The recommended setting is 9–13 pt, a cap height of about 2.2–3.2 mm; the ceiling is all-caps at about 24 pt, a cap height of about 5.9 mm (corrected by the fact-check: the draft said 5–7 mm, which breaks the 2 mm margin). At that size a good open look-alike is hard to tell from the original — even more so than the draft assumed. The step from rung 2 to rung 5 of the ladder below buys little and costs a lot. [M, reasoning]
 
 ### 1.2 Risk ladder
 
@@ -76,13 +77,13 @@ Risk is for the service, in France and the EU, with a commercial print run. "Typ
 
 | Point | Fonts note | Genai note | Kept, and why |
 |---|---|---|---|
-| Spine backgrounds taken or generated from the cover | Lawful use of image generation: "colour, texture sampled from the cover's edge, subject to the cover licence" (§8) | Only a flat colour is clean without consent; stretch, mirror and outpainting are the same alteration (§2.4) | **Genai note.** A cover licence comes from the publisher, and the publisher cannot waive the artist's right of integrity [M]. French courts have treated cropping, mirroring, colourisation and cut-outs as violations [V2, sibling note]. A procedural texture of our own that takes only a colour from the cover remains allowed |
+| Spine backgrounds taken or generated from the cover | Lawful use of image generation: "colour, texture sampled from the cover's edge, subject to the cover licence" (§8) | Only a flat colour is clean without consent; stretch, mirror and outpainting are the same alteration (§2.4) | **Genai note.** A cover licence comes from the publisher, and the publisher cannot waive the artist's right of integrity [M]. Secondary sources report that French courts have treated cropping, mirroring, colourisation and cut-outs as violations [sibling note; no decision identified], and a 2024 decision went the other way (§6.2). A procedural texture of our own that takes only a colour from the cover remains allowed |
 | Tracing or generating third-party lettering | "Exclude" (§9) | Allowed in an "own rights" mode or on per-title publisher opt-in (§6) | **Both.** Excluded for third-party covers by default. Allowed only when the uploader holds the rights. For *lettered* titles a publisher opt-in is not enough, because the letterer's moral right is not the publisher's to waive; the publisher should supply the artwork instead (rung 0) |
-| Subsetting and Reserved Font Names | A subset embedded in a PDF is a "document"; a subset shipped *as a font* is a Modified Version and may keep its name only if no Reserved Font Name is declared (§6.1) | "Keep originals unmodified because format conversion or subsetting makes a Modified Version" (§6, rung 1) | **Fonts note's reading, genai note's practice.** Ship the original files unmodified (they are today [L]). Subsetting inside the PDF is free. If we ever ship subset or converted font files, CI must check that the family declares no Reserved Font Name |
+| Subsetting and Reserved Font Names | A subset embedded in a PDF is a "document"; a subset shipped *as a font* is a Modified Version and may keep its name only if no Reserved Font Name is declared (§6.1) | "Keep originals unmodified because format conversion or subsetting makes a Modified Version" (§6, rung 1) | **Fonts note's reading, genai note's practice.** Ship the original files unmodified (the files match the repository's own `SHA256SUMS` [L]; identity with the upstream files was not verified, per the fact-check). Subsetting inside the PDF is free. If we ever ship subset or converted font files, CI must check that the family declares no Reserved Font Name |
 | Showing the identified commercial font's name | Referential use is allowed; but "the UI shows the open font's own name only" (§4, §10) | "Never name a commercial font in the UI" (§6) | **Never show it.** Naming is lawful in itself, but it invites the "imitation of X" reading that EU comparative-advertising law prohibits, and we gain nothing from it |
-| `fsType` 0x0002 (restricted) and 0x0200 (bitmap only) on a user-supplied font | 0x0002: outline only if the user confirms their licence allows it. 0x0200: rasterise at print resolution, or substitute (§5.3) | — | **Stricter: refuse both.** The existing code already documents "draw nothing with it in a PDF" (`crates/ebc-text/src/font.rs`) [L]. Such fonts are rare. An override can be added after counsel's opinion |
+| `fsType` 0x0002 (restricted) and 0x0200 (bitmap only) on a user-supplied font | 0x0002: outline only if the user confirms their licence allows it. 0x0200: rasterise at print resolution, or substitute (§5.3) | — | **Stricter: refuse both.** Such fonts are rare. An override can be added after counsel's opinion. Code status (fact-check, then re-read by the editor): when the checker read `crates/ebc-text/src/font.rs`, a font without an OS/2 table was reported as Installable and only 0x0002 carried "draw nothing with it in a PDF". The current file reports a font without an OS/2 table as `Restricted`, and its outline rule for user fonts refuses the restricted and bitmap-only bits [L, re-read 2026-11-12] |
 | German *Schriftzeichengesetz* | Folded into general design law by the 2004 reform; transitional rule in DesignG § 61 | "Repealed in 2004" | Compatible: the special typeface rules were repealed and typefaces moved into general design law. Whether the article ratifying the Vienna Agreement formally remains is not verified [M?] |
-| AI Act art. 50 start date | "From August 2026" [M?] | "2 August 2026"; Digital Omnibus outcome unknown [M?] | 2 August 2026 as the nominal date [M]. Plan as if it applies now: a system first placed on the market after that date gets no transitional relief under any version we know of [M?] |
+| AI Act art. 50 start date | "From August 2026" [M?] | "2 August 2026"; Digital Omnibus outcome unknown [M?] | **Updated by the fact-check and the editor's search:** the Digital Omnibus on AI was agreed provisionally on 7 May 2026 and reported adopted in July 2026. Generative systems already on the market before 2 August 2026 have until 2 December 2026 for art. 50(2); a system placed on the market after 2 August 2026 has no grace period [secondary sources: law-firm and vendor summaries; the regulation number given by one source was not checked on EUR-Lex]. Plan as if it applies now |
 
 ## 2. Typeface versus font; protection by jurisdiction
 
@@ -122,12 +123,12 @@ All cells are [M] unless marked.
 - Reg. 6/2002 art. 3(b) defines "product" as any industrial or handicraft item, including "packaging, get-up, graphic symbols and typographic typefaces", excluding computer programs. Locarno class 18-03 is "type and type faces".
 - Requirements: novelty and individual character (arts. 5–6). Scope: any design that does not produce a different overall impression on the informed user, taking the designer's degree of freedom into account (art. 10).
 - The right covers making, offering, putting on the market and **using** a product in which the design is incorporated (art. 19). Private non-commercial acts are exempt (art. 20(1)(a)).
-- The unregistered right protects only against copying. Use is not copying if it results from independent creation by a designer who can reasonably be thought not to know the protected design (art. 19(2)).
-- For a registered typeface design, the EUIPO representation consisted of the full alphabet in upper and lower case, the numerals, and five lines of text at 16 pt (Implementing Reg. 2245/2002 art. 4(4), as it stood before the reform) [M?]. So the registered "design" is the whole character set. Whether a title of 10–30 glyphs reproduces it is an open question; no case is known.
+- The unregistered right protects only against copying. Use is not copying if it results from independent creation by a designer who can reasonably be thought not to know the protected design (art. 19(2) in the old numbering; since 1 May 2025 this rule sits in art. 19(4), and the new art. 19(2)(d) is the software act below — fact-check, checker's recall).
+- For a registered typeface design, the EUIPO representation consisted of the full alphabet in upper and lower case, the numerals, and five lines of text at 16 pt (Implementing Reg. 2245/2002 art. 4(4), as it stood before the reform) [M?]. That rule may have been replaced in the reform's second phase on 1 July 2026; unknown (fact-check). So the registered "design" is the whole character set. Whether a title of 10–30 glyphs reproduces it is an open question; no case is known.
 - **2024 reform.** Reg. (EU) 2024/2822 entered into force on 8 December 2024 and applies in two phases: 1 May 2025 and 1 July 2026. Directive (EU) 2024/2823 must be transposed by 9 December 2027. The reform:
   - renames the right "EU design" and keeps the 25-year and 3-year terms;
   - rewrites the product definition to cover items "regardless of whether [they are] embodied in a physical object or materialise in a non-physical form", listing "graphic works or symbols, logos, surface patterns, typographic typefaces, and graphical user interfaces"; computer programs stay excluded;
-  - adds as an infringing act the creating, downloading, copying or sharing of "any medium or software which records the design" for the purpose of making a product (new art. 19(2)(d));
+  - adds as an infringing act the creating, downloading, copying or sharing of "any medium or software which records the design" for the purpose of making a product (new art. 19(2)(d)). A font file, or model weights that reproduce a typeface, may be such software: distributing an open clone of a registered design may itself be a listed act, not only its use (fact-check omission, checker's recall);
   - adds permitted uses for referential use and for comment, critique or parody.
 - The old German typeface law and the Vienna Agreement both aimed at the making of fonts, not at typesetting [M?]. EU design law has no such limit in its text. This is question 1 for counsel.
 
@@ -142,7 +143,7 @@ All cells are [M] unless marked.
 - CPI art. L112-2 lists as works of the mind, at 8°, "les œuvres graphiques et typographiques". A typeface is protected if original (*empreinte de la personnalité de l'auteur*). Term: life + 70 years. Moral rights (paternity, integrity) are perpetual and inalienable (L121-1).
 - *Dessins et modèles*: L511-1 names "les symboles graphiques et les caractères typographiques" as products. L513-1 gives 5 years, renewable up to 25. L513-4 prohibits, without consent, making, offering, marketing, importing and "l'utilisation" of a product incorporating the design.
 - Font files: if treated as *logiciel* (L112-2 13°), the software regime applies. There is then no private-copy exception, only a backup copy (L122-6-1). Whether a French court treats a font file as software, as a database, or as the carrier of the typographic work is not settled, to our knowledge.
-- **Case law: no verified French judgment on the originality of a typeface could be cited by either researcher.** The known incident is the 2010 Hadopi logo, set in "Bienvenüe", a face drawn by Jean-François Porchez for France Télécom's exclusive use. The logo was withdrawn and redone. It ended without a judgment that we know of. It shows that font misuse in France has a reputational cost independent of damages.
+- **Case law: no verified French judgment on the originality of a typeface could be cited by either researcher** (no search could be run, so absence is not established). The known incident is the 2010 Hadopi logo, set in "Bienvenüe", a face drawn by Jean-François Porchez for France Télécom's exclusive use. The logo was withdrawn and redone. It ended without a judgment that we know of. It shows that font misuse in France has a reputational cost independent of damages.
 - A purely typographic cover may lack originality in France: CA Versailles, 22 March 2022, *Zulma v Elior* denied copyright in a cover but still found *parasitisme* ([Fournol, originality](https://www.fournol-avocat.fr/actualite/2022/8/17/la-difficile-reconnaissance-de-loriginalit-des-couvertures-de-livre), [Fournol, parasitisme](https://www.fournol-avocat.fr/actualite/2022/8/18/parasitisme-reconnu-pour-la-couverture-dun-livre)) [V1, sibling note `legal-covers-reseller.independent.md`]. That decision concerns the layout, not the typeface.
 
 ### 2.7 Germany [M]
@@ -166,7 +167,7 @@ All cells are [M] unless marked.
 
 ### 2.10 Unfair competition [M]
 
-- France: *concurrence déloyale* and *parasitisme* under Code civil art. 1240. The commercial chamber of the Cour de cassation tightened the test on 26 June 2024 (three judgments, including n° 23-13.535 [M?]): the claimant must identify an individualised economic value and show an intention to ride on it.
+- France: *concurrence déloyale* and *parasitisme* under Code civil art. 1240. The commercial chamber of the Cour de cassation restated the criteria on 26 June 2024: the claimant must identify an individualised economic value and show an intention to ride on it. Per the checker's recall these were two judgments carrying three appeal numbers (n° 23-13.535; n° 22-17.647 and 22-21.497 joined), with *parasitisme* upheld in the first and rejected in the second; the draft's "three judgments" and "tightened" are withdrawn. Unverified.
 - For this project the exposure is less the typeface than the **publisher's series look**. A spine that imitates the typography, colours and layout of a recognisable collection can be attacked as *parasitisme* even with properly licensed fonts.
 
 ## 3. Identifying the font: is it lawful?
@@ -221,7 +222,7 @@ A catalogue of trade books uses hundreds of distinct title fonts. A per-family l
 
 ### 4.3 Embedding permissions: OS/2 `fsType`
 
-Meaning of the bits: [M], from the OpenType specification. Product rule: decision of this document. The decoding itself is already implemented in `crates/ebc-text/src/font.rs` [L].
+Meaning of the bits: [M], from the OpenType specification. Product rule: decision of this document. The bit decoding is implemented in `crates/ebc-text/src/font.rs` [L]. The fact-check found that refusing fonts without an OS/2 table, and refusing outlines for 0x0200, were new policy not yet in the code; the current file now reports a font without an OS/2 table as `Restricted` and refuses outlines for the restricted and bitmap-only bits [L, re-read by the editor]. Unit tests per row are still required (implication 16).
 
 | `fsType` | Meaning | Bundled or indexed font | User-supplied font (browser) |
 |---|---|---|---|
@@ -233,19 +234,19 @@ Meaning of the bits: [M], from the OpenType specification. Product rule: decisio
 | + 0x0200 | Bitmap embedding only | Reject | **Refuse**; substitute |
 | No OS/2 table | Unknown | Reject | Refuse |
 
-- From OS/2 version 3 the permission bits are mutually exclusive. If a font sets several anyway, take the most restrictive. For versions 0–2 the specification says the least restrictive applies. The code does both. [M for the specification; L for the code]
+- From OS/2 version 3 the permission bits are mutually exclusive. If a font sets several anyway, take the most restrictive. For versions 0–2 the specification says the least restrictive applies. The code does both. [M for the specification; L for the code; the fact-check found the same rule in an independent implementation, ttf-parser 0.25.1 `tables/os2.rs`]
 - `fsType` states the foundry's intent; the licence text prevails. A US court held that the bits are not an access control under the DMCA (*Agfa Monotype v. Adobe*, N.D. Ill. 2005) [M]. Honouring them is the industry norm and the cheapest evidence of good faith.
 
 ### 4.4 Converting text to outlines
 
 - Outlining removes the font program from the PDF. Nothing is redistributed and the embedding bits become moot. [M]
 - **It does not cure a missing licence.** The outlines were produced by running the font, and in France the shapes themselves may be a protected work. [M]
-- Printers differ: Printoclock asks for outlined fonts ([bien réaliser son fichier](https://www.printoclock.com/bien-realiser-son-fichier)) [V1, sibling note `print-requirements.prepress.md`]; Pixartprinting asks for embedded fonts, not outlined; Bookvault and Lulu ask for embedded fonts [V1 each, sibling note]. An outlined spine title plus embedded, subset body fonts satisfies all of them.
+- Printers differ: Printoclock asks for outlined fonts ([bien réaliser son fichier](https://www.printoclock.com/bien-realiser-son-fichier)) [V1, sibling note `print-requirements.prepress.md`]; Pixartprinting asks for embedded fonts, not outlined; Bookvault and Lulu ask for embedded fonts [V1 each, sibling note]. An outlined spine title plus embedded, subset body fonts satisfies all of them **except Printoclock**, which wants all text outlined; doc 03 handles it with a per-printer `outline_all_text` flag (corrected by the fact-check).
 - Cost of outlining: no selectable text and slightly heavier small type. Irrelevant for a spine title.
 
 ### 4.5 The closest precedent: *Laatz v. Zazzle* [M?]
 
-A type designer alleged that a print-on-demand platform bought a single-seat licence and installed the font on its servers for all users of its online design tool (N.D. Cal., filed 2022, no. 5:22-cv-04844). Claims included breach of contract, fraud and software copyright. **Outcome not verified.** The facts are the scenario that architectures A and B without a server licence would reproduce.
+A type designer alleged that a print-on-demand platform bought a single-seat licence and installed the font on its servers for all users of its online design tool (N.D. Cal., filed 2022, no. 5:22-cv-04844). Claims included breach of contract, fraud and software copyright. **Outcome not verified** (the fact-check could not search either). The checker recalls (low–medium) that the case raised the US Copyright Office's practice of questioning registration of fonts built with GUI editors; if so, §2.3 overstates how settled font-software copyright is. The facts are the scenario that architectures A and B without a server licence would reproduce.
 
 ## 5. Open-licence substitutes and look-alikes
 
@@ -334,6 +335,8 @@ All [M]. Points that matter for us:
 
 **Catalogue rule.** Admit a family to the index if it is (a) a revival of a model whose designer died more than 70 years ago, or (b) an original design, or (c) a long-distributed metric-compatible clone of a model more than 25 years old. Do not admit a close copy of a commercial face first published less than 25 years ago.
 
+**Corrected by the fact-check: the 25-year cut-off tracks design right only.** French copyright (life + 70 years) in an original face by a living designer is not covered by it: by this section's own dates a close copy of Gotham (2000) would pass the rule today. The rule therefore also excludes a close copy of any face whose designer died less than 70 years ago (or is living), whatever its age, unless the copy is a long-distributed metric-compatible clone of a text face (where originality is weakest). Registered typeface designs (Locarno 18-03) can be searched in EUIPO DesignView and at INPI; the rule uses age as a proxy and should be completed by that search for any family that resembles a recent commercial face [checker's recall for the registers].
+
 ## 6. Hand lettering and artwork
 
 ### 6.1 Lettering [M]
@@ -355,15 +358,16 @@ All [M]. Points that matter for us:
 | Moving the title pixels from the cover to the spine (crop, cut-out) | Partial reproduction; recomposition | Medium to medium–high. Covered only by a cover licence that includes the card; sensitive for integrity | [M] |
 | Tracing the lettering into vectors | Reproduction of the graphic work | High. Same as AI re-rendering, without the AI | [M] |
 | AI re-rendering of the lettering | Adaptation; integrity; trade mark for logos | High | [M] |
-| Stretching or mirroring edge pixels onto the spine | Alteration of the work | High | [M, reasoning]; case law on cropping and mirroring: [V2, sibling note, below] |
+| Stretching or mirroring edge pixels onto the spine | Alteration of the work | High | [M, reasoning]; case law on cropping and mirroring: secondary sources only, with a counter-example (below) |
 | AI outpainting of the artwork onto the spine | Adaptation; alteration; attributes to the artist content they did not make | Highest | [M] |
 
 Verified French background, carried from the sibling notes:
 
 - Permission to use a work does not dispense from respecting moral rights ([APIE / economie.gouv](https://www.economie.gouv.fr/node/40472)) [V1, sibling note].
-- French case law treats cropping, mirrored reproduction, colourisation and cut-outs (*détourage*) as infringements of the right of integrity ([Livres Hebdo](https://www.livreshebdo.fr/article/pop-et-droit-moral), [practical note](https://www.alsace.catholique.fr/wp-content/uploads/sites/14/2016/04/notions-cle-droit-image.pdf)) [V2, sibling note `legal-covers-reseller.reseller.md`].
+- Secondary sources report that French case law treats cropping, mirrored reproduction, colourisation and cut-outs (*détourage*) as infringements of the right of integrity ([Livres Hebdo](https://www.livreshebdo.fr/article/pop-et-droit-moral), [practical note](https://www.alsace.catholique.fr/wp-content/uploads/sites/14/2016/04/notions-cle-droit-image.pdf)) [sibling note `legal-covers-reseller.reseller.md`; a trade-press column and a diocesan practical guide, no decision identified — downgraded from V2 by the fact-check].
+- Counter-example (restored by the fact-check from the same sibling note): TJ Bordeaux, 29 February 2024 — claimants invoking cropping and a missing credit lost on all claims ([Dalloz actualité](https://www.dalloz-actualite.fr/document/tj-bordeaux-29-fevr-2024-n-2308086)) [V1, sibling note]. The outcome is fact-dependent, not automatic.
 - In the case reported by Livres Hebdo, a reproduction that altered the work, omitted the signature and changed the format cost €15,000 in damages ([Livres Hebdo](https://www.livreshebdo.fr/article/pop-et-droit-moral)) [V1, sibling note].
-- Cropping an image to fit a cover format without express consent was treated as an integrity issue (TGI Paris, 5 October 2007, [Légifrance](https://www.legifrance.gouv.fr/juri/id/JURITEXT000018862984)) [V1, sibling note `legal-covers-reseller.independent.md`].
+- Cropping an image to fit a cover format without express consent was treated as an integrity issue (TGI Paris, 5 October 2007, [Légifrance](https://www.legifrance.gouv.fr/juri/id/JURITEXT000018862984)) [V1, sibling note `legal-covers-reseller.independent.md`, which records that the decision itself was **not read**].
 
 Other jurisdictions [M]: Germany, §§ 14 and 23 UrhG (distortion; adaptations need consent for exploitation). UK, false attribution, CDPA s. 84.
 
@@ -390,7 +394,7 @@ Other jurisdictions [M]: Germany, §§ 14 and 23 UrhG (distortion; adaptations n
 - AI re-rendering of a hand-drawn title re-draws the same word in the same forms, rotated and resized. That is an adaptation, not an independent creation. [M]
 - Moral rights: integrity (a degraded or "almost right" redraw is the textbook complaint) and attribution. They belong to the letterer. [M]
 - Exceptions do not fit. Pastiche (CPI L122-5 4°; CJEU reference *Pelham II*, C-590/23, Advocate General's opinion of June 2025, judgment status unknown [M?]) requires some artistic dialogue; a functional spine label has none. Private copying covers the home user at most. [M]
-- Trade marks: in *Getty Images v Stability AI* ([2025] EWHC 2863 (Ch)) the model provider was held liable for trade-mark infringement where outputs reproduced a watermark [M]. A tool that redraws a registered title logo is in a comparable position.
+- Trade marks: in *Getty Images v Stability AI* ([2025] EWHC 2863 (Ch)) the trade-mark finding was narrow — confined to watermarks reproduced by specific early model versions, with the s. 10(3) reputation claim failing [M; narrowed per the checker's recall; the draft's wording was too broad]. A tool that redraws a registered title logo is nonetheless in a comparable position for the logo itself.
 - Outpainting adds invented content next to the work and presents it as part of it. That is a stronger alteration than a crop. [M, reasoning]
 - Generic inpainting models bring their own problems: training-data litigation (§7.8) and model licences (§7.5).
 
@@ -402,7 +406,10 @@ Other jurisdictions [M]: Germany, §§ 14 and 23 UrhG (distortion; adaptations n
   - Exception for systems that "perform an assistive function for standard editing" or "do not substantially alter the input data". Whether spine lettering or outpainting fits is untested. [M]
   - Fines for art. 50 breaches: up to €15 million or 3 % of turnover (art. 99(4)), with the lower cap for SMEs. [M]
   - The open-source exclusion does not cover art. 50 systems (art. 2(12)). [M]
-  - The 2025 "Digital Omnibus" proposed adjustments to these dates, including a grace period for systems already on the market. Outcome not verified. [M?] A system first placed on the market after 2 August 2026 should be designed as if the duty applies.
+  - **Digital Omnibus (updated).** A provisional agreement was reached at the May 2026 trilogue; secondary sources report formal adoption in July 2026. Generative systems placed on the market **before** 2 August 2026 have until **2 December 2026** to comply with art. 50(2); systems placed on the market on or after 2 August 2026 get no grace period, and the other art. 50 duties (including deep-fake labelling) were not deferred [V2 on the dates: checker's recall plus the editor's search — [Bird & Bird](https://www.twobirds.com/en/insights/2026/digital-omnibus-on-ai-provisional-agreement-reached-at-the-may-trilogue), [CSA research note](https://labs.cloudsecurityalliance.org/research/csa-research-note-eu-ai-act-article50-watermarking-deadline/), [Usercentrics](https://usercentrics.com/knowledge-hub/eu-ai-act-high-risk-delay-article-50-transparency-consent/); the regulation number one source gives was not checked on EUR-Lex]. Our generative features do not exist yet, so they will be new systems: **the duty applies from their first release.**
+  - **Code of practice on marking and labelling** (checker's recall, medium): drafts since December 2025 ask for layered marking of images (metadata plus an imperceptible watermark). XMP metadata alone (implication 24) may not be enough.
+  - **Art. 50(4)** (omitted by the draft, raised by the fact-check): deployers of AI systems that generate image content constituting a "deep fake" — content resembling existing objects that would falsely appear authentic — must disclose it. An outpainted cover is arguably such content; in reseller mode the deployer is a professional (the reseller), in standalone mode a consumer acting privately is not a deployer.
+  - Vocabulary for the machine-readable mark (checker's recall, high): IPTC digital source types `trainedAlgorithmicMedia`, `compositeWithTrainedAlgorithmicMedia`, and `algorithmicMedia` for purely procedural output.
 - A nearest-font classifier and a colour sampler generate no synthetic content. Art. 50(2) does not concern them. [M, reasoning]
 
 ### 7.4 Training: contracts and the EU exceptions
@@ -413,26 +420,30 @@ Other jurisdictions [M]: Germany, §§ 14 and 23 UrhG (distortion; adaptations n
 - **DSM Directive (EU) 2019/790, art. 3:** research organisations and cultural heritage institutions, for scientific research; no opt-out; cannot be overridden by contract. Not us. [M]
 - **Art. 4:** anyone with lawful access, unless the rightholder has expressly reserved the use "in an appropriate manner". A EULA clause against ML training is such a reservation. Training a commercial model on EULA-restricted fonts is therefore outside the exception and a breach of contract. [M]
 - **France:** CPI L122-5 10° and L122-5-3 (ordonnance of 24 November 2021). The opt-out need not be reasoned and may be expressed by any means, including site terms (R122-28, décret n° 2022-928 of 23 June 2022). [M; both notes and the sibling note `cover-sources.scraping-law.md` agree on the article number, none verified it]
-- **Case law** [M unless marked]: LG Hamburg, 27 September 2024, 310 O 227/23, *Kneschke v LAION* (dataset building covered by the research exception). Appeal decided by OLG Hamburg in December 2025, reportedly upheld [M?]. LG München I, 11 November 2025, 42 O 14139/24, *GEMA v OpenAI*: memorised works inside model weights are reproductions, not covered by TDM, and the provider, not the user, answers for outputs. First CJEU reference on generative AI: *Like Company v Google*, C-250/25, pending at last information [M?].
-- **Open fonts.** OFL: see §5.1 [L]. Apache 2.0 and Ubuntu Font Licence fonts are likewise permissive [M]. Google Fonts holds on the order of 1,800 families, mostly OFL [M].
+- **Case law** [M unless marked]: LG Hamburg, 27 September 2024, 310 O 227/23, *Kneschke v LAION* (dataset building covered by the research exception). Appeal decided by OLG Hamburg, 5 U 104/24, 10 December 2025: dismissal upheld, and per the sibling note `cover-sources.scraping-law.md` the court held a natural-language reservation **not** machine-readable [M?; the draft dropped the case number and that point]. "Site terms are a valid opt-out" is therefore a France-specific reading (R122-28), not an EU-wide one. LG München I, 11 November 2025, 42 O 14139/24, *GEMA v OpenAI*: memorised works inside model weights are reproductions, not covered by TDM, and the provider, not the user, answers for outputs. First CJEU reference on generative AI: *Like Company v Google*, C-250/25, pending at last information [M?].
+- **Open fonts.** OFL: see §5.1 [L]. Apache 2.0 and Ubuntu Font Licence fonts are likewise permissive [M]. Google Fonts holds **1,908 families**; licence records: OFL 1,828, Apache 36, UFL 5 ([google-font-metadata on npm](https://registry.npmjs.org/google-font-metadata)) [V1, sibling note `font-id-tech.tools.md`; corrected by the fact-check from "about 1,800"].
+- **France, pending** (checker's recall, medium): a Senate bill adopted in April 2026 would create a presumption that an AI provider used a protected work. If enacted, it raises the value of the published training manifest (R12, implication 28).
 
 ### 7.5 Datasets and weights in the literature
 
 | Work | Training data, as recalled | Reuse issue | Conf. |
 |---|---|---|---|
-| FontDiffuser (AAAI 2024) | About 400 Chinese fonts × about 800 characters, collected by the authors | Font licences undocumented; repository licence not checked | [M] |
-| DG-Font (CVPR 2021) | About 400 Chinese fonts | Same | [M] |
-| LF-Font, MX-Font (NAVER Clova, 2021) | Chinese and Korean font collections; code under MIT | The code licence does not clear the data | [M] |
-| Diff-Font (2022–24) | Chinese and Korean fonts | Same | [M] |
+| FontDiffuser (AAAI 2024) | About 400 Chinese fonts × about 800 characters, collected by the authors | README: "can only be used for non-commercial research purposes" ([repo](https://github.com/yeungchenwa/FontDiffuser)) | [V1, sibling note `font-id-tech.generation.md`] |
+| DG-Font (CVPR 2021), CF-Font | Chinese; trained on Founder fonts, which are free "for non-commercial users" | No licence file ([repo](https://github.com/ecnuycxie/DG-Font)) | [V1, sibling note] |
+| LF-Font, MX-Font (NAVER Clova, 2021) | Chinese and Korean; training fonts not released | MIT except FUNIT-derived modules ([repo](https://github.com/clovaai/mxfont)); the code licence does not clear the data | [V1, sibling note] |
+| Diff-Font (2022–24) | Chinese, Founder fonts | No licence file | [V1, sibling note] |
 | MC-GAN "Capitals64" (CVPR 2018) | About 10,000 Latin fonts gathered from the web, capitals only | Scraped; includes commercial faces | [M] |
 | SVG-Fonts / "Glyphazzn" (Lopes et al., 2019), used by DeepVecFont | About 14 million glyphs from fonts found online | Scraped | [M] |
 | AdobeVFR (DeepFont, 2015) | 2,383 Adobe font classes | Adobe-owned | [M] |
 | MyFonts tag dataset (Chen et al., 2019) | About 18,800 MyFonts fonts | Monotype catalogue | [M] |
 | Stable Diffusion 1.5 / SDXL | LAION subsets; OpenRAIL-M / OpenRAIL++-M | Use restrictions; data under litigation | [M] |
-| FLUX.1 schnell / dev | Undisclosed; Apache-2.0 / non-commercial | dev unusable commercially | [M] |
-| LaMa, MI-GAN (small inpainting models that can run in a browser) | Places2 and similar; Apache-2.0 / MIT | Dataset research terms | [M?] |
+| FLUX.1 schnell / dev | Undisclosed; Apache-2.0 / non-commercial | dev needs a paid commercial licence (corrected by the fact-check: not "unusable"; checker's recall) | [M] |
+| MI-GAN | Places2; MIT code and **MIT weights**, 27 MB, proven in a browser ([LICENSE-WEIGHTS](https://raw.githubusercontent.com/Picsart-AI-Research/MI-GAN/main/LICENSE-WEIGHTS)) | Places2 research terms | [V1, sibling note `font-id-tech.generation.md`] |
+| LaMa | Places2; Apache-2.0; 93–206 MB | Places2 research terms; too heavy for the browser | [V1, sibling note] |
 
 **Conclusion: no off-the-shelf font-generation checkpoint has a clean, documented data lineage for commercial use in the EU.** A model trained from scratch on Google Fonts, Latin only, with a published manifest, is the defensible route.
+
+**Decision on inpainting (conflict raised by the fact-check).** R12 bans third-party checkpoints with undocumented data, implication 29 did not name MI-GAN or LaMa, and `notes/font-id-tech.generation.md` recommends MI-GAN outpainting as an opt-in. MI-GAN's data (Places2, natural scenes, no fonts or covers) is documented and its weights are MIT; what remains is the research-only character of Places2's terms. Decision: MI-GAN is **allowed only where outpainting is already allowed** — "own rights" mode, behind the generative feature flag, downloaded on demand — and is named in the training-data notice with its dataset. It is never in the default pipeline. LaMa is not shipped (size). Counsel question 19 asks whether the Places2 terms reach the weights.
 
 ### 7.6 AI Act: general-purpose model duties versus a small specialised model [M]
 
@@ -458,7 +469,7 @@ All [M] unless marked. Verified background from the sibling note `legal-covers-r
 Does running the model in the browser change anything? [M, reasoning]
 
 1. **Yes, for the generation step.** The copy is made on the user's device at the user's request, so the user is the maker. Exceptions reserved to private users can apply only if the user is the copier.
-2. **No, for "mere tool" status.** A feature whose stated purpose is to imitate the cover's lettering is not a neutral staple article. *Grokster* (inducement) and *Cox v. Sony* (US Supreme Court, 2026: liability for services that induce or are tailored to infringement [M?]) point the same way as the French "rôle actif" reasoning. If the service itself fetches the cover by ISBN and runs the imitation automatically, the user's agency is thin.
+2. **No, for "mere tool" status.** A feature whose stated purpose is to imitate the cover's lettering is not a neutral staple article. *Grokster* (inducement) and *Cox v. Sony* point the same way as the French "rôle actif" reasoning, but only for a feature built to imitate. *Cox* (US Supreme Court, 25 March 2026) **reversed** contributory liability against the ISP: knowledge of user infringement and continued supply of a generally lawful service are not enough; the two recognised paths are inducement and a service tailored to infringement [V2 via the editor's search: [AIPLA](https://www.aipla.org/detail/news/2026/03/25/supreme-court-issues-unanimous-decision-in-cox-communications--inc.-v.-sony-music-entertainment), [Hunton](https://www.hunton.com/insights/legal/knowledge-is-not-enough-supreme-court-limits-contributory-copyright-liability-for-isps); the vote split is reported inconsistently]. It narrows provider liability in general and is US law; the draft cited only the half that hurts us. If the service itself fetches the cover by ISBN and runs the imitation automatically, the user's agency is thin.
 3. **No, for regulation.** AI Act provider status and art. 50 marking are unaffected.
 4. **It adds an act.** We distribute the weights to every browser in the EU. If weights can embody training works (*GEMA v OpenAI*; contrast *Getty v Stability*, where the UK court held that the Stable Diffusion model is not an "infringing copy"), each download is a reproduction and distribution in the EU, wherever training took place. Recital 106 of the AI Act takes the same territorial line for general-purpose models. A clean training set removes the issue.
 5. **Safe harbours are beside the point.** DSA arts. 4–6 protect transmission and hosting of users' information. Nothing is hosted in S1. In S2 and S3 we manufacture.
@@ -470,19 +481,21 @@ Output-liability precedents so far put liability on the provider: LG München I 
 
 | Matter | Point for us | Conf. |
 |---|---|---|
-| *Getty Images v Stability AI*, [2025] EWHC 2863 (Ch), 4 Nov 2025 | Training claim dropped (training outside the UK). Model weights are not an "infringing copy". Limited trade-mark infringement for watermarked outputs. Appeal on secondary infringement reportedly allowed [M?] | [M] |
+| *Getty Images v Stability AI*, [2025] EWHC 2863 (Ch), 4 Nov 2025 | Training claim dropped (training outside the UK). Model weights are not an "infringing copy". Narrow trade-mark infringement for watermarks in specific early versions; s. 10(3) claim failed. Appeal on secondary infringement reportedly allowed [M?] | [M] |
 | *GEMA v OpenAI*, LG München I, 11 Nov 2025 | Memorisation is reproduction; the provider is liable for outputs | [M] |
 | *Kneschke v LAION*, LG Hamburg 2024; OLG Hamburg Dec 2025 | Research TDM; form of opt-outs | [M] / [M?] |
 | *Andersen v. Stability AI* (N.D. Cal.) | Artists' direct and inducement claims survived dismissal (Aug 2024) | [M] |
+| *Cox v. Sony* (US Supreme Court, 25 March 2026) | Contributory liability needs inducement or a service tailored to infringement; knowledge is not enough (§7.7) | [V2, editor's search] |
 | *Thomson Reuters v. Ross* (D. Del., Feb 2025) | Fair use rejected for a non-generative AI tool; on appeal | [M] |
-| *Bartz v. Anthropic*; *Kadrey v. Meta* (N.D. Cal., June 2025) | Training on lawfully acquired books held fair use; pirated sources not; USD 1.5 bn settlement in *Bartz* | [M] |
+| *Bartz v. Anthropic* (N.D. Cal., June 2025) | Training on lawfully acquired books held fair use; pirated library copies not; USD 1.5 bn settlement | [M] |
+| *Kadrey v. Meta* (N.D. Cal., June 2025) | Meta won because the plaintiffs showed no market harm, although Meta had used shadow-library copies (corrected by the fact-check; the draft row fitted *Bartz* only) | [M] |
 | *Disney and Universal v. Midjourney* (C.D. Cal., June 2025); Warner Bros. (Sept 2025) | Output-side claims over recognisable characters | [M] |
 | SNE, SGDL, SNAC v. Meta (TJ Paris, March 2025) | The French book trade litigates against AI training; status unknown | [M] |
 | *Like Company v Google*, C-250/25 | First CJEU reference on training and outputs | [M?] |
 | US Copyright Office AI report, Parts 1–3 (2024–2025) | §7.3; Part 3 (pre-publication, 9 May 2025): training is fair use in some cases and not in others | [M] |
 | Monotype "Re:Vision" trends report (2025) and press coverage | Monotype presented AI as an opportunity; type designers objected publicly | [M?] |
 | Foundry EULAs with no-AI-training clauses | §7.4 | [M?] |
-| Rulings on AI-generated fonts or lettering | None known | [M?] |
+| Rulings on AI-generated fonts or lettering | None known; not searched | [M?] |
 
 For comparison, typeface litigation has almost always been about font software licences, not shapes [M]. China is an exception: courts have protected font libraries and sometimes single glyphs (*Founder v. Procter & Gamble*, Beijing, 2011, decided on implied licence) [M]. Positions of the type-design community (ATypI and others) were not verified.
 
@@ -492,22 +505,22 @@ For comparison, typeface litigation has almost always been about font software l
 |---|---|---|---|
 | R1 | The bundle and the font index contain only fonts under OFL 1.1 or Apache 2.0; UFL 1.0 and public-domain-dedicated files after a per-file check. No commercial font, no AGPL font | Only these licences allow shipping to browsers, embedding and training without a contract | §5 |
 | R2 | Honour `fsType`. Bundled fonts must be 0x0000. Restricted and bitmap-only user fonts are refused | Industry norm; evidence of good faith | §4.3 |
-| R3 | Spine text is drawn as outlines. Other text uses embedded subsets of bundled fonts | No font program travels for the spine; printers' requirements are met | §4.4 |
+| R3 | Spine text is drawn as outlines. Other text uses embedded subsets of bundled fonts, except for printers that require all text outlined (Printoclock: `outline_all_text`, doc 03) | No font program travels for the spine; printers' requirements are met | §4.4 |
 | R4 | Record each font's family, version and licence, and the spine's provenance, in the PDF metadata | Audit trail; supports the reseller log (clause X.4(e)) | §5.1 |
 | R5 | Never read, extract or de-obfuscate fonts from an EPUB or a publisher PDF | Licensed for that file only | §4.2 |
-| R6 | Bring-your-own-font runs in the browser only. The file is never uploaded or stored. The user warrants their licence | The only no-licence route for commercial fonts | §4.2 |
+| R6 | Bring-your-own-font runs in the browser only. The file is never uploaded or stored. The user warrants their licence | Hypothesised as the only no-licence route for commercial fonts; counsel question 6 decides whether it holds | §4.2 |
 | R7 | No commercial font name in the interface, in marketing or in match results. No "free X", no "alternative to X" | Trade marks; comparative advertising | §2.9 |
 | R8 | Self-host all fonts and model weights. No third-party font CDN or identification service at run time | GDPR (LG München I); cover images stay on the device | §5.3, §3 |
 | R9 | Default spine background is one flat colour sampled from the cover. No cover pixels on the spine | Integrity right; only a colour is free | §6 |
 | R10 | Lettered titles and logos get a house face. No imitation | Graphic work; moral rights; trade marks | §6 |
 | R11 | AI lettering and outpainting are off by default, available only in "own rights" mode, after explicit user confirmation, with an AI label; in reseller mode only on a per-title publisher opt-in, and never for lettered titles | Highest rungs of the ladder; AI Act art. 50 | §7 |
-| R12 | Never train on proprietary fonts or on scraped covers. Publish a training manifest. Ship no third-party checkpoint with undocumented training data | EULA and TDM reservations; weights are distributed in the EU | §7.4–7.5 |
+| R12 | Never train on proprietary fonts or on scraped covers. Publish a training manifest. Ship no third-party checkpoint with undocumented training data. Exception decided in §7.5: MI-GAN (documented data, MIT weights) in "own rights" mode only | EULA and TDM reservations; weights are distributed in the EU | §7.4–7.5 |
 | R13 | A model never outputs a font file. It outputs the title string only, as raster or outlines | Avoids the font-software and "Modified Version" questions | §5.1, §7.1 |
 | R14 | Neutral spine layout: title and author. No logo, no imitation of a collection | *Parasitisme* | §2.10 |
 | R15 | Ship licence texts and a credits page with every build | OFL condition 2 and termination clause | §5.1 |
 | R16 | Remote kill switch for generative features and a per-ISBN exclusion list, effective within 24 hours | No logs or moderation are possible client-side; supports clause X.4(d) | §7.7 |
 | R17 | Reseller contract: AI-generated elements are excluded from our warranty unless the publisher opted in | We warrant what we add (clause X.6(ii)) | §7.7 |
-| R18 | Catalogue curation: no close copy of a commercial face first published less than 25 years ago | Registered designs are infringed by use, without copying | §5.5 |
+| R18 | Catalogue curation: no close copy of a commercial face first published less than 25 years ago, nor of a face whose designer is living or died less than 70 years ago (corrected by the fact-check); search DesignView and INPI for families that resemble a recent commercial face | Registered designs are infringed by use, without copying; French copyright runs life + 70; distributing software that records a registered design may itself infringe (art. 19(2)(d)) | §5.5, §2.4 |
 
 ## 9. Questions for counsel
 
@@ -540,6 +553,8 @@ Generative AI:
 16. In scenario S1, how would *complicité* or art. 1240 liability be assessed for an opt-in imitative feature? Which design choices reduce it most?
 17. Reseller contract: is the split in clause X.6 sound, and is IP insurance available for generated elements?
 18. Which of these answers change for Belgium, Germany, Switzerland and the UK?
+19. (Added after the fact-check.) Do the research-only terms of the Places2 dataset reach the MIT-licensed MI-GAN weights if we distribute them for opt-in outpainting? Does art. 50(4) (deep fakes) apply to an outpainted cover in reseller mode, and who is the deployer?
+20. (Added after the fact-check.) Does art. 19(2)(d) of the reformed design regulation make distributing an open font that closely resembles a registered typeface design an infringing act in itself?
 
 ## 10. What could not be verified, and sources
 
@@ -549,7 +564,7 @@ Everything marked [M] or [M?] is unverified. The items that change decisions:
 
 1. **Commercial licence terms and prices** (as of 2026-11): Monotype/MyFonts server and web-to-print licences; the Adobe Fonts wording on servers and product-customisation tools. No price was obtained.
 2. **AI/ML clauses in commercial EULAs**: Monotype/MyFonts, Adobe Fonts, Fontshare, and French foundries (Production Type, Typofonderie, 205TF). Wording and dates.
-3. **AI Act art. 50 as of November 2026**: effect of the Digital Omnibus on the date; state of the Commission's code of practice on marking and labelling; any reading of the "standard editing" exception.
+3. **AI Act art. 50 as of November 2026**: the Omnibus dates are now reported by secondary sources (§7.3); still to check on EUR-Lex: the regulation number and final text; the state of the Commission's code of practice on marking and labelling; any reading of the "standard editing" exception; art. 50(4).
 4. **French case law** on the originality of typefaces. None found or recalled with a checkable citation.
 5. **EU design reform**: exact wording and numbering of the new product definition, of art. 19(2)(d) and of the new permitted uses in Reg. 2024/2822; the second application date; French transposition status of Dir. 2024/2823; any decision or EUIPO invalidity case on typeface designs; the current rule on representing a typeface design.
 6. ***Laatz v. Zazzle***: procedural history and outcome.
@@ -557,10 +572,10 @@ Everything marked [M] or [M?] is unverified. The items that change decisions:
 8. **OFL FAQ**: passages on document embedding, WOFF conversion, subsetting and Reserved Font Names, and any statement on AI training. The licence text itself is verified.
 9. **Current licences** of Roboto, Open Sans, Arimo/Tinos/Cousine, Caladea and the URW base 35 set; the upstream copyright line of Bebas Neue.
 10. **Status after mid-2026** of: the *Getty v Stability* appeal; the *GEMA v OpenAI* appeal; OLG Hamburg in *LAION*; *Like Company* (C-250/25); *Pelham II* (C-590/23); SNE/SGDL/SNAC v. Meta; *Andersen*; the Midjourney cases; *Thomson Reuters v. Ross*.
-11. **US points**: Supreme Court outcome in *Thaler*; exact holding in *Cox v. Sony*; any Copyright Office statement on AI-generated typefaces.
+11. **US points**: Supreme Court outcome in *Thaler* (certiorari denied 2 March 2026 per the checker's recall, medium); *Cox v. Sony* is now confirmed by secondary sources (§7.7); any Copyright Office statement on AI-generated typefaces and on fonts built with GUI editors.
 12. **Cour de cassation, 26 June 2024**, on *parasitisme*: numbers and wording.
 13. **French law on AI and copyright after 2025**; the exact article for the TDM opt-out (R122-28).
-14. **Licences and training data** of candidate models: FontDiffuser, DG-Font, MX-Font, LF-Font, Diff-Font; LaMa and MI-GAN weights; current Stability and Black Forest Labs terms.
+14. **Licences and training data** of candidate models: FontDiffuser, DG-Font, MX-Font, LF-Font, Diff-Font, MI-GAN and LaMa are now covered by the sibling note `font-id-tech.generation.md` (§7.5); still open: current Stability and Black Forest Labs terms, Places2 terms.
 15. **Font-identification services**: terms of use, and whether any offers an API usable in a commercial product; licence terms of public font-recognition datasets.
 16. **Type-community positions**: ATypI, the Monotype report and reactions; any "AI training licence" offers.
 17. **Small facts**: death dates used in §5.5; Ascender's authorship of Liberation and Arimo; browser support of the Local Font Access API; the foreign cases cited for colour (*Founder v. P&G*, the Ultraman cases).
@@ -596,7 +611,7 @@ Numbers marked "engineering default" are starting values to calibrate, not legal
 4. The current architecture text describes "a blurred/extended edge strip" for non-uniform edges (`docs/architecture.md`, ebc-spine, "Synthesis"). Move that variant behind the "own rights" gate (item 20). The default for a non-uniform edge is still a flat colour.
 5. Run a three-class image classifier on the title region: *typeset*, *lettered*, *logo*. No language model.
 6. If the class is *typeset* and the best index match scores at least 0.80 on the 0–1 scale (engineering default), use that open font. Otherwise, and always for *lettered* and *logo*, use a house face by class: Spectral for serif, Bebas Neue for condensed display, Atkinson Hyperlegible for sans.
-7. Draw the spine title and author as filled outlines. Fit the cap height to at most 7 mm on the 10 mm spine, inside the spine safe margins, and never set type below 6 pt (printer minimum [V2, sibling note `print-requirements.prepress.md`]). Choose the text colour for a contrast ratio of at least 4.5:1 (engineering default).
+7. Draw the spine title and author as filled outlines. Fit the text inside the 6 mm text band (2 mm clear each side, doc 03): typical setting 9–13 pt (cap height about 2.2–3.2 mm), ceiling about 24 pt all-caps (cap height about 5.9 mm), and never set outlined text below 8 pt (doc 03's floor for outlined text; 6 pt is the floor for live text). Choose the text colour for a contrast ratio of at least 4.5:1 (engineering default). (Corrected by the fact-check: the draft said "cap height at most 7 mm" and "never below 6 pt", which breaks the 2 mm margin and doc 03's outline floor.)
 8. Spine content is the title and the author as plain text. Never place a publisher logo, a collection monogram or other series device on a generated spine.
 
 **Fonts: bundle, index, manifest**
@@ -611,7 +626,7 @@ Numbers marked "engineering default" are starting values to calibrate, not legal
 
 **`fsType` and embedding**
 
-16. Decode `fsType` as in §4.3, with the most restrictive reading for malformed fonts of OS/2 version 3 or later (already implemented). Unit-test each row of the table.
+16. Decode `fsType` as in §4.3, with the most restrictive reading for malformed fonts of OS/2 version 3 or later (already implemented). Unit-test each row of the table, including "no OS/2 table" (now reported as `Restricted` by `ebc-text`) and 0x0200.
 17. Embed only bundled fonts, as subsets. Never embed a user-supplied font: use outlines only.
 18. For a user-supplied font: refuse if `fsType` has the restricted bit (0x0002) or the bitmap-only bit (0x0200), or if there is no OS/2 table. Substitute a house face and tell the user why. Log the decision in the PDF metadata.
 
@@ -625,7 +640,7 @@ Numbers marked "engineering default" are starting values to calibrate, not legal
 21. "Own rights" mode needs two separate confirmations before each generation: (a) rights: « Je suis l'auteur de cette couverture et de son lettrage, ou je dispose de l'autorisation écrite de leurs auteurs pour les adapter. » (b) AI disclosure: « Le dos sera généré par une IA et la carte le mentionnera. » The mode never starts automatically and never runs on a cover fetched by ISBN.
 22. In reseller mode, generative features run only when the feed carries a per-ISBN publisher flag. Three flags, all false by default: `spine_artwork_supplied`, `ai_lettering_allowed`, `outpainting_allowed`. For a title classified *lettered* or *logo*, `ai_lettering_allowed` is ignored.
 23. A model outputs the characters of the title and author strings only, as raster or outlines. It never writes a font file and never exposes a reusable glyph set.
-24. Every card with a generated element carries: a visible mention on the inside page, at 6 pt or larger (for example « Dos généré avec l'aide d'une IA »), and a machine-readable mark in the PDF metadata (XMP digital source type for AI-generated or composite content; exact vocabulary term to confirm [M]). Record the model version and the hash of the training manifest.
+24. Every card with a generated element carries: a visible mention on the inside page, at 6 pt or larger (for example « Dos généré avec l'aide d'une IA »), and a machine-readable mark in the PDF metadata (XMP/IPTC digital source type `compositeWithTrainedAlgorithmicMedia` for a card with a generated spine, `trainedAlgorithmicMedia` for a wholly generated image, `algorithmicMedia` for procedural output — terms from the checker's recall, to confirm). Record the model version and the hash of the training manifest. See item 36 for the watermark layer.
 25. Download model weights only after the user enters "own rights" mode, and only from our origin.
 26. Fetch a signed feature-flag and exclusion list at the start of each session; cache it for at most 24 hours. It must be able to disable every generative feature and to exclude single ISBNs. Exclude film and TV tie-in covers, licensed-character titles and franchise titles with registered title logos from all generative paths by default.
 
@@ -633,7 +648,7 @@ Numbers marked "engineering default" are starting values to calibrate, not legal
 
 27. Train the classifier and any generative model only on synthetic renders of open fonts taken from a pinned revision of the Google Fonts repository, licence in {OFL-1.1, Apache-2.0, UFL-1.0}, and listed in the training manifest (item 28). No commercial font, no scraped cover, no third-party dataset.
 28. Publish a training manifest with each model: font, version, licence, source, hash. Make the weights reproducible from it. CI checks that every training input is in the manifest.
-29. Do not ship or fine-tune FontDiffuser, DG-Font, MX-Font, LF-Font, Diff-Font, Stable Diffusion or FLUX checkpoints in production builds.
+29. Do not ship or fine-tune FontDiffuser, DG-Font, MX-Font, LF-Font, Diff-Font, Stable Diffusion or FLUX checkpoints in production builds. (MI-GAN and LaMa: see item 37.)
 
 **Inputs we must not touch**
 
@@ -645,3 +660,46 @@ Numbers marked "engineering default" are starting values to calibrate, not legal
 32. Write to the PDF metadata of every card: spine source (`publisher`, `open-font`, `house-font`, `user-font`, `ai-lettering`), background mode (`flat`, `supplied`, `ai-outpaint`), and for each font used: family, version, SPDX licence. For a user-supplied font write the family, the `fsType` and "licence: user-warranted". The preflight crate checks that these keys exist.
 33. In reseller mode, log per ISBN: spine source, font family and licence, background mode, application version, date. Keep the log available for the reseller audit (clause X.4(e)).
 34. Add a preflight check that, in default mode, the spine panel of page 1 contains vector fills only: no image object.
+
+**Added after the fact-check** (items 1–34 keep their numbers)
+
+35. The catalogue check of item 12 also rejects a close copy of any face whose designer is living or died less than 70 years ago, whatever the face's age, and the manifest records the designer's death year (or "living") next to the basis. For a family resembling a recent commercial face, record a DesignView and INPI search result (date, query) before admission.
+36. Generated elements are released only with both layers of marking: the metadata of item 24 and an imperceptible watermark in any generated raster, once the Commission's code of practice names an acceptable method. Until then generative features stay behind the flag of item 20. Our generative features are new AI systems: no grace period applies to them.
+37. MI-GAN may be shipped only as an on-demand download in "own rights" mode, behind the item-20 flag, with its dataset (Places2) named in the training-data notice. LaMa is not shipped. Neither is used in the default pipeline or in reseller mode without the `outpainting_allowed` flag.
+38. In reseller mode, a card with an outpainted cover carries the deep-fake disclosure of AI Act art. 50(4) on the inside page (« Image prolongée par IA »), in addition to item 24, until counsel answers question 19.
+39. The `outline_all_text` printer flag of doc 03 is honoured by the font pipeline: when set, body text is outlined too and must be 8 pt or larger.
+40. The bundled-font check of item 10 adds an upstream comparison: on network-enabled CI, the SHA-256 of each font file is compared with the file at the pinned upstream revision (google/fonts), and the manifest records that revision.
+
+---
+
+## Verification log
+
+Applied on 2026-11-12 from `factcheck/legal-fonts-genai.md`. The fact-checker's searches were all refused; its "recollection" lines are memory, kept here as "checker's recall" and unverified.
+
+**Checked by the editor in this pass**
+
+- `crates/ebc-text/src/font.rs` re-read: the "no OS/2 table → Installable" behaviour the checker found has since been changed to `Restricted`, and the user-font outline rule refuses the restricted and bitmap-only bits.
+- `docs/research/03-print-requirements.md` re-read: 6 mm text band, `outline_all_text`, 8 pt floor for outlined text — confirmed.
+- `notes/font-id-tech.generation.md` and `notes/font-id-tech.tools.md`: FontDiffuser, DG-Font, MX-Font licences; MI-GAN weights; 1,908 Google Fonts families — confirmed as recorded there.
+- Two web searches (result summaries): Digital Omnibus and art. 50(2) dates; *Cox v. Sony* holding. Both confirm the checker's recall.
+
+**Corrected (wrong or outdated in the draft)**
+
+1. Printers: outlined spine plus embedded body text satisfies all printers *except Printoclock* (§4.4, R3, item 39).
+2. Spine cap height 5–7 mm and 6 pt floor → 6 mm band, 9–13 pt typical, about 5.9 mm ceiling, 8 pt floor for outlines (finding 13, item 7).
+3. French integrity case law "[V2]" → secondary sources only; TJ Bordeaux 2024 counter-example and the "TGI Paris 2007 not read" caveat restored (finding 9, §1.4, §6.2).
+4. §7.5 dataset table updated from the verified sibling note; Google Fonts 1,908 families; MI-GAN decision recorded (R12, items 29, 37).
+5. `fsType`: code status re-stated (§1.4, §4.3, item 16).
+6. "Unmodified [L]" → self-consistent with `SHA256SUMS`, upstream identity unverified (§1.4, item 40).
+7. Catalogue rule R18 extended to French copyright (§5.5, item 35).
+8. AI Act Digital Omnibus: outdated "outcome not verified" replaced by the reported dates (§1.4, §7.3).
+9. *Cox v. Sony*: reversed liability; the draft cited only one half (§7.7, §7.8).
+10. *Kadrey v. Meta* row, Getty trade-mark wording, FLUX.1 dev, Cass. com. 26 June 2024, OLG Hamburg case number and holding, design-regulation numbering (checker's recall; unverified).
+
+**Downgraded**: finding 5 and R6 (bring-your-own-font) to a hypothesis; findings 12 and §2.6 (absence of case law) to "not searched".
+
+**Added (omissions)**: art. 50(4) deep fakes; layered marking under the code of practice; IPTC vocabulary; French Senate presumption bill; art. 19(2)(d) and distribution of font files; DesignView/INPI search; US Copyright Office GUI-editor practice; counsel questions 19–20.
+
+**Not upheld or not applicable**: the checker's code finding (claim 3) was correct when made, but the code has since changed; the document now describes the current code.
+
+**Still unverified**: every statute, case, licence term and price in §§2–7 other than the two searched points; the Omnibus regulation number and final text on EUR-Lex; the code of practice; *Laatz v. Zazzle*; *Mio/konektra*; Thaler certiorari; the Senate bill; the EU Data Privacy Framework point raised by the checker (it weakens the 2022 Munich GDPR reasoning, while self-hosting stays right for other reasons).

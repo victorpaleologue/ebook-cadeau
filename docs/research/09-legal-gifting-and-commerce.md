@@ -1,6 +1,6 @@
 # Legal: gifting an eBook, the upload-and-QR scheme, price law, VAT, consumer and data protection
 
-_Status: fact-checked — research date 2026-11-12_
+_Status: fact-check corrections applied (the fact-check had limited web access) — research date 2026-11-12_
 
 **Research to brief a lawyer and an accountant. Not legal or tax advice.**
 
@@ -12,7 +12,7 @@ _Status: fact-checked — research date 2026-11-12_
   - Neither input note could run a web search: the shared search budget was already spent and the legal hosts (EUR-Lex, Légifrance) are outside the sandbox allowlist.
   - For the synthesis five more searches were attempted on 2026-11-12 (wording of art. 4 of loi 2011-590; Tom Kabinet; the CJEU case on the French book-shipping floor; CJEU C-68/23; Cass. 23 Oct 2024 *Valve*). All five were refused.
   - An adversarial fact-check then reviewed the 20 most load-bearing claims. Its four searches were refused, and so were four arbitration searches by the editor (CJEU C-366/24, Kobo gifting, Danish book VAT, 2026 *franchise en base* thresholds). The fact-check could do two things: recompute the arithmetic and compare the text with the files of this repository, and set the text against the checker's own recollection. Its corrections are applied in place and summarised in "Verification log".
-  - No URL was added that is not already in this repository.
+  - No URL was added that is not already in this repository, except the result URLs of two later web searches by the editor (Danish book VAT; CJEU C-366/24), which are cited where used.
 - **Confidence markers.**
   - **[V-sib2]** found in two or more sources, **[V-sib1]** in one, by the search session of a *sibling* note (the two input notes tag them [S2]/[S1]). The URLs appeared in that agent's results. They were not reopened for this document or for the fact-check, so these markers mean "a sibling agent saw it", not "verified here".
   - **[M]** from memory, not verified. Where the commerce note graded its recall, the grade is kept: **[M-hi]** (text known well), **[M-med]**, **[M-lo]** (verify before relying on it).
@@ -20,7 +20,7 @@ _Status: fact-checked — research date 2026-11-12_
   - **[LOCAL]** recomputed, or checked against files in this repository.
   - **(analysis)** our own reasoning; no authority found or known.
 - **Citations.** Statutes and cases are cited by official number so that they can be looked up on Légifrance, EUR-Lex and Curia. They carry no URL because none appeared in a search result.
-- **Currency.** The law is described as recalled up to mid-2026. Rules that became applicable during 2026 are written as current obligations, with their details unverified: the online withdrawal function (19 June 2026), the Packaging Regulation (12 August 2026), e-invoice reception in France (1 September 2026) and the green-claims rules of Directive (EU) 2024/825 (27 September 2026). Anything decided after mid-2026 (the CJEU ruling on the shipping floor, PSD3, the 2026 Finance Act, French transposition texts, the 2027 postal tariff grid) is unknown and listed in "Could not verify".
+- **Currency.** The law is described as recalled up to mid-2026. Rules that became applicable during 2026 are written as current obligations, with their details unverified: the online withdrawal function (19 June 2026), the Packaging Regulation (12 August 2026), e-invoice reception in France (1 September 2026) and the green-claims rules of Directive (EU) 2024/825 (27 September 2026). Anything decided after mid-2026 (PSD3, the 2026 Finance Act, French transposition texts, the 2027 postal tariff grid) is unknown and listed in "Could not verify". The CJEU ruling on the shipping floor is now known (§5.4).
 
 ---
 
@@ -340,14 +340,14 @@ All conditions below are [M].
 
 - The buyer pays the reseller. The reseller issues a single-use entitlement (code / link). On redemption the content is licensed to the **recipient's** account, with DRM or watermark personalised to the recipient. The buyer never holds a copy. This is the first, authorised making-available; no exhaustion question arises (analysis).
 - Contract reading (analysis): a sale with a *stipulation pour autrui* (Code civil arts 1205 ff. [M]). The buyer obtains the reseller's promise to license a beneficiary; the promise is revocable until the beneficiary accepts — which matches Amazon's "reassign or refund if unredeemed" [V2 for the practice]. The recipient accepts the store terms at redemption.
-- Every existing gift flow follows the pattern "opaque token → sign in or create an account → entitlement added"; none delivers a file straight from the token (`notes/ereader-ux.ecosystems.md`, [M]). Keeping to it makes the watermark and the licence personal to the recipient.
+- Every existing gift flow follows the pattern "opaque token → sign in or create an account → entitlement added"; none delivers a file straight from the token (`docs/research/notes/ereader-ux.ecosystems.md`, [M]). Keeping to it makes the watermark and the licence personal to the recipient.
 
 ### 4.2 Where the reseller's authority comes from
 
 | Point | Finding | Conf. |
 |---|---|---|
 | The publisher fixes the public price; it binds everyone selling to buyers in France | [Livres Hebdo](https://www.livreshebdo.fr/article/la-loi-sur-le-prix-en-vigueur), text on [WIPO Lex](https://www.wipo.int/wipolex/en/legislation/details/13861) | [V2] |
-| Before the 2011 law, publishers controlled price through **contrats de mandat** (agency) with e-retailers; mandate retailers stayed under those contracts | [Livres Hebdo](https://www.livreshebdo.fr/article/prix-du-livre-numerique-une-loi-de-securite), [Livres Hebdo](https://www.livreshebdo.fr/article/loi-sur-le-prix-du-livre-numerique-une-victoire-la-pyrrhus) (via `notes/legal-covers-reseller.reseller.md`) | [V1] |
+| Before the 2011 law, publishers controlled price through **contrats de mandat** (agency) with e-retailers; mandate retailers stayed under those contracts | [Livres Hebdo](https://www.livreshebdo.fr/article/prix-du-livre-numerique-une-loi-de-securite), [Livres Hebdo](https://www.livreshebdo.fr/article/loi-sur-le-prix-du-livre-numerique-une-victoire-la-pyrrhus) (via `docs/research/notes/legal-covers-reseller.reseller.md`) | [V1] |
 | Under a *mandat* the retailer sells in the publisher's name and for its account; "le mandataire ne peut rien faire au-delà de ce qui est porté dans son mandat" (Code civil art. 1989). An agent has less room for own-initiative formats than a buyer-reseller | | [M] |
 | Reseller-facing terms of the French e-distributors (Eden Livres, Immatériel, Numilog, Interforum, Hachette) | Not public; not obtained by any note | — |
 | Fnac's eBook catalogue is operated with Kobo; the publisher licences may sit with Rakuten Kobo, not Fnac | | [M] |
@@ -393,7 +393,7 @@ Text of the law: WIPO Lex [original](https://www.wipo.int/wipolex/en/legislation
 | Art. 1 | Covers a *livre numérique* that is a work of the mind, sold in digital form and either published in print or printable by its content and composition, "à l'exception des éléments accessoires propres à l'édition numérique" | [M-hi] |
 | Art. 2 | Any person established in France who publishes an eBook for commercial distribution in France must set a public sale price "pour tout type d'offre à l'unité ou groupée"; the price "peut différer en fonction du contenu de l'offre et de ses modalités d'accès ou d'usage". Exception for collective/professional licences (research, higher education) | [M-hi] |
 | Art. 3 | That price "s'impose aux personnes proposant des offres de livres numériques aux acheteurs situés en France" — extraterritorial, keyed to the **buyer's** location | [M-hi] |
-| Art. 4 | "Les ventes à primes de livres numériques ne sont autorisées (…) que si elles sont proposées par l'éditeur (…) simultanément et dans les mêmes conditions à l'ensemble des personnes mentionnées à l'article 3". The article is recalled as opening with a reservation for the general consumer-law rule on primes | [M-med] |
+| Art. 4 | "Les ventes à primes de livres numériques ne sont autorisées (…) que si elles sont proposées par l'éditeur (…) simultanément et dans les mêmes conditions à l'ensemble des personnes mentionnées à l'article 3". The article is recalled as opening "sous réserve des dispositions de l'article L. 121-35 du code de la consommation" [FC, high] | [M-med] |
 | Art. 5 | The publisher's trade discount must reflect the retailer's qualitative services | [M-hi] |
 | Décret 2011-1499 | Defines "contenu de l'offre", "modalités d'accès" (download, streaming, removable medium) and "modalités d'usage" (private/collective, duration, printing/copying/transfer rights) | [M-med] |
 | Décret n° 2012-146 du 30 janvier 2012 | Breach = *contravention de 3e classe* (max EUR 450, ×5 for legal persons), per offence | [M-lo] |
@@ -402,8 +402,9 @@ Text of the law: WIPO Lex [original](https://www.wipo.int/wipolex/en/legislation
 Differences from print (loi n° 81-766, "loi Lang"):
 
 - **No 5 % retailer discount** for eBooks: the price is a floor and a ceiling [M-med].
-- Loi Lang art. 1 lets a retailer add "les frais ou rémunérations correspondant à des prestations supplémentaires exceptionnelles expressément réclamées par l'acheteur et dont le coût a fait l'objet d'un accord préalable" [M-hi]. No equivalent sentence is recalled in the 2011 law [M-lo], but the logic transfers: a service the buyer expressly asks and pays for is not part of the book price (analysis).
+- Loi Lang art. 1 lets a retailer add "les frais ou rémunérations correspondant à des prestations supplémentaires exceptionnelles expressément réclamées par l'acheteur et dont le coût a fait l'objet d'un accord préalable" [M-hi]. **The quotation is incomplete** (corrected by the fact-check, [FC, high]): the sentence reads "Tout détaillant doit offrir le service gratuit de commande à l'unité. Toutefois, *et dans ce seul cas*, le détaillant peut ajouter…", so the surcharge is confined to unit orders. No equivalent sentence is recalled in the 2011 law [M-lo]. The analogy is therefore weak; the separate-supply argument for a paid card rests on the definition of a *prime* (a free item, below), not on loi Lang art. 1 (analysis).
 - Loi Lang art. 6 bans primes unless offered by the publisher to all retailers [M-hi] — the model for art. 4 of the 2011 law.
+- Loi n° 2014-779 of 8 July 2014 first banned free shipping combined with the 5 % discount for printed books; the Darcos law (§5.4) builds on it [FC, high]. It concerns printed books only.
 
 **What is a *prime*.** A product or service given **free** with a purchase (former Code de la consommation art. L121-35, now L121-19) [M-med]. General consumer law has allowed primes since 2011 unless they are an unfair practice; the book-specific ban is a stricter special rule [M-med]. Before that liberalisation, the consumer code's regulations excluded from the notion of prime the product's usual packaging and free services "dépourvues de valeur marchande" that are not ordinarily sold [M-lo] — the reasoning by which free gift wrap was never treated as a prime, and the best analogy for a free print-at-home PDF. Whether those exclusions still exist in any form was not checked. The compatibility of the book-specific ban with Directive 2005/29 is arguable after CJEU *Mediaprint* (C-540/08, 2010) [M-med]; that argument should not be built on.
 
@@ -417,7 +418,7 @@ All readings are (analysis) on the [M-med] text of art. 4.
 |---|---|---|
 | Buyer pays the public price; recipient downloads | Price paid in full; the law does not care who reads | None |
 | Free **print-at-home PDF** | A presentation of the delivered code, of negligible value; comparable to free gift wrap | Low |
-| Free **printed and mailed card** (cost EUR 2–7) | Free good with market value tied to the sale → *prime* under art. 4, unless the *publisher* offers it to all retailers on the same terms; alternatively an indirect discount | Medium–high |
+| Free **printed and mailed card** (cost EUR 2–7, unverified; doc 04 now puts a mailed card at about EUR 4.3–6.3) | Free good with market value tied to the sale → *prime* under art. 4, unless the *publisher* offers it to all retailers on the same terms; alternatively an indirect discount | Medium–high |
 | **Paid optional card**, own price line, ≥ cost | Separate service expressly requested; not a prime (primes are free) | Low |
 | Paid card far below cost | Disguised-discount argument by a competitor, the SNE/SLF or the mediator | Medium |
 | **Compulsory** paid card to obtain the gift option | The buyer pays more than the public price to get the eBook as a gift; the price is also a ceiling | Medium — keep a free route |
@@ -433,7 +434,7 @@ All readings are (analysis) on the [M-med] text of art. 4.
 1. The eBook line always equals the publisher's public price. The gift option never changes it.
 2. The gift option is always available without a paid card (free print-at-home PDF, or the reseller's e-mail).
 3. The printed card is an optional line, never pre-ticked (also required by Directive 2011/83 art. 22 [M-hi]), with its own price.
-4. That price is at or above the fully loaded cost (print, envelope, postage where not charged separately, payment fee), compared excluding VAT. For orientation, the sibling printing note puts single-copy production at about EUR 2.4–2.8 per card and about EUR 6 landed with postage (`notes/printers.web2print.md`, not re-checked); the EUR 3.50 used in §6 is this brief's example, not a costed price.
+4. That price is at or above the fully loaded cost (print, envelope, postage where not charged separately, payment fee), compared excluding VAT. For orientation, the sibling printing note puts single-copy production at about EUR 2.4–2.8 per card and about EUR 6 landed with postage (`docs/research/notes/printers.web2print.md`, unverified); doc 04 gives EUR 4.29–6.33 for one card printed and mailed by Merci Facteur. The EUR 3.50 + 1.52 used in §6 is an example of the VAT arithmetic only: at about EUR 5.02 TTC (4.19 excl. VAT) it is **below** that cost and would fail this rule and implementation rule 23 (fact-check). A real card price must be set from a test invoice.
 5. A zero-price printed card is acceptable only as a publisher-backed offer made to all retailers on the same terms (art. 4), recorded as such (`publisher_premium = true` in document 07, rule 29).
 6. Discounts, coupons and loyalty credits never fund the eBook line. A promotion may apply to the card line, not below cost.
 
@@ -441,7 +442,7 @@ There is a tension noted in document 07: charging separately helps on price law 
 
 ### 5.4 Loi "Darcos" — loi n° 2021-1901 du 30 décembre 2021
 
-Delivery of a **printed** book may not be free unless collected in a bookshop, and must be charged at a minimum set by order. Arrêté du 4 avril 2023: **EUR 3 minimum** for orders containing less than EUR 35 of new books, EUR 0.01 above; in force 7 October 2023 [M-hi]. Amazon's challenge went from the Conseil d'État to the CJEU in 2024 (case number recalled as C-366/24) [M-lo]; the outcome is not known, and the search for it was refused.
+Delivery of a **printed** book may not be free unless collected in a bookshop, and must be charged at a minimum set by order. Arrêté du 4 avril 2023: **EUR 3 minimum** for orders containing less than EUR 35 of new books, EUR 0.01 above; in force 7 October 2023 [M-hi]. Amazon's challenge went from the Conseil d'État to the CJEU in 2024 (C-366/24). **Updated by the editor's search:** the CJEU gave judgment on 18 December 2025 and, per commentary, cleared the measure (a measure protecting cultural diversity falls outside the Services Directive); the Conseil d'État then rejected Amazon's appeal on 13 May 2026 (n° 474398), holding the minimum charge compatible with EU law ([Conseil d'État](https://conseil-etat.fr/actualites/le-conseil-d-etat-rejette-le-recours-d-amazon-contre-le-montant-minimal-des-frais-de-livraison-des-livres), [CJEU press release](https://curia.europa.eu/site/upload/docs/application/pdf/2025-12/cp250162en.pdf), [EU Law Live](https://eulawlive.com/op-ed-the-court-clears-frances-anti-amazon-book-delivery-charge-reflections-on-amazon-v-ministre-de-la-culture-c-366-24-and-some-long-standing-internal-market)) [V2, result summaries; judgment text not read]. The EUR 3 floor stands.
 
 Effect on this project: **none on the eBook or on the card alone**. The card is not a *livre*. The floor applies only if a parcel also contains new printed books; then the retailer's ordinary book-shipping rule governs the parcel (analysis). No amendment of the 2011 eBook law by the Darcos law is recalled [M-lo].
 
@@ -466,7 +467,8 @@ Germany is **more permissive on the card** than France: gift wrapping is the tex
 | Spain | Yes (Ley 10/2007, max 5 % discount) | Yes in principle — the statutory definition of *libro* includes digital |
 | Italy | Yes (Legge 128/2011 "Levi", Legge 15/2020: max 5 %) | No |
 | Netherlands | Yes — **not abolished** (Wet op de vaste boekenprijs, 2005) [M-med] | No |
-| Belgium | Flanders (decree of 2016, in force 2017) and Wallonia-Brussels (décret du 19 octobre 2017) | Wallonia-Brussels: yes; Flanders: not sure |
+| Belgium | Flanders (decree of 2016, in force 2017) and Wallonia-Brussels (décret du 19 octobre 2017) | Wallonia-Brussels: yes; Flanders: probably yes [FC, medium] |
+| Portugal, Greece, Slovenia; Norway (EEA, by agreement/law) | Fixed-price regimes exist [FC, medium; omitted by the draft] | Not checked |
 | No fixed price | UK, IE, SE, FI, DK, PL, CZ, CH | — |
 
 ---
@@ -477,7 +479,7 @@ Germany is **more permissive on the card** than France: gift wrapping is the tex
 
 | Supply | FR | DE | Others |
 |---|---|---|---|
-| eBook (download) | 5.5 % — CGI art. 278-0 bis A, books "y compris ceux fournis par téléchargement" [M-med] | 7 % since 18 Dec 2019, § 12(2) Nr. 14 UStG [M-hi] | BE 6, NL 9, ES 4, IT 4, AT 10, LU 3, PT 6, PL 5, SE 6, IE 0 (since 2024), DK 25 [M-med/lo] |
+| eBook (download) | 5.5 % — CGI art. 278-0 bis A, books "y compris ceux fournis par téléchargement" [M-med] | 7 % since 18 Dec 2019, § 12(2) Nr. 14 UStG [M-hi] | BE 6, NL 9, ES 4, IT 4, AT 10, LU 3, PT 6, PL 5, SE 6, IE 0 (since 2024), DK 25 (a zero rate for books, e-books and audiobooks is proposed from 1 July 2027: bill L 36 of 7 October 2026 re-tabling a bill that lapsed with the 2026 election; not law, and e-book scope may be limited to titles with an ISBN — [vatupdate](https://www.vatupdate.com/2026/07/08/denmark-plans-to-abolish-vat-on-books-zero-rate-proposed-from-2027/), [lookuptax](https://lookuptax.com/tax-changes/denmark/book-vat-zero-bill-l36-2027) [V1, editor's search; the checker's recall of a 2026 abolition is not upheld]). Whole "Others" column [M-med/lo], unverified |
 | Printed card, envelope, postage charged to the customer | 20 % | 19 % | BE 21, NL 21, ES 21, IT 22, AT 20, LU 17 [M-hi] |
 | Fee for generating a print-at-home PDF | Electronically supplied service, standard rate | same | same |
 
@@ -486,7 +488,7 @@ Basis for reduced eBook rates: Directive (EU) 2018/1713, after CJEU C-479/13 *Co
 ### 6.2 One supply or two?
 
 - CJEU *Card Protection Plan* (C-349/96, 1999): each supply is normally distinct; an element is ancillary when it is not an aim in itself for the customer but a means of better enjoying the principal supply. *Levob* (C-41/04, 2005): elements so closely linked that splitting them is artificial form one supply. *Stadion Amsterdam* (C-463/16, 2018): one supply takes one rate [M-hi].
-- France codified this in CGI art. 257 ter and **art. 278-0**: a single operation made of non-ancillary elements at different rates bears the **highest rate** [M-med].
+- France codified this in CGI art. 257 ter and **art. 278-0**: a single operation made of non-ancillary elements at different rates bears the **highest rate** [M-med]. It applies only when the elements form a single operation under 257 ter and none is ancillary; a single price is an indicator, not the test [FC, medium-high].
 - Consequences (analysis): (i) a free print-at-home PDF is ancillary — the whole price stays at 5.5 %; (ii) an *optional, separately priced* printed card is a distinct supply at 20 %; optional purchase and separate pricing are strong indicators, not conclusive; (iii) a compulsory "gift pack" at one price risks 20 % on the eBook too. A taxpayer could argue that a paid card is ancillary to the eBook (5.5 % on the card); the conservative position is 20 %.
 
 ### 6.3 Vouchers — Directive (EU) 2016/1065 (VAT Directive arts 30a, 30b, 73a; vouchers issued from 1 Jan 2019)
@@ -497,7 +499,7 @@ Basis for reduced eBook rates: Directive (EU) 2018/1713, after CJEU C-479/13 *Co
 | Single-purpose (SPV) | Place of supply **and** VAT due are known at issue. Each transfer by a taxable person acting in its own name is treated as the supply itself; redemption is not a taxable event | [M-hi] |
 | Multi-purpose (MPV) | Any other voucher. VAT only at redemption; taxable amount = price paid for the voucher (art. 73a) | [M-hi] |
 | Transposition | FR: CGI art. 256 ter (*bon à usage unique / à usages multiples*). DE: § 3(13)–(15) UStG (*Einzweck-/Mehrzweck-Gutschein*) | [M-med] |
-| CJEU C-68/23 *M-GbR* (18 April 2024) | Prepaid codes for digital content limited to users in Germany are SPVs: the "place of supply" test looks at the final supply to the end user, and a territorial restriction in the terms makes it known | [M-med] |
+| CJEU C-68/23 *M-GbR* (18 April 2024) | Prepaid store credit with a country identifier: the Court held that the place of supply was known; whether the VAT due was known (the second SPV condition) was left to the referring court. So territorially limited codes **can be** SPVs if both conditions are met (corrected by the fact-check, [FC, medium-high]); applying this to a one-title code is our analysis | [M-med] |
 
 A code for one named eBook has a known rate **only if the redeemer's country is fixed**, because electronically supplied services to consumers are taxed where the customer is (VAT Directive art. 58) [M-hi]. So:
 
@@ -519,14 +521,15 @@ Outside the voucher rules, the VAT "customer" is the party to the legal relation
 
 - **EUR 10,000** EU-wide annual threshold for cross-border B2C digital services plus intra-EU distance sales of goods (art. 59c); below it a supplier established in one Member State may charge home VAT; above it, destination VAT through the **Union OSS** (since 1 July 2021), records kept 10 years [M-hi].
 - A printed card mailed to a consumer in another Member State is an intra-EU distance sale of goods, taxed where transport ends once the threshold is passed — whoever ordered it [M-hi].
-- French *franchise en base* (micro-entreprise): no VAT charged below national thresholds. The 2026 figures are disputed in the sibling market note: EUR 85,000 (goods) / EUR 37,500 (services) per most sources, EUR 91,900 / EUR 36,800 per others — [Entreprisma](https://entreprisma.fr/micro-entrepreneur), [Developp](https://developp.fr/micro-entreprise-plafonds/) [V1, conflicting]. The franchise does not shelter supplies located in other Member States beyond the EUR 10,000 threshold, subject to the EU SME scheme applicable since 1 Jan 2025 [M-lo].
+- French *franchise en base* (micro-entreprise): no VAT charged below national thresholds: EUR 85,000 (goods) / EUR 37,500 (services), tolerance EUR 93,500 / 41,250, applicable since 1 January 2025 — [Entreprisma](https://entreprisma.fr/micro-entrepreneur) [V-sib1]; to confirm for 2026. The other pair in the sibling note (EUR 91,900 / 36,800) is the 2023–2024 figure, not a conflict (corrected by the fact-check, [FC, high]). The 2025 Finance Act's single EUR 25,000 threshold was enacted, suspended and then dropped [FC, medium]; whether the 2026 Finance Act changed anything is unchecked. The franchise does not shelter supplies located in other Member States beyond the EUR 10,000 threshold, subject to the EU SME scheme applicable since 1 Jan 2025 [M-lo].
 - **Art. 9a of Regulation 282/2011**: whoever "takes part" in a supply of electronic services through a portal is presumed to be the supplier unless the real provider is explicitly shown as such and the intermediary neither authorises the charge or delivery nor sets the terms [M-hi]. If eBook Cadeau sold eBooks for authors it would become the deemed VAT supplier. **Standalone mode sells only the card service.**
 - Service fee invoiced to a reseller: ordinary B2B service (FR 20 %, or reverse charge to a business customer in another Member State, art. 44) [M-hi].
-- French e-invoicing reform: as recalled, all businesses must be able to *receive* electronic invoices from 1 Sept 2026, and small businesses must *issue* them and report B2C transactions from 1 Sept 2027 [M-med]. The invoicing design should be checked against it.
+- French e-invoicing reform: all businesses must be able to *receive* electronic invoices since 1 Sept 2026 — a current obligation — and small businesses must *issue* them and report B2C transactions from 1 Sept 2027 [M-med; calendar agreed by the fact-check]. The invoicing design should be checked against it.
+- **ViDA** (VAT in the Digital Age, adopted March 2025) stages changes to platform deemed-supplier rules, OSS scope and EU e-invoicing up to 2030 [FC, medium-high; omitted by the draft]. Relevant to art. 9a above and to any future marketplace role.
 
 ### 6.6 Worked examples
 
-**Assumptions.** Consumer prices include VAT (TTC). eBook at the publisher's price EUR 9.99; optional printed card EUR 3.50; postage re-billed at the 2026 La Poste stamp price for a letter up to 20 g: EUR 1.52 within France, EUR 2.25 international — [La Poste](https://www.laposte.fr/tarifs-postaux-courrier-lettres-timbres), [Tout sur mes finances](https://www.toutsurmesfinances.com/argent/a/prix-du-timbre) (via `notes/market-business.competitors-costs.md`) [V2]. A card plus envelope above 20 g moves to the 100 g band (EUR 3.10 / EUR 4.85 in the same note). The seller is a French reseller on the normal VAT regime; the buyer is a consumer in France. Rates as in §6.1. Amounts are rounded to the cent per line (excl. VAT = TTC ÷ (1 + rate), VAT = TTC − excl. VAT). All treatments are [M-med] at best.
+**Assumptions.** Consumer prices include VAT (TTC). eBook at the publisher's price EUR 9.99; optional printed card EUR 3.50; postage re-billed at the 2026 La Poste stamp price for a letter up to 20 g: EUR 1.52 within France, EUR 2.25 international — [La Poste](https://www.laposte.fr/tarifs-postaux-courrier-lettres-timbres), [Tout sur mes finances](https://www.toutsurmesfinances.com/argent/a/prix-du-timbre) (via `docs/research/notes/market-business.competitors-costs.md`) [V2]. A card plus envelope above 20 g moves to the 100 g band (EUR 3.10 / EUR 4.85 in the same note; the checker suspected 3.04 / 4.50 from memory, but the editor of doc 04 found EUR 3.10 and EUR 2.97 online for France in a 2026 search, so the domestic figure stands; the international 4.85 is unchecked). A poche jacket on 300 g/m² board in a C5 envelope is at about 20 g (doc 04 §3.6), so EUR 1.52 is the optimistic band. From 1 January 2027 the 20 g stamp is reported at EUR 1.67 and the international at EUR 2.45 (docs 04 and 12, third-party sources) — seven weeks after this research date. The seller is a French reseller on the normal VAT regime; the buyer is a consumer in France. Rates as in §6.1. Amounts are rounded to the cent per line (excl. VAT = TTC ÷ (1 + rate), VAT = TTC − excl. VAT). All treatments are [M-med] at best.
 
 **Example A — recipient in France; code redeemable in France only (SPV, VAT due at sale).**
 
@@ -536,6 +539,8 @@ Outside the voucher rules, the VAT "customer" is the party to the legal relation
 | Printed card | 3.50 | FR 20 % | 2.92 | 0.58 |
 | Postage | 1.52 | FR 20 % | 1.27 | 0.25 |
 | **Total** | **15.01** | | **13.66** | **1.35** |
+
+Arithmetic recomputed by the fact-check [LOCAL]; all totals in this section are correct. The EUR 3.50 card price is illustrative and below cost (§5.3 point 4).
 
 Variants on the same EUR 15.01:
 
@@ -564,7 +569,7 @@ Non-tax points in Example B: the French fixed price still applies (the buyer is 
 | Seller status | Card 3.50 + postage 1.52 = 5.02 TTC | Kept by the seller |
 |---|---|---|
 | *Franchise en base* (invoice mention "TVA non applicable, art. 293 B du CGI" [M-hi]) | No VAT charged, no input VAT deducted | 5.02 |
-| Normal regime | 20 %: 4.19 excl. VAT + 0.83 VAT | 4.19 |
+| Normal regime | 20 %: 4.19 excl. VAT + 0.83 VAT (per-line sum; a single-line calculation gives 4.18 + 0.84) | 4.19 |
 
 **Example D — eBook Cadeau's fee to the reseller** (B2B). A fee of EUR 1.00 excl. VAT is invoiced EUR 1.20 to a French reseller, who deducts the VAT; to a reseller established in Germany it is invoiced EUR 1.00 with reverse charge [M-hi]. Whether printing and mailing a card to a consumer on behalf of a foreign reseller is a service (reverse charge) or a supply of goods located in France is a question for the accountant.
 
@@ -583,7 +588,7 @@ Non-tax points in Example B: the French fixed price still applies (the buyer is 
 | If the waiver is defective the consumer may withdraw and owes nothing | art. 14(4)(b) | [M-hi] |
 | Missing withdrawal information extends the period by 12 months | art. 10 | [M-hi] |
 | No withdrawal for goods "confectionnés selon les spécifications du consommateur ou nettement personnalisés" | art. 16(c); L221-28 3° | [M-hi] |
-| Online **withdrawal function** ("button") for distance contracts concluded through an online interface, from 19 June 2026 | Directive (EU) 2023/2673 inserting art. 11a; French transposition not checked | [M-med] |
+| Online **withdrawal function** ("button") for distance contracts concluded through an online interface: **applicable since 19 June 2026**, a current requirement, not an outlook (fact-check) | Directive (EU) 2023/2673 inserting art. 11a; French transposition text still unidentified | [M-med] |
 | No pre-ticked boxes for extra payments | Directive 2011/83 art. 22; L121-17 | [M-hi] |
 
 Gift specifics (analysis; no authority found):
@@ -714,7 +719,10 @@ For this project (analysis):
 | French language (other languages may be added) | Loi n° 94-665 ("Toubon") art. 2 | [M-hi] |
 | Printer's name and address on any publicly distributed print, except "ouvrages de ville ou bilboquets" (private stationery) | Loi du 29 juillet 1881 art. 3 | [M-med] |
 | **Triman + Info-tri** sorting label | Code de l'environnement art. L541-9-3 (loi AGEC art. 17), décret n° 2021-835 | [M-med] |
-| No "biodégradable" / "respectueux de l'environnement" claims; FSC/PEFC logos only under the printer's licence | AGEC art. 13; scheme rules (see `notes/printers.esg.md`) | [M-med] |
+| No "biodégradable" / "respectueux de l'environnement" claims; FSC/PEFC logos only under the printer's licence | AGEC art. 13; scheme rules (see `docs/research/notes/printers.esg.md`) | [M-med] |
+| No generic environmental claim and no offset-based "neutre en carbone" claim (added by the fact-check) | Directive (EU) 2024/825, to be applied from 27 September 2026; French transposition reported incomplete (doc 04 §6.2) | [FC, high] |
+| Manufacturer's name, postal and electronic address, and a traceability identifier (batch or order number) on the card or its envelope, and the same information in the online offer (added by the fact-check) | General Product Safety Regulation (EU) 2023/988, applicable since 13 December 2024 | [FC, high] |
+| Ink compliance with the mineral-oil restriction (printer's obligation; asked in the printer contract, doc 04 implication 30) | Loi AGEC art. 112, since 1 January 2025 | [FC; doc 04, from memory] |
 
 Not required: a price (better omitted on a gift), an ISBN (the card is not a book), legal deposit (commercial jobbing print is exempt [M-lo]). A one-off personalised card given privately is arguably an *ouvrage de ville*; a print run of promotional cards for a publisher is not (analysis).
 
@@ -726,7 +734,7 @@ Suggested legal line (to adapt): *« Bon pour un exemplaire numérique de "Titre
 - The producer must join an approved body, obtain a **unique identifier (IDU)** from ADEME and show it in its terms of sale (art. L541-10-13) [M-med]. Very small quantities get a flat-rate declaration; whether the old 5-tonne exemption for papers survives is not known [M-lo].
 - **Who is the producer** (analysis): the brand that issues the card — the reseller in reseller mode; eBook Cadeau, or the professional who orders a print run, in standalone mode. A private person printing at home is nobody's producer.
 - Missing Triman: administrative fine up to EUR 15,000 per legal person (art. L541-9-4) [M-lo].
-- Outlook: the Commission has challenged the Triman as a barrier to trade, and the Packaging Regulation (EU) 2025/40 (general application recalled as 12 Aug 2026, harmonised labels later) will displace national packaging labels [M-lo]. The label is designed as a swappable template element.
+- The Commission has challenged the Triman as a barrier to trade (status of the proceedings unknown), and the Packaging Regulation (EU) 2025/40 **has applied since 12 August 2026** — current law, with harmonised labels to follow later — and will displace national packaging labels [M-lo; date agreed by the fact-check]. The label is designed as a swappable template element.
 
 ### 11.3 Germany and other Member States
 
@@ -832,7 +840,7 @@ Each item is a task, not a finding. "Counsel" items refer to the question number
 22. Cross-border gifts: buyer or redeemer as the customer; evidence to keep; treatment of unredeemed codes.
 23. Printed card as a separate supply at 20 %: confirm; exposure to CGI art. 278-0 for an optional line; current wording of that article.
 24. Postage re-billed to the customer: taxable amount, non-deductible stamp cost, pricing to pass it through.
-25. *Franchise en base*: 2026 thresholds; effect of cross-border sales and of the EU SME scheme; when to leave the micro regime given that social charges apply to turnover including re-billed print and postage (`notes/market-business.competitors-costs.md`).
+25. *Franchise en base*: 2026 thresholds; effect of cross-border sales and of the EU SME scheme; when to leave the micro regime given that social charges apply to turnover including re-billed print and postage (`docs/research/notes/market-business.competitors-costs.md`).
 26. OSS: registration timing; distance sales of cards; records.
 27. Printing and mailing a card for a reseller established in another Member State: service with reverse charge, or goods supplied in France?
 28. Revenue recognition and VAT for unredeemed codes; credit notes on withdrawal.
@@ -860,7 +868,7 @@ No search succeeded for either input note or for this synthesis, so **every [M] 
 5. **CPI numbering after the 2021 ARCOM reform**; LCEN art. 6 after 2024; décret 2021-1362 retention periods.
 6. **French decisions cited from memory**: the 1984 "cercle de famille" definition; the *Aurélien D.* reasoning; Cass. 23 Oct 2024 (*Valve*); Cass. Feb 2025 (*Dstorage*); SNE blocking orders after 2022.
 7. **Withdrawal**: whether third-party redemption satisfies art. 16(m); French transposition of Directive 2023/2673.
-8. **CJEU case on the French EUR 3 book-shipping minimum** (number recalled as C-366/24): outcome unknown.
+8. ~~CJEU case on the French EUR 3 book-shipping minimum~~ — settled by the editor's search: C-366/24, judgment of 18 December 2025; Conseil d'État 13 May 2026 (§5.4). Judgment text not read.
 9. **Expiry rules**: French case law on expiry clauses; the Dutch two-year rule; other Member States.
 10. **Triman/Info-tri** for a small card, paper-EPR thresholds, Citeo fees, fine amounts; Commission action against the Triman; timetable of Regulation 2025/40; German implementation.
 11. **Card mentions**: printer's name under the 1881 law; "document publicitaire" status.
@@ -868,7 +876,8 @@ No search succeeded for either input note or for this synthesis, so **every [M] 
 13. **Other fixed-price regimes** (AT, ES, BE, IT, NL) and BuchPrG § 2(2), § 7(4) wording.
 14. **Project Gutenberg** licence text and the German blocking; Standard Ebooks CC0 wording; Gallica, Wikisource and ebooksgratuits.com reuse terms; CC 4.0 wording on format changes and technical measures.
 15. **PSD3/PSR** status; Code monétaire et financier article numbers; **data-transfer** status (UK adequacy, T-553/23 appeal); the French e-invoicing calendar.
-16. **Amazon gift mechanics**: when the publisher is paid; whether the link can be printed; the reported 2026 opening of EPUB/PDF downloads for DRM-free Kindle titles.
+16. **Amazon gift mechanics**: when the publisher is paid; whether the link can be printed; the 20 January 2026 opening of EPUB/PDF downloads for DRM-free Kindle titles (checker's recall, medium-high).
+17. **Added by the fact-check**: Kobo title-level gifting (launched late 2024 in English-speaking markets per the checker's recall; France and Fnac unknown); 7switch "offrir"; Danish book VAT (bill L 36 for 1 July 2027, §6.1); GPSR duties for a printed card; Directive 2024/825 in France; the fixed-price regimes of Portugal, Greece, Slovenia and Norway; ViDA timetable; La Poste international 100 g rate.
 
 For a verification pass: a fresh web-search budget, or the hosts `www.legifrance.gouv.fr`, `eur-lex.europa.eu`, `curia.europa.eu`, `bofip.impots.gouv.fr`, `www.gesetze-im-internet.de`, `www.cnil.fr`, `www.economie.gouv.fr`, `www.citeo.com`, `www.verpackungsregister.org`, `www.amazon.fr`, `www.kobo.com`, `www.fnac.com`, `www.7switch.com`, `www.gutenberg.org`, `standardebooks.org` allowed in the sandbox.
 
@@ -934,13 +943,13 @@ Fixed price, tax, costs:
 - French cases: Cass. 1re civ. 28 Feb 2006 and 19 June 2008 (*Mulholland Drive*); Cass. crim. 30 May 2006 and CA Aix 5 Sept 2007 (*Aurélien D.*); Cass. 1re civ. 23 Oct 2024 n° 23-13.738 (*Valve*); Cass. 1re civ. 5 Oct 2022 (*Entr'ouvert*); CA Paris 12 Apr 2023 and Cass. Feb 2025 (*Dstorage*); TJ Paris 25 Aug 2022 (Z-Library).
 - Germany and others: BuchPrG §§ 2, 3, 5, 7; UStG § 3(13)–(15), § 12(2) Nr. 14; BGB §§ 195, 199, 307; UrhG §§ 53, 95a; VerpackG; BFSG; BGH I ZR 83/14, I ZR 18/11, I ZR 80/12 and the 2 June 2022 *uploaded* judgments; OLG München 29 U 3193/07; OLG Hamm 22 U 60/13; OLG Hamburg 10 U 5/11; LG Frankfurt 9 Feb 2018 (*S. Fischer v PGLAF*); OLG Köln 6 U 60/14; *Capitol Records v ReDigi* (2d Cir. 2018); *Hachette v Internet Archive* (2d Cir. 2024); Project Gutenberg Licence § 1.E; CC0 1.0 and CC 4.0 legal codes.
 
-Repository documents used: `docs/api.md`; `docs/research/07-legal-covers-and-reseller-rights.md`; `notes/legal-covers-reseller.reseller.md`; `notes/market-business.market.md`; `notes/market-business.competitors-costs.md`; `notes/ereader-ux.ux.md`; `notes/ereader-ux.ecosystems.md`; `notes/printers.web2print.md`; `notes/printers.esg.md`.
+Repository documents used: `docs/api.md`; `docs/research/07-legal-covers-and-reseller-rights.md`; `docs/research/notes/legal-covers-reseller.reseller.md`; `docs/research/notes/market-business.market.md`; `docs/research/notes/market-business.competitors-costs.md`; `docs/research/notes/ereader-ux.ux.md`; `docs/research/notes/ereader-ux.ecosystems.md`; `docs/research/notes/printers.web2print.md`; `docs/research/notes/printers.esg.md`.
 
 ---
 
 ## Implications for the implementation
 
-Numbers marked "(proposal)" are design choices, not legal thresholds. Field and state names follow `docs/api.md` and document 07.
+Numbers marked "(proposal)" are design choices, not legal thresholds. Field and state names follow `docs/api.md` and document 07 where they exist there. Corrected by the fact-check [LOCAL]: `retail_copy_suspected`, `non_commercial_licence`, `pending_review`, `redemption_territory`, `vat_treatment`, `withdrawal_waiver`, `card_cost_floor`, `allow_format_conversion` and `redeemable_from` are **new names proposed here** and do not yet occur in `docs/api.md` (`publisher_premium` is defined in doc 07 rule 29); they have to be added to the contract.
 
 **Purpose, wording, repository**
 
@@ -982,13 +991,13 @@ Numbers marked "(proposal)" are design choices, not legal thresholds. Field and 
 24. The gift option is always offered without the paid card.
 25. No code path in the demo stores applies a coupon or loyalty credit to the eBook line; the partner API documentation states the rule.
 26. VAT rates, postage tariffs and thresholds are dated configuration records (`valid_from`), not constants. Shipped defaults: FR eBook 5.5 %, FR standard 20 %, DE eBook 7 %, DE standard 19 %, each flagged "unverified, 2026-11".
-27. Receipts show each line with its rate, amount excluding VAT and VAT, rounded per line to the cent. The worked examples of §6.6 are unit tests (15.01 → 13.66 + 1.35; 15.74 → 14.27 + 1.47, 14.30 + 1.44, 14.17 + 1.57).
+27. Receipts show each line with its rate, amount excluding VAT and VAT, rounded per line to the cent. The worked examples of §6.6 are unit tests of the rounding arithmetic (15.01 → 13.66 + 1.35; 15.74 → 14.27 + 1.47, 14.30 + 1.44, 14.17 + 1.57); the rates and tariffs pinned in them are illustrative and unverified, and the tests say so.
 28. Every code carries `redemption_territory` (ISO country list, default `["FR"]`) and a derived `vat_treatment`: `spv` when the list has one country, `mpv` otherwise (working rule until the VAT adviser answers question 21; the reseller can override it). The territory is printed on the card and shown on the gift page. For `reseller_redirect` and `reseller_licence` the partner enforces it by account country and returns `redeemer_country` in the fulfilment callback; an `mpv` code cannot be marked fulfilled without it.
 29. A print order whose delivery country is outside `redemption_territory` requires an explicit confirmation by the buyer ("the recipient will need an account in …") and is logged.
 
 **Code lifecycle and consumer law**
 
-30. States: `created → redeemed → fulfilled`, plus `cancelled` (reason `withdrawal`, `refund`, `fraud`, `takedown` or `reissued`) and `expired`. Cancellation for `withdrawal` returns `409` once the code is redeemed. Reissue creates a new code for the same order and cancels the old one atomically. Every transition is timestamped and sent to the partner webhook.
+30. States: `created → redeemed → fulfilled` (reseller lanes) or `created → redeemed → exhausted` (hosted file, session limit reached), plus `cancelled` (reason `withdrawal`, `refund`, `fraud` or `takedown`), `reissued` (a state in `docs/api.md`, not a cancellation reason — corrected by the fact-check) and `expired`. Cancellation for `withdrawal` returns `409` once the code is redeemed. Reissue creates a new code for the same order and cancels the old one atomically. Every transition is timestamped and sent to the partner webhook.
 31. There is no default expiry. An `expires_at` earlier than 5 years after issue is rejected for any gift attached to a paid eBook or a paid card. The card prints the expiry date or "sans date limite".
 32. Partner gift creation for a consumer sale carries `withdrawal_waiver {consented, at, text_version}`. When `consented` is false, the gift gets `redeemable_from` = purchase time + 14 days, and the gift page says when it opens.
 33. The gift page and the card state, before the claim action, the format, the protection (none, watermark, LCP, Adobe DRM) and device compatibility in one line.
@@ -1010,8 +1019,8 @@ Numbers marked "(proposal)" are design choices, not legal thresholds. Field and 
 **Accessibility**
 
 45. Gift pages meet WCAG 2.1 AA: they work without JavaScript, every input is labelled, text contrast is at least 4.5:1, errors are stated in text, and there is no CAPTCHA (rate limiting instead; the `429` page states the waiting time). CI runs an automated accessibility check on every gift-page route with zero AA violations allowed.
-46. Every card that carries a QR code also carries the claim URL in clear and the typed code, grouped `XXXXX-XXXXX`, in a monospaced face of at least 12 pt with contrast of at least 7:1 (proposal). Preflight fails a card lacking either text.
-47. The code input accepts upper and lower case, spaces and hyphens, and maps look-alike characters as Crockford base32 specifies.
+46. Every card that carries a QR code also carries the claim URL in clear and the typed code, grouped `XXXX-XXXX-XXXX` (12 symbols, `docs/api.md` v0.2; corrected by the fact-check from `XXXXX-XXXXX`), in a monospaced face of at least 12 pt with contrast of at least 7:1 (proposal). Preflight fails a card lacking either text.
+47. The code input accepts upper and lower case and ignores spaces, hyphens, dots and underscores, as `docs/api.md` specifies. The alphabet is the 20 consonants `BCDFGHJKLMNPQRSTVWXZ` (no digits, no vowels), so no look-alike mapping is needed (corrected by the fact-check: the draft specified Crockford base32 mapping, which the contract does not use).
 48. When the title's accessibility metadata is supplied, it is shown on the gift page.
 
 **Printed card: mentions and eco-labelling**
@@ -1022,3 +1031,47 @@ Numbers marked "(proposal)" are design choices, not legal thresholds. Field and 
 52. Templates contain none of the restricted environmental claims ("biodégradable", "respectueux de l'environnement", "écologique", "neutre en carbone"); a lint enforces it.
 53. The issuer record (eBook Cadeau or the reseller) holds the French EPR unique identifier and, where envelopes are sent to Germany, the LUCID registration number. A postal order to Germany that uses an envelope is refused when the LUCID number is missing; products flagged `packaging = none` (sealed self-mailer) skip this check.
 
+**Added after the fact-check** (items 1–53 keep their numbers)
+
+54. The professional-print template of item 49 gains a mandatory "manufacturer" slot (name, postal address, e-mail or web contact of the party placing the card on the market) and a traceability identifier (order or batch number) printed on the card or envelope; the product page shows the same information (GPSR). Preflight fails a professional-print PDF without them.
+55. The claim-language lint of item 52 also rejects generic environmental claims and offset-based neutrality wording in every language shipped ("neutre en carbone", "climate neutral", "klimaneutral", "éco-responsable", "eco-friendly"), matching doc 04 implication 18.
+56. The online withdrawal function (Directive 2023/2673, art. 11a) is a launch requirement for any paid consumer sale through our own interface: a clearly labelled "withdraw from the contract" function on the order page, confirmation on a durable medium. It is not a later item.
+57. The upload gate does not treat "no DRM container" as evidence that a file is not a store purchase (Kindle EPUB/PDF downloads since January 2026); the retailer-mark and ISBN checks of items 9–10 are mandatory, not optional.
+58. The gift-link allow-list of item 16 is re-checked for Kobo/Fnac before launch; if title-level gifting exists in France, add it with the date checked.
+59. The VAT configuration of item 26 gains a dated Danish record when bill L 36 is enacted (zero rate from 1 July 2027 if passed); until then DK stays 25 % and flagged unverified.
+60. Example A in §6.6 is not a pricing default: the card price shipped in any demo or configuration is at or above the cost floor of item 23, set from a test invoice.
+
+---
+
+## Verification log
+
+Applied on 2026-11-12 from `factcheck/legal-gifting-commerce.md`, completing a partial application made earlier the same day (§1–§3 had already been corrected; this pass completed §5–§13, the implications and this log). The fact-checker's four searches were refused; its "[RECALL]" items are kept as [FC] with the checker's confidence and are unverified.
+
+**Checked by the editor in this pass**
+
+- Two web searches (result summaries): CJEU C-366/24 (judgment 18 December 2025; Conseil d'État 13 May 2026, n° 474398) and Danish book VAT (bill L 36, zero rate proposed from 1 July 2027). A third search, run for doc 04, confirmed the 2026 La Poste domestic 100 g rate (EUR 3.10; EUR 2.97 online).
+- `docs/api.md` v0.2 re-read: code format `XXXX-XXXX-XXXX` from a 20-consonant alphabet; states include `exhausted` and `reissued` — confirms the checker's internal findings.
+
+**Corrected**
+
+1. Implications 46–47: code format and input rule (they contradicted `docs/api.md`).
+2. Implications preamble and 30: field names that are proposals, not contract names; `exhausted` and `reissued` states.
+3. Loi Lang art. 1 quotation completed ("et dans ce seul cas"); analogy withdrawn as the basis for a paid card.
+4. Loi 2011-590 art. 4 opening reservation (L. 121-35) [FC].
+5. C-68/23: "are SPVs" → "can be SPVs if both conditions are met".
+6. CGI art. 278-0: a single price is an indicator, not the test.
+7. Franchise thresholds: 91,900 / 36,800 are the 2023–2024 figures; 85,000 / 37,500 apply since 2025.
+8. C-366/24: outcome now known (editor's search); the EUR 3 floor stands.
+9. Withdrawal function, Regulation 2025/40 and e-invoice reception rewritten as current obligations.
+10. Example A: flagged as below cost; Example C single-line rounding noted.
+11. Paths `notes/…` → `docs/research/notes/…`.
+12. Applied in the earlier partial pass: *Cyando* and the hosting exemption; the bearer (not one-recipient) design; *Dstorage* chamber; Kindle January 2026 downloads; Project Gutenberg settlement; Kobo gifting; GPSR / 2024/825 / AGEC 112 in the summary table; §3.2 "encodes this only in part".
+
+**Checker finding not upheld**
+
+- Danish book VAT: the checker recalled an abolition "in 2026". The search found only a proposal, now for 1 July 2027 (the 2026 bill lapsed). DK stays 25 % with a dated note.
+- La Poste domestic 100 g: the checker's 3.04 is not upheld (EUR 3.10 found); international 4.85 remains unchecked.
+
+**Added (omissions)**: GPSR, Directive 2024/825 and AGEC art. 112 in §11.1; loi 2014-779; ViDA; fixed-price regimes of PT, GR, SI, NO; 2027 postal rates; implications 54–60.
+
+**Still unverified**: every statute and case cited from memory (§2–§11), including *Tom Kabinet* paragraph numbers, *Valve*, *Dstorage*, BuchPrG details, expiry rules, EAA details, PSD3 status, Kobo gifting in France, 7switch, the Kindle 2026 change, the 2026 Finance Act, French transposition of Directives 2023/2673 and 2024/825.

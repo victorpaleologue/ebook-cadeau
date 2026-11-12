@@ -32,7 +32,7 @@ use ebc_fontid::eval::{
     CaseReport, Condition, EvalOptions, evaluate, evaluate_holdout, format_holdout, format_table,
     standard_conditions,
 };
-use ebc_fontid::synth::{CoverSpec, Degradation, render_cover, Background};
+use ebc_fontid::synth::{Background, CoverSpec, Degradation, render_cover};
 use ebc_fontid::{FontIndex, IndexEntry, IndexEntryMeta, find_title_regions, identify_detailed};
 use ebc_text::Font;
 
@@ -144,7 +144,9 @@ fn run() -> Result<(), String> {
         build_ms,
         build_ms / index.len() as f64
     ))?;
-    line(format!("Covers: 600 x 900 px, {cases} per condition, seed {seed}; rerank on the best {rerank_top}.\n"))?;
+    line(format!(
+        "Covers: 600 x 900 px, {cases} per condition, seed {seed}; rerank on the best {rerank_top}.\n"
+    ))?;
 
     let dump = std::cell::RefCell::new(String::new());
     let observer = |r: &CaseReport| {
@@ -167,10 +169,20 @@ fn run() -> Result<(), String> {
             let _ = writeln!(
                 std::io::stderr(),
                 "[{}] #{} {} \"{}\" cap {:.0}px: detected={} truth={:?} found={:?} labelled={} id_rank={:?} rerank={:?} auto_rank={:?} best={} true_score={:.2} confident={}",
-                r.condition, r.case, r.font, r.title, r.cap_height_px, r.detected,
+                r.condition,
+                r.case,
+                r.font,
+                r.title,
+                r.cap_height_px,
+                r.detected,
                 (r.truth.x, r.truth.y, r.truth.w, r.truth.h),
                 r.found.map(|f| (f.x, f.y, f.w, f.h)),
-                r.labelled_glyphs, r.id_rank, r.rerank_rank, r.auto_rank, r.best, r.true_score,
+                r.labelled_glyphs,
+                r.id_rank,
+                r.rerank_rank,
+                r.auto_rank,
+                r.best,
+                r.true_score,
                 r.confident,
             );
         }
@@ -191,7 +203,8 @@ fn run() -> Result<(), String> {
     let rows = evaluate(&cover_fonts, &index, &conditions, &opts);
     line(format_table(&rows))?;
     if let Some(path) = &dump_path {
-        std::fs::write(path, dump.borrow().as_bytes()).map_err(|e| format!("{}: {e}", path.display()))?;
+        std::fs::write(path, dump.borrow().as_bytes())
+            .map_err(|e| format!("{}: {e}", path.display()))?;
     }
     if tables_only {
         return Ok(());

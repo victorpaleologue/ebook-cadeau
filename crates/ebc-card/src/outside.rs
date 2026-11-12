@@ -112,8 +112,7 @@ impl Composer<'_> {
             }
             _ => None,
         };
-        let spine =
-            self.design_spine(ground, cover_colour, analysis.as_ref(), sample.as_ref())?;
+        let spine = self.design_spine(ground, cover_colour, analysis.as_ref(), sample.as_ref())?;
         let own_spine_colour = !matches!(self.req.spine, SpineChoice::Typeset) && cover.is_some();
         let back_ground = if own_spine_colour { spine.background } else { ground };
 

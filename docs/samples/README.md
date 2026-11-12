@@ -6,7 +6,7 @@ and the book is fictional. Page 1 is the outside (back | spine | front), page 2 
 
 | File | What it shows |
 |---|---|
-| `poche-professional_eu-cover` | 110 × 178 mm card for a professional printer: bleed, crop and fold marks, FOGRA39 output intent; cover letterboxed, never cropped |
-| `poche-home_a4-typographic-fr` | Print-at-home A4 sheet, typographic card (no cover rights declared), French |
+| `poche-professional_eu-cover` | 110 × 178 mm card for a professional printer: bleed, crop and fold marks, FOGRA39 output intent; cover letterboxed, never cropped, on one flat ground computed from the cover (its frame colour) across back, spine and front |
+| `poche-home_a4-typographic-fr` | Print-at-home A4 sheet, typographic card (no cover rights declared), French; one ground from the title-hashed palette |
 | `poche-home_a4-promo-reduced` | Reduced-size cover layout used for the `promo_all_media` rights basis |
 | `poche-upload_eu-proof-with-guides` | Proof with the non-printing guides layer (trim, bleed, safe areas) |

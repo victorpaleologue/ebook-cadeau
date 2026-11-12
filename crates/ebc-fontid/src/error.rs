@@ -36,7 +36,9 @@ pub enum FontIdError {
     Checksum,
     /// A font was refused by [`FontIndex::build_checked`](crate::FontIndex::build_checked)
     /// because its licence is not one of [`OPEN_LICENCES`](crate::OPEN_LICENCES).
-    #[error("font \"{family} {style}\" refused: licence \"{licence}\" is not an allowed open licence")]
+    #[error(
+        "font \"{family} {style}\" refused: licence \"{licence}\" is not an allowed open licence"
+    )]
     LicenceNotAllowed {
         /// Family of the refused font.
         family: String,

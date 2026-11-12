@@ -275,13 +275,9 @@ pub fn render_cover(spec: &CoverSpec, title_font: &Font, author_font: &Font) -> 
     }
 
     let mut data = Vec::with_capacity(w * h * 4);
-    for i in 0..w * h {
-        data.extend_from_slice(&[
-            quantize(planes[0][i]),
-            quantize(planes[1][i]),
-            quantize(planes[2][i]),
-            255,
-        ]);
+    let [red, green, blue] = &planes;
+    for ((r, g), b) in red.iter().zip(green).zip(blue) {
+        data.extend_from_slice(&[quantize(*r), quantize(*g), quantize(*b), 255]);
     }
     let clean = Pixmap::from_rgba8(spec.width, spec.height, data)?;
     let image = degrade(&clean, &spec.degradation, spec.seed ^ 0x5eed_c0de);
@@ -570,8 +566,14 @@ mod tests {
         assert_eq!(blurred.get(0, 0), Some([200, 180, 160, 255]));
         let noisy = degrade(&img, &Degradation { noise_sigma: 8.0, ..Default::default() }, 1);
         assert_ne!(noisy, img);
-        assert_eq!(noisy, degrade(&img, &Degradation { noise_sigma: 8.0, ..Default::default() }, 1));
-        assert_ne!(noisy, degrade(&img, &Degradation { noise_sigma: 8.0, ..Default::default() }, 2));
+        assert_eq!(
+            noisy,
+            degrade(&img, &Degradation { noise_sigma: 8.0, ..Default::default() }, 1)
+        );
+        assert_ne!(
+            noisy,
+            degrade(&img, &Degradation { noise_sigma: 8.0, ..Default::default() }, 2)
+        );
     }
 
     #[test]
@@ -585,12 +587,9 @@ mod tests {
             }
         }
         let error = |q: u8| -> f32 {
-            let out = degrade(&img, &Degradation { jpeg_quality: Some(q), ..Default::default() }, 0);
-            img.data()
-                .iter()
-                .zip(out.data())
-                .map(|(a, b)| f32::from(a.abs_diff(*b)))
-                .sum::<f32>()
+            let out =
+                degrade(&img, &Degradation { jpeg_quality: Some(q), ..Default::default() }, 0);
+            img.data().iter().zip(out.data()).map(|(a, b)| f32::from(a.abs_diff(*b))).sum::<f32>()
                 / img.data().len() as f32
         };
         let (high, low) = (error(95), error(15));

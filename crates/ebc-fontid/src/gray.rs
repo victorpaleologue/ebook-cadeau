@@ -25,6 +25,7 @@ pub(crate) struct Gray {
 
 impl Gray {
     /// A `w` x `h` image filled with `value`.
+    #[cfg(any(test, feature = "synth"))]
     pub(crate) fn filled(w: usize, h: usize, value: u8) -> Self {
         Self { w, h, px: vec![value; w * h] }
     }
@@ -406,9 +407,9 @@ pub(crate) fn otsu(hist: &[u32; 256]) -> Option<(u8, f32, f32)> {
     let sum_all: f64 = hist.iter().enumerate().map(|(v, &c)| v as f64 * f64::from(c)).sum();
     let (mut w0, mut s0) = (0.0f64, 0.0f64);
     let mut best = (0.0f64, None);
-    for t in 0..255usize {
-        w0 += f64::from(hist[t]);
-        s0 += t as f64 * f64::from(hist[t]);
+    for (t, &count) in hist.iter().enumerate().take(255) {
+        w0 += f64::from(count);
+        s0 += t as f64 * f64::from(count);
         let w1 = total as f64 - w0;
         if w0 <= 0.0 || w1 <= 0.0 {
             continue;

@@ -99,10 +99,13 @@ fn noise_specks_and_stripes_do_not_panic_or_explode() {
         assert!(regions.len() <= 12);
         let _ = find_title_regions(img, "Some title of several words");
         let whole = region(0, 0, w, h);
-        for text in [None, Some("Some title"), Some(""), Some("ÿ\u{0301}\u{202e}\u{0}é"), Some("A")] {
+        for text in [None, Some("Some title"), Some(""), Some("ÿ\u{0301}\u{202e}\u{0}é"), Some("A")]
+        {
             let id = identify_detailed(img, &whole, text, &index);
             assert!(id.matches.len() <= 8);
-            assert!(id.matches.iter().all(|m| m.score.is_finite() && (0.0..=1.0).contains(&m.score)));
+            assert!(
+                id.matches.iter().all(|m| m.score.is_finite() && (0.0..=1.0).contains(&m.score))
+            );
             assert!(!id.confident, "nothing in noise is a confident match");
         }
         let rr = rerank(img, &whole, "Some title", &cands);
@@ -196,9 +199,24 @@ fn the_synthesiser_refuses_what_it_cannot_draw() {
     // Wild degradation parameters are ignored or clamped, never fatal.
     let img = Pixmap::filled(40, 30, [120, 130, 140, 255]);
     for d in [
-        Degradation { blur_sigma: f32::NAN, noise_sigma: f32::INFINITY, rotation_degrees: f32::NAN, jpeg_quality: Some(0) },
-        Degradation { blur_sigma: -3.0, noise_sigma: -1.0, rotation_degrees: 720.0, jpeg_quality: Some(255) },
-        Degradation { blur_sigma: 1e9, noise_sigma: 1e9, rotation_degrees: 1e9, jpeg_quality: None },
+        Degradation {
+            blur_sigma: f32::NAN,
+            noise_sigma: f32::INFINITY,
+            rotation_degrees: f32::NAN,
+            jpeg_quality: Some(0),
+        },
+        Degradation {
+            blur_sigma: -3.0,
+            noise_sigma: -1.0,
+            rotation_degrees: 720.0,
+            jpeg_quality: Some(255),
+        },
+        Degradation {
+            blur_sigma: 1e9,
+            noise_sigma: 1e9,
+            rotation_degrees: 1e9,
+            jpeg_quality: None,
+        },
     ] {
         let out = degrade(&img, &d, 5);
         assert_eq!((out.width(), out.height()), (40, 30));

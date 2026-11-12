@@ -17,7 +17,8 @@ use ebc_fontid::{
 };
 use ebc_text::Font;
 
-const TITLES: [&str; 4] = ["Le Rouge et le Noir", "Bonjour tristesse", "Wuthering Heights", "Germinal"];
+const TITLES: [&str; 4] =
+    ["Le Rouge et le Noir", "Bonjour tristesse", "Wuthering Heights", "Germinal"];
 
 #[test]
 fn clean_covers_are_identified_to_the_exact_face() {
@@ -38,7 +39,10 @@ fn clean_covers_are_identified_to_the_exact_face() {
             face += usize::from(is(&id.matches[0].entry, meta));
             family += usize::from(id.matches[0].entry.family == meta.family);
             confident += usize::from(id.confident && id.matches[0].entry.family == meta.family);
-            assert!(!id.confident || id.matches[0].entry.family == meta.family, "confidently wrong");
+            assert!(
+                !id.confident || id.matches[0].entry.family == meta.family,
+                "confidently wrong"
+            );
         }
     }
     // Measured: 16/16 for all three. The floor leaves room for one miss.
@@ -115,7 +119,7 @@ fn accents_punctuation_and_several_lines_are_labelled() {
     middle.h = middle.h * 3 / 11;
     let id = identify_detailed(&c.image, &middle, Some(&title), &index);
     assert_eq!(id.lines, 1, "{id:?}");
-    assert_eq!(id.labelled_glyphs, 8);
+    assert_eq!(id.labelled_glyphs, 8, "{id:?}");
     assert!(id.text_coverage > 0.25 && id.text_coverage < 0.35, "{}", id.text_coverage);
 }
 
@@ -132,7 +136,12 @@ fn without_the_title_the_fallback_is_used_and_never_confident() {
         assert!(id.matches.iter().all(|m| m.score <= 0.8 + 1e-6), "fallback scores are capped");
         family += usize::from(id.matches[0].entry.family == meta.family);
         // A text that does not fit the glyphs falls back too, instead of mislabelling.
-        let wrong = identify_detailed(&c.image, &c.title_region, Some("Completely unrelated words"), &index);
+        let wrong = identify_detailed(
+            &c.image,
+            &c.title_region,
+            Some("Completely unrelated words"),
+            &index,
+        );
         assert_eq!(wrong.labelled_glyphs, 0, "{wrong:?}");
         assert_eq!(wrong.matches[0].entry, id.matches[0].entry);
     }
@@ -151,8 +160,11 @@ fn the_detector_finds_the_title_with_and_without_the_prior() {
             let regions = find_title_regions(&c.image, title);
             assert!(regions.len() <= 12);
             assert!(regions.windows(2).all(|p| p[0].score >= p[1].score));
-            assert!(regions.iter().all(|r| r.w > 0 && r.h > 0 && r.x + r.w <= 420 && r.y + r.h <= 630));
-            with_prior += usize::from(regions.first().is_some_and(|r| is_detected(r, &c.title_region)));
+            assert!(
+                regions.iter().all(|r| r.w > 0 && r.h > 0 && r.x + r.w <= 420 && r.y + r.h <= 630)
+            );
+            with_prior +=
+                usize::from(regions.first().is_some_and(|r| is_detected(r, &c.title_region)));
             let regions = find_text_regions(&c.image);
             plain += usize::from(regions.first().is_some_and(|r| is_detected(r, &c.title_region)));
         }
@@ -228,7 +240,12 @@ fn results_are_deterministic_and_the_embedded_index_agrees_with_a_fresh_one() {
     let e = identify(&c.image, &c.title_region, Some("Bonjour tristesse"), &embedded);
     assert!(is(&e[0].entry, &fonts[5].0));
     assert_eq!(e[0].entry.family, a.matches[0].entry.family);
-    assert!((e[0].score - a.matches[0].score).abs() < 0.05, "{} vs {}", e[0].score, a.matches[0].score);
+    assert!(
+        (e[0].score - a.matches[0].score).abs() < 0.05,
+        "{} vs {}",
+        e[0].score,
+        a.matches[0].score
+    );
     // An empty index has nothing to say.
     assert!(identify(&c.image, &c.title_region, Some("x"), &FontIndex::default()).is_empty());
 }

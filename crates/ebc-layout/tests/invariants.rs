@@ -5,11 +5,11 @@
 
 use ebc_layout::{
     CardFormat, FOLD_GUIDE_MAX_MM, FURNITURE_BAND_MAX_MM, Face, Fit, LayoutError,
-    MARK_BLEED_GAP_MM, MIN_MARK_LENGTH_MM, MarkStyle, PageGeometry, PrintProfile, Resolution, Sheet, caption_areas,
-    check_marks_fit, color_bar, crop_marks, effective_ppi, fold_marks, guides, info_entries, marks,
-    new_page, page_geometry, place_image, place_image_aligned, place_image_bleed,
-    registration_target_centers, registration_targets, safe_panels, safe_rect, scale_ruler,
-    spine_safe_rect,
+    MARK_BLEED_GAP_MM, MIN_MARK_LENGTH_MM, MarkStyle, PageGeometry, PrintProfile, Resolution,
+    Sheet, caption_areas, check_marks_fit, color_bar, crop_marks, effective_ppi, fold_marks,
+    guides, info_entries, marks, new_page, page_geometry, place_image, place_image_aligned,
+    place_image_bleed, registration_target_centers, registration_targets, safe_panels, safe_rect,
+    scale_ruler, spine_safe_rect,
 };
 use ebc_scene::{Color, Item, Path, PathSeg, Point, Rect, Size, Stroke, Transform, pt_to_mm};
 

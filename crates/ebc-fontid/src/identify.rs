@@ -157,8 +157,7 @@ pub fn identify_detailed(
     let Some(prepared) = Prepared::new(img, region, known_text, index.centroids()) else {
         return Identification::empty();
     };
-    let scored =
-        prepared.score(index.entries().iter().map(|e| &*e.descriptor), index.centroids());
+    let scored = prepared.score(index.entries().iter().map(|e| &*e.descriptor), index.centroids());
     let mut out = prepared.identification(scored.labelled);
     out.matches = index
         .entries()

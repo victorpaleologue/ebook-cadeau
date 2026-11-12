@@ -85,10 +85,10 @@ pub fn rerank_detailed(
             // The same line under every case hypothesis that survived.
             let mut texts: Vec<String> = Vec::new();
             for l in &prepared.labellings {
-                if let Some(Some(text)) = l.line_texts.get(i) {
-                    if !texts.contains(text) {
-                        texts.push(text.clone());
-                    }
+                if let Some(Some(text)) = l.line_texts.get(i)
+                    && !texts.contains(text)
+                {
+                    texts.push(text.clone());
                 }
             }
             let Some(first) = texts.first() else { continue };
@@ -273,11 +273,8 @@ fn edges(g: &Gray) -> Vec<bool> {
                 continue;
             }
             let border = x == 0 || y == 0 || x + 1 == w || y + 1 == h;
-            out[y * w + x] = border
-                || !ink(x - 1, y)
-                || !ink(x + 1, y)
-                || !ink(x, y - 1)
-                || !ink(x, y + 1);
+            out[y * w + x] =
+                border || !ink(x - 1, y) || !ink(x + 1, y) || !ink(x, y - 1) || !ink(x, y + 1);
         }
     }
     out

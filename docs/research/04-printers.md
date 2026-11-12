@@ -313,9 +313,9 @@ Evidence rules:
 
 | Supplier | E1 | E2 | E3 | E4 | E5 | E6 | E7 | S1 | S2 | S3 | S4 | G1 | **Floor** | **Ceiling** | What the ceiling assumes |
 |---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|
-| Onlineprinters | 0 | 2 | 4 | 5 | 0 | 8 | 3 | 1 | 0 | 5 | 0 | 2 | **30** | 34 | Imprim'Vert in the directory; Blue Angel board at 300 g |
+| Onlineprinters | 0 | 2 | 4 | 5 | 0 | 8 | 3 | 1 | 0 | 5 | 0 | 1 | **29** | 34 | Imprim'Vert in the directory; Blue Angel board at 300 g; control from the EU/EEA confirmed. G1 lowered from 2 to 1 by the fact-check: the owner's capital is placed in Switzerland by this document's own text |
 | Flyeralarm | 0 | 0 | 7 | 5 | 0 | 8 | 0 | 1 | 0 | 5 | 0 | 2 | **28** | 30 | Founder ownership |
-| Exaprint | 0 | 0 | 0 | 5 | 0 | 12 | 0 | 1 | 0 | 5 | 0 | 1 | **24** | 31 | Imprim'Vert; FSC/PEFC board |
+| Exaprint | 0 | 0 | 0 | 5 | 0 | 8 | 0 | 1 | 0 | 2 | 0 | 1 | **17** | 31 | Imprim'Vert; FSC/PEFC board; a quote confirming that Mauguio prints our job (restores E6 = 12 and S3 = 5). Floor lowered from 24 by the fact-check: E6 and S3 had assumed what the quote must establish |
 | SAXOPRINT | 0 | 4 | 0 | 5 | 0 | 8 | 0 | 1 | 0 | 5 | 0 | 1 | **24** | 28 | ISO 14001 and 50001 still current after the takeover |
 | Entreprise adaptée (Copiver Express as the one verified example) | 0 | 0 | 0 | 0 | 0 | 12 | 0 | 1 | 8 | 0 | 0 | 2 | **23** | 40 | Imprim'Vert, PEFC board, digital press, named site |
 | Printoclock | 0 | 2 | 2 | 5 | 0 | 8 | 0 | 1 | 0 | 2 | 0 | 2 | **22** | 32 | Toulouse workshop prints our job; labels in registers |
@@ -328,6 +328,8 @@ Evidence rules:
 | Lokay, oeding print | — | — | — | — | — | — | — | — | — | — | — | — | **not scorable** | 68 | DE-UZ 195 licence, EMAS, recycled board, green electricity, owner-managed |
 | French SCOP printers (Laballery, La Contemporaine, Média Graphic) | — | — | — | — | — | — | — | — | — | — | — | — | **not scorable** | 36 | SCOP status, Imprim'Vert, PEFC board, French plant |
 
+**Stale evidence** (fact-check): the grid has no age limit, while implication 18 demands evidence under 12 months old. With a three-year limit, Onlineprinters loses E2 and E7 (Imprim'Vert renewal press release of about 2017, offsetting release of 2013, ESG report 2022: floor 24) and SAXOPRINT loses E2 (2022 presentation, before the takeover: floor 20); Flyeralarm's 2012 leaflet earns no point already. Both floors are shown in §6.6.
+
 Evidence behind the floor points: Onlineprinters — Imprim'Vert renewal (own press release), PEFC 300 g on product pages, ESG report 2022 ([PDF](https://de.onlineprinters.ch/$WS/diedruckerei/shopdata/web/images/landingpages/unternehmen/was-uns-wichtig-ist/op_esg-report-2022_en.pdf)), carbon-neutral option since 2013 ([press release](https://www.pr.com/press-release/555928)), named sites [V1]. Flyeralarm — recycled 300 g stock, named sites [V1]; its only climate document found is a 2012 offsetting leaflet naming a Ghana cookstove project ([leaflet](https://www.flyeralarm.com/images/upload/content/_pdf/de/de/FA_Infoblatt_KlimaneutralesDrucken_12122012_WEB.pdf)) [V1]. Exaprint — Mauguio plant [V2]. SAXOPRINT — ISO 14001 and ISO 50001 in a 2022 corporate presentation ([PDF](https://www.heidelberg.com/global/media/global_media/company___press_lounge/press_kits_1/2022_15/saxoprint/presentation/SAXOPRINT_Corporate_presentation-2022.pdf)) [V1], before the Cimpress takeover. Copiver Express — UNEA directory sheet ([PDF](https://www.unea.fr/sites/default/files/doc_ea_4657_copiver_express_.pdf)) [V1]. Printoclock — own brochure [V1]. dieUmweltDruckerei — a sustainability report dated 02/2023 exists ([PDF](https://www.dieumweltdruckerei.de/assets/content_files/10580/Nachhaltigkeitsbericht_02_23_dieUmweltDruckerei.pdf)) [V1], content not read.
 
 **B. One personalised card to one French recipient**
@@ -338,12 +340,13 @@ Evidence behind the floor points: Onlineprinters — Imprim'Vert renewal (own pr
 | Fizzer (flat card) | 0 | 0 | 0 | 5 | 0 | 15 | 0 | 1 | 0 | 2 | 0 | 2 | **25** | 25 | No API: benchmark only |
 | **Merci Facteur** (folded card) | 0 | 0 | 0 | 5 | 0 | 12 | 0 | 1 | 0 | 0 | 0 | 2 | **20** | 28 | Ceiling: French print site named |
 | Popcarte (folded card) | 0 | 0 | 0 | 5 | 0 | 12 | 0 | 1 | 0 | 0 | 0 | 2 | **20** | 28 | No API: benchmark only |
-| **Gelato** | 0 | 0 | 0 | 5 | 0 | 6 | 0 | 1 | 0 | 0 | 0 | 4 | **16** | 22 | Ceiling: French partner confirmed for cards |
+| **Gelato** | 0 | 0 | 0 | 5 | 0 | 6 | 0 | 1 | 0 | 0 | 0 | 2 | **14** | 22 | Ceiling: French partner confirmed for cards; EEA seat and sub-processor list confirmed. G1 lowered from 4 to 2 by the fact-check: the EEA seat is memory, which counts zero |
 | Printful | 0 | 0 | 0 | 5 | 0 | 3 | 0 | 1 | 0 | 5 | 0 | 0 | **14** | 14 | Riga or Barcelona to France |
 | Print&Bind | 0 | 0 | 0 | 5 | 0 | 3 | 0 | 1 | 0 | 0 | 0 | 2 | **11** | 11 | — |
 | Lulu dummy book | 0 | 0 | 0 | 0 | 0 | 6 | 0 | 1 | 0 | 0 | 0 | 0 | **7** | 12 | Ceiling: B Corp confirmed |
 | BoD dummy book | 0 | 0 | 0 | 0 | 0 | 3 | 0 | 1 | 0 | 0 | 0 | 2 | **6** | 6 | — |
-| Prodigi, Stannp (UK) | 0 | 0 | 0 | 5 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | **6** | 9 | Ceiling: Prodigi fulfils from the EU |
+| Prodigi | 0 | 0 | 0 | 5 | 0 | 4 | 0 | 1 | 0 | 0 | 0 | 0 | **10** | 10 | Cards "fulfilled from UK, EU, US" [V1]: E6 raised from 0 to 4 (unknown EU plant) by the fact-check, which found the UK-origin score inconsistent with this document's own evidence |
+| Stannp (UK) | 0 | 0 | 0 | 5 | 0 | 0 | 0 | 1 | 0 | 0 | 0 | 0 | **6** | 6 | UK origin |
 
 Print at home and in-store printing are not suppliers and are not scored; they beat every row on transport (no shipment) and on data (no address leaves the buyer).
 
@@ -355,13 +358,13 @@ Batches:
 
 1. **To verify first, highest potential — environment:** Lokay and oeding print (ceiling 68), dieUmweltDruckerei (58). One register lookup each (Blauer Engel product search, EMAS register) decides whether they lead.
 2. **To verify first, highest potential — society:** entreprises adaptées (ceiling 40, the only verified S2 points) and SCOP printers (36). The grid gives the environment 70 % of the points, which is why they sit below the German eco-printers; on social criteria alone they come first.
-3. **Best on verified evidence today:** Onlineprinters (30), Flyeralarm (28), Exaprint and SAXOPRINT (24).
+3. **Best on verified evidence today:** Onlineprinters (29; 24 without evidence older than three years), Flyeralarm (28), SAXOPRINT (24; 20 without stale evidence), Exaprint (17 until a quote names the plant).
 4. **Low or opaque:** Pixartprinting (20), WIRmachenDRUCK, Helloprint, Vistaprint (11–13): little evidence, or the plant is not predictable per order.
 5. **Deprioritise:** UK production (MOO, Solopress, Mixam UK): customs border and longer transport.
 
-Singles: French print with letter post leads (Maileva 27 for a letter, Merci Facteur 20 for a card), then Gelato (16), then Printful (14); dummy books and UK or US origin come last (6–7).
+Singles: French print with letter post leads (Maileva 27 for a letter, Merci Facteur 20 for a card), then Gelato and Printful (14), Print&Bind (11) and Prodigi (10); dummy books and UK or US origin come last (6–7).
 
-Contradiction resolved: the web2print note ranks Exaprint as the best mainstream option for France; the grid puts Onlineprinters six points ahead. Both are right about different things. Onlineprinters has more **evidence** (report, Imprim'Vert, papers); Exaprint has the better **transport** score and French jobs, and its labels are simply unverified (three points of Imprim'Vert and four of PEFC would close the gap to 31 against 34). We keep the grid order for ESG and keep Exaprint as the first batch supplier to quote, because free delivery in France, lead time and the custom-fold lead are decision criteria outside the grid.
+Contradiction resolved: the web2print note ranks Exaprint as the best mainstream option for France; the grid puts Onlineprinters twelve points ahead after the fact-check. Both are right about different things. Onlineprinters has more **evidence** (report, Imprim'Vert, papers, though old); Exaprint's French plant may give it the better **transport** and labour scores, but only a quote naming the production site can establish that, and its labels are unverified (with the plant confirmed, three points of Imprim'Vert and four of PEFC would bring it to 31 against 34). We keep the grid order for ESG and keep Exaprint as the first batch supplier to quote, because free delivery in France, lead time and the custom-fold lead are decision criteria outside the grid — subject to it accepting our account (trade customers only, checker's recall).
 
 ### 6.7 Ownership, labour and other social notes
 
@@ -369,6 +372,7 @@ Contradiction resolved: the web2print note ranks Exaprint as the best mainstream
 - Exaprint invested in workplace quality ([Journal des Entreprises](https://www.lejournaldesentreprises.com/article/limprimeur-exaprint-investit-dans-la-qualite-de-vie-au-travail-2119064)) [V1].
 - Marketplaces and partner networks (Helloprint, WIRmachenDRUCK's partners, Gelato, Cloudprinter) do not let the customer see working conditions at the plant that prints. The grid scores that opacity at 0–2 on S3.
 - Letter post is delivered by postal employees; parcel delivery in France relies largely on subcontracted drivers [M-low]. This is a second reason to prefer envelope formats.
+- OETH deduction (fact-check nuance, checker's recall): the deduction (30 % of the labour cost of the purchase, capped at 50 % or 75 % of the contribution) goes to the company that buys from the EA or ESAT. If eBook Cadeau is the buyer of record, the reseller gets nothing; a reseller that wants the deduction must contract with the EA directly.
 - EA versus ESAT: an EA is an ordinary employer paying at least the minimum wage; ESAT workers are users of a medico-social service, paid a guaranteed fraction of it [M]. The EA is the stronger social claim. Prison print workshops are excluded.
 - **Recollections not to be repeated publicly** (no source in this run): union criticism of Flyeralarm over collective agreements and works councils [M-low]; offshored customer care and restructurings at Cimpress/Vistaprint [M].
 
@@ -377,18 +381,18 @@ Contradiction resolved: the web2print note ranks Exaprint as the best mainstream
 ### 7.1 Recommendation
 
 1. **Default to print at home.** It costs nothing, ships nothing, exposes no address, and is the only route for a standalone user whose cover is not licensed for professional printing (see `07-legal-covers-and-reseller-rights.md`: an unlicensed cover is never sent to a printer).
-2. **Mailed single card (reseller mode, or a rights holder gifting one copy): Merci Facteur**, with the single-fold A5 layout (P2). Planning cost €4.29–4.79 per card plus €19.95 per month; ceiling about €6.3 if the card lands in the 100 g postage band.
-3. **Batches of one title (authors, publishers, reseller stock): quote Exaprint first, Onlineprinters second**, and ask both for the true jacket (P1). Buy the single-fold card (P2) from the catalogue while waiting: €0.36–0.60 per card at 100.
-4. **Offer two labelled alternatives to resellers**, once verified: an entreprise adaptée (social case, OETH deduction [M]) and a Blauer Engel printer (environmental case).
+2. **Mailed single item (reseller mode, or a rights holder gifting one copy): Merci Facteur.** Changed by the fact-check: its documented card API takes one JPEG visual, so the route that is known to carry our artwork is its **letter** service with the A4 home-print PDF (P6), which the recipient cuts and folds. The folded card (P2) becomes the launch product only if a test order shows inside and back artwork printed as designed. Planning cost for the card: a range of €4.29–6.3 per card (base no lower than the midpoint, about €5.3) plus €19.95 per month; the letter's price was not retrieved.
+3. **Batches of one title (authors, publishers, reseller stock): quote Exaprint first, Onlineprinters second**, and ask both for the true jacket (P1). Buy the single-fold card (P2) from the catalogue while waiting: about €0.52–0.59 per folded A6 card at 100 (Onlineprinters list price, the only matching product priced).
+4. **Offer two labelled alternatives to resellers**, once verified: an entreprise adaptée (social case; the OETH deduction [M] goes only to a reseller that contracts with the EA directly) and a Blauer Engel printer (environmental case).
 5. **Do not use** book POD as the default object (cost about €9–12, about 150 blank pages), UK or US origin for single items, or any supplier's "climate-neutral" wording.
 
 ### 7.2 Phases
 
 | Phase | Volume trigger | Singles (one recipient) | Batches (one title) | Actions and gates |
 |---|---|---|---|---|
-| **0. Before launch** (weeks 0–2) | none | Home print only | None; fake printer in tests | Send the quote request of section 8.2 to Exaprint, Onlineprinters, Flyeralarm (A5 folder, 10 mm), one EA, one SCOP. Order samples: one Merci Facteur folded card (about €4.29), 100 folded A6 cards at Onlineprinters (€52.41 HT). **Weigh them.** Ask Merci Facteur for a DPA, hosting country, print site, HT/TTC and the postage band |
-| **1. Launch** (months 1–3) | first orders | Merci Facteur API, layout P2 A5, tracking optional (+€0.50) | Catalogue P2 at Onlineprinters or Exaprint, 50–250 copies, delivered creased and flat | Gate to open mailed cards: DPA signed, test invoice matches the price model, codes inactive until activation. Retail price must cover €4.29–6.33 of cost. At €6.90 and a €4.29 cost, the contribution is about €2.26 after payment fees (1.5 % + €0.25), about €1.41 after micro-entreprise charges of 12.3 % of turnover; the €19.95 plan is then covered from about 15 cards a month. If the cost is €6.33, the same contribution needs a price of about €9.00 before charges and €9.30 after them [all est.] |
-| **2. Reseller pilot** (months 3–9) | 100–500 mailed cards a month, or a first reseller | Keep Merci Facteur; negotiate a direct mailing contract (*routage*) with an EA or a mailing house: in-house style cost about €1.08 print and envelope + €1.67 stamp = €2.75 [est., business-model placeholders], a saving of about €1.5–2.0 per card | True jacket (P1) from the winning quote, 250–1,000 per title, variable data if unique codes are required | Reseller is controller; list each printer as an authorised sub-processor. Publish only verified facts (site, licence numbers). At 500 cards a month the saving is about €770–1,000 a month [est.], enough to justify the contract work |
+| **0. Before launch** (weeks 0–2) | none | Home print only | None; fake printer in tests | Send the quote request of section 8.2 to Exaprint, Onlineprinters, Flyeralarm (A5 folder, 10 mm), one EA, one SCOP. Order samples: one Merci Facteur folded card (about €4.29) **and one Merci Facteur colour letter with the A4 layout**, 100 folded A6 cards at Onlineprinters (€52.41 HT). **Weigh them.** Ask Merci Facteur for a DPA, hosting country, print site, HT/TTC, the postage band, and whether inside and back artwork can be sent for a folded card |
+| **1. Launch** (months 1–3) | first orders | Merci Facteur API: letter with the A4 layout (P6) by default; folded card P2 only if the Phase-0 test passed; tracking optional (+€0.50) | Catalogue P2 at Onlineprinters or Exaprint, 50–250 copies, delivered creased and flat | Gate to open mailed cards: DPA signed, test invoice matches the price model, codes inactive until activation. Retail price must cover €4.29–6.33 of cost. At €6.90 and a €4.29 cost, the contribution is about €2.26 after payment fees (1.5 % + €0.25), about €1.41 after micro-entreprise charges of 12.3 % of turnover (the rate for sales of goods); if the activity is classed as a service the rate is 21.2 % and the contribution falls to about €0.80 (fact-check, checker's recall). The €19.95 plan is covered from about 15 cards a month at the goods rate, about 25 at the service rate. Under the VAT franchise no input VAT is recovered. If the cost is €6.33, the same contribution needs a price of about €9.00 before charges and €9.30 after them [all est.] |
+| **2. Reseller pilot** (months 3–9) | 100–500 mailed cards a month, or a first reseller | Keep Merci Facteur; negotiate a direct mailing contract (*routage*) with an EA or a mailing house: in-house style cost about €1.08 print and envelope + €1.67 stamp = €2.75 [est., business-model placeholders, using a retail stamp: a mailing house pays industrial rates with other bands, and the comparison object is lighter than the Merci Facteur card (fact-check)], a saving of about €1.5–2.0 per card | True jacket (P1) from the winning quote, 250–1,000 per title, variable data if unique codes are required | Reseller is controller; list each printer as an authorised sub-processor. Publish only verified facts (site, licence numbers). At 500 cards a month the saving is about €770–1,000 a month [est.], enough to justify the contract work |
 | **3. EU scale-out** (month 9+) | first non-French market, or more than about 2,000 mailed cards a month (Merci Facteur plan step to €39.95) | Gelato folded card per country after a live price check; Pingen or a national postal API for the letter fallback | One certified printer per region: a DE-UZ 195 printer for German-speaking markets; Exaprint or an EA for France | Gate: Gelato sub-processor list read; French partner and delivery mode (letter or parcel) confirmed; no country served by a cross-border parcel per card |
 
 In-store printing at a reseller's photo counter would remove shipping altogether; whether Fnac counters can print and crease a 300 g card is unknown [M-low]. Keep it as a question for the first reseller meeting.
@@ -396,6 +400,8 @@ In-store printing at a reseller's photo counter would remove shipping altogether
 ### 7.3 What would change the recommendation
 
 - Merci Facteur cannot provide a DPA or prints outside France: move singles to Gelato (if a French partner is confirmed) or to Maileva with the letter format.
+- Merci Facteur's folded card cannot carry inside and back artwork: keep its letter route, or quote French consumer card services with full custom upload (Popcarte has one, no API) and the French letter/postcard APIs the fact-check named (MySendingBox, La Poste's own online services).
+- A quantity-1 upload-and-print shop (viaprinto, print24, WIRmachenDRUCK) sells a folder or card with a real 10 mm spine: it becomes the batch and possibly the single-copy route.
 - A French printer quotes the true jacket at quantity 1–10 with mailing: it replaces both Merci Facteur and the P2 compromise.
 - Exaprint's "pliure sur mesure" does not accept two creases: use a folder product with a 10 mm spine (Flyeralarm or Helloprint, A5) or a regional printer on quote.
 - A register lookup confirms a DE-UZ 195 licence at dieUmweltDruckerei with delivery to France: it becomes the default "certified" batch option, since it is an upload-and-pay shop [M].
@@ -409,7 +415,7 @@ Prices and products:
 - **Any live configurator price or written quote.** Prices at 1, 10, 500 and 1,000 for a folded card are missing for almost every printer.
 - **Any price for the true jacket (P1) or for a folder with a 10 mm spine (P3)**, with or without variable data. Whether any configurator accepts two creases 10 mm apart at book trim; Exaprint's "pliure sur mesure" is the only lead.
 - Official unit price and shipping to France for Gelato, Cloudprinter, Prodigi, Printful (card shipping), Lulu, Helloprint, Flyeralarm PRO, SAXOPRINT, Onlineprinters op.connect, Print.com, Mixam. Whether the "$6.16 per pack of 10" figure refers to Gelato.
-- Merci Facteur: HT or TTC, API-side price, postal product and weight band, accepted artwork formats, print site, DPA, hosting.
+- Merci Facteur: HT or TTC, API-side price, postal product and weight band, print site, DPA, hosting, legal entity. Artwork formats are now documented for cards (one JPEG) and letters (PDF) [V1, README]; whether a folded card can carry anything inside is not.
 - HT versus TTC on the Onlineprinters €59.24 and €54.59 figures and on Vistaprint's €0.74. Pixartprinting's minimum (10 versus 100). Whether an Exaprint business account is mandatory.
 - Lulu: minimum page count, EU plants, postage to France. BoD: minimum page count, order API. Bookvault: EU shipping after Brexit, current fees. Gelato and Printful notebooks as spine carriers.
 - Dust jackets, small packaging, bellybands: not searched. Not researched at all: print24 / Unitedprint, Drukland, Copy-Top, COREP, PostGrid, Docsaway, Touchnote, Cewe cards; Easyflyer beyond ownership; MOO, Solopress and Mixam prices.
@@ -426,6 +432,15 @@ ESG and law:
 - **Every eco or social printer profile** (Lokay, oeding print, dieUmweltDruckerei beyond the existence of its report, gugler*, Printzipia, Laballery, La Contemporaine, Média Graphic, Imprimerie 34, Imprimerie Villière, Pure Impression, Escourbiac, Handiprint, ANRH, APF Entreprises): labels, minimums, prices, delivery to France. "Ecoprint", "Greenprinter" and "ICI Imprimerie écologique" were not identified.
 - Label mechanics (exact Imprim'Vert criteria, DE-UZ 195 version, FSC Mix and PEFC thresholds); the application date of Directive (EU) 2024/825 and its French transposition; the status of the Green Claims Directive; the OETH deduction rules; the Data Privacy Framework appeal.
 - All carbon figures in 6.3; all labour recollections in 6.7.
+
+Raised by the fact-check (all from the checker's recall; leads to verify):
+
+- **Quantity-1 upload-and-print shops** were not examined: viaprinto (its whole model; lists folders with 1/5/10 mm spines, minimum not captured), print24 / Unitedprint, WIRmachenDRUCK short runs, and French walk-in chains with online ordering (Copy-Top). "No catalogue sells a 10 mm double crease at quantity 1" means "not found", not "does not exist".
+- **French letter and card APIs missing from the comparison**: MySendingBox (formerly Seeuletter), La Poste's own online letter and postcard services; consumer benchmarks Dromadaire, Cheerz, Photoweb, Planet Cards. Popcarte and Fizzer have business offers: "no API" was a non-finding.
+- **VAT on postage**: universal-service stamps are VAT-exempt, while a printed-and-mailed card sold as one supply carries 20 % VAT on the whole price; this changes the in-house versus outsourced comparison once the VAT franchise is exceeded.
+- **Mandatory marks on the printed object**: the printer's name and address on printed matter made public (loi du 29 juillet 1881, art. 3, with an exemption for private stationery — "travaux de ville"); Triman and sorting information for printed paper given to households (Code de l'environnement art. L. 541-9-3). Applicability to a personal gift card is unchecked.
+- **EU Deforestation Regulation**: paper is in scope; the December 2025 amendment reportedly postponed application to end-2026 / mid-2027 and removed printed products from scope. It matters for what "legal baseline" means for paper sourcing. (Merci Facteur states its card board is "certifié pour la lutte contre la déforestation" [V1, README], without naming a scheme.)
+- **Merci Facteur's legal entity** and the commercial terms of its PRO plan.
 
 ### 8.2 How to get real quotes
 
@@ -628,7 +643,7 @@ ESG
 1. Offer fulfilment in this fixed default order: (a) print at home, (b) one card printed and mailed to the recipient, (c) batch order of one title. Home print is always available and free; (b) and (c) are disabled until a provider is configured.
 2. Put every printer behind one provider interface that declares capabilities: `single_fold_card`, `double_crease_jacket`, `folder_with_spine`, `book_cover_with_spine`, `plain_letter`. Each provider also declares: minimum quantity, quantity tiers, accepted formats, bleed, crease-mark convention, delivery mode (letter to recipient or parcel to buyer), production country, hosting country, DPA reference.
 3. Ship a **fake print provider** first. It must cover both flows: a tiered batch quote (HT and TTC by quantity) and a single mailed order with the states accepted, printed, posted, delivered, failed, plus a weight-band calculation. Real adapters come in this order: Merci Facteur, then Gelato. Book POD stays behind a feature flag that is off by default.
-4. Generate these layouts from the same card data: `home-a4` (A4 landscape, spread 230 × 178 mm at 100 %, fold ticks outside the trim, 100 mm calibration ruler); `jacket-poche` (trim 230 × 178 mm, creases at 110 and 120 mm from the left trim edge, 3 mm bleed, so 236 × 184 mm); `jacket-a5` (trim 306 × 210 mm, creases at 148 and 158 mm); `card-a5-single-fold` (open 300 × 210 mm, one fold at 150 mm, for Merci Facteur); `card-a6-single-fold` (open 210 × 148 mm, for catalogue web-to-print).
+4. Generate these layouts from the same card data: `home-a4` (A4 landscape, spread 230 × 178 mm at 100 %, fold ticks outside the trim, 100 mm calibration ruler); `jacket-poche` (trim 230 × 178 mm, creases at 110 and 120 mm from the left trim edge, 3 mm bleed, so 236 × 184 mm); `jacket-a5` (trim 306 × 210 mm, creases at 148 and 158 mm); `card-a5-single-fold` (open 300 × 210 mm, one fold at 150 mm, for Merci Facteur); `card-a6-single-fold` (open 210 × 148 mm, for catalogue web-to-print). (Fact-check: Merci Facteur's API README gives its folded card as 280 × 195 mm open and takes one JPEG visual, so `card-a5-single-fold` is not what that API accepts; see item 25.)
 5. On single-fold layouts, print the 10 mm spine band on the front panel immediately beside the fold (150–160 mm on the A5 layout) and fit the cover, uncropped, in the remaining 140 × 210 mm. Print tick marks outside the trim for an optional second, hand-made fold at 160 mm, which turns the card into a jacket with a real spine. This is a design inference to test on a real sample.
 6. Export per-provider PDFs: 3 mm bleed by default; no crease or fold line inside the trim for card APIs; artwork supplied unfolded with bleed for Gelato; batch files marked "livré à plat, rainé non plié". The crease-line convention (outside ticks, spot-colour layer, or separate view file) is a provider setting.
 7. Compute the mass of every mailed item: area × grammage + envelope (8 g default for C5). Warn when the total exceeds 19 g and refuse the "20 g" postage price when it exceeds 20 g. Default board for mailed poche jackets: 250 g/m² (10.2 g + 8 g = 18.2 g); at 300 g/m² the same jacket reaches 20.3 g and moves to the 100 g band. Default for batches: 300 g/m². A closed poche jacket (120 × 178 mm) fits a C5 envelope (162 × 229 mm).
@@ -641,7 +656,7 @@ ESG
 14. Send a print provider only the PDF and the delivery name and address. Never send the buyer's e-mail, the gift message outside the PDF, or order metadata. Delete the recipient's address 30 days after the "delivered" or "posted" status; keep only provider, production country, timestamps and cost.
 15. Refuse any order to a print provider unless a rights basis is recorded for the cover (reseller licence reference or rights-holder declaration). Home print never needs one.
 16. Keep a supplier registry with these fields: legal entity, seat country, ultimate owner, production country for French orders, hosting country, DPA URL, sub-processor list date, and an exposure value among `none_known`, `us_listed_group`, `us_parent`, `us_cloud_host`, `unknown`. Unknown is the default and is displayed as unknown.
-17. Provide a strict setting `eu_only` (default on for mailed singles) that hides any provider not meeting all three: controlled from the EU/EEA, EU hosting stated in writing, DPA signed. On current evidence no real provider passes: Maileva meets the first two conditions, Merci Facteur only the first as far as is known. Each passes once its signed DPA and hosting answer are recorded in the registry.
+17. Provide a strict setting `eu_only` (default on for mailed singles) that hides any provider not meeting all three: controlled from the EU/EEA, EU hosting stated in writing, DPA signed. On current evidence no real provider passes: Maileva meets the first condition and states French hosting only in a brochure (not in writing in the sense of this rule, per the fact-check), Merci Facteur only the first as far as is known. Each passes once its signed DPA and hosting answer are recorded in the registry.
 18. Environmental and social statements shown to users are built only from registry fields that carry a licence number and a verification date less than 12 months old, using the pattern "Imprimé à {ville} par {imprimeur} — {label} n° {licence}". A test fails the build if translation files contain "neutre en carbone", "climate neutral", "klimaneutral", "éco-responsable", "eco-friendly", "green printing" or a tree-planting promise.
 19. The printer brief generated with every batch PDF states: CMYK only, no lamination, no foil, no spot UV, recycled uncoated or matt-coated board, grain parallel to the creases, delivered flat. Lamination is an explicit opt-in; the generator suggests it, or a lighter spine colour, when a dark solid crosses a crease.
 20. Implement the ESG grid of section 6.4 as data: twelve criteria with their maxima, a floor and a ceiling score per supplier, and the evidence link and date for every point. The admin view sorts by floor score and shows the gap.
@@ -649,3 +664,45 @@ ESG
 22. Store every price HT with its VAT rate and show consumers TTC. When a supplier's VAT status is unknown (Merci Facteur today), assume the published figure is HT, which is the more expensive reading, until an invoice shows otherwise.
 23. Raise an admin alert when mailed singles exceed 300 a month for two consecutive months (time to request a direct mailing quote from an EA or mailing house) and when they exceed 2,000 a month (Merci Facteur plan step).
 24. For the book variant, compute spine width from page count with the provider's own formula (Lulu: pages / 444 + 0.06 in) and target 148–175 pages for 10 mm; warn that the object costs about €9–12 delivered and uses about 150 blank pages.
+
+**Added after the fact-check** (items 1–24 keep their numbers)
+
+25. The Merci Facteur adapter has two products. `letter`: the `home-a4` PDF (colour, recto or recto-verso, up to 10 PDF files, 50 MB each), which is the default single-item route. `folded_card`: a single JPEG visual, short side = 0.71 × long side, 800 × 1124 to 4000 × 2840 px (recommended 1200 × 1690), at most 4 MB, sent by URL or base64, 350 g/m² board, 140 × 195 mm closed. The provider capability list gains `single_visual_only`; a provider with it cannot receive a four-panel layout, and the `folded_card` product stays disabled until a test order shows the inside printed as designed. The README says "RVB conseillé": the JPEG export for this provider is the one documented exception to the CMYK rule and is labelled so in the preflight report.
+26. Price the Merci Facteur card as a range, €4.29 floor to €6.33 ceiling, with the base cost no lower than the midpoint (about €5.3) until a test invoice exists; read the real price from its `/getPostagePrice` endpoint once an account exists and store it as class Q.
+27. Weight calculation for Merci Facteur cards uses its stated 350 g/m² board and a C5 envelope (about 27 g mailed for the folded card). Retail weight bands are applied only to items the buyer stamps; provider postage is taken from the provider's price, never computed from La Poste retail bands.
+28. The ESG data model stores the date of every evidence item; points backed by evidence older than three years (proposal) are shown separately and excluded from the default floor score. Criterion E1 is marked "probably unattainable" for single-card services (de-inkability of liquid toner and inkjet).
+29. In standalone mode (an individual orders a mailed card), the recipient-information notice of GDPR Art. 14 is produced with the order; the postal operator is recorded as an independent controller, not as a sub-processor.
+30. The printer brief of item 19 asks for written confirmation of compliance with the French mineral-oil restriction (AGEC art. 112) from any printer outside France, and asks whether the printer's name and address must appear on the card (loi de 1881 art. 3) and whether Triman information applies; the answers are stored in the supplier registry.
+31. VAT handling distinguishes VAT-exempt stamps bought by the buyer from a printed-and-mailed supply sold by us, which carries VAT on the whole price.
+
+---
+
+## Verification log
+
+Applied on 2026-11-12 from `factcheck/printers.md`. The fact-checker ran no web search (all refused) and fetched nothing; its verdicts marked "CONFIRMED [MEM]" are its own recollection and are kept as unverified in this document.
+
+**Checked by the editor in this pass**
+
+- Merci Facteur API README, read in full on `raw.githubusercontent.com` (HTTP 200): card formats and dimensions, one JPEG visual per card, 350 g/m² board, C5 envelopes, PDF letters, API orders billed at the PRO interface price, `/getPostagePrice`. `www.merci-facteur.com` itself (OpenAPI file) was refused by the network proxy.
+- Three web searches (result summaries): Merci Facteur card prices (nothing found); La Poste 2026 Lettre verte grid (€1.52 / €3.10, online €1.49 / €2.97; 2027 €1.67 reported by third parties only); French transposition of Directive (EU) 2024/825 (DDADUE bill arts. 20–21; reported not yet transposed in late 2026; sources are law firms and blogs).
+
+**Corrected**
+
+1. Merci Facteur evidence V2 → V1 (single vendor) everywhere; "the only verified per-card route" → "the only one found".
+2. Merci Facteur artwork: the checker suspected (memory) that cards take a front visual only; the README confirms one JPEG visual per card. Launch recommendation changed to the letter route (§1, §3.4, §4, §7.1, §7.2; implications 25–27).
+3. "Mass web-to-print does not sell single copies" → "the six shops read had minimums of 10–50".
+4. "Four printers agree on €0.36–0.60" → one printer priced the product; the jacket €0.60 / 1.00 / 1.50 is a pure guess.
+5. Exaprint E6 12 → 8 and S3 5 → 2 (floor 24 → 17); Gelato G1 4 → 2 (floor 16 → 14); Onlineprinters G1 2 → 1 (floor 30 → 29); Prodigi E6 0 → 4 (floor 6 → 10). Stale-evidence floors added.
+6. AGEC art. 112: a mineral-oil threshold ban, not a vegetable-ink mandate.
+7. Directive (EU) 2024/825: binding in France only through transposition, reported incomplete.
+8. Maileva "EU hosting" rests on one brochure; `eu_only` passes nobody yet (implication 17 amended).
+9. Micro-entreprise rate: 12.3 % for goods, 21.2 % for services (checker's recall).
+10. OETH deduction goes to the buyer of record.
+
+**Checker finding not upheld**
+
+- La Poste 100 g rate: the checker expected €3.04 (twice the 20 g rate, from memory) and doubted €3.10 / €2.97. The editor's search found €3.10 and €2.97 online for 2026; the figures and the €1.58 band jump stand.
+
+**Added (omissions)**: quantity-1 upload shops; French letter/card APIs and consumer benchmarks; industrial mail tariffs; VAT on postage; imprint and Triman marks; EU Deforestation Regulation; Green Claims withdrawal; de-inkability and E1; GDPR Art. 14 in standalone mode; EU postage by format; stale evidence; Prodigi inconsistency (§3.6, §5, §6.1–6.7, §8.1, implications 25–31). All of these come from the checker's recall and remain to be verified.
+
+**Still unverified**: every vendor price other than the La Poste 2026 grid; the 2027 La Poste rates on laposte.fr; Cimpress's SAXOPRINT/viaprinto closing (the document's sources look solid but were not re-opened); every label, licence and register entry; Exaprint's plant scope and SIRET requirement; Gelato's card prices, French partner and Gelato+ price; Onlineprinters' owner; Data Privacy Framework appeal status after mid-2026; all carbon figures; all labour recollections; Merci Facteur's legal entity, DPA, print site and whether the folded card can carry an inside visual.

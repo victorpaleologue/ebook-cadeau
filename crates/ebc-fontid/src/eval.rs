@@ -174,7 +174,8 @@ pub fn standard_conditions() -> Vec<Condition> {
         Condition { backgrounds: vec![Background::Textured], ..clean() }
             .named("clean + textured background"),
         Condition { spacing: (0.10, 0.20), ..clean() }.named("clean + tracking 0.10–0.20 em"),
-        Condition { spacing: (-0.06, -0.03), ..clean() }.named("clean + tight tracking −0.06..−0.03"),
+        Condition { spacing: (-0.06, -0.03), ..clean() }
+            .named("clean + tight tracking −0.06..−0.03"),
         Condition { multi_line: true, ..clean() }.named("clean + multi-line"),
         Condition { upper_share: 1.0, ..clean() }.named("clean + ALL CAPS on cover"),
         Condition { with_text: false, ..clean() }.named("clean, title unknown"),
@@ -412,7 +413,8 @@ fn make_case(
 }
 
 fn hash(s: &str) -> u64 {
-    s.bytes().fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ u64::from(b)).wrapping_mul(0x100_0000_01b3))
+    s.bytes()
+        .fold(0xcbf2_9ce4_8422_2325u64, |h, b| (h ^ u64::from(b)).wrapping_mul(0x100_0000_01b3))
 }
 
 fn is_entry(entry: &IndexEntry, meta: &IndexEntryMeta) -> bool {
@@ -566,8 +568,12 @@ pub fn evaluate_holdout(
         }
         let Some(case) = make_case(fonts, condition, opts, i) else { continue };
         let reduced = FontIndex::from_entries(rest.iter().cloned());
-        let id =
-            identify_detailed(&case.cover.image, &case.cover.title_region, Some(&case.title), &reduced);
+        let id = identify_detailed(
+            &case.cover.image,
+            &case.cover.title_region,
+            Some(&case.title),
+            &reduced,
+        );
         out.cases += 1;
         chance += siblings as f32 / rest.len() as f32;
         out.sibling_top1 += usize::from(family_first(&id, meta));
@@ -579,7 +585,11 @@ pub fn evaluate_holdout(
 }
 
 fn percent(count: usize, total: usize) -> String {
-    if total == 0 { "–".to_string() } else { format!("{:.0} %", 100.0 * count as f64 / total as f64) }
+    if total == 0 {
+        "–".to_string()
+    } else {
+        format!("{:.0} %", 100.0 * count as f64 / total as f64)
+    }
 }
 
 /// The rows as a Markdown table (accuracy in percent of the covers drawn, mean
@@ -593,7 +603,9 @@ pub fn format_table(rows: &[Row]) -> String {
     for r in rows {
         let n = r.cases;
         let rr = |count: usize| if r.with_text { percent(count, n) } else { "–".to_string() };
-        let ms = |total: f64| if n == 0 { "–".to_string() } else { format!("{:.1}", total / n as f64) };
+        let ms = |total: f64| {
+            if n == 0 { "–".to_string() } else { format!("{:.1}", total / n as f64) }
+        };
         out.push_str(&format!(
             "| {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} | {} ({}) | {} | {} | {} |\n",
             r.name,
@@ -661,7 +673,9 @@ mod tests {
         let table = format_table(&[Row { name: "empty".into(), ..Row::default() }]);
         assert!(table.contains("| empty | 0 | – |"));
         assert!(format_holdout(&[Holdout::default()]).contains("| 0 | – | – |"));
-        assert!(evaluate(&[], &FontIndex::default(), &standard_conditions(), &EvalOptions::default())
-            .is_empty());
+        assert!(
+            evaluate(&[], &FontIndex::default(), &standard_conditions(), &EvalOptions::default())
+                .is_empty()
+        );
     }
 }

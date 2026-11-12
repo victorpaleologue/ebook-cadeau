@@ -128,7 +128,8 @@ pub(crate) fn analyse(img: &Pixmap, region: &TextRegion) -> Option<Analysis> {
 
     // Huge regions are read block-averaged, so that no full-size buffer is ever built.
     let k = (rect.3 / MAX_CROP_H as u32).max(rect.2 / MAX_CROP_W as u32).max(1);
-    let read = |channel| Gray::from_pixmap_rect_reduced(img, rect.0, rect.1, rect.2, rect.3, channel, k);
+    let read =
+        |channel| Gray::from_pixmap_rect_reduced(img, rect.0, rect.1, rect.2, rect.3, channel, k);
     let mut gray = read(Channel::Luma)?;
     // Coloured text on a coloured ground of the same lightness: use the colour channel
     // that separates best instead.
@@ -650,8 +651,8 @@ mod tests {
         let comps = vec![
             comp(10, 110, 40, 160), // second line
             comp(50, 110, 80, 160),
-            comp(10, 20, 40, 70), // first line
-            comp(50, 35, 80, 70), // x-height letter on the first line
+            comp(10, 20, 40, 70),  // first line
+            comp(50, 35, 80, 70),  // x-height letter on the first line
             comp(90, 35, 120, 85), // letter with a descender on the first line
         ];
         let lines = build_lines(&comps, 200, 200);
@@ -664,11 +665,11 @@ mod tests {
     #[test]
     fn border_components_rules_and_specks_are_ignored() {
         let comps = vec![
-            comp(0, 20, 30, 70),     // touches the left border
-            comp(40, 20, 70, 70),    // letter
-            comp(80, 20, 110, 70),   // letter
-            comp(20, 90, 180, 93),   // horizontal rule
-            comp(120, 40, 121, 41),  // speck
+            comp(0, 20, 30, 70),    // touches the left border
+            comp(40, 20, 70, 70),   // letter
+            comp(80, 20, 110, 70),  // letter
+            comp(20, 90, 180, 93),  // horizontal rule
+            comp(120, 40, 121, 41), // speck
         ];
         let lines = build_lines(&comps, 200, 100);
         assert_eq!(lines.len(), 1);

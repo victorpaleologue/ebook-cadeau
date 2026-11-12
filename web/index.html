@@ -1,0 +1,329 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light dark">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self'; img-src 'self' data: blob: https:; connect-src 'self' https: http://127.0.0.1:* http://localhost:*; worker-src 'self'; object-src 'none'; base-uri 'self'; form-action 'none'">
+<title>eBook cadeau</title>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<script type="module" src="app.js"></script>
+</head>
+<body>
+<a class="skip" href="#main" data-i18n="ui_skip">Aller au formulaire</a>
+
+<header class="masthead">
+  <div class="masthead-inner">
+    <p class="brand"><img src="icon.svg" alt="" width="28" height="28"> <span data-i18n="product_name">eBook cadeau</span></p>
+    <label class="lang-switch"><span data-i18n="language_label">Langue</span>
+      <select id="ui-locale" disabled></select>
+    </label>
+  </div>
+</header>
+
+<p id="boot" class="boot" role="status">Chargement… · Loading…</p>
+
+<div id="fatal" class="fatal" role="alert" hidden>
+  <p lang="fr">Cette page a besoin de WebAssembly et des Web Workers, que ce navigateur ne propose pas. Essayez avec un navigateur récent.</p>
+  <p lang="en">This page needs WebAssembly and Web Workers, which this browser does not provide. Try a recent browser.</p>
+  <p id="fatal-detail" class="hint"></p>
+</div>
+<noscript>
+  <div class="fatal">
+    <p lang="fr">Cette page compose la carte dans votre navigateur et a besoin de JavaScript.</p>
+    <p lang="en">This page composes the card in your browser and needs JavaScript.</p>
+  </div>
+</noscript>
+
+<main id="main" hidden tabindex="-1">
+  <div class="hero">
+    <h1 data-i18n="create_title"></h1>
+    <p data-i18n="ui_intro"></p>
+  </div>
+
+  <nav class="progress">
+    <ol>
+      <li><a href="#step-book"><span class="num" aria-hidden="true">1</span> <span data-i18n="ui_step_book"></span></a></li>
+      <li><a href="#step-cover"><span class="num" aria-hidden="true">2</span> <span data-i18n="ui_step_cover"></span></a></li>
+      <li><a href="#step-spine"><span class="num" aria-hidden="true">3</span> <span data-i18n="ui_step_spine"></span></a></li>
+      <li><a href="#step-message"><span class="num" aria-hidden="true">4</span> <span data-i18n="ui_step_message"></span></a></li>
+      <li><a href="#step-ebook"><span class="num" aria-hidden="true">5</span> <span data-i18n="ui_step_ebook"></span></a></li>
+      <li><a href="#step-card"><span class="num" aria-hidden="true">6</span> <span data-i18n="ui_step_card"></span></a></li>
+    </ol>
+  </nav>
+
+  <form id="card-form" class="layout" novalidate>
+    <div class="steps">
+
+      <!-- 1. The book -->
+      <section id="step-book" class="step" aria-labelledby="h-book">
+        <p class="step-of" data-step="1"></p>
+        <h2 id="h-book" data-i18n="ui_step_book"></h2>
+        <div class="field">
+          <label for="isbn" data-i18n="field_isbn"></label>
+          <div class="inline">
+            <input id="isbn" name="isbn" type="text" inputmode="numeric" autocomplete="off" spellcheck="false" aria-describedby="isbn-hint isbn-status">
+            <button type="button" id="lookup" class="secondary" data-i18n="lookup_cta"></button>
+          </div>
+          <p id="isbn-hint" class="hint" data-i18n="ui_isbn_hint"></p>
+          <p id="isbn-status" class="status" role="status" aria-live="polite"></p>
+          <p id="lookup-privacy" class="hint small"></p>
+        </div>
+        <figure id="lookup-cover" class="lookup-cover" hidden>
+          <img id="lookup-cover-img" alt="" referrerpolicy="no-referrer" decoding="async">
+          <figcaption><strong data-i18n="ui_preview_only_title"></strong> <span id="lookup-cover-note"></span></figcaption>
+        </figure>
+        <h3 class="sub" data-i18n="ui_by_hand"></h3>
+        <div class="field">
+          <label for="title" data-i18n="field_title"></label>
+          <input id="title" name="title" type="text" autocomplete="off" required aria-describedby="title-error">
+          <p id="title-error" class="error" hidden data-i18n="ui_title_required"></p>
+        </div>
+        <div class="field">
+          <label for="subtitle"><span data-i18n="ui_field_subtitle"></span> <span class="opt" data-i18n="ui_optional"></span></label>
+          <input id="subtitle" name="subtitle" type="text" autocomplete="off">
+        </div>
+        <div class="field">
+          <label for="author" data-i18n="field_author"></label>
+          <input id="author" name="author" type="text" autocomplete="off">
+        </div>
+        <div class="row">
+          <div class="field">
+            <label for="publisher"><span data-i18n="ui_field_publisher"></span> <span class="opt" data-i18n="ui_optional"></span></label>
+            <input id="publisher" name="publisher" type="text" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="book-language" data-i18n="ui_book_language"></label>
+            <select id="book-language" name="book-language"></select>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. The cover -->
+      <section id="step-cover" class="step" aria-labelledby="h-cover">
+        <p class="step-of" data-step="2"></p>
+        <h2 id="h-cover" data-i18n="ui_step_cover"></h2>
+        <fieldset class="choices">
+          <legend class="sr-only" data-i18n="ui_step_cover"></legend>
+          <label class="choice">
+            <input type="radio" name="cover-mode" value="typographic" checked>
+            <span><strong data-i18n="ui_cover_typographic"></strong>
+              <span class="hint" data-i18n="ui_cover_typographic_help"></span></span>
+          </label>
+          <label class="choice">
+            <input type="radio" name="cover-mode" value="own">
+            <span><strong data-i18n="ui_cover_own"></strong>
+              <span class="hint" data-i18n="ui_cover_own_help"></span></span>
+          </label>
+        </fieldset>
+        <p class="note"><span data-i18n="ui_cover_why"></span> <a href="legal.html" id="legal-link" data-i18n="ui_legal_note"></a></p>
+        <div id="own-image" class="sub-panel" hidden>
+          <div class="field">
+            <label for="cover-file" data-i18n="ui_choose_image"></label>
+            <input id="cover-file" type="file" accept="image/jpeg,image/png,image/webp" aria-describedby="cover-error">
+          </div>
+          <p id="cover-error" class="error" role="alert" hidden></p>
+          <div id="cover-info" class="cover-info" hidden>
+            <img id="cover-thumb" alt="">
+            <div>
+              <p id="cover-size" class="small"></p>
+              <p id="cover-quality" class="quality"></p>
+              <button type="button" id="cover-remove" class="link-button" data-i18n="ui_remove_image"></button>
+            </div>
+          </div>
+          <fieldset id="rights" class="choices compact">
+            <legend data-i18n="ui_rights_legend"></legend>
+            <div id="rights-list"></div>
+          </fieldset>
+          <p id="rights-note" class="hint" aria-live="polite"></p>
+          <div class="field">
+            <label for="credit"><span data-i18n="ui_cover_credit"></span> <span class="opt" data-i18n="ui_optional"></span></label>
+            <input id="credit" type="text" autocomplete="off">
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. The spine -->
+      <section id="step-spine" class="step" aria-labelledby="h-spine">
+        <p class="step-of" data-step="3"></p>
+        <h2 id="h-spine" data-i18n="ui_step_spine"></h2>
+        <p class="hint" data-i18n="ui_spine_help"></p>
+        <div class="row">
+          <div class="field">
+            <label for="title-font" data-i18n="ui_title_font"></label>
+            <select id="title-font"></select>
+          </div>
+          <div class="field">
+            <label for="ground" data-i18n="ui_ground_colour"></label>
+            <div class="inline">
+              <input id="ground" type="color" value="#1f3a5f" disabled>
+              <label class="check"><input id="ground-auto" type="checkbox" checked> <span data-i18n="ui_ground_auto"></span></label>
+            </div>
+          </div>
+        </div>
+        <div id="swatches" class="swatches" hidden></div>
+        <div class="fontid">
+          <button type="button" id="font-detect" class="secondary" data-i18n="ui_font_detect" aria-describedby="font-detect-help font-result"></button>
+          <p id="font-detect-help" class="hint small" data-i18n="ui_font_detect_help"></p>
+          <p id="font-result" class="status" role="status" aria-live="polite"></p>
+        </div>
+        <p id="direction" class="hint"></p>
+        <div id="adapt-box" class="sub-panel">
+          <label class="check"><input id="adapt" type="checkbox" aria-describedby="adapt-help"> <span data-i18n="ui_adapt_tick"></span></label>
+          <p id="adapt-help" class="hint small" data-i18n="ui_adapt_help"></p>
+          <p id="adapt-unavailable" class="hint small" data-i18n="ui_adapt_unavailable"></p>
+          <fieldset id="spine-styles" class="choices compact" hidden>
+            <legend class="sr-only" data-i18n="ui_step_spine"></legend>
+            <label class="choice"><input type="radio" name="spine" value="typeset" checked> <span data-i18n="ui_spine_typeset"></span></label>
+            <label class="choice"><input type="radio" name="spine" value="cover_colour"> <span data-i18n="ui_spine_cover_colour"></span></label>
+            <label class="choice"><input type="radio" name="spine" value="edge_continuation"> <span data-i18n="ui_spine_edge"></span></label>
+          </fieldset>
+        </div>
+      </section>
+
+      <!-- 4. The message -->
+      <section id="step-message" class="step" aria-labelledby="h-message">
+        <p class="step-of" data-step="4"></p>
+        <h2 id="h-message" data-i18n="ui_step_message"></h2>
+        <div class="row">
+          <div class="field">
+            <label for="giver"><span data-i18n="field_giver"></span> <span class="opt" data-i18n="ui_optional"></span></label>
+            <input id="giver" type="text" autocomplete="off">
+          </div>
+          <div class="field">
+            <label for="recipient"><span data-i18n="field_recipient"></span> <span class="opt" data-i18n="ui_optional"></span></label>
+            <input id="recipient" type="text" autocomplete="off">
+          </div>
+        </div>
+        <div class="field">
+          <label for="message"><span data-i18n="field_message"></span> <span class="opt" data-i18n="ui_optional"></span></label>
+          <textarea id="message" rows="3" aria-describedby="message-hint"></textarea>
+          <p id="message-hint" class="hint small" data-i18n="ui_message_hint"></p>
+        </div>
+        <div class="field narrow">
+          <label for="card-locale" data-i18n="ui_card_language"></label>
+          <select id="card-locale"></select>
+        </div>
+      </section>
+
+      <!-- 5. The eBook -->
+      <section id="step-ebook" class="step" aria-labelledby="h-ebook">
+        <p class="step-of" data-step="5"></p>
+        <h2 id="h-ebook" data-i18n="ui_step_ebook"></h2>
+        <fieldset class="choices">
+          <legend class="sr-only" data-i18n="ui_step_ebook"></legend>
+          <label class="choice"><input type="radio" name="ebook-mode" value="upload"> <span data-i18n="ui_ebook_upload"></span></label>
+          <label class="choice"><input type="radio" name="ebook-mode" value="code"> <span data-i18n="ui_ebook_code"></span></label>
+          <label class="choice"><input type="radio" name="ebook-mode" value="demo"> <span data-i18n="ui_ebook_demo"></span></label>
+        </fieldset>
+
+        <div id="ebook-upload" class="sub-panel" hidden>
+          <p id="upload-help" class="hint"></p>
+          <p class="note" data-i18n="upload_purchased_notice"></p>
+          <div class="field">
+            <label for="ebook-file" data-i18n="field_file"></label>
+            <input id="ebook-file" type="file" accept=".epub,.pdf,application/epub+zip,application/pdf">
+          </div>
+          <fieldset id="ebook-rights" class="choices compact">
+            <legend data-i18n="rights_basis_label"></legend>
+            <label class="choice"><input type="radio" name="ebook-rights" value="own_work"> <span data-i18n="rights_own_work"></span></label>
+            <label class="choice"><input type="radio" name="ebook-rights" value="public_domain"> <span data-i18n="rights_public_domain"></span></label>
+            <label class="choice"><input type="radio" name="ebook-rights" value="open_licence"> <span data-i18n="rights_open_licence"></span></label>
+            <label class="choice"><input type="radio" name="ebook-rights" value="licensed_distributor"> <span data-i18n="rights_licensed_distributor"></span></label>
+          </fieldset>
+          <label class="check"><input id="ebook-confirm" type="checkbox"> <span data-i18n="rights_confirm"></span></label>
+          <button type="button" id="create-gift" class="primary" data-i18n="ui_create_gift"></button>
+          <p id="create-status" class="status" role="status" aria-live="polite"></p>
+        </div>
+
+        <div id="ebook-code" class="sub-panel" hidden>
+          <div class="field">
+            <label for="code" data-i18n="code_label"></label>
+            <input id="code" type="text" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-describedby="code-hint code-status">
+            <p id="code-hint" class="hint small" data-i18n="ui_code_hint"></p>
+            <p id="code-status" class="status" role="status" aria-live="polite"></p>
+          </div>
+        </div>
+
+        <div id="ebook-demo" class="sub-panel" hidden>
+          <p class="note" data-i18n="ui_ebook_demo_note"></p>
+        </div>
+
+        <div id="site-field" class="field" hidden>
+          <label for="site" data-i18n="ui_site_address"></label>
+          <input id="site" type="url" inputmode="url" autocomplete="off" spellcheck="false" aria-describedby="site-error">
+          <p id="site-error" class="error" hidden data-i18n="err_invalid_base_url"></p>
+        </div>
+
+        <div id="gift-result" class="gift-result" role="status" aria-live="polite" hidden>
+          <p id="gift-code" class="gift-code"></p>
+          <p id="gift-key" class="small"></p>
+        </div>
+      </section>
+    </div>
+
+    <!-- The live preview -->
+    <aside class="preview-pane" aria-labelledby="h-preview">
+      <h2 id="h-preview" data-i18n="preview_label"></h2>
+      <p id="preview-status" class="hint" role="status" aria-live="polite"></p>
+      <figure class="sheet">
+        <img id="preview-outside" alt="">
+        <figcaption data-i18n="ui_preview_outside"></figcaption>
+      </figure>
+      <figure class="sheet">
+        <img id="preview-inside" alt="">
+        <figcaption data-i18n="ui_preview_inside"></figcaption>
+      </figure>
+    </aside>
+
+    <!-- 6. The card -->
+    <section id="step-card" class="step final" aria-labelledby="h-card">
+      <p class="step-of" data-step="6"></p>
+      <h2 id="h-card" data-i18n="ui_step_card"></h2>
+      <div class="row">
+        <div class="field">
+          <label for="format" data-i18n="ui_format"></label>
+          <select id="format" aria-describedby="format-note"></select>
+          <p id="format-note" class="hint small"></p>
+        </div>
+        <div class="field">
+          <label for="profile" data-i18n="ui_profile"></label>
+          <select id="profile" aria-describedby="profile-note"></select>
+          <p id="profile-note" class="hint small"></p>
+        </div>
+      </div>
+      <label class="check"><input id="guides" type="checkbox"> <span data-i18n="ui_guides"></span></label>
+      <div class="warnings">
+        <h3 class="sub" data-i18n="ui_warnings"></h3>
+        <ul id="warnings" aria-live="polite"></ul>
+      </div>
+      <p id="duplex-hint" class="hint" data-i18n="ui_duplex_hint"></p>
+      <div class="actions">
+        <button type="button" id="download" class="primary" data-i18n="download_pdf_cta"></button>
+        <a id="download-link" class="download-link" hidden></a>
+      </div>
+      <p id="download-status" class="status" role="status" aria-live="polite"></p>
+      <details id="order" class="order">
+        <summary data-i18n="order_print_cta"></summary>
+        <p id="order-note" class="hint"></p>
+        <div id="order-form" hidden>
+          <div class="field">
+            <label for="order-address" data-i18n="ui_order_address"></label>
+            <textarea id="order-address" rows="3" autocomplete="street-address"></textarea>
+          </div>
+          <button type="button" id="order-submit" class="secondary" data-i18n="order_print_cta"></button>
+          <p id="order-status" class="status" role="status" aria-live="polite"></p>
+        </div>
+      </details>
+    </section>
+  </form>
+</main>
+
+<footer class="footer" id="footer" hidden>
+  <p><span data-i18n="ui_privacy"></span> <a href="legal.html" data-i18n="ui_legal_note"></a></p>
+  <p class="small">eBook cadeau <span id="version"></span></p>
+</footer>
+</body>
+</html>

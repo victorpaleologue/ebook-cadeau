@@ -90,7 +90,9 @@ fn run() -> Result<(), String> {
 
     // Refuse font files the manifest does not know.
     let mut unlisted = Vec::new();
-    for entry in std::fs::read_dir(&fonts_dir).map_err(|e| format!("{}: {e}", fonts_dir.display()))? {
+    for entry in
+        std::fs::read_dir(&fonts_dir).map_err(|e| format!("{}: {e}", fonts_dir.display()))?
+    {
         let name = entry.map_err(|e| e.to_string())?.file_name().to_string_lossy().into_owned();
         let lower = name.to_lowercase();
         let is_font = lower.ends_with(".ttf") || lower.ends_with(".otf") || lower.ends_with(".ttc");

@@ -215,11 +215,13 @@ impl FaceDescriptor {
                     }
                 }
             }
-            if count > 0 {
-                present[slot] = true;
-                for (o, s) in records[slot * RECORD_LEN..(slot + 1) * RECORD_LEN].iter_mut().zip(&sums) {
-                    *o = ((s + count / 2) / count) as u8;
-                }
+            if count == 0 {
+                continue;
+            }
+            present[slot] = true;
+            for (o, s) in records[slot * RECORD_LEN..(slot + 1) * RECORD_LEN].iter_mut().zip(&sums)
+            {
+                *o = (s + count / 2).checked_div(count).unwrap_or(0).min(255) as u8;
             }
         }
         Self { table: Arc::clone(table), present, records }
@@ -243,9 +245,8 @@ pub(crate) fn reference_record(font: &Font, ch: char) -> Option<[u8; RECORD_LEN]
     let Features(features) = describe(&crop)?;
     let mut record = [0u8; RECORD_LEN];
     record[..FEATURE_LEN].copy_from_slice(&features);
-    let size_byte = |px: usize| {
-        (px as f32 / REF_PX_PER_EM * GEOM_SIZE_SCALE + 0.5).clamp(0.0, 255.0) as u8
-    };
+    let size_byte =
+        |px: usize| (px as f32 / REF_PX_PER_EM * GEOM_SIZE_SCALE + 0.5).clamp(0.0, 255.0) as u8;
     record[G_HEIGHT] = size_byte(crop.h);
     record[G_WIDTH] = size_byte(crop.w);
     let bottom_em = (raster.top as f32 + y1 as f32) / REF_PX_PER_EM;
@@ -442,9 +443,8 @@ impl FontIndex {
     #[must_use]
     pub fn from_entries(entries: impl IntoIterator<Item = IndexEntry>) -> Self {
         let mut entries: Vec<IndexEntry> = entries.into_iter().collect();
-        let table = entries
-            .first()
-            .map_or_else(CharTable::reference, |e| Arc::clone(&e.descriptor.table));
+        let table =
+            entries.first().map_or_else(CharTable::reference, |e| Arc::clone(&e.descriptor.table));
         for entry in &mut entries {
             if !Arc::ptr_eq(&entry.descriptor.table, &table) {
                 entry.descriptor = Arc::new(entry.descriptor.rebased(&table));

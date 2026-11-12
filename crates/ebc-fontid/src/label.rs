@@ -266,7 +266,11 @@ fn width_mismatch(a: f32, b: f32) -> f32 {
 /// Aligns the glyphs of one line with a run of letters when their counts differ a
 /// little: a glyph may stand for two or three touching letters, two glyphs for one
 /// broken letter. Returns the cost and the one-to-one pairs `(glyph, letter)`.
-fn align_glyphs(widths: &[f32], gaps: &[f32], expected: &[f32]) -> Option<(f32, Vec<(usize, usize)>)> {
+fn align_glyphs(
+    widths: &[f32],
+    gaps: &[f32],
+    expected: &[f32],
+) -> Option<(f32, Vec<(usize, usize)>)> {
     let (g, n) = (widths.len(), expected.len());
     if g < 2 || n < 3 || g.abs_diff(n) > (n / 4).max(2) {
         return None;
@@ -349,7 +353,11 @@ struct Structure {
 }
 
 /// Distributes consecutive words over the lines.
-fn match_structure(obs: &Observed, words: &[Word], centroids: &FaceDescriptor) -> Option<Structure> {
+fn match_structure(
+    obs: &Observed,
+    words: &[Word],
+    centroids: &FaceDescriptor,
+) -> Option<Structure> {
     let n_lines = obs.lines.len();
     let n_words = words.len();
     if n_lines == 0 || n_lines > MAX_LINES || n_words == 0 {
@@ -367,9 +375,7 @@ fn match_structure(obs: &Observed, words: &[Word], centroids: &FaceDescriptor) -
     let expected: Vec<f32> = letters
         .iter()
         .map(|c| {
-            c.base
-                .and_then(|b| centroids.record(b))
-                .map_or(0.62, |r| record_geometry(r).1 / cap)
+            c.base.and_then(|b| centroids.record(b)).map_or(0.62, |r| record_geometry(r).1 / cap)
         })
         .collect();
 
@@ -417,11 +423,11 @@ fn match_structure(obs: &Observed, words: &[Word], centroids: &FaceDescriptor) -
                 if !before.is_finite() {
                     continue;
                 }
-                if let Some((c, _)) = pair(l, j, k) {
-                    if before + c < value {
-                        value = before + c;
-                        how = j;
-                    }
+                if let Some((c, _)) = pair(l, j, k)
+                    && before + c < value
+                {
+                    value = before + c;
+                    how = j;
                 }
             }
             best[(l + 1) * stride + k] = value;
@@ -505,8 +511,8 @@ fn plausibility(obs: &Observed, labels: &[Label], centroids: &FaceDescriptor) ->
         };
         let reference = &record[..f.0.len()];
         let hog = hog_distance(f.hog(), &reference[..f.hog().len()]);
-        let aspect = f32::from(f.scalars()[S_ASPECT].abs_diff(reference[f.hog().len() + S_ASPECT]))
-            / 255.0;
+        let aspect =
+            f32::from(f.scalars()[S_ASPECT].abs_diff(reference[f.hog().len() + S_ASPECT])) / 255.0;
         let b = o.bbox(label.whole);
         let rel_px = (b[3] - b[1]) / line_px[o.line].max(1.0);
         let rel_em = record_geometry(record).0 / line_em[o.line].max(1e-3);
@@ -514,6 +520,38 @@ fn plausibility(obs: &Observed, labels: &[Label], centroids: &FaceDescriptor) ->
         n += 1;
     }
     (n > 0).then(|| sum / n as f32)
+}
+
+/// The runs of consecutive words `(start, end)` the region may show: the whole text
+/// first, then every shorter run whose letter count is close to the number of glyphs.
+///
+/// A box around part of a title ("de la nuit" of "Voyage au bout de la nuit") fits
+/// several runs of words with the same letter count ("au bout de", "bout de la"); the
+/// letter counts alone cannot tell them apart, the shapes can, so every run that fits
+/// is labelled and the most plausible one wins.
+fn windows(ws: &[Word], glyphs: usize) -> Vec<(usize, usize)> {
+    let n = ws.len();
+    let mut out = vec![(0, n)];
+    if glyphs == 0 {
+        return out;
+    }
+    let tolerance = (glyphs / 4).max(2);
+    for start in 0..n {
+        let mut letters = 0usize;
+        for end in start + 1..=n {
+            letters += ws[end - 1].chars.len();
+            if (start, end) == (0, n) {
+                break;
+            }
+            if letters.abs_diff(glyphs) <= tolerance {
+                out.push((start, end));
+            }
+            if letters > glyphs + tolerance {
+                break;
+            }
+        }
+    }
+    out
 }
 
 /// Matches `text` with the glyphs under every case hypothesis. Returns the hypotheses
@@ -536,22 +574,41 @@ pub(crate) fn label(obs: &Observed, text: &str, centroids: &FaceDescriptor) -> V
         }
         let ws = words(&cased);
         tried.push(cased);
-        let Some(structure) = match_structure(obs, &ws, centroids) else { continue };
         let total: usize = ws.iter().map(|w| w.chars.len()).sum();
-        let Some(plaus) = plausibility(obs, &structure.labels, centroids) else { continue };
-        if plaus > PLAUSIBLE_MAX || structure.labels.is_empty() {
-            continue;
+        // The most plausible placement of the text: (key, structure, first word).
+        let mut best: Option<(f32, Structure, usize)> = None;
+        for (start, end) in windows(&ws, obs.glyphs.len()) {
+            let Some(structure) = match_structure(obs, &ws[start..end], centroids) else {
+                continue;
+            };
+            if structure.labels.is_empty() {
+                continue;
+            }
+            let Some(plaus) = plausibility(obs, &structure.labels, centroids) else { continue };
+            if plaus > PLAUSIBLE_MAX {
+                continue;
+            }
+            let key = plaus + 0.03 * structure.cost;
+            if best.as_ref().is_none_or(|(k, _, _)| key < *k) {
+                best = Some((key, structure, start));
+            }
         }
+        let Some((key, structure, start)) = best else { continue };
         let line_texts = structure
             .line_words
             .iter()
             .map(|r| {
-                r.clone()
-                    .map(|r| ws[r].iter().map(|w| w.text.as_str()).collect::<Vec<_>>().join(" "))
+                r.clone().map(|r| {
+                    ws[start + r.start..start + r.end]
+                        .iter()
+                        .map(|w| w.text.as_str())
+                        .collect::<Vec<_>>()
+                        .join(" ")
+                })
             })
             .collect();
         out.push((
-            plaus + 0.03 * structure.cost,
+            key,
             Labelling {
                 case,
                 labels: structure.labels,
@@ -610,6 +667,21 @@ mod tests {
         assert!(is_tall('ß') && is_tall('Ж') && !is_tall('-') && !is_tall('\''));
         assert!(words("... — !!").len() <= 1);
         assert!(words("").is_empty());
+    }
+
+    #[test]
+    fn windows_list_the_runs_of_words_that_fit_the_glyph_count() {
+        let ws = words("Voyage au bout de la nuit");
+        let runs = windows(&ws, 8);
+        assert_eq!(runs[0], (0, 6), "the whole text comes first");
+        // 8 letters: "Voyage au", "au bout de", "bout de la", "de la nuit" (and runs
+        // within two letters of 8).
+        for run in [(0, 2), (1, 4), (2, 5), (3, 6)] {
+            assert!(runs.contains(&run), "{run:?} in {runs:?}");
+        }
+        assert!(!runs.contains(&(0, 5)), "16 letters do not fit 8 glyphs");
+        assert_eq!(windows(&ws, 0), vec![(0, 6)]);
+        assert_eq!(windows(&[], 5), vec![(0, 0)]);
     }
 
     #[test]

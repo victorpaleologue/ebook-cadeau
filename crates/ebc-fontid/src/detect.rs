@@ -194,7 +194,8 @@ fn title_prior(img: &Pixmap, region: &TextRegion, title: &str, no_shapes: &FaceD
         if tried.contains(&cased) {
             continue;
         }
-        if let Some((coverage, exact, matched_lines)) = match_text_structure(&obs, &cased, no_shapes)
+        if let Some((coverage, exact, matched_lines)) =
+            match_text_structure(&obs, &cased, no_shapes)
         {
             // Only the whole title with the right letter count on every line is strong
             // evidence; a part of it fits other text too easily.
@@ -277,9 +278,16 @@ fn letter_like(c: &Comp, w: usize, h: usize) -> bool {
 
 /// Groups letter-like components into lines. `labels` and `comps` describe the ink mask
 /// of one polarity of `gray` (`light`: the ink is lighter than its surroundings).
-fn find_lines(gray: &Gray, labels: &[u32], comps: &[Comp], light: bool, c_min: f32) -> Vec<LineBox> {
+fn find_lines(
+    gray: &Gray,
+    labels: &[u32],
+    comps: &[Comp],
+    light: bool,
+    c_min: f32,
+) -> Vec<LineBox> {
     let (w, h) = (gray.w, gray.h);
-    let mut order: Vec<usize> = (0..comps.len()).filter(|&i| letter_like(&comps[i], w, h)).collect();
+    let mut order: Vec<usize> =
+        (0..comps.len()).filter(|&i| letter_like(&comps[i], w, h)).collect();
     if order.len() > MAX_CANDIDATES {
         order.sort_by(|&a, &b| comps[b].area.cmp(&comps[a].area));
         order.truncate(MAX_CANDIDATES);
@@ -299,8 +307,7 @@ fn find_lines(gray: &Gray, labels: &[u32], comps: &[Comp], light: bool, c_min: f
     for i in 0..n {
         let a = letters[i];
         let (ha, sa) = (a.h() as f32, a.stroke_width());
-        for j in i + 1..n {
-            let b = letters[j];
+        for (j, &b) in letters.iter().enumerate().skip(i + 1) {
             let gap = b.x0 as f32 - a.x1 as f32;
             if gap > max_gap {
                 break;
@@ -404,7 +411,8 @@ fn find_lines(gray: &Gray, labels: &[u32], comps: &[Comp], light: bool, c_min: f
         // Stroke-width regularity.
         let strokes: Vec<f32> = tall.iter().map(|c| c.stroke_width()).collect();
         let mean = strokes.iter().sum::<f32>() / strokes.len() as f32;
-        let var = strokes.iter().map(|s| (s - mean) * (s - mean)).sum::<f32>() / strokes.len() as f32;
+        let var =
+            strokes.iter().map(|s| (s - mean) * (s - mean)).sum::<f32>() / strokes.len() as f32;
         let cv = var.sqrt() / mean.max(1e-3);
         // Alignment of the bottoms on a (possibly slanted) baseline.
         let points: Vec<(f32, f32)> = tall.iter().map(|c| (c.cx(), c.y1 as f32)).collect();
@@ -426,7 +434,8 @@ fn find_lines(gray: &Gray, labels: &[u32], comps: &[Comp], light: bool, c_min: f
         // dark text leaves in the light mask (and vice versa) and the counters of
         // letters do not: they have the level of the background.
         let pad = (0.35 * reference).round().max(2.0) as u32;
-        let ring = ring_level(gray, x0.saturating_sub(pad), y0.saturating_sub(pad), x1 + pad, y1 + pad);
+        let ring =
+            ring_level(gray, x0.saturating_sub(pad), y0.saturating_sub(pad), x1 + pad, y1 + pad);
         let ink = level_sum[root] as f32 / level_count[root].max(1) as f32;
         let contrast = if light { ink - ring } else { ring - ink };
         if contrast < c_min.max(20.0) {
@@ -562,7 +571,9 @@ mod tests {
         assert!(find_text_regions(&Pixmap::filled(200, 300, [0, 0, 0, 255])).is_empty());
         assert!(find_text_regions(&Pixmap::filled(3, 3, [0, 0, 0, 255])).is_empty());
         assert!(find_text_regions(&Pixmap::filled(1, 5000, [9, 9, 9, 255])).is_empty());
-        assert!(find_title_regions(&Pixmap::filled(200, 300, [90, 90, 90, 255]), "Title").is_empty());
+        assert!(
+            find_title_regions(&Pixmap::filled(200, 300, [90, 90, 90, 255]), "Title").is_empty()
+        );
         // One isolated blob is not text.
         let mut img = Pixmap::filled(200, 200, [255, 255, 255, 255]);
         bars(&mut img, 90, 90, 1, 30, [0, 0, 0, 255]);

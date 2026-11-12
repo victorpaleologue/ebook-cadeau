@@ -1,0 +1,14 @@
+[package]
+name = "ebc-pdf"
+description = "Print-ready PDF writer (page boxes, PDF/X output intent, embedded fonts and images) for ebc-scene documents."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

@@ -1,0 +1,14 @@
+[package]
+name = "ebc-fontid"
+description = "Image-based font identification against an index of openly licensed fonts."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

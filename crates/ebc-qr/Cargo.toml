@@ -1,0 +1,14 @@
+[package]
+name = "ebc-qr"
+description = "QR code generation tuned for print: compact payloads, vector output, size rules."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

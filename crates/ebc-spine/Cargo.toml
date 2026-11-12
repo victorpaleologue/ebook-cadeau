@@ -1,0 +1,14 @@
+[package]
+name = "ebc-spine"
+description = "Spine design: adapt a provided spine or synthesise a 10 mm spine from the cover."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+
+[lints]
+workspace = true

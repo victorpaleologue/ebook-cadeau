@@ -1,0 +1,64 @@
+[workspace]
+resolver = "3"
+members = ["crates/*", "demo/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.88"
+license = "BSD-3-Clause"
+repository = "https://github.com/victorpaleologue/ebook-cadeau"
+authors = ["Victor Paléologue"]
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_docs = "warn"
+unreachable_pub = "warn"
+
+[workspace.lints.clippy]
+all = { level = "warn", priority = -1 }
+dbg_macro = "warn"
+todo = "warn"
+unwrap_used = "warn"
+print_stdout = "warn"
+
+# Internal crates. Add a line here only for crates that exist under crates/ or demo/.
+[workspace.dependencies]
+ebc-scene = { path = "crates/ebc-scene", version = "0.1.0" }
+ebc-isbn = { path = "crates/ebc-isbn", version = "0.1.0" }
+ebc-model = { path = "crates/ebc-model", version = "0.1.0" }
+ebc-i18n = { path = "crates/ebc-i18n", version = "0.1.0" }
+ebc-color = { path = "crates/ebc-color", version = "0.1.0" }
+ebc-qr = { path = "crates/ebc-qr", version = "0.1.0" }
+ebc-text = { path = "crates/ebc-text", version = "0.1.0" }
+ebc-layout = { path = "crates/ebc-layout", version = "0.1.0" }
+ebc-pdf = { path = "crates/ebc-pdf", version = "0.1.0" }
+ebc-preflight = { path = "crates/ebc-preflight", version = "0.1.0" }
+ebc-catalog = { path = "crates/ebc-catalog", version = "0.1.0" }
+ebc-covers = { path = "crates/ebc-covers", version = "0.1.0" }
+ebc-fontid = { path = "crates/ebc-fontid", version = "0.1.0" }
+ebc-spine = { path = "crates/ebc-spine", version = "0.1.0" }
+ebc-card = { path = "crates/ebc-card", version = "0.1.0" }
+
+# Shared third-party crates (keep this list short; crate-specific deps go in the crate's own Cargo.toml).
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+
+[profile.release]
+opt-level = 3
+lto = "thin"
+codegen-units = 4
+strip = "debuginfo"
+
+# Smaller wasm bundles: `cargo build --profile wasm-release --target wasm32-unknown-unknown -p ebc-wasm`
+[profile.wasm-release]
+inherits = "release"
+opt-level = "s"
+lto = "fat"
+codegen-units = 1
+strip = true
+panic = "abort"
+
+[profile.dev.package."*"]
+opt-level = 1

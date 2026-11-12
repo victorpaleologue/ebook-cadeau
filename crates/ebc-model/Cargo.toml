@@ -1,0 +1,20 @@
+[package]
+name = "ebc-model"
+description = "Domain model for eBook Cadeau: book metadata, gifts, redemption codes, sans-IO HTTP types."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+ebc-isbn = { workspace = true, features = ["serde"] }
+serde = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+serde_json = { workspace = true }
+
+[lints]
+workspace = true

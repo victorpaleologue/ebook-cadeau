@@ -127,15 +127,16 @@ pub(crate) fn analyse(img: &Pixmap, region: &TextRegion) -> Option<Analysis> {
     let (cx1, cy1) = (rx1.saturating_add(margin).min(iw), ry1.saturating_add(margin).min(ih));
     let rect = (cx0, cy0, cx1 - cx0, cy1 - cy0);
 
-    let mut gray = Gray::from_pixmap_rect(img, rect.0, rect.1, rect.2, rect.3, Channel::Luma)?;
+    // Huge regions are read block-averaged, so that no full-size buffer is ever built.
+    let k = (rect.3 / MAX_CROP_H as u32).max(rect.2 / MAX_CROP_W as u32).max(1);
+    let read = |channel| Gray::from_pixmap_rect_reduced(img, rect.0, rect.1, rect.2, rect.3, channel, k);
+    let mut gray = read(Channel::Luma)?;
     // Coloured text on a coloured ground of the same lightness: use the colour channel
     // that separates best instead.
     if class_separation(&gray) < 40.0 {
         let mut best = class_separation(&gray);
         for channel in [Channel::Red, Channel::Green, Channel::Blue] {
-            if let Some(candidate) =
-                Gray::from_pixmap_rect(img, rect.0, rect.1, rect.2, rect.3, channel)
-            {
+            if let Some(candidate) = read(channel) {
                 let sep = class_separation(&candidate);
                 if sep > best + 8.0 {
                     best = sep;

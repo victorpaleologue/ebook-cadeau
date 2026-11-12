@@ -628,7 +628,7 @@ def cash_flow(v: Mapping, level: str, scenario: str, volumes: Sequence) -> SimRe
         contribution = revenue - variable
         cfe_due = year >= 1 and previous_year_turnover > v["tax_cfe_exempt_turnover"]
         fixed = sum(fixed_costs_month(v, level, scenario, regime, cfe_due).values())
-        people = cost_excl_vat(people_costs_month(v, level), v, regime) if level == "seed" else people_costs_month(v, level)
+        people = people_costs_month(v, level)  # company regime: VAT on freelance invoices is recovered
         setup_now = sum(setup.values()) if month == 1 else 0.0
         if vol.new_partners and not counsel_paid:
             setup_now += v["setup_counsel_before_reseller"]
@@ -790,7 +790,7 @@ def annual_fixed_cash(v: Mapping, level: str, scenario: str) -> float:
     """Cash committed in a steady year: fixed lines, people and the full marketing budget."""
     regime = regime_for(level)
     fixed = sum(fixed_costs_month(v, level, scenario, regime, cfe_due=True).values())
-    people = cost_excl_vat(people_costs_month(v, level), v, regime) if level == "seed" else people_costs_month(v, level)
+    people = people_costs_month(v, level)
     sc = SCENARIOS[scenario]
     marketing = marketing_budget_month(v, level) if sc.channels & frozenset("abd") else 0.0
     return 12.0 * (fixed + people + marketing)

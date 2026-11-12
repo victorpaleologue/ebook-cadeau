@@ -40,6 +40,22 @@ impl Gray {
         h: u32,
         channel: Channel,
     ) -> Option<Self> {
+        Self::from_pixmap_rect_reduced(img, x, y, w, h, channel, 1)
+    }
+
+    /// Like [`from_pixmap_rect`](Self::from_pixmap_rect), but every output pixel is the
+    /// average of a `k` x `k` block of source pixels (`k >= 1`; a trailing partial block
+    /// is dropped unless it is the only one). This reads a huge image at a reduced size
+    /// without any full-size intermediate buffer.
+    pub(crate) fn from_pixmap_rect_reduced(
+        img: &Pixmap,
+        x: u32,
+        y: u32,
+        w: u32,
+        h: u32,
+        channel: Channel,
+        k: u32,
+    ) -> Option<Self> {
         if x >= img.width() || y >= img.height() {
             return None;
         }
@@ -48,26 +64,41 @@ impl Gray {
         if w == 0 || h == 0 {
             return None;
         }
+        let k = (k.max(1) as usize).min(w).min(h);
+        let (ow, oh) = (w / k, h / k);
         let stride = img.width() as usize * 4;
         let data = img.data();
-        let mut px = Vec::with_capacity(w * h);
-        for row in 0..h {
-            let start = (y as usize + row) * stride + x as usize * 4;
-            let Some(line) = data.get(start..start + w * 4) else { return None };
-            for p in line.chunks_exact(4) {
-                let a = u32::from(p[3]);
-                let over_white = |c: u8| (u32::from(c) * a + 255 * (255 - a) + 127) / 255;
-                let (r, g, b) = (over_white(p[0]), over_white(p[1]), over_white(p[2]));
-                let v = match channel {
-                    Channel::Luma => (77 * r + 150 * g + 29 * b + 128) >> 8,
-                    Channel::Red => r,
-                    Channel::Green => g,
-                    Channel::Blue => b,
-                };
-                px.push(v.min(255) as u8);
-            }
+        if data.len() < stride * img.height() as usize {
+            return None;
         }
-        Some(Self { w, h, px })
+        let value = |p: &[u8]| -> u32 {
+            let a = u32::from(p[3]);
+            let over_white = |c: u8| (u32::from(c) * a + 255 * (255 - a) + 127) / 255;
+            match channel {
+                Channel::Luma => {
+                    let (r, g, b) = (over_white(p[0]), over_white(p[1]), over_white(p[2]));
+                    ((77 * r + 150 * g + 29 * b + 128) >> 8).min(255)
+                }
+                Channel::Red => over_white(p[0]),
+                Channel::Green => over_white(p[1]),
+                Channel::Blue => over_white(p[2]),
+            }
+        };
+        let mut px = Vec::with_capacity(ow * oh);
+        let mut acc = vec![0u32; ow];
+        let block = (k * k) as u32;
+        for row in 0..oh {
+            acc.iter_mut().for_each(|a| *a = 0);
+            for dy in 0..k {
+                let start = (y as usize + row * k + dy) * stride + x as usize * 4;
+                let line = &data[start..start + ow * k * 4];
+                for (a, chunk) in acc.iter_mut().zip(line.chunks_exact(4 * k)) {
+                    *a += chunk.chunks_exact(4).map(value).sum::<u32>();
+                }
+            }
+            px.extend(acc.iter().map(|&a| ((a + block / 2) / block) as u8));
+        }
+        Some(Self { w: ow, h: oh, px })
     }
 
     /// The whole image as grey.
@@ -433,6 +464,22 @@ mod tests {
         assert_eq!((g.w, g.h), (2, 2));
         assert!(Gray::from_pixmap_rect(&img, 4, 0, 1, 1, Channel::Luma).is_none());
         assert!(Gray::from_pixmap_rect(&img, 0, 0, 0, 1, Channel::Luma).is_none());
+    }
+
+    #[test]
+    fn reduced_reading_averages_blocks() {
+        let mut img = Pixmap::filled(5, 4, [0, 0, 0, 255]);
+        for (x, y) in [(0, 0), (1, 0), (0, 1), (1, 1)] {
+            img.set(x, y, [200, 200, 200, 255]);
+        }
+        img.set(2, 2, [255, 255, 255, 255]);
+        let g = Gray::from_pixmap_rect_reduced(&img, 0, 0, 5, 4, Channel::Luma, 2).expect("ok");
+        assert_eq!((g.w, g.h), (2, 2));
+        assert_eq!(g.px, vec![200, 0, 0, 64]);
+        // A factor larger than the image collapses to one pixel instead of nothing.
+        let one = Gray::from_pixmap_rect_reduced(&img, 0, 0, 5, 4, Channel::Luma, 99).expect("ok");
+        assert_eq!((one.w, one.h), (1, 1));
+        assert!(Gray::from_pixmap_rect_reduced(&img, 9, 0, 5, 4, Channel::Luma, 2).is_none());
     }
 
     #[test]

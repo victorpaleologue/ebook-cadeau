@@ -53,7 +53,8 @@ use crate::text::{
 pub const MIN_COVER_INSET_MM: f64 = 3.0;
 /// Largest share of the front panel's width and height a `promo_all_media` cover takes.
 pub const REDUCED_COVER_SHARE: f64 = 0.6;
-/// How far a spine with its own colour continues past the front crease, in millimetres.
+/// How far a spine with its own colour continues past the creases, in millimetres
+/// (`docs/research/03-print-requirements.md` §6.4 rule 3).
 const SPINE_OVERLAP_MM: f64 = 2.0;
 /// Longest side of the cover copy handed to the spine designer when it samples pixels.
 const SPINE_SAMPLE_SIDE_PX: u32 = 2_400;
@@ -98,7 +99,9 @@ impl Composer<'_> {
         // … which is the ground of the whole outside unless the caller names one or
         // print argues for white (see `ground.rs`).
         let ground = self.req.ground.unwrap_or_else(|| match cover_colour {
-            Some(colour) => ground::ground_from(colour, profile.max_total_ink_percent),
+            Some(colour) => {
+                ground::ground_from(colour, profile.max_total_ink_percent, self.paint.link())
+            }
             None => palette_ground(&self.req.book.title),
         });
         let full_bleed = cover
@@ -119,8 +122,17 @@ impl Composer<'_> {
         // ---- Grounds ---------------------------------------------------------------------
         page.items.push(Item::filled_rect(self.geometry.bleed, self.paint.flat(ground)));
         if back_ground != ground {
-            let overlap = if full_bleed { 0.0 } else { SPINE_OVERLAP_MM };
-            let right = panels.spine.right() + overlap;
+            // A flat spine colour runs on 2 mm past the front crease (§6.4 rule 3). An
+            // image spine runs on past both creases itself (`crease_overrun_mm`), so the
+            // back's colour stops under it: a band of it beside the image on the front
+            // would be a third colour next to the crease.
+            let right = if !spine.background_kind.is_flat() {
+                panels.spine.x + SPINE_OVERLAP_MM
+            } else if full_bleed {
+                panels.spine.right()
+            } else {
+                panels.spine.right() + SPINE_OVERLAP_MM
+            };
             let area = Rect::new(
                 self.geometry.bleed.x,
                 self.geometry.bleed.y,
@@ -166,7 +178,12 @@ impl Composer<'_> {
                         (rect, rect, None)
                     }
                 };
-                let data = plan.image.into_image_data(rect.size(), &profile, &mut self.warnings);
+                let data = plan.image.into_image_data(
+                    rect.size(),
+                    &profile,
+                    self.paint.link(),
+                    &mut self.warnings,
+                );
                 let image = self.doc.add_image(data, None);
                 let item = Item::Image { image, rect };
                 page.items.push(match clip {
@@ -246,6 +263,9 @@ impl Composer<'_> {
             // sRGB here; the fills are re-expressed for the profile by `Paint::repaint`,
             // exactly like the card's own ground, so that the two never differ.
             background_paint: BackgroundPaint::Rgb,
+            // An image spine (and its contrast band) never ends on a crease (§6.4 rule 3);
+            // under a full-bleed cover the overrun is simply covered by the cover.
+            crease_overrun_mm: SPINE_OVERLAP_MM,
             fallback_font: self.fonts.title_alt.clone(),
             ..SpineOptions::default()
         };
@@ -602,7 +622,7 @@ impl Composer<'_> {
     }
 
     /// The address printed in clear: cleaned, in lower case. When the request gives none,
-    /// the host of the claim URL is printed.
+    /// the host of the claim URL is printed (with its port, unless the default one).
     pub(crate) fn display_url(&mut self) -> String {
         let font = self.fonts.body_bold.clone();
         let url = self.req.display_url.to_lowercase();
@@ -610,9 +630,7 @@ impl Composer<'_> {
         if !url.is_empty() {
             return url;
         }
-        let claim = self.req.claim_url.trim().to_lowercase();
-        let rest = claim.split_once("://").map_or(claim.as_str(), |(_, rest)| rest);
-        let host = rest.split(['/', '?', '#', ':']).next().unwrap_or_default().to_owned();
+        let host = crate::request::host_of(&self.req.claim_url);
         self.clean_line(&font, &host, TextField::DisplayUrl)
     }
 }

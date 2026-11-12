@@ -72,16 +72,23 @@
 //!   crosses both creases), or the text on it would stay under
 //!   [`GROUND_MIN_CONTRAST`]:1 with black counted as ink on paper (saturated mid-tones).
 //!
-//! On press the ground is close to the cover's own frame or edge colour, not identical
-//! with it: see *Colour* below.
+//! In a PDF/X file the ground goes through the same ICC transform as the cover, so on
+//! press it matches the cover's own frame or edge colour: see *Colour* below.
 //!
 //! # Colour
 //!
 //! Text, QR code and rules are black on the black plate only (grey in a home PDF).
-//! Flat grounds are device CMYK in PDF/X files, through a conversion that is **not
-//! colour-managed**. The cover is embedded as sRGB and left to the printer's colour
-//! management ([`CardWarning::CoverNotConverted`]); PDF/X-1a, which forbids RGB,
-//! therefore cannot carry a cover ([`CardError::CoverColourSpace`]).
+//! In PDF/X files the cover, any image on the spine and the flat grounds are converted
+//! to the output intent's CMYK by **one ICC transform** (`ebc_color::SrgbToCmyk`:
+//! relative colorimetric with black-point compensation, from the output profile's own
+//! tables), so that the ground and the cover's frame meet on press; flat colours are
+//! then cleaned of tints under 5 % and capped at the ink limit. A CMYK JPEG cover is
+//! passed through unchanged. Only when the output profile cannot be read (an ICC v4
+//! profile with `mBA` tables, the CC0 fallback) does the cover stay sRGB
+//! ([`CardWarning::CoverNotConverted`]) — and then [`render_pdf`] refuses the file
+//! ([`CardError::CoverColourSpace`]) unless the print profile allows RGB
+//! (`PrintProfile::allow_rgb`, off for the professional profiles; never in PDF/X-1a).
+//! A home PDF keeps sRGB images and colours.
 //!
 //! The output intent of PDF/X files is, by default, the bundled "ISO Coated v2 300%
 //! (basICColor)" FOGRA39 profile ([`OutputProfile::bundled_fogra39`]); pass the profile
@@ -96,7 +103,9 @@
 //!
 //! # Not implemented
 //!
-//! No colour-managed conversion of covers or grounds; no right-to-left or vertical
+//! Colour management handles `lut8`/`lut16` CMYK output profiles only, ignores the
+//! profiles embedded in covers, and judges a CMYK JPEG cover's ground from a naive
+//! RGB decoding of it; no right-to-left or vertical
 //! setting (one run, one direction, as in `ebc-text`); no font fallback for body text
 //! (characters the font lacks are left out, with a warning); the single-sided home
 //! variant with a flap and per-printer crease encodings of the print research are not
@@ -118,7 +127,7 @@ pub mod svg;
 mod text;
 
 use ebc_pdf::{WriteOptions, write_pdf};
-use ebc_scene::Document;
+use ebc_scene::{Document, ImageData, PixelFormat};
 
 pub use compose::{MARK_CLEARANCE_MM, NOTES_LAYER};
 pub use cover::{
@@ -147,32 +156,68 @@ pub fn compose(
     req: &CardRequest,
     fonts: &FontSet,
 ) -> Result<(Document, Vec<CardWarning>), CardError> {
-    compose::compose(req, fonts)
+    compose::compose(req, fonts, compose::Purpose::Print)
 }
 
 /// [`compose`], then [`ebc_pdf::write_pdf`]: the print file and the warnings.
 ///
 /// Layers are flattened, as printers ask — except for a proof with the guides overlay
-/// ([`CardRequest::guides`]), which keeps them so that a viewer can switch them off.
-/// The bytes are deterministic.
+/// ([`CardRequest::guides`]), which keeps them so that a viewer can switch them off, and
+/// is therefore written as a plain PDF without the PDF/X label and output intent (a
+/// proof is not a print file). The bytes are deterministic.
+///
+/// Two print gates apply to professional (PDF/X) files, which [`compose`] only reports
+/// as warnings: a cover below the profile's minimum resolution, and RGB images in a
+/// profile that does not allow RGB (when the output profile cannot be read by the
+/// colour-management module, so nothing could be converted).
 ///
 /// # Errors
-/// Those of [`compose`], and [`CardError::Pdf`] when the writer refuses the document.
+/// Those of [`compose`]; [`CardError::CoverResolutionTooLow`] (offer the typographic
+/// card instead); [`CardError::CoverColourSpace`]; and [`CardError::Pdf`] when the writer
+/// refuses the document.
 pub fn render_pdf(
     req: &CardRequest,
     fonts: &FontSet,
 ) -> Result<(Vec<u8>, Vec<CardWarning>), CardError> {
     let (doc, warnings) = compose(req, fonts)?;
+    print_gates(req, &doc, &warnings)?;
     let options = WriteOptions { compress: true, keep_layers: req.guides };
     Ok((write_pdf(&doc, &options)?, warnings))
 }
 
-/// [`compose`], then [`svg::render_page`] for each page: `[outside, inside]`, for live
-/// previews.
+/// The checks that stop a professional print file from being written.
+fn print_gates(req: &CardRequest, doc: &Document, warnings: &[CardWarning]) -> Result<(), CardError> {
+    if doc.standard == ebc_scene::PdfStandard::Plain {
+        return Ok(());
+    }
+    // `docs/research/03-print-requirements.md` §4.2: below the error threshold a
+    // professional order is blocked and the typographic card is offered instead.
+    for warning in warnings {
+        if let CardWarning::LowResolution { ppi, threshold_ppi, below_minimum: true } = warning {
+            return Err(CardError::CoverResolutionTooLow { ppi: *ppi, minimum_ppi: *threshold_ppi });
+        }
+    }
+    // §3.2 / §3.4, implication 23: CMYK and grey only, unless the profile allows RGB.
+    let rgb_allowed =
+        req.profile.allow_rgb && req.profile.standard != ebc_scene::PdfStandard::X1a2001;
+    let rgb = doc.images.iter().any(|image| match &image.data {
+        ImageData::Jpeg { components, .. } => *components == 3,
+        ImageData::Raw { format, .. } => matches!(format, PixelFormat::Rgb8 | PixelFormat::Rgba8),
+    });
+    if rgb && !rgb_allowed {
+        return Err(CardError::CoverColourSpace { standard: req.profile.standard });
+    }
+    Ok(())
+}
+
+/// The card composed for the screen, then [`svg::render_page`] for each page:
+/// `[outside, inside]`, for live previews. Nothing is converted to the output intent
+/// (the screen shows the sRGB design), and the print gates of [`render_pdf`] do not
+/// apply.
 ///
 /// # Errors
 /// Those of [`compose`].
 pub fn preview_svg(req: &CardRequest, fonts: &FontSet) -> Result<Vec<String>, CardError> {
-    let (doc, _) = compose(req, fonts)?;
+    let (doc, _) = compose::compose(req, fonts, compose::Purpose::Preview)?;
     Ok((0..doc.pages.len()).map(|index| svg::render_page(&doc, index)).collect())
 }

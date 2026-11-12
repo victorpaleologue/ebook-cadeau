@@ -939,6 +939,53 @@ fn a_continuation_too_uneven_for_the_text_gets_a_band() {
     assert_eq!(spine.background_kind, BackgroundKind::DominantColour);
 }
 
+/// §6.4 rule 3: an image spine never ends on a crease. With `crease_overrun_mm` the
+/// continuation and its contrast band run on 2 mm past both creases, the extra columns
+/// repeating the edge columns.
+#[test]
+fn image_spines_and_their_band_run_on_past_the_creases_when_asked() {
+    let mut cover = flat_cover([255, 255, 255]);
+    fill(&mut cover, 0, COVER_H / 2, COVER_W, COVER_H, [0, 0, 0]);
+    let b = book("Le Rouge et le Noir", &["Stendhal"]);
+    let font = serif();
+    let options = SpineOptions {
+        background: BackgroundStyle::EdgeContinuation,
+        crease_overrun_mm: 2.0,
+        ..Default::default()
+    };
+    let (rect, ..) = poche();
+    let (spine, doc) = run_with(&request(&b, Some(&cover), &font, &font, BottomToTop), &options);
+    let Item::Image { rect: placed, .. } = &spine.items[0] else { panic!("image first") };
+    // At least 2 mm (whole pixels, so up to one pixel more).
+    let (left, right) = (rect.x - placed.x, placed.right() - rect.right());
+    assert!((2.0..2.1).contains(&left) && (2.0..2.1).contains(&right), "{placed:?}");
+    assert_eq!((placed.y, placed.h), (rect.y, rect.h));
+    let (pixels, w, h) = raw_rgb(&doc);
+    assert_eq!(w, 119 + 2 * 24, "24 columns (2 mm at 300 ppi) on each side");
+    let px = |x: u32, y: u32| {
+        let i = ((y * w + x) * 3) as usize;
+        [pixels[i], pixels[i + 1], pixels[i + 2]]
+    };
+    for y in [0, h / 3, h - 1] {
+        assert_eq!(px(0, y), px(24, y));
+        assert_eq!(px(w - 1, y), px(w - 25, y));
+    }
+    let band = painted_bounds(&spine.items)[1];
+    assert!(
+        (band.x - (rect.x - 2.0)).abs() < 1e-9
+            && (band.right() - (rect.right() + 2.0)).abs() < 1e-9
+    );
+    // Hostile values are refused.
+    for bad in [-1.0, 10.5, f64::NAN] {
+        let options = SpineOptions { crease_overrun_mm: bad, ..options.clone() };
+        let mut doc = Document::default();
+        assert!(
+            design_with(&request(&b, Some(&cover), &font, &font, BottomToTop), &options, &mut doc)
+                .is_err()
+        );
+    }
+}
+
 #[test]
 fn continuation_without_a_cover_falls_back_to_a_flat_ground() {
     let b = book("Candide", &[]);

@@ -416,8 +416,9 @@ pub fn gift_code_from_random(bytes: &[u8]) -> Result<String, ApiError> {
     to_json(&CodeInfo::of(&code))
 }
 
-/// Parses a code as typed or pasted — or a claim URL that carries one (`…/k/<code>`).
-/// Case, hyphens, dots and spaces do not matter.
+/// Parses a code as typed or pasted — or a claim URL that carries one (`…/k/<code>`, with
+/// or without `https://`; see `GiftCode::parse_typed`). Case, hyphens, dots and spaces do
+/// not matter.
 ///
 /// Returns `{"code", "display"}`. Success means *well-formed*, not *issued*.
 ///
@@ -428,12 +429,9 @@ pub fn gift_code_parse(input: &str) -> Result<String, ApiError> {
     if input.len() > 2048 {
         return Err(ApiError::new("invalid_code", "too long to be a code"));
     }
-    let code = if input.contains("://") {
-        GiftCode::from_claim_url(input.trim())
-    } else {
-        GiftCode::parse(input)
-    }
-    .map_err(|e| code_error(&e))?;
+    // The same rule as the server's redemption form: a code, or a claim URL with or
+    // without its scheme.
+    let code = GiftCode::parse_typed(input).map_err(|e| code_error(&e))?;
     to_json(&CodeInfo::of(&code))
 }
 
@@ -708,6 +706,15 @@ mod tests {
         assert_eq!(value(&gift_code_parse(&display.to_lowercase()).expect("typed"))["code"], code);
         let url = format!("HTTPS://EBK.EXAMPLE/K/{code}");
         assert_eq!(value(&gift_code_parse(&url).expect("scanned"))["display"], display);
+        // Pasted claim URLs without a scheme, as the server accepts them.
+        for pasted in [
+            format!("ebk.example/k/{code}"),
+            format!("EBK.EXAMPLE/K/{code}"),
+            format!("/k/{}", code.to_lowercase()),
+            format!(" ebk.example/k/{} ", display.replace('-', " ")),
+        ] {
+            assert_eq!(value(&gift_code_parse(&pasted).expect("pasted"))["code"], code, "{pasted}");
+        }
     }
 
     #[test]

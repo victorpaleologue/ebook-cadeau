@@ -3,21 +3,32 @@
 //! * JPEG, PNG and WebP are decoded with the `image` crate; the bytes are hostile input,
 //!   so dimensions are checked before any pixel is decoded and a panic inside a decoder
 //!   is contained (where panics can be caught at all).
-//! * A baseline or progressive 8-bit RGB or grey JPEG whose pixels need no change is
-//!   embedded as it is; everything else (PNG, WebP, CMYK or rotated JPEG, raw pixels)
-//!   becomes raw sRGB with any transparency composited on white.
+//! * **Print at home** (plain PDF): a baseline or progressive 8-bit RGB or grey JPEG
+//!   whose pixels need no change is embedded as it is; everything else (PNG, WebP, CMYK
+//!   or rotated JPEG, raw pixels) becomes raw sRGB with any transparency composited on
+//!   white.
+//! * **PDF/X** (professional): the cover is converted to the output intent's CMYK with
+//!   the ICC transform of `ebc_color::SrgbToCmyk` (relative colorimetric with black-point
+//!   compensation) and embedded as lossless CMYK — except a baseline or progressive
+//!   8-bit **CMYK JPEG** (not rotated by its EXIF orientation), which is passed through
+//!   unchanged: CMYK covers are assumed to be in the output condition already
+//!   (`docs/research/03-print-requirements.md` §4.2), and are not resampled. Only when
+//!   the output profile cannot be read *and* the print profile allows RGB is the cover
+//!   left as sRGB.
 //! * A cover with more than about 350 ppi at its printed size is resampled to 300 ppi; a
-//!   cover is never upscaled, low resolution is reported instead.
+//!   cover is never upscaled. Below the profile's minimum `render_pdf` refuses to write a
+//!   professional file (the typographic card is the way out); at home it is a warning.
 //!
-//! Not done: embedded ICC profiles are ignored (the pixels are treated as sRGB, with a
-//! warning), and nothing is converted to the output-intent colour space.
+//! Not done: embedded ICC profiles are ignored (RGB pixels are treated as sRGB, CMYK
+//! JPEGs as already in the output condition, with a warning).
 
 use std::io::Cursor;
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
 
+use ebc_color::SrgbToCmyk;
 use ebc_layout::{PrintProfile, Resolution, effective_ppi};
-use ebc_scene::{ImageData, PixelFormat, Pixmap, Rect, Size};
+use ebc_scene::{ImageData, PdfStandard, PixelFormat, Pixmap, Rect, Size};
 use image::metadata::Orientation;
 use image::{DynamicImage, ImageDecoder, ImageFormat, ImageReader, Limits, RgbImage};
 
@@ -41,7 +52,8 @@ const ANALYSIS_SIDE_PX: u32 = 256;
 pub(crate) struct DecodedCover {
     /// The pixels as displayed (orientation applied), transparency composited on white.
     rgb: RgbImage,
-    /// The original file and its component count, when it can be embedded untouched.
+    /// The original file and its component count (1, 3 or 4), when it can be embedded
+    /// untouched.
     jpeg: Option<(Arc<[u8]>, u8)>,
     /// The file carried an ICC profile (which is ignored).
     has_icc_profile: bool,
@@ -154,16 +166,26 @@ impl DecodedCover {
             .unwrap_or_else(|| Pixmap::filled(1, 1, [255, 255, 255, 255]))
     }
 
+    /// `true` when the cover is a CMYK JPEG that a PDF/X file carries unchanged.
+    pub(crate) fn is_cmyk_jpeg(&self) -> bool {
+        matches!(self.jpeg, Some((_, 4)))
+    }
+
     /// The image data to embed for a cover printed at `placed` millimetres, with the
-    /// resolution warnings that go with it.
+    /// resolution warnings that go with it. `link` is the ICC transform to the output
+    /// intent of a PDF/X profile (`None` at home, in a preview, or when the output
+    /// profile cannot be read: the cover then stays sRGB, and `render_pdf` refuses the
+    /// file unless the profile allows RGB).
     pub(crate) fn into_image_data(
         self,
         placed: Size,
         profile: &PrintProfile,
+        link: Option<&SrgbToCmyk>,
         warnings: &mut Vec<CardWarning>,
     ) -> ImageData {
         let (width, height) = self.rgb.dimensions();
         let ppi = effective_ppi((width, height), Rect::new(0.0, 0.0, placed.w, placed.h));
+        let pdfx = profile.standard != PdfStandard::Plain;
         match profile.judge_ppi(ppi) {
             Resolution::TooLow => warnings.push(CardWarning::LowResolution {
                 ppi,
@@ -181,6 +203,20 @@ impl DecodedCover {
             warnings.push(CardWarning::CoverProfileIgnored);
         }
 
+        // A CMYK JPEG goes into a PDF/X file as it is (DCTDecode, the writer handles the
+        // Adobe inversion), whatever its resolution.
+        if pdfx && let Some((bytes, 4)) = &self.jpeg {
+            return ImageData::Jpeg {
+                bytes: Arc::clone(bytes),
+                width_px: width,
+                height_px: height,
+                components: 4,
+            };
+        }
+        let encode = |rgb: RgbImage| match (pdfx, link) {
+            (true, Some(link)) => raw_cmyk(&rgb, link),
+            _ => raw_rgb(rgb),
+        };
         if ppi > MAX_EMBED_PPI {
             let scale = RESAMPLE_PPI / ppi;
             let nw = ((f64::from(width) * scale).round() as u32).max(1);
@@ -188,14 +224,26 @@ impl DecodedCover {
             let resized =
                 image::imageops::resize(&self.rgb, nw, nh, image::imageops::FilterType::CatmullRom);
             warnings.push(CardWarning::CoverDownsampled { from_ppi: ppi, to_ppi: RESAMPLE_PPI });
-            return raw_rgb(resized);
+            return encode(resized);
         }
         match self.jpeg {
-            Some((bytes, components)) => {
+            // An RGB or grey JPEG is passed through unless it must be converted.
+            Some((bytes, components)) if components != 4 && !(pdfx && link.is_some()) => {
                 ImageData::Jpeg { bytes, width_px: width, height_px: height, components }
             }
-            None => raw_rgb(self.rgb),
+            _ => encode(self.rgb),
         }
+    }
+}
+
+/// The image converted to the output intent's CMYK through `link`.
+fn raw_cmyk(image: &RgbImage, link: &SrgbToCmyk) -> ImageData {
+    let (width_px, height_px) = image.dimensions();
+    ImageData::Raw {
+        pixels: Arc::from(link.convert_pixels(image.as_raw())),
+        width_px,
+        height_px,
+        format: PixelFormat::Cmyk8,
     }
 }
 
@@ -324,15 +372,15 @@ fn jpeg_frame(data: &[u8]) -> Option<JpegFrame> {
     }
 }
 
-/// The number of components (1 or 3) of a JPEG file that PDF can embed untouched and
-/// that needs no colour change: baseline, extended-sequential or progressive Huffman
-/// coding, 8-bit samples, grey or three components. `None` for anything else (CMYK,
-/// lossless, arithmetic coding, 12-bit, a corrupt marker stream).
+/// The number of components (1, 3 or 4) of a JPEG file that PDF can embed untouched:
+/// baseline, extended-sequential or progressive Huffman coding, 8-bit samples, grey,
+/// three components or CMYK (four; only a PDF/X file takes those as they are). `None`
+/// for anything else (lossless, arithmetic coding, 12-bit, a corrupt marker stream).
 fn embeddable_jpeg_components(data: &[u8]) -> Option<u8> {
     let frame = jpeg_frame(data)?;
     (matches!(frame.marker, 0xC0..=0xC2)
         && frame.precision == 8
-        && matches!(frame.components, 1 | 3))
+        && matches!(frame.components, 1 | 3 | 4))
     .then_some(frame.components)
 }
 
@@ -363,7 +411,10 @@ mod tests {
         assert_eq!(embeddable_jpeg_components(&jpeg), Some(3));
         let mut cmyk = jpeg.clone();
         cmyk[11] = 4;
-        assert_eq!(embeddable_jpeg_components(&cmyk), None);
+        assert_eq!(embeddable_jpeg_components(&cmyk), Some(4));
+        let mut two = jpeg.clone();
+        two[11] = 2;
+        assert_eq!(embeddable_jpeg_components(&two), None);
         let mut twelve_bit = jpeg.clone();
         twelve_bit[6] = 12;
         assert_eq!(embeddable_jpeg_components(&twelve_bit), None);

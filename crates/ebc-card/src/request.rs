@@ -3,7 +3,7 @@
 
 use std::sync::Arc;
 
-use ebc_color::Rgb8;
+use ebc_color::{Rgb8, SrgbToCmyk};
 use ebc_layout::{CardFormat, PrintProfile};
 use ebc_model::{BookMeta, GiftCode, Locale};
 use ebc_scene::{OutputIntent, Pixmap};
@@ -299,6 +299,18 @@ impl OutputProfile {
         self.fallback
     }
 
+    /// The colour-managed transform from sRGB to this profile's CMYK: relative
+    /// colorimetric with black-point compensation
+    /// (`docs/research/03-print-requirements.md` §3.4), sampled on a 33³ grid.
+    ///
+    /// # Errors
+    /// [`ebc_color::IccError`] when the profile's tables cannot be read by
+    /// `ebc_color::icc` (an ICC v4 profile with `mAB`/`mBA` tables, or an input-class
+    /// profile without `B2A` tables such as the CC0 fallback).
+    pub fn colour_link(&self) -> Result<SrgbToCmyk, ebc_color::IccError> {
+        ebc_color::CmykProfile::parse(&self.icc).map(|profile| SrgbToCmyk::relative_bpc(&profile))
+    }
+
     pub(crate) fn to_output_intent(&self) -> OutputIntent {
         OutputIntent {
             condition_identifier: self.condition_identifier.clone(),
@@ -349,8 +361,8 @@ pub struct CardRequest {
     pub claim_url: String,
     /// The code typed by recipients without a phone; printed grouped.
     pub code: GiftCode,
-    /// The address printed in clear, normally a bare host such as `"ebk.example"`.
-    /// Printed in lower case.
+    /// The address printed in clear, normally a bare host such as `"ebk.example"` (with
+    /// its port when it is not the scheme's default). Printed in lower case.
     pub display_url: String,
     /// Who gives the book.
     pub giver: Option<String>,
@@ -384,7 +396,9 @@ pub struct CardRequest {
     /// Ignored by plain-PDF (home) profiles.
     pub output_profile: Option<OutputProfile>,
     /// Add the proofing overlay of [`ebc_layout::guides`] (bleed, trim, creases, safe
-    /// areas) on top of both pages. The result is a proof, not a print file.
+    /// areas) on top of both pages, as a layer a viewer can hide. The result is a proof,
+    /// not a print file: it is written as a plain PDF, without the PDF/X label and output
+    /// intent of the profile.
     pub guides: bool,
 }
 
@@ -424,16 +438,36 @@ impl CardRequest {
     }
 }
 
-/// The host of a base URL, for display: scheme, user info, port, path and a leading
-/// `www.` removed, lower-cased.
-fn host_of(base_url: &str) -> String {
+/// The host of a base URL, for display: scheme, user info, path and a leading `www.`
+/// removed, lower-cased. A port is kept unless it is the scheme's default (`:443` for
+/// `https`, `:80` for `http`): an address typed without it would lead nowhere. (The
+/// same rule as `typed_host` in `ebc-server`'s card composer.)
+pub(crate) fn host_of(base_url: &str) -> String {
     let rest = base_url.trim();
-    let rest = rest.split_once("://").map_or(rest, |(_, r)| r);
+    let (scheme, rest) = match rest.split_once("://") {
+        Some((scheme, rest)) => (scheme.to_ascii_lowercase(), rest),
+        None => (String::new(), rest),
+    };
     let rest = rest.split(['/', '?', '#']).next().unwrap_or(rest);
     let rest = rest.rsplit_once('@').map_or(rest, |(_, r)| r);
-    let host = rest.split(':').next().unwrap_or(rest);
+    let (host, port) = match rest.rsplit_once(':') {
+        Some((host, port)) if !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit()) => {
+            (host, Some(port.trim_start_matches('0')))
+        }
+        Some((host, "")) => (host, None),
+        _ => (rest, None),
+    };
     let host = host.to_lowercase();
-    host.strip_prefix("www.").map(str::to_owned).unwrap_or(host)
+    let host = host.strip_prefix("www.").map(str::to_owned).unwrap_or(host);
+    let default = match scheme.as_str() {
+        "https" => Some("443"),
+        "http" => Some("80"),
+        _ => None,
+    };
+    match port {
+        Some(port) if Some(port) != default && !port.is_empty() => format!("{host}:{port}"),
+        _ => host,
+    }
 }
 
 #[cfg(test)]
@@ -443,9 +477,16 @@ mod tests {
     #[test]
     fn display_host() {
         assert_eq!(host_of("https://ebk.example"), "ebk.example");
-        assert_eq!(host_of("https://WWW.Ebk.Example:8443/x?y#z"), "ebk.example");
         assert_eq!(host_of("user@ebk.example/a"), "ebk.example");
         assert_eq!(host_of(""), "");
+        // A port is part of the address, unless it is the scheme's default.
+        assert_eq!(host_of("https://WWW.Ebk.Example:8443/x?y#z"), "ebk.example:8443");
+        assert_eq!(host_of("http://127.0.0.1:8080"), "127.0.0.1:8080");
+        assert_eq!(host_of("https://ebk.example:443/"), "ebk.example");
+        assert_eq!(host_of("http://ebk.example:80"), "ebk.example");
+        assert_eq!(host_of("http://ebk.example:443"), "ebk.example:443");
+        assert_eq!(host_of("https://ebk.example:"), "ebk.example");
+        assert_eq!(host_of("ebk.example:8080"), "ebk.example:8080");
     }
 
     #[test]

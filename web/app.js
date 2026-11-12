@@ -20,6 +20,23 @@ const DEMO_BASE_URL = 'https://ebk.example';
 /** A valid ISBN, only used to learn which providers a lookup would ask. */
 const PROBE_ISBN = '9780306406157';
 const PREVIEW_DELAY_MS = 180;
+/**
+ * Countries offered for a printed card (ISO 3166-1 alpha-2), named in the page's language
+ * by `Intl.DisplayNames`. The server accepts any alpha-2 code; whether the printer posts
+ * there is the printer's answer (`unsupported_country`).
+ */
+const ORDER_COUNTRIES = ['FR', 'BE', 'LU', 'MC', 'CH', 'DE', 'AT', 'NL', 'ES', 'IT', 'PT', 'IE', 'GB', 'CA', 'US'];
+const DEFAULT_COUNTRY = 'FR';
+/** Address members (docs/api.md §3) → input ids. */
+const ADDRESS_INPUTS = {
+  name: 'order-name',
+  line1: 'order-line1',
+  line2: 'order-line2',
+  postal_code: 'order-postal-code',
+  city: 'order-city',
+  country: 'order-country',
+};
+const REQUIRED_ADDRESS = ['name', 'line1', 'postal_code', 'city'];
 
 const engine = new Engine(new URL('./worker.js', import.meta.url));
 
@@ -190,6 +207,8 @@ function buildControls() {
   $('format').value = options.defaults.format;
   fill($('profile'), options.profiles.map((p) => [p.name, '']));
   $('profile').value = options.defaults.profile;
+  fill($('order-country'), ORDER_COUNTRIES.map((code) => [code, code]));
+  $('order-country').value = DEFAULT_COUNTRY;
   const list = $('rights-list');
   list.replaceChildren(...options.rights.map((choice) => {
     const label = document.createElement('label');
@@ -216,6 +235,7 @@ async function setLocale(code) {
   $('ui-locale').value = code;
   if (!state.cardLocale) $('card-locale').value = code;
   applyStrings(document, strings);
+  nameCountries(locale ? locale.bcp47 : code);
   for (const element of document.querySelectorAll('.step-of')) {
     element.textContent = t('ui_step_of', { n: element.dataset.step, total: TOTAL_STEPS });
   }
@@ -224,6 +244,31 @@ async function setLocale(code) {
   history.replaceState(null, '', url);
   await describeLookupSources();
   refreshAll();
+}
+
+/** Names the delivery countries in the page's language, sorted, keeping the choice. */
+function nameCountries(tag) {
+  const select = $('order-country');
+  const chosen = select.value || DEFAULT_COUNTRY;
+  let names = null;
+  try {
+    names = new Intl.DisplayNames([tag], { type: 'region' });
+  } catch {
+    // no Intl.DisplayNames: the codes stay as they are
+  }
+  const items = [...select.options].map((option) => {
+    let name = option.value;
+    try {
+      name = (names && names.of(option.value)) || option.value;
+    } catch {
+      // unknown region: keep the code
+    }
+    option.textContent = name;
+    return option;
+  });
+  items.sort((a, b) => a.textContent.localeCompare(b.textContent, tag));
+  select.replaceChildren(...items);
+  select.value = chosen;
 }
 
 /** "The search queries, from your browser: …" with the providers a lookup would ask. */
@@ -856,17 +901,77 @@ async function onDownload() {
   }
 }
 
+/** Marks one address input (or none) as invalid, with `message` under the fieldset. */
+function markAddress(member, message) {
+  for (const [key, id] of Object.entries(ADDRESS_INPUTS)) {
+    if (key === member) {
+      $(id).setAttribute('aria-invalid', 'true');
+      $(id).setAttribute('aria-describedby', 'order-address-error');
+    } else {
+      $(id).removeAttribute('aria-invalid');
+      $(id).removeAttribute('aria-describedby');
+    }
+  }
+  setText($('order-address-error'), message || '');
+  show($('order-address-error'), Boolean(message));
+  if (member && ADDRESS_INPUTS[member]) $(ADDRESS_INPUTS[member]).focus();
+}
+
+/** The address as the server takes it (docs/api.md §3), or `null` after marking a gap. */
+function orderAddress() {
+  const address = {};
+  for (const [key, id] of Object.entries(ADDRESS_INPUTS)) {
+    const value = $(id).value.trim();
+    if (value) address[key] = key === 'country' ? value.toUpperCase() : value;
+  }
+  const missing = REQUIRED_ADDRESS.find((key) => !address[key]);
+  if (missing) {
+    markAddress(missing, t('ui_order_address_incomplete'));
+    return null;
+  }
+  if (!address.country) address.country = DEFAULT_COUNTRY;
+  markAddress(null, '');
+  return address;
+}
+
+/** A translated text for a refused order. */
+function orderErrorText(error) {
+  const details = (error && error.details) || {};
+  if (error && (error.code === 'printer_rejected' || error.code === 'preflight_failed')) {
+    if (details.printer_code === 'unsupported_country') return t('ui_order_country_refused');
+    const findings = Array.isArray(details.findings)
+      ? details.findings.filter((f) => f && f.severity !== 'warning' && f.severity !== 'info')
+        .map((f) => String(f.message || f.code || '')).filter(Boolean)
+      : [];
+    const reason = findings.length ? findings.slice(0, 3).join('; ')
+      : String(details.printer_message || details.printer_code || error.message || error.code);
+    return t('ui_order_rejected', { reason });
+  }
+  return errorText(error);
+}
+
 async function onOrder() {
   const status = $('order-status');
-  const address = $('order-address').value.trim();
-  if (!address || !state.gift || !state.gift.server) return;
+  if (!state.gift || !state.gift.server) return;
+  const address = orderAddress();
+  if (!address) {
+    setText(status, '');
+    return;
+  }
   setText(status, t('ui_generating'));
+  $('order-submit').disabled = true;
   try {
     const pdf = await renderPdf();
-    const order = await orderPrint(serverUrl(), state.gift, pdf, `card-${$('format').value}`, { text: address });
+    const order = await orderPrint(serverUrl(), state.gift, pdf, `card-${$('format').value}`, address);
     setText(status, t('ui_order_sent', { id: order.order_id }), 'ok');
   } catch (error) {
-    setText(status, errorText(error), 'error');
+    if (error && error.code === 'invalid_address') {
+      const field = String((error.details && error.details.field) || '').replace(/^address\.?/, '');
+      markAddress(ADDRESS_INPUTS[field] ? field : null, t('err_invalid_address'));
+    }
+    setText(status, orderErrorText(error), 'error');
+  } finally {
+    $('order-submit').disabled = false;
   }
 }
 
@@ -1006,6 +1111,9 @@ function bindEvents() {
   $('guides').addEventListener('change', schedulePreview);
   $('download').addEventListener('click', onDownload);
   $('order-submit').addEventListener('click', onOrder);
+  for (const id of Object.values(ADDRESS_INPUTS)) {
+    $(id).addEventListener('input', () => $(id).removeAttribute('aria-invalid'));
+  }
 }
 
 main();

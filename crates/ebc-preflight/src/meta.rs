@@ -418,7 +418,7 @@ fn check_output_intent(
                         && header.color_space != "CMYK"
                         && expect.require_output_intent
                     {
-                        sink.warning(
+                        sink.error(
                             codes::OUTPUT_INTENT_INVALID,
                             None,
                             format!(
@@ -438,8 +438,11 @@ fn check_output_intent(
                             ),
                         );
                     }
+                    // Check A6: a PDF/X output intent describes an output device. A
+                    // scanner ('scnr') or display profile is not a printing condition.
                     if header.class != "prtr" {
-                        sink.warning(
+                        sink.push(
+                            grade,
                             codes::OUTPUT_INTENT_INVALID,
                             None,
                             format!(

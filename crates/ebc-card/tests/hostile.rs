@@ -268,8 +268,8 @@ fn small_and_odd_custom_formats_never_panic() {
     let fonts = fonts();
     let mut composed = 0;
     for (w, h, spine) in [
-        (50.0, 50.0, 3.0),
-        (50.0, 300.0, 3.0),
+        (50.0, 50.0, 5.0),
+        (50.0, 300.0, 5.0),
         (300.0, 50.0, 40.0),
         (60.0, 90.0, 5.0),
         (70.0, 100.0, 6.0),

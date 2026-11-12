@@ -80,12 +80,10 @@ fn unknown_lines(locale: Locale, first: &str, remaining: Option<u32>) -> Vec<Str
     lines
 }
 
-/// Parses what a recipient typed or pasted: a code, or a whole claim URL.
+/// Parses what a recipient typed or pasted: a code, or a whole claim URL (with or without
+/// its scheme). The same rule as the web app's code field ([`GiftCode::parse_typed`]).
 fn parse_code(raw: &str) -> Result<GiftCode, CodeError> {
-    match GiftCode::parse(raw) {
-        Err(CodeError::InvalidChar(_)) if raw.contains('/') => GiftCode::from_claim_url(raw),
-        other => other,
-    }
+    GiftCode::parse_typed(raw)
 }
 
 /// The `400` page for a mistyped code: not an attempt, says so.

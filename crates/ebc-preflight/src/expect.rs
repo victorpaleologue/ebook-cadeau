@@ -48,6 +48,14 @@ pub struct Expectations {
     /// Minimum QR module size in millimetres, verified against QR-like vector graphics and
     /// the optional `EBC.QrModuleMm` Info key.
     pub min_qr_module_mm: Option<f64>,
+    /// Whether printer's marks may be in the file. `false` for upload portals, which want
+    /// the page to be exactly trim + bleed (`docs/research/03-print-requirements.md` §2.2
+    /// rule 1, check B4): then anything painted in the registration colour
+    /// (`Separation /All`), wherever it is, is an error.
+    pub marks_allowed: bool,
+    /// Whether the MediaBox must equal the BleedBox (within 0.01 mm): no slug. `true` for
+    /// upload portals (check B4).
+    pub require_media_equals_bleed: bool,
 }
 
 impl Default for Expectations {
@@ -73,7 +81,16 @@ impl Expectations {
             trim_mm: None,
             spine_mm: None,
             min_qr_module_mm: None,
+            marks_allowed: true,
+            require_media_equals_bleed: false,
         }
+    }
+
+    /// [`Expectations::professional`] for a web-to-print upload: no printer's marks and
+    /// no slug — the page is exactly trim + bleed.
+    #[must_use]
+    pub fn upload() -> Self {
+        Self { marks_allowed: false, require_media_equals_bleed: true, ..Self::professional() }
     }
 
     /// For printing at home or at a copy shop: no bleed requirement, 100 ppi, RGB and
@@ -90,6 +107,8 @@ impl Expectations {
             trim_mm: None,
             spine_mm: None,
             min_qr_module_mm: None,
+            marks_allowed: true,
+            require_media_equals_bleed: false,
         }
     }
 
@@ -189,6 +208,13 @@ mod tests {
         assert_eq!(home.spine_mm, Some(10.0));
         assert_eq!(home.min_qr_module_mm, Some(0.4));
         assert!(home.validate().is_ok());
+        assert!(pro.marks_allowed && !pro.require_media_equals_bleed);
+        let upload = Expectations::upload();
+        assert!(!upload.marks_allowed && upload.require_media_equals_bleed);
+        assert_eq!(
+            Expectations { marks_allowed: true, require_media_equals_bleed: false, ..upload },
+            pro
+        );
     }
 
     #[test]

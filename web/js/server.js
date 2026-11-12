@@ -1,12 +1,17 @@
 // The server's creator API (docs/api.md §3). Every call goes to the server this page
 // was configured with; nothing else is contacted.
 
-/** An error answered by the server (`code` from its JSON body), or `unreachable`. */
+/**
+ * An error answered by the server (`code` from its JSON body), or `unreachable`.
+ * `details` is the whole `error` object of the body (e.g. `field` of `invalid_address`,
+ * `printer_code` and `findings` of `printer_rejected` / `preflight_failed`).
+ */
 export class ServerError extends Error {
-  constructor(code, message, status = 0) {
+  constructor(code, message, status = 0, details = {}) {
     super(message);
     this.code = code;
     this.status = status;
+    this.details = details;
   }
 }
 
@@ -20,16 +25,18 @@ async function send(url, init) {
   if (!response.ok) {
     let code = `http_${response.status}`;
     let message = response.statusText || code;
+    let details = {};
     try {
       const body = await response.json();
-      if (body && body.error) {
+      if (body && body.error && typeof body.error === 'object') {
+        details = body.error;
         code = String(body.error.code || code);
         message = String(body.error.message || message);
       }
     } catch {
       // not JSON: keep the status
     }
-    throw new ServerError(code, message, response.status);
+    throw new ServerError(code, message, response.status, details);
   }
   return response.json();
 }
@@ -57,7 +64,13 @@ export async function createGift(serverUrl, file, rightsBasis, gift) {
 
 /**
  * Stores the card PDF with the gift, then orders a printed copy from the configured
- * printer. Returns `{order_id, status, price_cents, currency}`.
+ * printer. `address` is `{name, line1, line2?, postal_code, city, country}` (docs/api.md
+ * §3; `country` is an ISO 3166-1 alpha-2 code). Returns
+ * `{order_id, status, price_cents, currency}`.
+ *
+ * Errors (`ServerError`): `invalid_address` (400, `details.field` names the member),
+ * `preflight_failed` / `printer_rejected` (422, the printer refused: `details.printer_code`,
+ * `details.printer_message`, `details.findings`), `printer_unavailable` (502).
  */
 export async function orderPrint(serverUrl, gift, pdf, product, address) {
   const auth = { Authorization: `Bearer ${gift.manage_token}` };

@@ -160,17 +160,32 @@ fn the_default_output_profile_is_a_printer_profile_and_others_are_reported() {
     assert_eq!(intent.identifier.as_deref(), Some("FOGRA39"));
     assert!(intent.profile_embedded);
 
-    // The CC0 fallback: usable, but flagged by the composer and by the referee.
+    // The CC0 fallback: a test aid. The composer flags it (as an input-class profile
+    // without B2A tables it cannot be converted to either: colours are not managed),
+    // and the referee refuses it as the output intent of a PDF/X file (check A6: a
+    // scanner profile is not a printing condition).
     req.output_profile = Some(OutputProfile::bundled_cc0_fallback().unwrap());
     let (pdf, card_warnings) = render_pdf(&req, &fonts).unwrap();
     assert_eq!(card_warnings, [CardWarning::FallbackOutputProfile]);
+    // The same file named as the caller's own profile: not managed, and said so.
+    let mut own_cc0 = req.clone();
+    own_cc0.output_profile = Some(
+        OutputProfile::new(OutputProfile::bundled_cc0_fallback().unwrap().icc().clone(), "CGATS TR 001", "x")
+            .unwrap(),
+    );
+    let (_, own_warnings) = compose(&own_cc0, &fonts).unwrap();
+    assert!(own_warnings.iter().any(|w| matches!(w, CardWarning::ColourNotManaged { .. })));
     assert_eq!(
         card_warnings[0].to_string(),
         "fallback output profile — supply FOGRA39/FOGRA51 for European printers"
     );
     let report = check(&pdf, &expectations(&req, false)).unwrap();
-    assert!(errors(&report).is_empty(), "{:#?}", errors(&report));
-    assert!(report.has(ebc_preflight::codes::OUTPUT_INTENT_INVALID));
+    assert_eq!(
+        report.errors().map(|f| f.code).collect::<Vec<_>>(),
+        [ebc_preflight::codes::OUTPUT_INTENT_INVALID],
+        "{:#?}",
+        errors(&report)
+    );
 
     // A caller's own profile is embedded under the names the caller gives.
     let own = OutputProfile::new(

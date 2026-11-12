@@ -51,7 +51,9 @@ const STEP_SIZES_PT: [f64; 7] = [12.0, 11.0, 10.0, 9.5, 9.0, 8.5, 8.0];
 ///
 /// # Errors
 /// [`CardError::InvalidClaimUrl`] for an empty URL, one without an `http(s)` scheme, or
-/// one with white space or control characters.
+/// one with white space or control characters; [`CardError::ClaimUrlCodeMismatch`] when
+/// the URL has a `/k/<code>` segment that is not `code` — the QR code would lead to
+/// another gift than the code printed beside it.
 pub fn qr_payload(url: &str, code: &ebc_model::GiftCode) -> Result<(String, bool), CardError> {
     let url = url.trim();
     if url.is_empty() {
@@ -67,6 +69,26 @@ pub fn qr_payload(url: &str, code: &ebc_model::GiftCode) -> Result<(String, bool
     };
     if rest.is_empty() || rest.starts_with('/') {
         return Err(CardError::InvalidClaimUrl("it has no host"));
+    }
+    // A claim URL of our form must carry the printed code (a store's own scheme without
+    // `/k/` is the store's business).
+    match ebc_model::GiftCode::from_claim_url(url) {
+        Ok(found) if found == *code => {}
+        Err(ebc_model::CodeError::NotAClaimUrl) => {}
+        _ => {
+            let lower = url.to_ascii_lowercase();
+            let start = lower.rfind("/k/").map_or(0, |i| i + 3);
+            let found: String = url
+                .get(start..)
+                .unwrap_or_default()
+                .split(['?', '#', '/'])
+                .next()
+                .unwrap_or_default()
+                .chars()
+                .take(40)
+                .collect();
+            return Err(CardError::ClaimUrlCodeMismatch { found });
+        }
     }
     // Our own scheme: nothing but a host (and port) before "/k/<code>".
     let base_len = url.len() - rest.len() + rest.find('/').unwrap_or(rest.len());
@@ -689,15 +711,34 @@ mod tests {
             let url = claim_url(base, &code);
             assert_eq!(qr_payload(&url, &code).expect("valid"), (claim_url_qr(base, &code), true));
         }
-        // A path before /k/, another code, or another route: encoded as given.
-        let other = GiftCode::from_payload(987_654_321).expect("valid payload");
+        // A path before /k/, or another route: encoded as given.
         for url in [
             claim_url("https://store.example/Gifts", &code),
-            claim_url("https://ebk.example", &other),
             "https://store.example/redeem?c=AbC".to_owned(),
         ] {
             assert_eq!(qr_payload(&url, &code).expect("valid"), (url.clone(), false));
         }
+    }
+
+    #[test]
+    fn a_claim_url_for_another_code_is_refused() {
+        let code = GiftCode::from_payload(123_456_789).expect("valid payload");
+        let other = GiftCode::from_payload(987_654_321).expect("valid payload");
+        for url in [
+            claim_url("https://ebk.example", &other),
+            claim_url("https://store.example/Gifts", &other),
+            "https://ebk.example/k/NOTACODE".to_owned(),
+            "https://ebk.example/k/".to_owned(),
+            format!("https://ebk.example/k/{}?x=1", other.compact()),
+        ] {
+            assert!(
+                matches!(qr_payload(&url, &code), Err(CardError::ClaimUrlCodeMismatch { .. })),
+                "{url}"
+            );
+        }
+        // The grouped form of the right code is the right code.
+        let grouped = format!("https://ebk.example/k/{}", code.grouped());
+        assert!(qr_payload(&grouped, &code).is_ok());
     }
 
     #[test]

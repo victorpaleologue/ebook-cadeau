@@ -837,8 +837,13 @@ fn layers_are_reported() {
         "OCProperties",
         dictionary! { "OCGs" => vec![layer.into()], "D" => dictionary! { "Order" => vec![layer.into()] } },
     );
-    // PDF/X-4 allows layers: informational.
-    assert_only(&f.check(), c::OPTIONAL_CONTENT, Severity::Info);
+    // PDF/X-4 allows layers, but a professional print file must be flattened (§3.2, C3):
+    // a RIP may print a layer that a viewer hides.
+    assert_only(&f.check(), c::OPTIONAL_CONTENT, Severity::Error);
+    // Without professional expectations it is informational.
+    let lenient =
+        f.check_with(&Expectations { require_output_intent: false, ..card_expectations() });
+    assert_only(&lenient, c::OPTIONAL_CONTENT, Severity::Info);
 }
 
 #[test]
@@ -990,11 +995,16 @@ fn output_profile_component_count() {
     f.set_content(f.icc, icc_profile(b"prtr", b"RGB "));
     assert_only(&f.check(), c::OUTPUT_INTENT_PROFILE_MISMATCH, Severity::Error);
 
-    // A monitor profile with the right component count is suspicious, not fatal.
-    let mut f = Fixture::reference();
-    f.set_content(f.icc, icc_profile(b"mntr", b"CMYK"));
-    let report = f.check();
-    assert_only(&report, c::OUTPUT_INTENT_INVALID, Severity::Warning);
+    // A monitor (or scanner) profile is not a printing condition (check A6): an error
+    // for professional output, a warning otherwise.
+    for class in [b"mntr", b"scnr"] {
+        let mut f = Fixture::reference();
+        f.set_content(f.icc, icc_profile(class, b"CMYK"));
+        assert_only(&f.check(), c::OUTPUT_INTENT_INVALID, Severity::Error);
+        let lenient =
+            f.check_with(&Expectations { require_output_intent: false, ..card_expectations() });
+        assert!(lenient.findings.iter().all(|f| f.severity != Severity::Error), "{lenient:#?}");
+    }
 
     // A Flate-compressed profile is decoded before it is inspected.
     let mut f = Fixture::reference();

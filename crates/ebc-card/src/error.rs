@@ -83,15 +83,36 @@ pub enum CardError {
         /// Whether the request said `adaptation_authorised`.
         authorised: bool,
     },
-    /// The profile's PDF standard cannot carry the cover: PDF/X-1a forbids RGB, and the
-    /// composer has no colour-managed conversion to CMYK (it never converts a cover
-    /// naively).
+    /// The profile cannot carry the cover's colours: the output profile cannot be read
+    /// by the colour-management module (so the cover cannot be converted to CMYK — it is
+    /// never converted naively), and the profile does not allow RGB (`allow_rgb` is off,
+    /// or the standard is PDF/X-1a, which forbids RGB).
     #[error(
-        "{standard:?} cannot carry an RGB cover image and no colour-managed CMYK conversion is available"
+        "{standard:?} cannot carry an RGB image and no colour-managed CMYK conversion is available"
     )]
     CoverColourSpace {
         /// The standard of the profile.
         standard: PdfStandard,
+    },
+    /// The cover would print below the professional profile's minimum resolution: a
+    /// printer would reject the file. Use a larger image, or the typographic card
+    /// (no cover). Home profiles only warn ([`CardWarning::LowResolution`]).
+    #[error(
+        "the cover would print at {ppi:.0} ppi, below the {minimum_ppi:.0} ppi a printer accepts: use a larger image or the typographic card"
+    )]
+    CoverResolutionTooLow {
+        /// Effective resolution at the placed size.
+        ppi: f64,
+        /// The profile's minimum (`min_ppi`).
+        minimum_ppi: f64,
+    },
+    /// The claim URL leads to another code than the one printed on the card (its
+    /// `/k/<code>` segment is a different or malformed code): the QR code and the typed
+    /// code would disagree.
+    #[error("the claim URL carries the code {found:?}, not the code printed on the card")]
+    ClaimUrlCodeMismatch {
+        /// What the URL carries after `/k/`.
+        found: String,
     },
     /// A PDF/X profile needs a creation time and `created_unix` is `None` (the composer
     /// never reads the clock).
@@ -227,10 +248,27 @@ pub enum CardWarning {
         "no cover credit was supplied and the publisher is unknown: a generic credit is printed"
     )]
     CoverCreditMissing,
-    /// The cover is embedded as sRGB and left to the printer's colour management: no
-    /// colour-managed conversion to the output intent is available in this build.
+    /// The cover is embedded as sRGB and left to the printer's colour management: the
+    /// output profile cannot be read by the colour-management module and the print
+    /// profile allows RGB (`allow_rgb`).
     #[error("the cover is embedded as sRGB, not converted to the output-intent colour space")]
     CoverNotConverted,
+    /// The output profile cannot be read by the colour-management module (for example
+    /// an ICC v4 profile with `mBA` tables): flat colours are written with the naive,
+    /// uncalibrated device conversion, and images can only stay RGB.
+    #[error("colours are not colour-managed: {reason}")]
+    ColourNotManaged {
+        /// Why the profile could not be used.
+        reason: String,
+    },
+    /// The spine is outside the 5–15 mm range validated for spine text
+    /// (`docs/research/03-print-requirements.md`, implication 6): the one-line spine
+    /// setting was not designed for it.
+    #[error("the spine is {spine_mm:.1} mm wide, outside the 5–15 mm range validated for spine text")]
+    SpineOutsideTextRange {
+        /// The spine width, in millimetres.
+        spine_mm: f64,
+    },
     /// The cover's embedded ICC profile is ignored: the image is treated as sRGB.
     #[error("the cover's embedded ICC profile is ignored: the image is treated as sRGB")]
     CoverProfileIgnored,

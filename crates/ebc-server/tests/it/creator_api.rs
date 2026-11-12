@@ -317,6 +317,13 @@ async fn print_orders_forward_the_uploaded_card_to_the_print_provider() {
         if text.contains("\"product\":\"card-a5\"") {
             let refusal = json!({ "error": { "code": "preflight_failed", "findings": [{ "code": "BOX_BLEED_TOO_SMALL", "page": 1 }] } });
             (StatusCode::UNPROCESSABLE_ENTITY, refusal.to_string().into_bytes())
+        } else if text.contains("\"product\":\"card-a6\"") {
+            let refusal = json!({ "error": { "code": "unsupported_country", "message": "this printer posts to FR only" } });
+            (StatusCode::UNPROCESSABLE_ENTITY, refusal.to_string().into_bytes())
+        } else if text.contains("\"product\":\"card-digest\"") {
+            (StatusCode::BAD_REQUEST, b"<html>bad request</html>".to_vec())
+        } else if text.contains("\"product\":\"card-gone\"") {
+            (StatusCode::SERVICE_UNAVAILABLE, json!({ "error": { "code": "demo_full" } }).to_string().into_bytes())
         } else {
             (StatusCode::CREATED, json!({ "order_id": "po_17", "status": "accepted", "price_cents": 390 }).to_string().into_bytes())
         }
@@ -330,7 +337,7 @@ async fn print_orders_forward_the_uploaded_card_to_the_print_provider() {
     let auth = [("authorization", bearer.as_str())];
     let card_path = format!("/api/v1/gifts/{id}/card.pdf");
     let orders = format!("/api/v1/gifts/{id}/print-orders");
-    let address = json!({ "name": "Sacha Démo", "line1": "1 rue de l'Exemple", "postcode": "75001", "city": "Paris", "country": "FR" });
+    let address = json!({ "name": "Sacha Démo", "line1": "1 rue de l'Exemple", "postal_code": "75001", "city": "Paris", "country": "FR" });
     let pdf = b"%PDF-1.6\n% a card composed in the browser\n%%EOF\n".to_vec();
     let sha = ebc_server::codes::sha256_hex(&pdf);
     let order = |product: &str, sha: &str| {
@@ -364,14 +371,33 @@ async fn print_orders_forward_the_uploaded_card_to_the_print_provider() {
         (mismatch.status, error_code(&mismatch).as_str()),
         (StatusCode::CONFLICT, "pdf_mismatch")
     );
-    for bad in [
-        json!({ "product": "../x", "pdf_sha256": sha, "address": address }),
-        json!({ "product": "card-poche", "pdf_sha256": sha, "address": "chez moi" }),
+    let bad = json!({ "product": "../x", "pdf_sha256": sha, "address": address });
+    assert_eq!(
+        h.call(Method::POST, &orders, &auth, bad.to_string()).await.status,
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
+    // A malformed address is a 400 naming the member (docs/api.md §3).
+    for (bad_address, field) in [
+        (json!("chez moi"), "address"),
+        (json!({ "text": "1 rue de l'Exemple, 75001 Paris" }), "address.text"),
+        (json!({ "name": "Sacha", "line1": "1 rue", "city": "Paris" }), "address.postal_code"),
+        (
+            json!({ "name": "Sacha", "line1": "1 rue", "postcode": "75001", "city": "Paris" }),
+            "address.postcode",
+        ),
+        (
+            json!({ "name": "Sacha", "line1": "1 rue", "postal_code": "75001", "city": "Paris", "country": "France" }),
+            "address.country",
+        ),
     ] {
+        let body = json!({ "product": "card-poche", "pdf_sha256": sha, "address": bad_address });
+        let reply = h.call(Method::POST, &orders, &auth, body.to_string()).await;
         assert_eq!(
-            h.call(Method::POST, &orders, &auth, bad.to_string()).await.status,
-            StatusCode::UNPROCESSABLE_ENTITY
+            (reply.status, error_code(&reply).as_str()),
+            (StatusCode::BAD_REQUEST, "invalid_address"),
+            "{bad_address}"
         );
+        assert_eq!(reply.json()["error"]["field"], field);
     }
     assert!(printer.requests().is_empty(), "nothing reaches the printer before the checks pass");
 
@@ -416,6 +442,29 @@ async fn print_orders_forward_the_uploaded_card_to_the_print_provider() {
         (StatusCode::UNPROCESSABLE_ENTITY, "preflight_failed")
     );
     assert_eq!(refused.json()["error"]["findings"][0]["code"], "BOX_BLEED_TOO_SMALL");
+    // Any other refusal of the printer is passed through with the printer's code.
+    let rejected = h.call(Method::POST, &orders, &auth, order("card-a6", &sha)).await;
+    assert_eq!(
+        (rejected.status, error_code(&rejected).as_str()),
+        (StatusCode::UNPROCESSABLE_ENTITY, "printer_rejected")
+    );
+    let error = &rejected.json()["error"];
+    assert_eq!(
+        (&error["printer_code"], &error["printer_status"], &error["printer_message"]),
+        (&json!("unsupported_country"), &json!(422), &json!("this printer posts to FR only"))
+    );
+    let rejected = h.call(Method::POST, &orders, &auth, order("card-digest", &sha)).await;
+    assert_eq!(
+        (rejected.status, error_code(&rejected).as_str()),
+        (StatusCode::UNPROCESSABLE_ENTITY, "printer_rejected")
+    );
+    assert_eq!(rejected.json()["error"]["printer_code"], "http_400");
+    // A 5xx of the printer is still "unavailable".
+    let full = h.call(Method::POST, &orders, &auth, order("card-gone", &sha)).await;
+    assert_eq!(
+        (full.status, error_code(&full).as_str()),
+        (StatusCode::BAD_GATEWAY, "printer_unavailable")
+    );
     // The printer is down.
     printer.fail_first.store(1, std::sync::atomic::Ordering::SeqCst);
     let down = h.call(Method::POST, &orders, &auth, order("card-poche", &sha)).await;
@@ -441,6 +490,88 @@ async fn print_orders_forward_the_uploaded_card_to_the_print_provider() {
         (reply.status, error_code(&reply).as_str()),
         (StatusCode::SERVICE_UNAVAILABLE, "printing_not_configured")
     );
+}
+
+/// The whole path against the reference printer of `demo/printer` (docs/api.md §5): the
+/// address shape the server documents is the one the printer takes, and its refusals keep
+/// their codes.
+#[tokio::test]
+async fn print_orders_reach_the_reference_printer() {
+    use ebc_demo_printer::testkit::SampleCard;
+    use ebc_demo_printer::{PrinterConfig, PrinterState, catalog};
+
+    let printer = PrinterState::new(PrinterConfig::default());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let printer_url = format!("http://{}", listener.local_addr().unwrap());
+    let router = ebc_demo_printer::app_with_state(printer.clone());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+
+    let h = Harness::with(|c| c.printer_url = Some(printer_url));
+    let gift = h.hosted_gift(json!({})).await;
+    let id = gift["id"].as_str().unwrap();
+    let bearer = format!("Bearer {}", gift["manage_token"].as_str().unwrap());
+    let auth = [("authorization", bearer.as_str())];
+    let orders = format!("/api/v1/gifts/{id}/print-orders");
+    let poche = catalog::find("card-poche").unwrap();
+    let good = SampleCard::for_product(poche).to_pdf();
+    let put =
+        h.call(Method::PUT, &format!("/api/v1/gifts/{id}/card.pdf"), &auth, good.clone()).await;
+    assert_eq!(put.status, StatusCode::OK, "{}", put.text());
+    let sha = ebc_server::codes::sha256_hex(&good);
+    let order = |product: &str, address: serde_json::Value| {
+        json!({ "product": product, "pdf_sha256": sha, "address": address }).to_string()
+    };
+
+    // What the web designer sends: no country (France by default), an empty second line.
+    let address = json!({ "name": " Sacha Martin ", "line1": "12 rue des Lilas", "line2": "", "postal_code": "69003", "city": "Lyon" });
+    let placed = h.call(Method::POST, &orders, &auth, order("card-poche", address)).await;
+    assert_eq!(placed.status, StatusCode::CREATED, "{}", placed.text());
+    let receipt = placed.json();
+    assert_eq!(receipt["status"], "accepted");
+    assert!(receipt["price_cents"].as_u64().is_some_and(|p| p > 0), "{receipt}");
+    let at_printer = printer.order(receipt["order_id"].as_str().unwrap()).unwrap();
+    assert_eq!(at_printer.reference, id);
+    assert_eq!(at_printer.pdf_sha256, sha);
+    assert_eq!(
+        (at_printer.address.name.as_str(), at_printer.address.line2.as_deref()),
+        ("Sacha Martin", None)
+    );
+    assert_eq!(
+        (at_printer.address.postal_code.as_str(), at_printer.address.city.as_str()),
+        ("69003", "Lyon")
+    );
+    assert_eq!(at_printer.address.country, "FR");
+
+    // A country the printer does not post to: its own code comes back, not a 502.
+    let abroad = json!({ "name": "Sam", "line1": "1 Main Street", "postal_code": "10001", "city": "New York", "country": "us" });
+    let refused = h.call(Method::POST, &orders, &auth, order("card-poche", abroad)).await;
+    assert_eq!(
+        (refused.status, error_code(&refused).as_str()),
+        (StatusCode::UNPROCESSABLE_ENTITY, "printer_rejected"),
+        "{}",
+        refused.text()
+    );
+    assert_eq!(refused.json()["error"]["printer_code"], "unsupported_country");
+
+    // A product the printer does not sell.
+    let address = json!({ "name": "Sacha", "line1": "1 rue", "postal_code": "75001", "city": "Paris", "country": "FR" });
+    let unknown = h.call(Method::POST, &orders, &auth, order("card-folio", address.clone())).await;
+    assert_eq!(
+        (unknown.status, unknown.json()["error"]["printer_code"].as_str()),
+        (StatusCode::UNPROCESSABLE_ENTITY, Some("unknown_product"))
+    );
+
+    // The poche card ordered as A5: the printer's preflight findings are passed on.
+    let wrong_format = h.call(Method::POST, &orders, &auth, order("card-a5", address)).await;
+    assert_eq!(
+        (wrong_format.status, error_code(&wrong_format).as_str()),
+        (StatusCode::UNPROCESSABLE_ENTITY, "preflight_failed"),
+        "{}",
+        wrong_format.text()
+    );
+    let findings = wrong_format.json()["error"]["findings"].as_array().cloned().unwrap();
+    assert!(findings.iter().any(|f| f["severity"] == "error"), "{findings:#?}");
+    assert_eq!(printer.orders().len(), 1, "only the good order was registered");
 }
 
 #[tokio::test]

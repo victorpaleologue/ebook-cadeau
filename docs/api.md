@@ -37,7 +37,7 @@ weight < 30 kB excluding the optional cover thumbnail).
 | Route | Purpose | Key element ids |
 |---|---|---|
 | `GET /` | Home with the code form (for people typing the short URL on an e-reader) | `code-form`, `code-input` (name `code`), `code-submit` |
-| `GET /k?code=…` | Normalises the typed code and 303-redirects to `/k/{CODE}` | — |
+| `GET /k?code=…` | Normalises the typed code — or a pasted claim URL, with or without its scheme (`ebk.example/k/…`, `/k/…`; `GiftCode::parse_typed`, the rule the web app's code field shares) — and 303-redirects to `/k/{CODE}` | — |
 | `GET /aide` | Help page: the three ways to get the book, per device | `help` |
 | `GET /k/{code}` (`/K/` too; optional `?device=`) | The gift page: title, author, giver, message, the primary action for this device, the device chooser, and how many times the gift was already claimed | `gift-title`, `gift-author`, `gift-from`, `gift-message`, `primary-action`, `other-ways`, `device-chooser` (links `device-kobo`, `device-kindle`, `device-pocketbook`, `device-tolino`, `device-phone`, `device-computer`), `claim-count` |
 | `POST /k/{code}/download` | `hosted_file` only. Mints a download session and 303-redirects to `/d/{session}/{file-name}` | form id `download-form`, button id `download` |
@@ -120,10 +120,51 @@ EPUBs carrying DRM (`META-INF/encryption.xml` with a non-font-obfuscation algori
 `POST /api/v1/gifts/{id}/reissue` → `200 {"code", "code_display", "claim_url"}` (the previous
 code is voided). The creation body accepts an optional `"reveal_at": <unix>`.
 
-`POST /api/v1/gifts/{id}/print-orders` (Bearer) — body `{"product": "card-poche", "pdf_sha256": "…", "address": {…}}`
-plus the PDF uploaded beforehand via `PUT /api/v1/gifts/{id}/card.pdf`. The server forwards
-the PDF to the configured print provider (`EBC_PRINTER_URL`, see §5) and returns
+`POST /api/v1/gifts/{id}/print-orders` (Bearer) — body
+`{"product": "card-poche", "pdf_sha256": "…", "address": {…}, "quantity": 1}`
+(`quantity` optional, 1–1000, default 1) plus the PDF uploaded beforehand via
+`PUT /api/v1/gifts/{id}/card.pdf`. The server forwards the PDF to the configured print
+provider (`EBC_PRINTER_URL`, see §5) and returns
 `201 {"order_id", "status", "price_cents", "currency"}`.
+
+The **postal address** (`address`, the same object the print provider takes in §5):
+
+```json
+{ "name": "Sacha Martin", "line1": "12 rue des Lilas", "line2": "Bâtiment B",
+  "postal_code": "69003", "city": "Lyon", "country": "FR" }
+```
+
+| Member | Rule |
+|---|---|
+| `name` | required, the addressee, 1–80 characters |
+| `line1` | required, street and number, 1–120 characters |
+| `line2` | optional, at most 120 characters; empty or `null` is omitted |
+| `postal_code` | required, 1–12 characters |
+| `city` | required, 1–80 characters |
+| `country` | optional, ISO 3166-1 alpha-2 (case-insensitive, sent upper-cased); default `FR` |
+
+Every member is a string; text is trimmed, characters are counted (not bytes), control
+characters and any other member are refused. The server forwards the normalised object.
+Whether the printer posts to the country is the printer's answer (`unsupported_country`
+below), not the server's.
+
+Errors of this route:
+
+| Status / code | When |
+|---|---|
+| `400 invalid_address` | the address is not an object, misses a required member, has a member of the wrong type, too long, with a control character, unknown (e.g. `postcode`), or `country` is not two letters; `error.field` names it (`"address"`, `"address.postal_code"`, …) |
+| `422 invalid_request` | `product` is not a product id, or `quantity` is out of range |
+| `409 card_pdf_missing`, `409 pdf_mismatch` | no card uploaded, or `pdf_sha256` is not the uploaded card's |
+| `503 printing_not_configured` | no `EBC_PRINTER_URL` |
+| `422 preflight_failed` | the printer's preflight refused the PDF (§5); `error.findings` are the printer's |
+| `422 printer_rejected` | the printer refused the order with any other `4xx` (`unsupported_country`, `unknown_product`, `invalid_quantity`, `invalid_address`, `duplicate_reference`, …) |
+| `502 printer_unavailable` | the printer did not answer, answered `5xx`, or answered `2xx` without an `order_id` |
+
+Both `422` refusals carry the printer's answer: `error.printer_status` (its HTTP status),
+`error.printer_code` (its `error.code`, or `http_<status>` when it gave none usable),
+`error.printer_message` (its message, at most 300 characters, when given) and
+`error.findings` (its findings, or `[]`). Nothing is recorded on the gift unless the
+printer accepted the order.
 
 ## 4. Partner API (reseller-integrated mode)
 
@@ -221,7 +262,7 @@ Deliveries are retried with backoff; receivers must be idempotent.
 | Route | Purpose |
 |---|---|
 | `GET /v1/products` | Catalogue: `[{ "id": "card-poche", "trim_mm": [230, 178], "bleed_mm": 3, "spine_mm": 10, "paper": "350 g/m² …", "price_cents": {"1": 390, "10": 1900} }]` |
-| `POST /v1/orders` | `multipart/form-data`: part `order` (JSON: `product`, `quantity`, `address`, `reference`) and part `file` (the PDF). The printer **preflights** the PDF against the product: `201 {"order_id", "status": "accepted", "price_cents"}` or `422 {"error": {"code": "preflight_failed", "findings": [...]}}` |
+| `POST /v1/orders` | `multipart/form-data`: part `order` (JSON: `product`, `quantity`, `address`, `reference`, optional `callback_url`) and part `file` (the PDF). `address` is the object of §3 — `{name, line1, line2?, postal_code, city, country}`, `country` an ISO 3166-1 alpha-2 code. The printer **preflights** the PDF against the product: `201 {"order_id", "status": "accepted", "price_cents", "currency"}` or `422 {"error": {"code": "preflight_failed", "findings": [...]}}`. Other refusals are `{"error": {"code", "message"}}` with a `4xx`: `400 invalid_order` / `invalid_multipart` / `missing_part` (unreadable request, e.g. an address member missing), `422 unknown_product`, `invalid_quantity`, `invalid_reference`, `invalid_address`, `unsupported_country`, `invalid_callback_url`, `409 duplicate_reference`, `413` too large. The eBook Cadeau server passes them on as `422 printer_rejected` (§3) |
 | `GET /v1/orders/{id}` | `{"status": "accepted|printing|shipped|cancelled", "tracking": …}` |
 | Webhook | Optional `callback_url` in the order: status changes are POSTed there |
 

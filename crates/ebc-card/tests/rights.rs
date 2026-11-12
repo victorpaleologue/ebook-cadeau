@@ -135,7 +135,12 @@ fn the_print_route_gate() {
                 | RightsBasis::PublicDomain => {
                     let (doc, warnings) = result.unwrap();
                     assert_eq!(doc.images.len(), 1, "{basis}");
-                    assert!(has_warning(&warnings, &CardWarning::CoverNotConverted));
+                    // Converted to the output intent's CMYK (§3.4), not left as sRGB.
+                    assert!(!has_warning(&warnings, &CardWarning::CoverNotConverted));
+                    assert!(matches!(
+                        doc.images[0].data,
+                        ebc_scene::ImageData::Raw { format: ebc_scene::PixelFormat::Cmyk8, .. }
+                    ));
                 }
                 RightsBasis::PromoAllMedia | RightsBasis::UserPrivateCopy => {
                     let Err(CardError::RightsRouteRefused { basis: refused, route }) = result
@@ -512,12 +517,31 @@ fn a_flat_colour_computed_from_the_cover_needs_no_authorisation() {
 }
 
 #[test]
-fn pdf_x_1a_cannot_carry_a_cover_but_carries_the_typographic_card() {
+fn pdf_x_1a_carries_a_converted_cover_but_never_an_rgb_one() {
     let fonts = fonts();
     let mut profile = pro();
     profile.standard = PdfStandard::X1a2001;
-    let result = compose(&with_cover(poche(profile.clone()), RightsBasis::PrintLicence), &fonts);
-    assert!(matches!(result, Err(CardError::CoverColourSpace { standard: PdfStandard::X1a2001 })));
+    // Converted to CMYK through the output profile: a valid PDF/X-1a file.
+    let req = with_cover(poche(profile.clone()), RightsBasis::PrintLicence);
+    let (pdf, _) = render_pdf(&req, &fonts).unwrap();
+    let report = check(&pdf, &expectations(&req, false)).unwrap();
+    assert!(errors(&report).is_empty(), "{:#?}", errors(&report));
+    // With an output profile the colour-management module cannot read, the cover could
+    // only stay RGB, which PDF/X-1a forbids (even when the profile allows RGB).
+    let mut rgb = req.clone();
+    rgb.profile.allow_rgb = true;
+    rgb.output_profile = Some(
+        ebc_card::OutputProfile::new(
+            ebc_card::OutputProfile::bundled_cc0_fallback().unwrap().icc().clone(),
+            "CGATS TR 001",
+            "test",
+        )
+        .unwrap(),
+    );
+    assert!(matches!(
+        render_pdf(&rgb, &fonts),
+        Err(CardError::CoverColourSpace { standard: PdfStandard::X1a2001 })
+    ));
     for standard in [PdfStandard::X1a2001, PdfStandard::X3_2002] {
         profile.standard = standard;
         let req = poche(profile.clone());

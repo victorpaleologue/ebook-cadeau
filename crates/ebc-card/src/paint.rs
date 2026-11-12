@@ -2,39 +2,63 @@
 //!
 //! The card is designed in sRGB ([`Rgb8`]) and painted according to the output:
 //!
-//! * **PDF/X profiles** — flat grounds become device CMYK through
-//!   [`ebc_color::to_cmyk_ink_safe`] (not colour-managed: the printed tint of a chromatic
-//!   ground will differ from the screen), text and the QR code are 0/0/0/100, white is
-//!   0/0/0/0.
+//! * **PDF/X profiles** — flat grounds are converted to the output intent's CMYK with the
+//!   ICC transform of [`ebc_color::SrgbToCmyk`] (relative colorimetric with black-point
+//!   compensation — the very transform the cover image goes through, so that the ground
+//!   and the cover's own frame meet on press), then cleaned of tints under 5 % and capped
+//!   at the profile's ink limit ([`ebc_color::finish_flat`]). A near-black ground is
+//!   K 100 alone. Text and the QR code are 0/0/0/100, white is 0/0/0/0. When the output
+//!   profile cannot be read by the colour-management module, the naive conversion of
+//!   [`ebc_color::to_cmyk_ink_safe`] is the fallback (see [`Paint::link`]).
 //! * **Plain-PDF (home) profiles** — chromatic grounds stay sRGB, neutrals and all text
 //!   are `DeviceGray`, as `docs/research/03-print-requirements.md` (implication 29) asks.
 //!
 //! Text, QR code and rules are never RGB in either case.
 
-use ebc_color::{Rgb8, black_or_white, to_cmyk_ink_safe, to_scene_rgb};
+use ebc_color::{
+    NEAR_BLACK_LSTAR, Rgb8, SrgbToCmyk, black_or_white, finish_flat, to_cmyk_ink_safe,
+    to_scene_rgb,
+};
 use ebc_layout::PrintProfile;
 use ebc_scene::{Color, Item, PdfStandard};
 
 /// How colours are written for one profile.
-#[derive(Debug, Clone, Copy)]
+#[derive(Debug, Clone)]
 pub(crate) struct Paint {
     cmyk: bool,
     max_ink_percent: f32,
+    /// The ICC transform to the output intent, for PDF/X profiles whose profile could be
+    /// read.
+    link: Option<SrgbToCmyk>,
 }
 
 impl Paint {
-    pub(crate) fn for_profile(profile: &PrintProfile) -> Self {
+    /// Paint for `profile`; `link` is the sRGB → output-intent transform (PDF/X only).
+    pub(crate) fn for_profile(profile: &PrintProfile, link: Option<SrgbToCmyk>) -> Self {
         let max = profile.max_total_ink_percent;
+        let cmyk = profile.standard != PdfStandard::Plain;
         Self {
-            cmyk: profile.standard != PdfStandard::Plain,
+            cmyk,
             max_ink_percent: if max.is_finite() && max > 0.0 { max.min(400.0) } else { 300.0 },
+            link: if cmyk { link } else { None },
         }
+    }
+
+    /// The ICC transform, when there is one.
+    pub(crate) fn link(&self) -> Option<&SrgbToCmyk> {
+        self.link.as_ref()
     }
 
     /// A flat ground or tint.
     pub(crate) fn flat(&self, c: Rgb8) -> Color {
         if self.cmyk {
-            to_cmyk_ink_safe(c, self.max_ink_percent)
+            match &self.link {
+                // A near-black ground prints as K 100 alone, not as a four-colour build
+                // (and never as rich black across a crease, §4.3).
+                Some(_) if c.to_lab().l < NEAR_BLACK_LSTAR => Color::BLACK,
+                Some(link) => finish_flat(link.convert_color(c), self.max_ink_percent),
+                None => to_cmyk_ink_safe(c, self.max_ink_percent),
+            }
         } else if c.r == c.g && c.g == c.b {
             Color::Gray(f32::from(c.r) / 255.0)
         } else {
@@ -118,8 +142,8 @@ mod tests {
 
     #[test]
     fn professional_paint_is_cmyk_and_home_paint_is_grey_or_rgb() {
-        let pro = Paint::for_profile(&PrintProfile::professional_eu());
-        let home = Paint::for_profile(&PrintProfile::home(Sheet::A4));
+        let pro = Paint::for_profile(&PrintProfile::professional_eu(), None);
+        let home = Paint::for_profile(&PrintProfile::home(Sheet::A4), None);
         let navy = Rgb8::new(31, 58, 95);
         assert!(matches!(pro.flat(navy), Color::Cmyk { .. }));
         assert!(pro.flat(navy).total_ink_percent().is_some_and(|ink| ink <= 300.0));
@@ -135,8 +159,8 @@ mod tests {
 
     #[test]
     fn repainting_converts_rgb_fills_and_keeps_k_only_text() {
-        let pro = Paint::for_profile(&PrintProfile::professional_eu());
-        let home = Paint::for_profile(&PrintProfile::home(Sheet::A4));
+        let pro = Paint::for_profile(&PrintProfile::professional_eu(), None);
+        let home = Paint::for_profile(&PrintProfile::home(Sheet::A4), None);
         let rect = Path::rect(Rect::new(0.0, 0.0, 1.0, 1.0));
         let rgb = Item::group(
             ebc_scene::Transform::IDENTITY,
@@ -152,5 +176,27 @@ mod tests {
             pro.repaint(Item::fill(rect.clone(), Color::BLACK)),
             Item::fill(rect, Color::BLACK)
         );
+    }
+
+    #[cfg(feature = "bundled-fogra39")]
+    #[test]
+    fn colour_managed_grounds_go_through_the_output_profile_and_are_cleaned() {
+        let profile = crate::OutputProfile::bundled_fogra39().expect("bundled profile");
+        let link = ebc_color::CmykProfile::parse(profile.icc())
+            .map(|p| SrgbToCmyk::relative_bpc(&p))
+            .expect("the bundled profile is readable");
+        let pro = Paint::for_profile(&PrintProfile::upload_eu(), Some(link.clone()));
+        assert!(pro.link().is_some());
+        let cream = Rgb8::new(250, 240, 220);
+        let Color::Cmyk { c, m, y, k } = pro.flat(cream) else { panic!("CMYK expected") };
+        for v in [c, m, y, k] {
+            assert!(v == 0.0 || v >= ebc_color::MIN_TINT, "{v}");
+        }
+        assert_eq!(pro.flat(Rgb8::new(8, 8, 10)), Color::BLACK, "near-black is K only");
+        assert!(pro.flat(Rgb8::new(0, 40, 160)).total_ink_percent().is_some_and(|i| i <= 300.01));
+        // A home sheet never uses the transform.
+        let home = Paint::for_profile(&PrintProfile::home(Sheet::A4), Some(link));
+        assert!(home.link().is_none());
+        assert!(matches!(home.flat(cream), Color::Rgb { .. }));
     }
 }

@@ -255,6 +255,7 @@ fn check_parsed(pdf: &[u8], expect: &Expectations) -> Result<Report, PreflightEr
         &doc,
         catalog,
         level.is_some_and(meta::PdfxLevel::forbids_layers),
+        expect.require_output_intent,
         &mut sink,
     );
 

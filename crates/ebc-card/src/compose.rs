@@ -7,7 +7,7 @@ use ebc_layout::{
     CardFormat, DuplexFlip, Face, GUIDES_LAYER, PageGeometry, PrintProfile, caption_areas,
     check_marks_fit, guides, info_entries, marks, new_page_for, page_geometry, scale_ruler,
 };
-use ebc_scene::{DocInfo, Document, Item, Page, PdfStandard, Point, Rect};
+use ebc_scene::{DocInfo, Document, ImageData, Item, Page, PdfStandard, PixelFormat, Point, Rect};
 use ebc_text::fit_size;
 
 use crate::cover::DecodedCover;
@@ -47,9 +47,20 @@ pub(crate) struct CoverPlan {
     pub(crate) rights: RightsBasis,
 }
 
+/// What a composition is for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Purpose {
+    /// The print document: colours converted to the output intent where possible.
+    Print,
+    /// A screen preview: nothing is converted, so that the screen shows the sRGB design
+    /// (the cover as it is, grounds through the exact inverse of the naive conversion).
+    Preview,
+}
+
 pub(crate) fn compose(
     req: &CardRequest,
     fonts: &FontSet,
+    purpose: Purpose,
 ) -> Result<(Document, Vec<CardWarning>), CardError> {
     req.format.validate()?;
     req.profile.validate()?;
@@ -89,30 +100,8 @@ pub(crate) fn compose(
             authorised: req.adaptation_authorised,
         });
     }
-    if placement.is_some() && req.profile.standard == PdfStandard::X1a2001 {
-        return Err(CardError::CoverColourSpace { standard: req.profile.standard });
-    }
-    let cover = match placement {
-        Some(placement) => DecodedCover::decode(&req.cover)?.map(|image| CoverPlan {
-            image,
-            placement,
-            rights: basis,
-        }),
-        None => None,
-    };
-    if cover.is_some() {
-        if basis == RightsBasis::UserPrivateCopy {
-            warnings.push(CardWarning::OwnPrinterOnly);
-        }
-        if pdfx {
-            warnings.push(CardWarning::CoverNotConverted);
-        }
-    } else if matches!(req.spine, SpineChoice::CoverColour) {
-        warnings.push(CardWarning::SpineChoiceIgnored { style: req.spine.name() });
-    }
-
-    // ---- The document ------------------------------------------------------------------
-    let output_intent = if pdfx {
+    // ---- The output profile and the colour transform -----------------------------------
+    let output_profile = if pdfx {
         let profile = match &req.output_profile {
             Some(profile) => profile.clone(),
             None => OutputProfile::default_for_build()?,
@@ -124,13 +113,61 @@ pub(crate) fn compose(
                 class: profile.device_class().to_owned(),
             });
         }
-        Some(profile.to_output_intent())
+        Some(profile)
     } else {
         None
     };
+    // Covers, images and flat colours of a PDF/X file go through one ICC transform to
+    // the output intent (docs/research/03-print-requirements.md §3.4).
+    let link = match (&output_profile, purpose) {
+        (Some(profile), Purpose::Print) => match profile.colour_link() {
+            Ok(link) => Some(link),
+            Err(error) => {
+                // The fallback profile is already reported as such.
+                if !profile.is_fallback() {
+                    warnings.push(CardWarning::ColourNotManaged { reason: error.to_string() });
+                }
+                None
+            }
+        },
+        _ => None,
+    };
+
+    let cover = match placement {
+        Some(placement) => DecodedCover::decode(&req.cover)?.map(|image| CoverPlan {
+            image,
+            placement,
+            rights: basis,
+        }),
+        None => None,
+    };
+    if let Some(plan) = &cover {
+        if basis == RightsBasis::UserPrivateCopy {
+            warnings.push(CardWarning::OwnPrinterOnly);
+        }
+        if pdfx && purpose == Purpose::Print && link.is_none() && !plan.image.is_cmyk_jpeg() {
+            // `render_pdf` refuses the file unless the profile allows RGB.
+            warnings.push(CardWarning::CoverNotConverted);
+        }
+    } else if matches!(req.spine, SpineChoice::CoverColour) {
+        warnings.push(CardWarning::SpineChoiceIgnored { style: req.spine.name() });
+    }
+    if req.format.spine_width > CardFormat::SPINE_TEXT_MAX_MM {
+        warnings.push(CardWarning::SpineOutsideTextRange { spine_mm: req.format.spine_width });
+    }
+
+    // ---- The document ------------------------------------------------------------------
+    // A proof with the guides overlay is not a print file: it keeps its layers (so that a
+    // viewer can hide the guides) and therefore drops the PDF/X label and output intent,
+    // which a RIP would take as "print everything" (§3.2: no layers in print files).
+    let (standard, output_intent) = if req.guides {
+        (PdfStandard::Plain, None)
+    } else {
+        (req.profile.standard, output_profile.as_ref().map(OutputProfile::to_output_intent))
+    };
     let doc = Document {
         info: DocInfo::default(),
-        standard: req.profile.standard,
+        standard,
         output_intent,
         pages: Vec::new(),
         images: Vec::new(),
@@ -143,7 +180,7 @@ pub(crate) fn compose(
         doc,
         setter: Setter::default(),
         warnings,
-        paint: Paint::for_profile(&req.profile),
+        paint: Paint::for_profile(&req.profile, link),
         geometry,
         qr_module_mm: None,
         cover_rect: None,
@@ -155,6 +192,7 @@ pub(crate) fn compose(
     composer.doc.pages.push(inside);
     composer.doc.info = composer.doc_info(effective_rights);
     composer.check_cover_is_untouched()?;
+    composer.convert_images();
 
     Ok((composer.doc, composer.warnings))
 }
@@ -217,8 +255,10 @@ impl Composer<'_> {
         let (format, profile) = (self.req.format, self.req.profile.clone());
         let locale = self.req.locale;
         let font = self.fonts.body.clone();
-        // A dark grey on the black plate only: readable, and clearly not part of the card.
-        let color = self.paint.grey(0.25);
+        // On a home sheet a dark grey on the black plate only: readable, and clearly not
+        // part of the card. The job line of a press sheet is 100 % K, like the marks of a
+        // digital job, so that it survives on the black plate alone.
+        let color = if profile.sheet.is_some() { self.paint.grey(0.25) } else { self.paint.ink() };
         let mut items = Vec::new();
         if !profile.marks.any() {
             return Ok(items);
@@ -257,10 +297,16 @@ impl Composer<'_> {
                     Face::Outside => Msg::OutsideLabel,
                     Face::Inside => Msg::InsideLabel,
                 };
+                // The crease positions, from the left edge of the trim, as the printer
+                // must set its creasing tool (they are also in the EBC.FoldXMm key).
+                let [crease_a, crease_b] = format.fold_x();
                 let job = format!(
-                    "{} · {title} · {size} · {}",
+                    "{} · {title} · {size} · {} · {}: x = {} / {} mm",
                     t(locale, Msg::ProductName),
-                    t(locale, face)
+                    t(locale, face),
+                    t(locale, Msg::FoldHere),
+                    trim_mm(crease_a),
+                    trim_mm(crease_b),
                 );
                 [String::new(), job]
             };
@@ -333,6 +379,29 @@ impl Composer<'_> {
             created_unix: req.created_unix,
             language: Some(locale.bcp47().to_owned()),
             custom,
+        }
+    }
+
+    /// Converts the RGB images still in a PDF/X document (the spine's generated or
+    /// adapted backgrounds; the cover is converted when it is placed) to the output
+    /// intent's CMYK, with the same transform as the cover and the grounds. Without a
+    /// transform they stay RGB (and `render_pdf` refuses the file unless the profile
+    /// allows RGB).
+    fn convert_images(&mut self) {
+        let Some(link) = self.paint.link().cloned() else { return };
+        for resource in &mut self.doc.images {
+            let ImageData::Raw { pixels, width_px, height_px, format: PixelFormat::Rgb8 } =
+                &resource.data
+            else {
+                continue;
+            };
+            resource.data = ImageData::Raw {
+                pixels: link.convert_pixels(pixels).into(),
+                width_px: *width_px,
+                height_px: *height_px,
+                format: PixelFormat::Cmyk8,
+            };
+            resource.icc_profile = None;
         }
     }
 

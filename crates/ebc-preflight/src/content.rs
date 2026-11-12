@@ -803,6 +803,13 @@ impl<'a, 's> Interpreter<'a, 's> {
                 if paint.count == 0 || paint.components[0] > 0.0 {
                     let what =
                         format!("registration colour (Separation /All) is used for a {role}");
+                    if !self.expect.marks_allowed {
+                        self.sink.error(
+                            codes::MARKS_NOT_ALLOWED,
+                            Some(self.page),
+                            format!("{what}: printer's marks, which this upload must not carry"),
+                        );
+                    }
                     match self.touches_printed_area(geometry) {
                         Some(true) => self.sink.error(
                             codes::COLOR_REGISTRATION,
@@ -824,6 +831,23 @@ impl<'a, 's> Interpreter<'a, 's> {
                 }
                 let total: f64 =
                     paint.components.iter().map(|c| c.clamp(0.0, 1.0)).sum::<f64>() * 100.0;
+                // Check C6: a tint between 0 and 5 % on a process plate (a rounding margin
+                // of 0.01 % either side, for values written with few decimals).
+                if self.expect.require_output_intent
+                    && let Some(v) =
+                        paint.components[..4].iter().find(|v| **v > 0.000_1 && **v < 0.049_9)
+                {
+                    let [c, m, y, k] = paint.components.map(|v| v.clamp(0.0, 1.0) * 100.0);
+                    self.sink.warning(
+                        codes::INK_LIGHT_TINT,
+                        Some(self.page),
+                        format!(
+                            "a {role} uses C{c:.1} M{m:.1} Y{y:.1} K{k:.1}: a tint of {:.1} % \
+                             is below the 5 % that prints reliably",
+                            v * 100.0
+                        ),
+                    );
+                }
                 // At most 400.
                 #[allow(clippy::cast_possible_truncation)]
                 let total = total as f32;

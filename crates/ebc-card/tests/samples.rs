@@ -16,7 +16,13 @@ use ebc_preflight::check;
 
 fn write(name: &str, req: &CardRequest) -> usize {
     let (pdf, _) = render_pdf(req, &fonts()).unwrap();
-    let report = check(&pdf, &expectations(req, req.cover.is_printable())).unwrap();
+    let mut expect = expectations(req, false);
+    if req.guides {
+        // A proof is not a print file: a plain PDF with a layer, no PDF/X label.
+        assert!(!pdf.windows(9).any(|w| w == b"/GTS_PDFX"), "{name}: a proof claims PDF/X");
+        expect.require_output_intent = false;
+    }
+    let report = check(&pdf, &expect).unwrap();
     assert!(errors(&report).is_empty(), "{name}: {:#?}", errors(&report));
     std::fs::write(sample_dir().join(format!("{name}.pdf")), &pdf).unwrap();
     pdf.len()

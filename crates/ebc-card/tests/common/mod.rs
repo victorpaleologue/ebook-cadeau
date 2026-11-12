@@ -97,23 +97,27 @@ pub fn png(pixmap: &Pixmap) -> Vec<u8> {
 }
 
 /// What a printer's preflight would expect of a card composed for `req`'s profile and
-/// format. `rgb_cover` says that a cover is embedded: PDF/X-4 then carries it as tagged
-/// sRGB, which the expectations must allow; everything the composer paints itself is
-/// CMYK or grey in a PDF/X file.
+/// format. `rgb_cover` says that an RGB image is expected (a cover kept as tagged sRGB
+/// by a profile that allows RGB); a PDF/X card is otherwise CMYK and grey only — its
+/// cover is converted to the output intent. An upload profile (no marks, no sheet)
+/// expects no marks and no slug.
 pub fn expectations(req: &CardRequest, rgb_cover: bool) -> Expectations {
     let profile = &req.profile;
     let spread = req.format.spread();
     let plain = profile.standard == PdfStandard::Plain;
+    let upload = profile.sheet.is_none() && !profile.marks.any();
     Expectations {
         bleed_mm: profile.bleed,
         min_ppi: profile.min_ppi,
         require_output_intent: !plain,
-        allow_rgb: plain || rgb_cover,
+        allow_rgb: plain || profile.allow_rgb || rgb_cover,
         allow_transparency: false,
         max_total_ink_percent: Some(profile.max_total_ink_percent),
         trim_mm: Some((spread.w, spread.h)),
         spine_mm: Some(req.format.spine_width),
         min_qr_module_mm: Some(ebc_qr::MIN_PRINT_MODULE_MM),
+        marks_allowed: !upload,
+        require_media_equals_bleed: upload,
     }
 }
 

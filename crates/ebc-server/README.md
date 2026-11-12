@@ -120,6 +120,11 @@ Recipient pages (no JavaScript, no cookie): `GET /`, `GET /k?code=`, `GET /aide`
 `GET /o/{session}/catalog.xml|catalog.json`, `GET /healthz`.
 Creator API: `POST /api/v1/uploads`, `POST /api/v1/gifts`, `GET|DELETE /api/v1/gifts/{id}`,
 `POST …/reissue`, `PUT …/card.pdf`, `POST …/print-orders`.
+A print order's `address` is `{name, line1, line2?, postal_code, city, country}` (`country`
+ISO 3166-1 alpha-2, default `FR`); a malformed one is `400 invalid_address` with
+`error.field`. The printer's `4xx` refusals come back as `422 preflight_failed` /
+`422 printer_rejected` carrying `printer_code`, `printer_message` and `findings`; only a
+network error, a `5xx` or an unusable answer is `502 printer_unavailable` (`docs/api.md` §3).
 Partner API: `POST /api/partner/v1/uploads`, `POST /api/partner/v1/gifts`, `GET …/gifts/{id}`,
 `PUT …/cover[?cover_rights=…]`, `GET …/card.pdf`, `POST …/cancel|reissue|fulfilled`; signed webhooks.
 

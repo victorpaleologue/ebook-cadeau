@@ -73,17 +73,28 @@ fn name_tree_has_entries(doc: &Document, tree: &Dictionary) -> bool {
         .any(|key| get_array(doc, tree, key).is_some_and(|entries| !entries.is_empty()))
 }
 
-/// Reports optional content (layers); the severity depends on the PDF/X level claimed.
+/// Reports optional content (layers): an error for professional printing (`professional`:
+/// an output intent is required — layers must be flattened, §3.2, check C3), else graded
+/// by the PDF/X level claimed.
 pub(crate) fn check_optional_content(
     doc: &Document,
     catalog: &Dictionary,
     forbids_layers: bool,
+    professional: bool,
     sink: &mut Sink,
 ) {
     let Some(properties) = get_dict(doc, catalog, b"OCProperties") else { return };
     let groups = get_array(doc, properties, b"OCGs").map_or(0, <[Object]>::len);
     let message = format!("the document uses optional content (layers): {groups} group(s)");
-    if forbids_layers {
+    if professional {
+        sink.error(
+            codes::OPTIONAL_CONTENT,
+            None,
+            format!(
+                "{message}; a print file must be flattened (a RIP may print a layer a viewer hides)"
+            ),
+        );
+    } else if forbids_layers {
         sink.warning(
             codes::OPTIONAL_CONTENT,
             None,
@@ -332,9 +343,14 @@ mod tests {
     fn layers_are_graded_by_pdfx_level() {
         let doc = Document::with_version("1.6");
         let catalog = dictionary! { "OCProperties" => dictionary! { "OCGs" => vec![Object::Null, Object::Null] } };
-        for (forbids, severity) in [(true, Severity::Warning), (false, Severity::Info)] {
+        for (forbids, professional, severity) in [
+            (true, false, Severity::Warning),
+            (false, false, Severity::Info),
+            (false, true, Severity::Error),
+            (true, true, Severity::Error),
+        ] {
             let mut sink = Sink::default();
-            check_optional_content(&doc, &catalog, forbids, &mut sink);
+            check_optional_content(&doc, &catalog, forbids, professional, &mut sink);
             let got = sink.into_sorted();
             assert_eq!(got.len(), 1);
             assert_eq!((got[0].code, got[0].severity), (codes::OPTIONAL_CONTENT, severity));

@@ -309,10 +309,37 @@
         <summary data-i18n="order_print_cta"></summary>
         <p id="order-note" class="hint"></p>
         <div id="order-form" hidden>
-          <div class="field">
-            <label for="order-address" data-i18n="ui_order_address"></label>
-            <textarea id="order-address" rows="3" autocomplete="street-address"></textarea>
-          </div>
+          <!-- The postal address of docs/api.md §3: name, line1, line2?, postal_code, city, country. -->
+          <fieldset id="order-address" class="address" aria-describedby="order-address-error">
+            <legend data-i18n="ui_order_address"></legend>
+            <div class="field">
+              <label for="order-name" data-i18n="ui_address_name"></label>
+              <input id="order-name" name="name" type="text" autocomplete="shipping name" maxlength="80" required>
+            </div>
+            <div class="field">
+              <label for="order-line1" data-i18n="ui_address_line1"></label>
+              <input id="order-line1" name="line1" type="text" autocomplete="shipping address-line1" maxlength="120" required>
+            </div>
+            <div class="field">
+              <label for="order-line2" data-i18n="ui_address_line2"></label>
+              <input id="order-line2" name="line2" type="text" autocomplete="shipping address-line2" maxlength="120">
+            </div>
+            <div class="row">
+              <div class="field">
+                <label for="order-postal-code" data-i18n="ui_address_postal_code"></label>
+                <input id="order-postal-code" name="postal_code" type="text" autocomplete="shipping postal-code" maxlength="12" spellcheck="false" required>
+              </div>
+              <div class="field">
+                <label for="order-city" data-i18n="ui_address_city"></label>
+                <input id="order-city" name="city" type="text" autocomplete="shipping address-level2" maxlength="80" required>
+              </div>
+            </div>
+            <div class="field narrow">
+              <label for="order-country" data-i18n="ui_address_country"></label>
+              <select id="order-country" name="country" autocomplete="shipping country"></select>
+            </div>
+            <p id="order-address-error" class="error" hidden></p>
+          </fieldset>
           <button type="button" id="order-submit" class="secondary" data-i18n="order_print_cta"></button>
           <p id="order-status" class="status" role="status" aria-live="polite"></p>
         </div>

@@ -889,6 +889,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "ebc-card",
+ "ebc-demo-printer",
  "ebc-i18n",
  "ebc-isbn",
  "ebc-layout",

@@ -113,8 +113,9 @@ fn png_transparency_is_composited_on_white() {
         CoverInput::Encoded { bytes: png(&pixmap), rights: RIGHTS },
         CoverInput::Pixels { pixmap: pixmap.clone(), rights: RIGHTS },
     ] {
-        let mut req = poche(PrintProfile::upload_eu());
-        req.cover = cover;
+        // At home the cover stays sRGB.
+        let mut req = poche(home());
+        req.cover = cover.clone();
         let (doc, _) = compose(&req, &fonts).unwrap();
         let ImageData::Raw { pixels, format: PixelFormat::Rgb8, width_px: 620, height_px: 1004 } =
             &doc.images[0].data
@@ -124,9 +125,17 @@ fn png_transparency_is_composited_on_white() {
         assert_eq!(&pixels[..3], [255, 255, 255], "transparent becomes white, not green");
         let at = (50 * 620 + 10) * 3;
         assert_eq!(&pixels[at..at + 3], [127, 127, 127]);
+        // In a PDF/X file it is converted to the output intent's CMYK: white is no ink.
+        let mut req = poche(PrintProfile::upload_eu());
+        req.cover = cover;
+        let (doc, _) = compose(&req, &fonts).unwrap();
+        let ImageData::Raw { pixels, format: PixelFormat::Cmyk8, .. } = &doc.images[0].data else {
+            panic!("raw CMYK expected")
+        };
+        assert_eq!(&pixels[..4], [0, 0, 0, 0], "transparent becomes paper white");
         // No alpha channel is left, so no transparency reaches a PDF/X file.
         let (pdf, _) = render_pdf(&req, &fonts).unwrap();
-        let report = check(&pdf, &expectations(&req, true)).unwrap();
+        let report = check(&pdf, &expectations(&req, false)).unwrap();
         assert!(errors(&report).is_empty(), "{:#?}", errors(&report));
         assert!(!report.pages[0].transparency);
     }
@@ -340,9 +349,13 @@ fn the_ground_is_the_colour_of_the_cover_or_paper_white() {
     req.cover = CoverInput::Pixels { pixmap: art::cover(620, 1004, true, true), rights: RIGHTS };
     req.ground = Some(ebc_color::Rgb8::new(31, 58, 95));
     let (doc, _) = compose(&req, &fonts).unwrap();
-    let Item::Path { fill: Some((Color::Cmyk { c, k, .. }, _)), .. } = &doc.pages[0].items[0]
-    else {
-        panic!("a CMYK ground in a PDF/X file")
+    let Item::Path { fill: Some((ground, _)), .. } = &doc.pages[0].items[0] else {
+        panic!("a ground")
     };
-    assert!(*c > 0.5 && *k > 0.5);
+    // Through the output profile (FOGRA39, relative colorimetric with BPC), cleaned.
+    let link = ebc_card::OutputProfile::default_for_build().unwrap().colour_link().unwrap();
+    let navy = ebc_color::Rgb8::new(31, 58, 95);
+    assert_eq!(*ground, ebc_color::finish_flat(link.convert_color(navy), 300.0));
+    let Color::Cmyk { c, k, .. } = ground else { panic!("a CMYK ground in a PDF/X file") };
+    assert!(*c > 0.8 && *k > 0.2, "{ground:?}");
 }

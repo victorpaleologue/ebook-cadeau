@@ -26,7 +26,9 @@ pub const ANNOTATION: &str = "ANNOTATION";
 pub const ACROFORM: &str = "ACROFORM";
 /// The document embeds files (attachments). Error.
 pub const EMBEDDED_FILE: &str = "EMBEDDED_FILE";
-/// The document uses optional content (layers). Warning under PDF/X-1a and PDF/X-3, else info.
+/// The document uses optional content (layers). Error when an output intent is required
+/// (professional printing: layers must be flattened, `docs/research/03-print-requirements.md`
+/// §3.2 and check C3); otherwise a warning under PDF/X-1a and PDF/X-3, else info.
 pub const OPTIONAL_CONTENT: &str = "OPTIONAL_CONTENT";
 /// The file was saved with incremental updates: earlier revisions remain inside it. Warning.
 pub const INCREMENTAL_UPDATE: &str = "INCREMENTAL_UPDATE";
@@ -47,6 +49,9 @@ pub const BOX_BLEED_MISSING: &str = "BOX_BLEED_MISSING";
 pub const BOX_INVALID: &str = "BOX_INVALID";
 /// The boxes are not nested `TrimBox ⊆ BleedBox ⊆ MediaBox`. Error.
 pub const BOX_NOT_NESTED: &str = "BOX_NOT_NESTED";
+/// The MediaBox is larger than the BleedBox (a slug for marks) although the upload must be
+/// exactly trim + bleed. Error.
+pub const BOX_MEDIA_NOT_BLEED: &str = "BOX_MEDIA_NOT_BLEED";
 /// A `CropBox` cuts into the bleed box: viewers and some RIPs would clip the bleed. Warning.
 pub const BOX_CROP_CLIPS_BLEED: &str = "BOX_CROP_CLIPS_BLEED";
 /// A page has both a `TrimBox` and an `ArtBox`, which PDF/X forbids. Warning.
@@ -99,6 +104,13 @@ pub const COLOR_SPOT: &str = "COLOR_SPOT";
 pub const COLOR_REGISTRATION: &str = "COLOR_REGISTRATION";
 /// A colour space could not be resolved. Warning.
 pub const COLOR_UNKNOWN: &str = "COLOR_UNKNOWN";
+/// Printer's marks (anything in the registration colour, `Separation /All`) in a file
+/// for a printer that wants none. Error.
+pub const MARKS_NOT_ALLOWED: &str = "MARKS_NOT_ALLOWED";
+/// A flat CMYK colour in the printed area has a process channel above 0 and below 5 %,
+/// a tint that prints unreliably (Pixartprinting: no tint below 5 %). Warning, when an
+/// output intent is required.
+pub const INK_LIGHT_TINT: &str = "INK_LIGHT_TINT";
 /// A CMYK fill or stroke exceeds the total ink limit. Error.
 pub const INK_TOTAL_TOO_HIGH: &str = "INK_TOTAL_TOO_HIGH";
 
@@ -174,6 +186,7 @@ pub const ALL: &[&str] = &[
     BOX_CROP_CLIPS_BLEED,
     BOX_INVALID,
     BOX_MEDIA_MISSING,
+    BOX_MEDIA_NOT_BLEED,
     BOX_NOT_NESTED,
     BOX_TRIM_AND_ART,
     BOX_TRIM_MISSING,
@@ -199,9 +212,11 @@ pub const ALL: &[&str] = &[
     IMAGE_INVALID,
     IMAGE_LOW_RES,
     INCREMENTAL_UPDATE,
+    INK_LIGHT_TINT,
     INK_TOTAL_TOO_HIGH,
     JAVASCRIPT,
     LIMIT_EXCEEDED,
+    MARKS_NOT_ALLOWED,
     NO_DOCUMENT_DATES,
     NO_FILE_ID,
     NO_OUTPUT_INTENT,

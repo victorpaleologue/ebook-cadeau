@@ -370,6 +370,29 @@ impl GiftCode {
         Self::parse(code)
     }
 
+    /// Parses what a person typed or pasted into a code field: a code
+    /// ([`parse`](Self::parse)) or a whole claim URL, with or without its scheme
+    /// (`https://ebk.example/k/…`, `ebk.example/k/…`, `EBK.EXAMPLE/K/…`, `/k/…`).
+    ///
+    /// The input is first read as a code. Only when that fails with
+    /// [`CodeError::InvalidChar`] or [`CodeError::Length`] *and* the input contains a `/`
+    /// is it read as a claim URL ([`from_claim_url`](Self::from_claim_url)). A code that is
+    /// merely mistyped therefore still reports [`CodeError::Check`], whether it was typed
+    /// alone or inside a URL. This is the one function the server's redemption form and
+    /// the web app's code field share.
+    ///
+    /// # Errors
+    /// The errors of [`parse`](Self::parse); [`CodeError::NotAClaimUrl`] when the input
+    /// holds a `/` but no `/k/<code>` path.
+    pub fn parse_typed(input: &str) -> Result<Self, CodeError> {
+        match Self::parse(input) {
+            Err(CodeError::InvalidChar(_) | CodeError::Length { .. }) if input.contains('/') => {
+                Self::from_claim_url(input.trim())
+            }
+            other => other,
+        }
+    }
+
     /// The twelve symbol values (`0..20`), check symbol last.
     #[must_use]
     pub fn symbols(&self) -> [u8; Self::LEN] {
@@ -1007,6 +1030,62 @@ mod tests {
             GiftCode::from_claim_url("https://ebk.example/k/é"),
             Err(CodeError::InvalidChar('é'))
         );
+    }
+
+    #[test]
+    fn typed_input_is_a_code_or_a_claim_url_with_or_without_scheme() {
+        let code = GiftCode::from_payload(123_456_789_012).expect("in range");
+        let compact = code.compact();
+        let lower = compact.to_lowercase();
+        let spaced = code.grouped().replace('-', " ");
+        for input in [
+            compact.clone(),
+            lower.clone(),
+            spaced.clone(),
+            format!("  {}  ", code.grouped()),
+            format!("https://ebk.example/k/{compact}"),
+            format!("ebk.example/k/{compact}"),
+            format!("EBK.EXAMPLE/K/{compact}"),
+            format!("HTTPS://EBK.EXAMPLE/K/{compact}"),
+            format!("/k/{compact}"),
+            format!("/K/{lower}"),
+            format!("ebk.example/k/{lower}"),
+            format!("  ebk.example/k/{spaced}  "),
+            format!("https://ebk.example/k/{}?device=kobo#x", code.grouped()),
+            format!("http://localhost:8080/base/k/{compact}/"),
+        ] {
+            assert_eq!(GiftCode::parse_typed(&input), Ok(code), "input {input:?}");
+        }
+
+        // Typo versus not-a-code semantics are kept, inside a URL too.
+        let mut typo = compact.clone().into_bytes();
+        typo.swap(0, 1);
+        let typo = String::from_utf8(typo).expect("ascii");
+        if typo != compact {
+            assert_eq!(GiftCode::parse_typed(&typo), Err(CodeError::Check));
+            assert_eq!(
+                GiftCode::parse_typed(&format!("ebk.example/k/{typo}")),
+                Err(CodeError::Check)
+            );
+        }
+        assert_eq!(
+            GiftCode::parse_typed("ebk.example/k/BCDF"),
+            Err(CodeError::Length { expected: 12, found: 4 })
+        );
+        assert_eq!(GiftCode::parse_typed("ebk.example/"), Err(CodeError::NotAClaimUrl));
+        assert_eq!(GiftCode::parse_typed("ebk.example/k/é"), Err(CodeError::InvalidChar('é')));
+        // Without a `/`, the errors of `parse` are unchanged.
+        assert_eq!(GiftCode::parse_typed("ebk.example"), Err(CodeError::InvalidChar('e')));
+        assert_eq!(
+            GiftCode::parse_typed("BCDF"),
+            Err(CodeError::Length { expected: 12, found: 4 })
+        );
+        assert_eq!(GiftCode::parse_typed(""), Err(CodeError::Length { expected: 12, found: 0 }));
+
+        // Hostile input never panics.
+        for input in ["/", "//k//", "/k/", "/k/\u{0}", "é/k/é", "/k/%%%", &"/k/".repeat(500)] {
+            assert!(GiftCode::parse_typed(input).is_err(), "{input:?}");
+        }
     }
 
     #[test]

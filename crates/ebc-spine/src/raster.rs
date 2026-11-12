@@ -82,6 +82,25 @@ impl Raster {
         }
         Self { w: self.w, h: self.h + top + bottom, data }
     }
+
+    /// A copy with the first column repeated `left` times on the left and the last column
+    /// repeated `right` times on the right (edge replication, used to run an image spine
+    /// on past the creases).
+    pub(crate) fn extend_cols(&self, left: usize, right: usize) -> Self {
+        let w = self.w + left + right;
+        let mut data = Vec::with_capacity(w * self.h * 3);
+        for row in self.data.chunks_exact(self.w * 3) {
+            let (first, last) = (&row[..3], &row[row.len() - 3..]);
+            for _ in 0..left {
+                data.extend_from_slice(first);
+            }
+            data.extend_from_slice(row);
+            for _ in 0..right {
+                data.extend_from_slice(last);
+            }
+        }
+        Self { w, h: self.h, data }
+    }
 }
 
 /// Composites a non-premultiplied RGBA pixel over white — what a transparent pixel

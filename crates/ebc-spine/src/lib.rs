@@ -288,6 +288,13 @@ pub struct SpineOptions {
     /// A provided spine with fewer pixels per inch along the spine is not reused.
     /// Default 150.
     pub min_provided_ppi: f64,
+    /// How far an **image** background (an edge continuation, a provided spine) and the
+    /// contrast band run on past each crease, in millimetres, by repeating their edge
+    /// columns, so that no colour boundary falls on a crease that may drift
+    /// (`docs/research/03-print-requirements.md` §6.4 rule 3: "never ending on the
+    /// crease"). Flat backgrounds are not affected: the caller paints the neighbouring
+    /// panels. 0–10; default 0 (everything stays inside [`SpineRequest::rect`]).
+    pub crease_overrun_mm: f64,
 }
 
 impl Default for SpineOptions {
@@ -310,6 +317,7 @@ impl Default for SpineOptions {
             fallback_font: None,
             image_ppi: 300.0,
             min_provided_ppi: 150.0,
+            crease_overrun_mm: 0.0,
         }
     }
 }
@@ -348,6 +356,9 @@ impl SpineOptions {
         }
         if !positive(self.image_ppi) || !non_negative(self.min_provided_ppi) {
             return bad("resolutions must be finite and positive");
+        }
+        if !(non_negative(self.crease_overrun_mm) && self.crease_overrun_mm <= 10.0) {
+            return bad("the overrun past the creases must be between 0 and 10 mm");
         }
         Ok(())
     }
@@ -799,6 +810,37 @@ pub fn text_area(req: &SpineRequest<'_>, opts: &SpineOptions) -> Result<Rect, Sp
     Ok(Geometry::new(req, opts)?.text_area())
 }
 
+/// Runs an image background on past the creases by `overrun` millimetres: the raster's
+/// edge columns are repeated (only on the sides where the image reaches a crease of
+/// `panel`), and the rectangle grows to match.
+fn overrun_image(raster: Raster, rect: Rect, panel: Rect, overrun: f64) -> (Raster, Rect) {
+    if overrun.is_nan() || overrun <= 0.0 || rect.w <= 0.0 {
+        return (raster, rect);
+    }
+    let px_per_mm = raster.w as f64 / rect.w;
+    let cols = (overrun * px_per_mm).ceil().max(1.0) as usize;
+    let extra = cols as f64 / px_per_mm;
+    let left = if rect.x <= panel.x + 1e-6 { cols } else { 0 };
+    let right = if rect.right() >= panel.right() - 1e-6 { cols } else { 0 };
+    let grown = Rect::new(
+        rect.x - if left > 0 { extra } else { 0.0 },
+        rect.y,
+        rect.w + if left > 0 { extra } else { 0.0 } + if right > 0 { extra } else { 0.0 },
+        rect.h,
+    );
+    (raster.extend_cols(left, right), grown)
+}
+
+/// `rect` grown by `overrun` millimetres on each side that lies on a crease of `panel`.
+fn overrun_rect(rect: Rect, panel: Rect, overrun: f64) -> Rect {
+    if overrun.is_nan() || overrun <= 0.0 {
+        return rect;
+    }
+    let left = if rect.x <= panel.x + 1e-6 { overrun } else { 0.0 };
+    let right = if rect.right() >= panel.right() - 1e-6 { overrun } else { 0.0 };
+    Rect::new(rect.x - left, rect.y, rect.w + left + right, rect.h)
+}
+
 /// Registers an RGB raster in the document.
 fn register(doc: &mut Document, raster: Raster) -> ebc_scene::ImageId {
     let (width_px, height_px) = (raster.w as u32, raster.h as u32);
@@ -852,13 +894,23 @@ fn adapted_design(
     doc: &mut Document,
     notes: Vec<SpineNote>,
 ) -> SpineDesign {
+    let panel = adapted
+        .fills
+        .iter()
+        .map(|fill| fill.rect)
+        .fold(adapted.image_rect, |all, rect| all.union(&rect));
+    let overrun = opts.crease_overrun_mm;
     let mut items: Vec<Item> = adapted
         .fills
         .iter()
-        .map(|fill| Item::filled_rect(fill.rect, flat_paint(fill.colour, opts.background_paint)))
+        .map(|fill| {
+            let rect = overrun_rect(fill.rect, panel, overrun);
+            Item::filled_rect(rect, flat_paint(fill.colour, opts.background_paint))
+        })
         .collect();
-    let image = register(doc, adapted.raster);
-    items.push(Item::Image { image, rect: adapted.image_rect });
+    let (raster, rect) = overrun_image(adapted.raster, adapted.image_rect, panel, overrun);
+    let image = register(doc, raster);
+    items.push(Item::Image { image, rect });
     let text = ebc_color::black_or_white(adapted.background);
     finish(items, adapted.background, BackgroundKind::ProvidedSpine, text, notes)
 }
@@ -1092,8 +1144,10 @@ fn synthesise(
         }
         Ground::Image(image) => {
             let (mean, darkest, lightest) = (image.mean, image.darkest, image.lightest);
-            let id = register(doc, image.raster);
-            items.push(Item::Image { image: id, rect: geom.rect });
+            let (raster, rect) =
+                overrun_image(image.raster, geom.rect, geom.rect, opts.crease_overrun_mm);
+            let id = register(doc, raster);
+            items.push(Item::Image { image: id, rect });
             let (text, _) = text_on_flat(mean, opts, &mut notes);
             let worst = contrast_ratio(text, darkest).min(contrast_ratio(text, lightest));
             (mean, BackgroundKind::EdgeContinuation, text, worst, Some((darkest, lightest)))
@@ -1131,7 +1185,11 @@ fn synthesise(
         }
         let top = (ink.y - 3.0).max(geom.rect.y);
         let bottom = (ink.bottom() + 3.0).min(geom.rect.bottom());
-        let band = Rect::new(geom.rect.x, top, geom.rect.w, bottom - top);
+        let band = overrun_rect(
+            Rect::new(geom.rect.x, top, geom.rect.w, bottom - top),
+            geom.rect,
+            opts.crease_overrun_mm,
+        );
         items.push(Item::filled_rect(band, flat_paint(band_colour, opts.background_paint)));
         notes.push(SpineNote::ContrastBand);
         contrast = contrast_ratio(text_colour, band_colour);

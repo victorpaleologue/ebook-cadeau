@@ -31,6 +31,14 @@ const QR_MODULE: f64 = 0.5;
 /// 2026-11-12T08:30:00Z.
 const CREATED: i64 = 1_794_472_200;
 
+/// "ISO Coated v2 300% (basICColor)", the printer-class (`prtr`) FOGRA39L profile that
+/// `ebc-card` bundles (zlib licence).
+fn fogra39() -> Arc<[u8]> {
+    let path = FsPath::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../ebc-card/assets/icc/ISOcoated_v2_300_bas.icc");
+    Arc::from(std::fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display())))
+}
+
 fn asset(relative: &str) -> Arc<[u8]> {
     let path = FsPath::new(env!("CARGO_MANIFEST_DIR")).join("../../assets").join(relative);
     Arc::from(std::fs::read(&path).unwrap_or_else(|e| panic!("{}: {e}", path.display())))
@@ -75,10 +83,10 @@ impl Card {
             ("EBC.CoverHeightMm".into(), "178".into()),
         ];
         doc.output_intent = Some(OutputIntent {
-            condition_identifier: "CGATS TR 001".into(),
-            info: "U.S. Web Coated (SWOP)".into(),
+            condition_identifier: "FOGRA39".into(),
+            info: "ISO Coated v2 300% (basICColor)".into(),
             registry_name: "http://www.color.org".into(),
-            icc_profile: Some(asset("icc/CGATS001Compat-v2-micro.icc")),
+            icc_profile: Some(fogra39()),
             components: 4,
         });
         let font = doc.add_font(asset("fonts/AtkinsonHyperlegible-Regular.ttf"), 0);
@@ -216,20 +224,11 @@ fn bounded(pdf: &[u8], expect: &Expectations) -> Result<Report, PreflightError> 
     result
 }
 
-/// The only finding a good card may carry: the bundled CMYK profile
-/// (`assets/icc/CGATS001Compat-v2-micro.icc`) declares the device class `scnr` (input),
-/// while PDF/X asks for an output (`prtr`) profile. That is a property of the asset, which
-/// the preflight rightly points out as a warning.
+/// A good card carries no finding at all. (It used to carry one warning: the 8 kB CC0
+/// profile of `assets/icc` is of class `scnr`, which is now an error for PDF/X output, so
+/// the cards here use the printer-class FOGRA39 profile bundled with `ebc-card`.)
 fn assert_clean(report: &Report, what: &str) {
-    for finding in &report.findings {
-        assert!(
-            finding.code == c::OUTPUT_INTENT_INVALID
-                && finding.severity == Severity::Warning
-                && finding.message.contains("class 'scnr'"),
-            "{what}: unexpected finding {finding}"
-        );
-    }
-    assert!(report.findings.len() <= 1, "{what}: {:#?}", report.findings);
+    assert!(report.findings.is_empty(), "{what}: {:#?}", report.findings);
     assert!(report.passed(), "{what}");
 }
 
@@ -250,7 +249,7 @@ fn cards_written_by_ebc_pdf_pass() {
         assert_eq!(report.document.trapped.as_deref(), Some("False"));
         assert_eq!(report.document.ebc.get("EBC.FoldXMm").map(String::as_str), Some("110,120"));
         let intent = report.document.output_intent.as_ref().unwrap();
-        assert_eq!(intent.identifier.as_deref(), Some("CGATS TR 001"));
+        assert_eq!(intent.identifier.as_deref(), Some("FOGRA39"));
         assert_eq!(intent.profile_components, Some(4));
 
         assert_eq!(report.pages.len(), 2);
@@ -413,4 +412,37 @@ fn truncated_and_corrupted_writer_output_never_panics_or_hangs() {
     wrapped.extend_from_slice(&pdf);
     wrapped.extend(rng.bytes(200));
     let _ = bounded(&wrapped, &expect);
+}
+
+/// Check B4 (`docs/research/03-print-requirements.md` §10.1): an upload is exactly trim +
+/// bleed and carries no printer's marks. The writer's card has a 7 mm slug with crop marks
+/// in the registration colour: both are errors for an upload, neither for a printer that
+/// takes marks.
+#[test]
+fn an_upload_refuses_marks_and_a_slug() {
+    let upload = Expectations { trim_mm: Some((TRIM.w, TRIM.h)), ..Expectations::upload() };
+    let marked = Card::good(PdfStandard::X4).pdf();
+    let report = check(&marked, &upload).unwrap();
+    let found = codes(&report);
+    assert!(found.contains(c::BOX_MEDIA_NOT_BLEED), "{found:?}");
+    assert!(found.contains(c::MARKS_NOT_ALLOWED), "{found:?}");
+    assert!(!report.passed());
+    // The slug alone (no marks) is still refused; marks are allowed by default.
+    let unmarked = Card { marks: false, ..Card::good(PdfStandard::X4) }.pdf();
+    let found = codes(&check(&unmarked, &upload).unwrap());
+    assert!(found.contains(c::BOX_MEDIA_NOT_BLEED) && !found.contains(c::MARKS_NOT_ALLOWED));
+    assert!(check(&marked, &expectations()).unwrap().passed());
+}
+
+/// Check C6: a flat colour with a process channel above 0 and below 5 % is reported.
+#[test]
+fn light_tints_are_reported_for_professional_output() {
+    let card =
+        Card { background: Color::cmyk(0.10, 0.03, 0.30, 0.0), ..Card::good(PdfStandard::X4) };
+    let report = check(&card.pdf(), &expectations()).unwrap();
+    let tint = report.findings.iter().find(|f| f.code == c::INK_LIGHT_TINT).expect("a finding");
+    assert_eq!((tint.severity, tint.page), (Severity::Warning, Some(1)));
+    assert!(report.passed(), "a warning, not an error");
+    let home = Expectations { require_output_intent: false, ..expectations() };
+    assert!(!codes(&check(&card.pdf(), &home).unwrap()).contains(c::INK_LIGHT_TINT));
 }

@@ -311,6 +311,28 @@ pub(crate) fn check_boxes(
             format!("the {bleed_source} extends beyond the MediaBox"),
         );
     }
+    if expect.require_media_equals_bleed {
+        let off = [
+            bleed_mm.x0 - media_mm.x0,
+            media_mm.x1 - bleed_mm.x1,
+            bleed_mm.y0 - media_mm.y0,
+            media_mm.y1 - bleed_mm.y1,
+        ];
+        if off.iter().any(|d| d.abs() > NESTING_TOLERANCE_MM) {
+            sink.error(
+                codes::BOX_MEDIA_NOT_BLEED,
+                Some(page),
+                format!(
+                    "the page is {:.2} × {:.2} mm but the {bleed_source} is {:.2} × {:.2} mm: an \
+                     upload must be exactly trim + bleed, without a slug for marks",
+                    media_mm.width(),
+                    media_mm.height(),
+                    bleed_mm.width(),
+                    bleed_mm.height()
+                ),
+            );
+        }
+    }
     if let (Some(crop), Some(bleed)) = (boxes.crop, boxes.bleed)
         && !boxes.to_mm(crop).contains(&boxes.to_mm(bleed), NESTING_TOLERANCE_MM)
     {

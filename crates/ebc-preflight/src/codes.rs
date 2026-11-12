@@ -90,7 +90,9 @@ pub const IMAGE_INVALID: &str = "IMAGE_INVALID";
 /// An image is scaled by different factors horizontally and vertically (stretched). Warning.
 pub const IMAGE_DISTORTED: &str = "IMAGE_DISTORTED";
 /// More than 0.5 % of the pixels of a losslessly stored CMYK image exceed the total ink
-/// limit. Warning.
+/// limit (check C4: the 99.5th percentile is above it). Error when an output intent is
+/// required (a professional file), warning otherwise. JPEG-compressed images are not
+/// decoded and not checked.
 pub const IMAGE_INK_TOTAL_TOO_HIGH: &str = "IMAGE_INK_TOTAL_TOO_HIGH";
 
 // ---- colour ----------------------------------------------------------------------------
@@ -113,6 +115,13 @@ pub const MARKS_NOT_ALLOWED: &str = "MARKS_NOT_ALLOWED";
 pub const INK_LIGHT_TINT: &str = "INK_LIGHT_TINT";
 /// A CMYK fill or stroke exceeds the total ink limit. Error.
 pub const INK_TOTAL_TOO_HIGH: &str = "INK_TOTAL_TOO_HIGH";
+/// CMYK paint of more than [`HEAVY_INK_AT_CREASE_PERCENT`](crate::HEAVY_INK_AT_CREASE_PERCENT)
+/// total ink lies within [`CREASE_BAND_MM`](crate::CREASE_BAND_MM) of a crease declared in
+/// `EBC.FoldXMm` (a fill or stroke whose box reaches the band, or the pixels of a
+/// losslessly stored image inside it): heavy ink can crack when the board is folded.
+/// Warning — advice to laminate (matt or soft-touch) and to run the grain parallel to the
+/// fold (research 03 §4.3, §6.1, check B8's neighbour).
+pub const INK_HEAVY_AT_CREASE: &str = "INK_HEAVY_AT_CREASE";
 
 // ---- transparency ----------------------------------------------------------------------
 
@@ -212,6 +221,7 @@ pub const ALL: &[&str] = &[
     IMAGE_INVALID,
     IMAGE_LOW_RES,
     INCREMENTAL_UPDATE,
+    INK_HEAVY_AT_CREASE,
     INK_LIGHT_TINT,
     INK_TOTAL_TOO_HIGH,
     JAVASCRIPT,

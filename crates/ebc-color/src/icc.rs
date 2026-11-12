@@ -16,6 +16,10 @@
 //! colours are then interpolated tetrahedrally on that grid, so a cover image and a flat
 //! ground colour taken from it go through exactly the same transform.
 //!
+//! [`SrgbToCmyk::with_ink_limit`] puts the transform under a printer's total ink limit:
+//! the grid nodes the profile builds above it are rebuilt by grey-component replacement
+//! ([`crate::ink`]), and every colour converted afterwards stays within it.
+//!
 //! The default is the one `docs/research/03-print-requirements.md` §3.4 asks for:
 //! **relative colorimetric with black-point compensation** (the black point is detected
 //! with the algorithm Little CMS uses for LUT-based CMYK output profiles).
@@ -26,7 +30,10 @@
 //! FOGRA39L profile on a 9 × 9 × 9 sRGB lattice and the colours of the test suite: the
 //! CMYK values differ by at most a few per cent of a channel, and the two results differ
 //! by ΔE2000 well under 1 once rendered back to Lab through the profile's `A2B1` table
-//! (`tests/icc_reference.rs`). This is a reimplementation, not a certified CMM.
+//! (`tests/icc_reference.rs`). The CMYK → Lab direction ([`CmykProfile::cmyk_to_lab`],
+//! the `A2B1` table the ink limiter measures with) is checked separately on a 5⁴ CMYK
+//! lattice and dark builds (`tests/ink_limit.rs`, ΔE2000 < 1 against 8-bit Lab). This is a
+//! reimplementation, not a certified CMM.
 //!
 //! # Not supported
 //!
@@ -44,6 +51,7 @@
 use ebc_scene::Color;
 
 use crate::Rgb8;
+use crate::ink::InkLimit;
 use crate::lab::{lab_f, lab_f_inv, srgb_eotf, srgb_to_linear};
 
 /// Largest profile accepted, in bytes. FOGRA profiles are 1–3 MB.
@@ -672,14 +680,30 @@ pub fn srgb8_to_lab_d50(c: Rgb8) -> [f64; 3] {
     ])
 }
 
-/// A sampled sRGB → CMYK transform for one profile and intent. Cheap to clone (the
-/// grid is about 0.6 MB).
+/// A sampled sRGB → CMYK transform for one profile and intent, optionally under a
+/// printer's total-ink limit ([`SrgbToCmyk::with_ink_limit`]). Cheap to clone (the grids
+/// are about 0.6 MB each and shared).
 #[derive(Debug, Clone)]
 pub struct SrgbToCmyk {
     /// `GRID_POINTS³` CMYK values (0–1), red slowest, blue fastest.
     grid: std::sync::Arc<[[f32; 4]]>,
     intent: RenderingIntent,
     black_point_compensation: bool,
+    /// The ink limit, when one was set.
+    ink: Option<std::sync::Arc<InkLimitedGrid>>,
+}
+
+/// The ink-limited side of a transform: see [`SrgbToCmyk::with_ink_limit`].
+#[derive(Debug)]
+struct InkLimitedGrid {
+    limit: InkLimit,
+    /// The grid with every node above the limit replaced by [`CmykProfile::limit_ink`];
+    /// `None` when no node is above the limit.
+    grid: Option<Vec<[f32; 4]>>,
+    /// Number of nodes that were rebuilt.
+    rebuilt: usize,
+    /// The profile, to measure how far a limited build is from the original.
+    profile: CmykProfile,
 }
 
 impl SrgbToCmyk {
@@ -713,7 +737,69 @@ impl SrgbToCmyk {
                 }
             }
         }
-        Self { grid: grid.into(), intent, black_point_compensation: bpc }
+        Self { grid: grid.into(), intent, black_point_compensation: bpc, ink: None }
+    }
+
+    /// This transform under a printer's total-ink limit.
+    ///
+    /// Every node of the sampled grid whose CMYK exceeds `limit` is rebuilt once with
+    /// [`CmykProfile::limit_ink`] (grey-component replacement, the build with the smallest
+    /// ΔE2000 through `profile`), which should be the profile the transform was made from.
+    /// [`convert`](Self::convert) then gives, for a colour whose ordinary conversion is
+    /// within the limit, exactly that conversion, and for one above the limit the
+    /// interpolation between the rebuilt nodes — a weighted average with non-negative
+    /// weights of builds within the limit, hence within the limit itself. Pixels and flat
+    /// colours go through the same two grids, so a ground computed from a cover still
+    /// matches the cover's own pixels.
+    ///
+    /// Cost: one search (about 150 evaluations of the profile's `A2B1` table) per node
+    /// above the limit, once; conversions cost what they cost without a limit, plus one
+    /// interpolation for colours above it.
+    #[must_use]
+    pub fn with_ink_limit(mut self, profile: &CmykProfile, limit: InkLimit) -> Self {
+        let mut rebuilt = 0;
+        let limited: Vec<[f32; 4]> = self
+            .grid
+            .iter()
+            .map(|node| {
+                let original = node.map(f64::from);
+                if limit.admits(original) {
+                    *node
+                } else {
+                    rebuilt += 1;
+                    // Values in 0–1: the narrowing is a rounding, never an overflow.
+                    #[allow(clippy::cast_possible_truncation)]
+                    profile.limit_ink(original, limit).cmyk.map(|v| v as f32)
+                }
+            })
+            .collect();
+        self.ink = Some(std::sync::Arc::new(InkLimitedGrid {
+            limit,
+            grid: (rebuilt > 0).then_some(limited),
+            rebuilt,
+            profile: profile.clone(),
+        }));
+        self
+    }
+
+    /// The ink limit set with [`with_ink_limit`](Self::with_ink_limit), if any.
+    #[must_use]
+    pub fn ink_limit(&self) -> Option<InkLimit> {
+        self.ink.as_ref().map(|ink| ink.limit)
+    }
+
+    /// The output profile an ink-limited transform measures with (`None` without an ink
+    /// limit): for callers that need the appearance of a build, e.g. its L\* through
+    /// [`CmykProfile::cmyk_to_lab`].
+    #[must_use]
+    pub fn profile(&self) -> Option<&CmykProfile> {
+        self.ink.as_ref().map(|ink| &ink.profile)
+    }
+
+    /// How many of the `GRID_POINTS³` grid nodes the ink limit rebuilt (0 without one).
+    #[must_use]
+    pub fn rebuilt_nodes(&self) -> usize {
+        self.ink.as_ref().map_or(0, |ink| ink.rebuilt)
     }
 
     /// The default link of `docs/research/03-print-requirements.md` §3.4: relative
@@ -735,7 +821,7 @@ impl SrgbToCmyk {
         self.black_point_compensation
     }
 
-    fn sample(&self, pos: [f64; 3]) -> [f64; 4] {
+    fn sample(grid: &[[f32; 4]], pos: [f64; 3]) -> [f64; 4] {
         let n = GRID_POINTS;
         let cell = |p: f64| {
             let i = (p as usize).min(n - 2);
@@ -744,7 +830,7 @@ impl SrgbToCmyk {
         let ((x0, rx), (y0, ry), (z0, rz)) = (cell(pos[0]), cell(pos[1]), cell(pos[2]));
         let at = |dx: usize, dy: usize, dz: usize| {
             let i = ((x0 + dx) * n + (y0 + dy)) * n + (z0 + dz);
-            self.grid.get(i).copied().unwrap_or([0.0; 4]).map(f64::from)
+            grid.get(i).copied().unwrap_or([0.0; 4]).map(f64::from)
         };
         let c0 = at(0, 0, 0);
         let (p1, p2, p3);
@@ -785,11 +871,44 @@ impl SrgbToCmyk {
         })
     }
 
-    /// The CMYK value (each 0–1) of an 8-bit sRGB colour.
+    fn position(c: Rgb8) -> [f64; 3] {
+        let scale = (GRID_POINTS - 1) as f64 / 255.0;
+        [f64::from(c.r) * scale, f64::from(c.g) * scale, f64::from(c.b) * scale]
+    }
+
+    /// The CMYK value (each 0–1) of an 8-bit sRGB colour, within the ink limit if one is
+    /// set (see [`with_ink_limit`](Self::with_ink_limit)).
     #[must_use]
     pub fn convert(&self, c: Rgb8) -> [f64; 4] {
-        let scale = (GRID_POINTS - 1) as f64 / 255.0;
-        self.sample([f64::from(c.r) * scale, f64::from(c.g) * scale, f64::from(c.b) * scale])
+        let pos = Self::position(c);
+        let plain = Self::sample(&self.grid, pos);
+        match &self.ink {
+            Some(ink) if !ink.limit.admits(plain) => match &ink.grid {
+                Some(limited) => Self::sample(limited, pos),
+                None => plain,
+            },
+            _ => plain,
+        }
+    }
+
+    /// The CMYK value of an 8-bit sRGB colour through the profile alone, ignoring the ink
+    /// limit.
+    #[must_use]
+    pub fn convert_unlimited(&self, c: Rgb8) -> [f64; 4] {
+        Self::sample(&self.grid, Self::position(c))
+    }
+
+    /// CIEDE2000 between how the profile prints `c` without the ink limit and with it
+    /// (both measured through the profile's `A2B1` table): what the limit costs this
+    /// colour. 0 without a limit or for a colour within it.
+    #[must_use]
+    pub fn ink_limit_delta_e(&self, c: Rgb8) -> f64 {
+        let Some(ink) = &self.ink else { return 0.0 };
+        let plain = self.convert_unlimited(c);
+        if ink.limit.admits(plain) {
+            return 0.0;
+        }
+        ink.profile.delta_e(plain, self.convert(c))
     }
 
     /// The CMYK value of an sRGB colour as a [`Color::Cmyk`] (no cleaning, no ink cap).
@@ -801,9 +920,21 @@ impl SrgbToCmyk {
 
     /// Converts interleaved 8-bit RGB pixels to interleaved 8-bit CMYK (255 = 100 %
     /// ink). A trailing partial pixel is ignored.
+    ///
+    /// With an ink limit, each pixel is [`convert`](Self::convert)ed and, should rounding
+    /// to 8 bits push its total above the limit, the excess (at most a few units) is taken
+    /// off its heaviest colour channel, so that no pixel exceeds the limit in the file.
     #[must_use]
     pub fn convert_pixels(&self, rgb: &[u8]) -> Vec<u8> {
         let mut out = Vec::with_capacity(rgb.len() / 3 * 4);
+        // The largest 8-bit sum allowed, e.g. 612 for 240 %.
+        let cap = self.ink.as_ref().map(|ink| {
+            let units = ink.limit.total_fraction() * 255.0 + 1e-9;
+            // At most 4 × 255 after the clamp; `as` cannot overflow.
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let cap = units.floor().clamp(0.0, 1020.0) as u32;
+            cap
+        });
         // Photographs repeat colours: remember the last one.
         let mut last: Option<([u8; 3], [u8; 4])> = None;
         for px in rgb.chunks_exact(3) {
@@ -813,7 +944,10 @@ impl SrgbToCmyk {
                 _ => {
                     let cmyk = self.convert(Rgb8::new(px[0], px[1], px[2]));
                     // 0..=255 after the clamp; `as` cannot overflow.
-                    let v = cmyk.map(|v| (clamp01(v) * 255.0 + 0.5) as u8);
+                    let mut v = cmyk.map(|v| (clamp01(v) * 255.0 + 0.5) as u8);
+                    if let Some(cap) = cap {
+                        cap_total(&mut v, cap);
+                    }
                     last = Some((key, v));
                     v
                 }
@@ -824,9 +958,40 @@ impl SrgbToCmyk {
     }
 }
 
+/// Takes the excess of an 8-bit CMYK pixel over `cap` off its heaviest colour channels
+/// (black last), one unit at a time.
+fn cap_total(px: &mut [u8; 4], cap: u32) {
+    let mut sum: u32 = px.iter().map(|&v| u32::from(v)).sum();
+    while sum > cap {
+        let heaviest = (0..3).fold(0, |best, i| if px[i] > px[best] { i } else { best });
+        let channel = if px[heaviest] > 0 { heaviest } else { 3 };
+        if px[channel] == 0 {
+            break;
+        }
+        px[channel] -= 1;
+        sum -= 1;
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn rounding_excess_is_taken_off_the_heaviest_colour_channel() {
+        let mut px = [200, 150, 100, 255];
+        cap_total(&mut px, 700);
+        assert_eq!(px, [195, 150, 100, 255]);
+        let mut px = [0, 0, 0, 255];
+        cap_total(&mut px, 200);
+        assert_eq!(px, [0, 0, 0, 200]);
+        let mut px = [10, 10, 10, 10];
+        cap_total(&mut px, 0);
+        assert_eq!(px, [0, 0, 0, 0]);
+        let mut px = [1, 2, 3, 4];
+        cap_total(&mut px, 100);
+        assert_eq!(px, [1, 2, 3, 4]);
+    }
 
     #[test]
     fn lab_and_xyz_round_trip() {

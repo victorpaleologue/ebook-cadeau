@@ -193,11 +193,28 @@ From `docs/research/03-print-requirements.md` (fact-checked):
   top-to-bottom for English and Dutch.
 - **Home printing**: the PDF page is the A4/Letter sheet, the card centred, everything inside a
   6.35 mm printable margin, with a duplex hint ("flip on the short edge").
+- **Ink limits per printer**: 240 % total ink for upload/print-on-demand printers
+  (`upload_eu`; IngramSpark's cap and its rich black C60 M40 Y40 K100), 300 % for offset on
+  coated stock (`professional_eu`; FOGRA39 "ISO Coated v2 300 %", PSO Coated v3); home
+  files are sRGB and grey, so nothing there is limited. The demo printer's digital
+  products and the CLI's preflight profiles carry the same values.
 
-**Open print question** (research done, not yet implemented): dark grounds on professional cards
-currently fall back to white because they exceed the 240 % ink limit. Industry practice is to
-keep dark covers but build them with more black and less colour ink (e.g. C60 M40 Y40 K100 =
-240 %), with lamination and the paper grain parallel to the spine to avoid cracking at creases.
+**Dark covers** (implemented 2026-11-12). Dark covers keep their one-colour jacket. Every
+colour the output profile would build above the printer's ink limit — the ground, the
+pixels of the converted cover, image spines — is **rebuilt by grey-component
+replacement**: the grey common to C, M and Y moves to black, C, M and Y are then scaled
+down together if still needed, and the build closest to the original (ΔE2000 through the
+profile's own tables) wins (`ebc_color::ink`). Measured on FOGRA39 at 240 %: navy ΔE 1.0,
+black 0.1, deep red 1.7, forest green 1.7, brown 1.9, purple 1.1 (at 300 % they need no
+change). The ground turns white only if its build under the limit is more than ΔE 3 from
+the colour, or if text on it would not be legible. When the outside is dark or heavy on a
+crease (above 180 % ink or darker than L\* 35), the card says so (`dark_across_creases` in
+the CLI, the designer's warnings in seven languages and the partner API's
+`X-EBC-Card-Warnings` header) and advises **matt or soft-touch lamination** and the
+**paper grain parallel to the spine**; the preflight gives the same advice
+(`INK_HEAVY_AT_CREASE`) and now checks the ink of lossless images too (CMYK JPEGs are not
+decoded). Samples: `docs/samples/poche-professional_eu-cover` and
+`poche-upload_eu-cover`.
 
 ---
 
@@ -283,9 +300,10 @@ Sample cards (PDF and page images) are in `docs/samples/`.
 - No lawyer has reviewed the legal studies; no native speaker the translations.
 - No store has been approached; all business volumes are assumptions.
 
-**Known technical gaps** (full list in `docs/STATUS.md`): dark grounds on professional cards
-(§6), per-printer ink limits and print briefs, server storage is a single JSON file (fine for a
-pilot, not for scale), no right-to-left or CJK spines, a partner cannot yet choose the spine
+**Known technical gaps** (full list in `docs/STATUS.md`): per-printer profile records (only
+the built-in profiles carry an ink limit) and print briefs, CMYK JPEG covers are neither
+ink-limited nor checked, the dark-cover lamination advice is untested on a real fold,
+server storage is a single JSON file (fine for a pilot, not for scale), no right-to-left or CJK spines, a partner cannot yet choose the spine
 style or output profile, the learned font model is not built.
 
 **Owner actions to switch everything on**: add the review secret, enable auto-merge and branch

@@ -117,12 +117,18 @@ test('the browser writes the very bytes the native library writes (golden cards)
   }
   const expected = new Map(readFileSync(digestsFile, 'utf8').trim().split('\n')
     .map((line) => line.split(/\s+/)).map(([digest, name]) => [name, digest]));
-  const cases = [['typographic', false, false], ['cover', true, false], ['pdfx', false, true]];
-  const icc = readFileSync(join(root, 'assets', 'icc', 'CGATS001Compat-v2-micro.icc'));
+  // The cases of crates/ebc-wasm/tests/common/golden.rs: the CC0 profile leaves colours
+  // unmanaged; FOGRA39 sends a dark ground through the ink-limited (GCR) transform.
+  const cc0 = join(root, 'assets', 'icc', 'CGATS001Compat-v2-micro.icc');
+  const fogra39 = join(root, 'crates', 'ebc-card', 'assets', 'icc', 'ISOcoated_v2_300_bas.icc');
+  const cases = [['typographic', false, null], ['cover', true, null], ['pdfx', false, cc0], ['pdfx-dark', false, fogra39]];
   const cover = readFileSync(join(fixtures, 'golden-cover.png'));
-  for (const [name, withCover, withIcc] of cases) {
+  for (const [name, withCover, iccPath] of cases) {
     const request = readFileSync(join(fixtures, `golden-${name}.json`), 'utf8');
-    const card = pkg.render_card(request, withCover ? cover : null, withIcc ? icc : null);
+    const icc = iccPath ? readFileSync(iccPath) : null;
+    const started = Date.now();
+    const card = pkg.render_card(request, withCover ? cover : null, icc);
+    t.diagnostic(`golden ${name}: ${Date.now() - started} ms in WebAssembly`);
     const digest = sha256(card.pdf);
     card.free();
     assert.equal(digest, expected.get(name), `golden card "${name}" differs from the native rendering`);

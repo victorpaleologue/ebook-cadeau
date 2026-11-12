@@ -12,6 +12,10 @@
 //! * *How do I hand a colour to the PDF writer?* — [`SrgbToCmyk`] (colour-managed, through
 //!   the printer's ICC profile: see [`icc`]), [`finish_flat`], [`to_cmyk_naive`],
 //!   [`to_scene_rgb`].
+//! * *How do I stay under the printer's total ink limit without losing dark colours?* —
+//!   [`CmykProfile::limit_ink`] (grey-component replacement, the build with the smallest
+//!   ΔE2000 through the profile) and [`SrgbToCmyk::with_ink_limit`] for whole images: see
+//!   [`ink`].
 //!
 //! It is pure Rust, depends only on `ebc-scene` (images are [`ebc_scene::Pixmap`]s), performs
 //! no I/O and compiles to `wasm32-unknown-unknown`.
@@ -24,8 +28,9 @@
 //! centroid rounds to) are computed with IEEE-754 basic operations only — the sRGB transfer
 //! curve and the CIELAB cube root are evaluated by this crate's own Newton iterations instead
 //! of the platform's `libm`. The same image therefore yields the same palette natively and
-//! in the browser. Only [`delta_e2000`] calls transcendental functions (`atan2`, `sin`,
-//! `cos`, `exp`) whose last bit may differ between platforms.
+//! in the browser. [`delta_e2000`] evaluates its trigonometry with polynomial versions
+//! built from basic operations as well, so the separations the ink limiter chooses by
+//! comparing ΔE2000 values are the same natively and in WebAssembly.
 //!
 //! # Colour-management caveat
 //!
@@ -59,7 +64,9 @@
 mod cmyk;
 mod contrast;
 mod delta_e;
+mod detmath;
 pub mod icc;
+pub mod ink;
 mod lab;
 mod palette;
 mod rgb;
@@ -73,6 +80,7 @@ pub use contrast::{
 };
 pub use delta_e::{delta_e2000, delta_e2000_lab};
 pub use icc::{CmykProfile, IccError, RenderingIntent, SrgbToCmyk};
+pub use ink::{InkLimit, InkLimited, MAX_TOTAL_INK_PERCENT};
 pub use lab::Lab;
 pub use palette::{
     BorderOptions, EDGE_BUSY_SIGMA, Edge, MAX_PALETTE_SIZE, PALETTE_MERGE_DELTA_E, Swatch,

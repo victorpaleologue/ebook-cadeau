@@ -22,29 +22,43 @@
 //! * *too faint* — written as process colour, none of its channels reaches
 //!   [`GROUND_MIN_TINT_PERCENT`]: a tint that light does not print reliably, and paper
 //!   white says the same thing;
-//! * *too heavy* — it needs more than [`GROUND_MAX_INK_PERCENT`] of total ink (or more
-//!   than the profile allows, if that is less). The ground covers the whole sheet and
-//!   crosses both creases, where heavy coverage cracks (§4.3, "solids crossing a
-//!   crease": prefer a mid or light ground). A near-black colour passes: it is written
-//!   as K 100 alone, which is what that rule asks of a black ground;
+//! * *too far under the ink limit* — a dark colour that the output profile builds above
+//!   the printer's total ink limit (`PrintProfile::max_total_ink_percent`: 240 % for
+//!   upload and print-on-demand, 300 % for offset) is **rebuilt under the limit** by
+//!   grey-component replacement — more black, less colour ink — with the build closest
+//!   to the original (`ebc_color::ink`), the way printers build rich blacks (IngramSpark's
+//!   C60 M40 Y40 K100 = 240 %). It stays the ground unless that build is more than
+//!   [`GROUND_MAX_DELTA_E`] (ΔE2000, measured through the profile) from what the profile
+//!   would print without the limit. The cover's own pixels go through the very same
+//!   ink-limited transform, so the ground still meets the cover's frame on press;
 //! * *no legible text* — the text the card sets on it (black or white, whichever
 //!   contrasts more) stays under [`GROUND_MIN_CONTRAST`]:1, counting black as black ink
 //!   on paper rather than as an ideal black. This rules out saturated mid-tones.
 //!
+//! A near-black colour is written as K 100 alone (100 % of ink), which is what
+//! `docs/research/03-print-requirements.md` §4.3 asks of a black ground that crosses a
+//! crease. Without a readable output profile (the naive device conversion), a colour
+//! above the limit cannot be rebuilt and paper white is kept (*too heavy*).
+//!
+//! A dark or heavy ground crosses both creases, where heavy ink can crack: the composer
+//! then advises matt or soft-touch lamination and grain parallel to the spine
+//! ([`CardWarning::DarkAcrossCreases`](crate::CardWarning::DarkAcrossCreases), see
+//! `crease.rs`) instead of giving the colour up.
+//!
 //! [`CardRequest::ground`](crate::CardRequest::ground) overrides all of this: a ground
-//! given by the caller is used as it is.
+//! given by the caller is used as it is (and is written under the ink limit the same way).
 //!
 //! # What is guaranteed
 //!
 //! In a PDF/X file the ground and the cover go through the same ICC transform to the
 //! output intent (`ebc_color::SrgbToCmyk`, relative colorimetric with black-point
-//! compensation), so the ground matches the cover's frame or edge colour on press to
-//! within the transform's interpolation (the ground is also cleaned of tints under 5 %,
-//! which can move a very light colour by a few per cent of one ink). The ink figures
-//! judged here are those of that transform. In a home PDF both are sRGB and they match.
-//! Without a readable output profile the naive device conversion is the fallback, and
-//! then the ground is only *close to* the cover. The 240 % threshold is a house value,
-//! not a measured one.
+//! compensation, under the profile's ink limit), so the ground matches the cover's frame
+//! or edge colour on press to within the transform's interpolation (the ground is also
+//! cleaned of tints under 5 %, which can move a very light colour by a few per cent of one
+//! ink). The ink figures judged here are those of that transform. In a home PDF both are
+//! sRGB and they match. Without a readable output profile the naive device conversion is
+//! the fallback, and then the ground is only *close to* the cover. The ΔE threshold is a
+//! house value, not a measured one.
 
 use ebc_color::{
     Edge, NEAR_BLACK_LSTAR, Rgb8, SrgbToCmyk, UNIFORM_EDGE_THRESHOLD, black_or_white,
@@ -55,11 +69,18 @@ use ebc_scene::{Color, Pixmap};
 /// Lowest WCAG 2 contrast ratio between a ground computed from the cover and the text
 /// set on it; below it the ground is white.
 pub const GROUND_MIN_CONTRAST: f64 = 4.5;
-/// Highest total ink, in per cent, of a ground computed from the cover; above it (or
-/// above the profile's own limit) the ground is white. A house value: well under the
-/// common 300 % ceiling and under the strictest product limit surveyed (260 %), because
-/// this solid covers the whole sheet and is folded twice.
-pub const GROUND_MAX_INK_PERCENT: f32 = 240.0;
+/// Largest CIEDE2000 difference, measured through the output profile, between how the
+/// profile would print a ground computed from the cover and the build that respects the
+/// printer's ink limit; beyond it the ground is white.
+///
+/// A house value: about three times the just-noticeable difference (ΔE2000 ≈ 1). It is
+/// well above what grey-component replacement costs dark colours under the strictest
+/// limit in use (measured on the bundled FOGRA39 profile at 240 %: navy 1.2, black 0.1,
+/// deep red 1.7, forest green 1.7, brown 1.9, purple 1.1 — `ebc-color`'s
+/// `tests/ink_limit.rs`), so dark covers keep their jacket, and below the point where the
+/// ground would read as another colour than the cover. The cover itself goes through the
+/// same ink-limited transform, so ground and cover agree on press whatever this value.
+pub const GROUND_MAX_DELTA_E: f64 = 3.0;
 /// A ground computed from the cover whose every process channel is under this, in per
 /// cent, is white: lighter tints do not print reliably.
 pub const GROUND_MIN_TINT_PERCENT: f32 = 5.0;
@@ -80,8 +101,12 @@ const PRINTED_BLACK: Rgb8 = Rgb8::new(35, 31, 32);
 pub(crate) enum Objection {
     /// No channel reaches [`GROUND_MIN_TINT_PERCENT`].
     TooFaint,
-    /// More than [`GROUND_MAX_INK_PERCENT`] (or the profile's limit) of total ink.
+    /// Above the profile's total ink limit with no output profile to rebuild it under the
+    /// limit (the naive device conversion, or a transform without an ink limit).
     TooHeavy,
+    /// Rebuilt under the ink limit, but more than [`GROUND_MAX_DELTA_E`] from the colour
+    /// the profile would print without it.
+    TooFarUnderLimit,
     /// Text on it stays under [`GROUND_MIN_CONTRAST`].
     NoLegibleText,
 }
@@ -109,23 +134,24 @@ pub(crate) fn text_contrast(ground: Rgb8) -> f64 {
 
 /// What print has against `colour` as the ground of the whole outside, if anything.
 /// `max_total_ink_percent` is the profile's limit; `link` the ICC transform the ground
-/// will be written with (the naive device conversion is judged without one).
+/// will be written with — ink-limited in a card, see `OutputProfile::colour_link_with_ink_limit`
+/// (the naive device conversion is judged without one).
 pub(crate) fn objection(
     colour: Rgb8,
     max_total_ink_percent: f32,
     link: Option<&SrgbToCmyk>,
 ) -> Option<Objection> {
     let limit = if max_total_ink_percent.is_finite() && max_total_ink_percent > 0.0 {
-        max_total_ink_percent.min(GROUND_MAX_INK_PERCENT)
+        max_total_ink_percent
     } else {
-        GROUND_MAX_INK_PERCENT
+        ebc_layout::OFFSET_MAX_TOTAL_INK_PERCENT
     };
-    // The process build the ground would be written as, before any cap: a colour that
-    // only fits once its ink has been cut is no longer the cover's colour.
-    // Before any cleaning or cap: a near-black is K 100 alone, anything else the build
-    // the transform (or, without one, the naive device formula) gives.
+    // The process build the ground is written as, before cleaning: a near-black is K 100
+    // alone, anything else the build of the transform — under the ink limit when the
+    // transform carries one — or, without one, of the naive device formula.
+    let near_black = colour.to_lab().l < NEAR_BLACK_LSTAR;
     let build = match link {
-        _ if colour.to_lab().l < NEAR_BLACK_LSTAR => Color::BLACK,
+        _ if near_black => Color::BLACK,
         Some(link) => link.convert_color(colour),
         None => to_cmyk_naive(colour),
     };
@@ -134,10 +160,16 @@ pub(crate) fn objection(
         Color::Gray(level) => ((1.0 - level) * 100.0, (1.0 - level) * 100.0),
         Color::Rgb { .. } | Color::Registration => (100.0, 400.0),
     };
+    let cost = match link {
+        Some(link) if !near_black => link.ink_limit_delta_e(colour),
+        _ => 0.0,
+    };
     if heaviest < GROUND_MIN_TINT_PERCENT {
         Some(Objection::TooFaint)
     } else if total > limit + 1e-3 {
         Some(Objection::TooHeavy)
+    } else if cost > GROUND_MAX_DELTA_E {
+        Some(Objection::TooFarUnderLimit)
     } else if text_contrast(colour) < GROUND_MIN_CONTRAST {
         Some(Objection::NoLegibleText)
     } else {
@@ -244,21 +276,24 @@ mod tests {
         let cream = Rgb8::new(232, 220, 194);
         assert_eq!(ground_from(cream, 300.0, None), cream);
         // Near-black is written as K 100 alone: 100 % of ink, kept.
-        assert_eq!(objection(Rgb8::new(8, 8, 10), 300.0, None), None);
-        assert_eq!(objection(Rgb8::BLACK, 300.0, None), None);
+        assert_eq!(objection(Rgb8::new(8, 8, 10), 240.0, None), None);
+        assert_eq!(objection(Rgb8::BLACK, 240.0, None), None);
 
         // Nearly white: no channel reaches 5 %.
         for faint in [Rgb8::WHITE, Rgb8::new(248, 246, 240), Rgb8::new(236, 240, 246)] {
             assert_eq!(objection(faint, 300.0, None), Some(Objection::TooFaint), "{faint}");
             assert_eq!(ground_from(faint, 300.0, None), Rgb8::WHITE);
         }
-        // Dark and saturated: two full plates and most of a third.
+        // Dark and saturated, without an output profile to rebuild them under a 240 %
+        // limit: the naive build has two full plates and most of a third.
         for heavy in [Rgb8::new(0, 0, 100), Rgb8::new(0, 60, 0), Rgb8::new(60, 10, 10)] {
-            assert_eq!(objection(heavy, 300.0, None), Some(Objection::TooHeavy), "{heavy}");
-            assert_eq!(ground_from(heavy, 300.0, None), Rgb8::WHITE);
+            assert_eq!(objection(heavy, 240.0, None), Some(Objection::TooHeavy), "{heavy}");
+            assert_eq!(ground_from(heavy, 240.0, None), Rgb8::WHITE);
+            // Under the offset limit they fit.
+            assert_eq!(objection(heavy, 300.0, None), None, "{heavy}");
         }
-        // A profile with a lower limit lowers the bar; a nonsensical one changes nothing.
-        let navy = Rgb8::new(14, 22, 48); // about 206 %
+        // A profile with a lower limit lowers the bar; a nonsensical one means 300 %.
+        let navy = Rgb8::new(14, 22, 48); // about 206 % naively
         assert_eq!(objection(navy, 200.0, None), Some(Objection::TooHeavy));
         assert_eq!(objection(navy, f32::NAN, None), None);
         assert_eq!(objection(navy, -1.0, None), None);
@@ -272,70 +307,125 @@ mod tests {
 
     #[test]
     fn every_ground_the_rule_can_produce_carries_legible_text_within_the_ink_limit() {
-        let mut kept = 0;
-        let mut white = 0;
-        for r in (0..=255).step_by(15) {
-            for g in (0..=255).step_by(15) {
-                for b in (0..=255).step_by(15) {
-                    let colour = Rgb8::new(r as u8, g as u8, b as u8);
-                    let ground = ground_from(colour, 300.0, None);
-                    // What `Paint::text_on` sets on it, against ideal and printed black.
-                    let ideal = contrast_ratio(black_or_white(ground), ground);
-                    assert!(ideal >= GROUND_MIN_CONTRAST, "{colour} -> {ground}: {ideal}");
-                    assert!(text_contrast(ground) >= GROUND_MIN_CONTRAST, "{colour} -> {ground}");
-                    let ink = ebc_color::to_cmyk_ink_safe(ground, 300.0).total_ink_percent();
-                    assert!(
-                        ink.is_some_and(|ink| ink <= GROUND_MAX_INK_PERCENT + 1e-3),
-                        "{colour} -> {ground}: {ink:?}"
-                    );
-                    if ground == colour {
-                        kept += 1;
-                    } else {
-                        assert_eq!(ground, Rgb8::WHITE);
-                        white += 1;
+        for limit in [240.0_f32, 300.0] {
+            let mut kept = 0;
+            let mut white = 0;
+            for r in (0..=255).step_by(15) {
+                for g in (0..=255).step_by(15) {
+                    for b in (0..=255).step_by(15) {
+                        let colour = Rgb8::new(r as u8, g as u8, b as u8);
+                        let ground = ground_from(colour, limit, None);
+                        // What `Paint::text_on` sets on it, against ideal and printed black.
+                        let ideal = contrast_ratio(black_or_white(ground), ground);
+                        assert!(ideal >= GROUND_MIN_CONTRAST, "{colour} -> {ground}: {ideal}");
+                        assert!(text_contrast(ground) >= GROUND_MIN_CONTRAST, "{colour}");
+                        let ink = ebc_color::to_cmyk_ink_safe(ground, limit).total_ink_percent();
+                        assert!(ink.is_some_and(|ink| ink <= limit + 1e-3), "{colour}: {ink:?}");
+                        if ground == colour {
+                            kept += 1;
+                        } else {
+                            assert_eq!(ground, Rgb8::WHITE);
+                            white += 1;
+                        }
                     }
                 }
             }
+            // The rule is neither "always white" nor "anything goes".
+            assert!(kept > 1500 && white > 500, "{limit}: kept {kept}, white {white}");
         }
-        // The rule is neither "always white" nor "anything goes".
-        assert!(kept > 1500 && white > 500, "kept {kept}, white {white}");
+    }
+
+    #[cfg(feature = "bundled-fogra39")]
+    fn bundled_link(limit: Option<f32>) -> SrgbToCmyk {
+        let profile = crate::OutputProfile::bundled_fogra39().expect("the bundled profile");
+        match limit {
+            Some(limit) => profile.colour_link_with_ink_limit(limit),
+            None => profile.colour_link(),
+        }
+        .expect("the bundled profile is readable")
+    }
+
+    #[cfg(feature = "bundled-fogra39")]
+    #[test]
+    fn dark_grounds_are_rebuilt_under_the_ink_limit_instead_of_turning_white() {
+        // The navy frame of the sample cover needs about 274 % through FOGRA39.
+        let navy = Rgb8::new(14, 22, 48);
+        let unlimited = bundled_link(None);
+        let total = |c: [f64; 4]| c.iter().sum::<f64>() * 100.0;
+        assert!(total(unlimited.convert(navy)) > 260.0);
+        // Without an ink limit on the transform the build is too heavy for 240 %.
+        assert_eq!(objection(navy, 240.0, Some(&unlimited)), Some(Objection::TooHeavy));
+        for limit in [240.0_f32, 300.0] {
+            let link = bundled_link(Some(limit));
+            assert_eq!(objection(navy, limit, Some(&link)), None, "{limit}");
+            assert_eq!(ground_from(navy, limit, Some(&link)), navy);
+            let paint = crate::paint::Paint::for_profile(
+                &ebc_layout::PrintProfile {
+                    max_total_ink_percent: limit,
+                    ..ebc_layout::PrintProfile::upload_eu()
+                },
+                Some(link.clone()),
+            );
+            let ink = paint.flat(navy).total_ink_percent().expect("CMYK");
+            assert!(ink <= limit + 1e-3 && ink > 230.0, "{limit}: {ink}");
+            assert!(link.ink_limit_delta_e(navy) <= GROUND_MAX_DELTA_E);
+        }
+        // A limit no build of the colour can approach: white.
+        let link = bundled_link(Some(120.0));
+        assert_eq!(objection(navy, 120.0, Some(&link)), Some(Objection::TooFarUnderLimit));
+        assert_eq!(ground_from(navy, 120.0, Some(&link)), Rgb8::WHITE);
     }
 
     #[cfg(feature = "bundled-fogra39")]
     #[test]
     fn grounds_judged_through_the_output_profile_stay_within_the_ink_limit() {
-        let link = crate::OutputProfile::bundled_fogra39()
-            .and_then(|p| {
-                p.colour_link().map_err(|e| crate::CardError::InvalidOutputProfile(e.to_string()))
-            })
-            .expect("the bundled profile is readable");
-        let paint = crate::paint::Paint::for_profile(
-            &ebc_layout::PrintProfile::upload_eu(),
-            Some(link.clone()),
-        );
-        let (mut kept, mut white) = (0, 0);
-        for r in (0..=255).step_by(17) {
-            for g in (0..=255).step_by(17) {
-                for b in (0..=255).step_by(17) {
-                    let colour = Rgb8::new(r as u8, g as u8, b as u8);
-                    let ground = ground_from(colour, 300.0, Some(&link));
-                    if ground == colour {
-                        kept += 1;
-                        let ink = paint.flat(ground).total_ink_percent();
+        for limit in [240.0_f32, 300.0] {
+            let link = bundled_link(Some(limit));
+            let profile = ebc_layout::PrintProfile {
+                max_total_ink_percent: limit,
+                ..ebc_layout::PrintProfile::upload_eu()
+            };
+            let paint = crate::paint::Paint::for_profile(&profile, Some(link.clone()));
+            let (mut kept, mut white) = (0, 0);
+            for r in (0..=255).step_by(17) {
+                for g in (0..=255).step_by(17) {
+                    for b in (0..=255).step_by(17) {
+                        let colour = Rgb8::new(r as u8, g as u8, b as u8);
+                        let ground = ground_from(colour, limit, Some(&link));
+                        if ground == colour {
+                            kept += 1;
+                            let ink = paint.flat(ground).total_ink_percent();
+                            assert!(
+                                ink.is_some_and(|ink| ink <= limit + 1e-3),
+                                "{colour}: {ink:?}"
+                            );
+                            assert!(link.ink_limit_delta_e(colour) <= GROUND_MAX_DELTA_E);
+                        } else {
+                            white += 1;
+                        }
+                    }
+                }
+            }
+            assert!(kept > 300 && white > 300, "{limit}: kept {kept}, white {white}");
+            // No dark colour is lost to the ink limit: the only reasons left for white
+            // are faint tints and illegible mid-tones.
+            for r in (0..=255).step_by(17) {
+                for g in (0..=255).step_by(17) {
+                    for b in (0..=255).step_by(17) {
+                        let colour = Rgb8::new(r as u8, g as u8, b as u8);
+                        let why = objection(colour, limit, Some(&link));
                         assert!(
-                            ink.is_some_and(|ink| ink <= GROUND_MAX_INK_PERCENT + 1e-3),
-                            "{colour}: {ink:?}"
+                            !matches!(why, Some(Objection::TooHeavy | Objection::TooFarUnderLimit)),
+                            "{limit}: {colour} {why:?}"
                         );
-                    } else {
-                        white += 1;
                     }
                 }
             }
         }
-        assert!(kept > 300 && white > 300, "kept {kept}, white {white}");
         // Paper-like colours are too faint through the profile as well.
+        let link = bundled_link(Some(240.0));
         assert_eq!(
-            objection(Rgb8::new(253, 253, 252), 300.0, Some(&link)),
+            objection(Rgb8::new(253, 253, 252), 240.0, Some(&link)),
             Some(Objection::TooFaint)
         );
     }

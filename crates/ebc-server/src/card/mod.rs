@@ -211,6 +211,17 @@ pub enum CardRenderError {
     Failed(String),
 }
 
+/// A rendered card and what the composer had to say about it.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct RenderedCard {
+    /// The PDF.
+    pub pdf: Vec<u8>,
+    /// Stable codes of the composer's warnings, in the order they were raised, without
+    /// repeats (e.g. `dark_across_creases`: dark ink on a crease, laminate the card). Sent
+    /// to partners in the `X-EBC-Card-Warnings` header (`docs/api.md` §4.2).
+    pub warnings: Vec<String>,
+}
+
 /// Renders the print-ready PDF of a card.
 pub trait CardRenderer: Send + Sync + 'static {
     /// Composes the card.
@@ -218,6 +229,16 @@ pub trait CardRenderer: Send + Sync + 'static {
     /// # Errors
     /// See [`CardRenderError`].
     fn render(&self, request: &CardRequest) -> Result<Vec<u8>, CardRenderError>;
+
+    /// Composes the card and returns the codes of the composer's warnings with it. The
+    /// default is [`render`](Self::render) with no warnings, for renderers that have none
+    /// to report.
+    ///
+    /// # Errors
+    /// See [`CardRenderError`].
+    fn render_with_warnings(&self, request: &CardRequest) -> Result<RenderedCard, CardRenderError> {
+        self.render(request).map(|pdf| RenderedCard { pdf, warnings: Vec::new() })
+    }
 }
 
 /// The default renderer: there is none, the endpoint answers `501`.

@@ -313,9 +313,20 @@ fn defects_composed_through_the_writer_are_found() {
     let card = Card { cover_px: (1100, 1449), ..good.clone() };
     assert_eq!(only(&card, &expectations()), set(&[c::IMAGE_DISTORTED]));
 
-    // Rich black far over the ink limit.
+    // Rich black far over the ink limit — and, being a ground, across both creases.
     let card = Card { background: Color::cmyk(0.9, 0.9, 0.9, 1.0), ..good.clone() };
-    assert_eq!(only(&card, &expectations()), set(&[c::INK_TOTAL_TOO_HIGH]));
+    assert_eq!(only(&card, &expectations()), set(&[c::INK_HEAVY_AT_CREASE, c::INK_TOTAL_TOO_HIGH]));
+    // A dark ground built under the limit: only the advice for the creases, a warning.
+    let card = Card { background: Color::cmyk(0.6, 0.4, 0.4, 1.0), ..good.clone() };
+    assert_eq!(only(&card, &expectations()), set(&[c::INK_HEAVY_AT_CREASE]));
+    let report = check(&card.pdf(), &expectations()).unwrap();
+    assert!(report.passed());
+    let advice = report.findings.iter().find(|f| f.code == c::INK_HEAVY_AT_CREASE).unwrap();
+    assert_eq!((advice.severity, advice.page), (Severity::Warning, Some(1)));
+    assert!(advice.message.starts_with("240 % total ink within 2 mm of a crease"), "{advice}");
+    // K 100 alone is not heavy.
+    let card = Card { background: Color::BLACK, ..good.clone() };
+    assert_eq!(only(&card, &expectations()), set(&[]));
 
     // The spine key contradicts both the expectation and the folds.
     let card = Card { spine_key: "12", ..good.clone() };

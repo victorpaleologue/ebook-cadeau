@@ -96,8 +96,9 @@ node web/tests/browser-smoke.mjs   # real Chromium through Playwright (must be i
 ```
 
 * `smoke.test.mjs` loads `web/pkg` in Node (`initSync`), checks `isbn_parse`, `qr_svg`,
-  codes, `render_card` (`%PDF`, no warning, the rights gate), the preview, that the three
-  golden cards are byte-identical to the native rendering, that every string the page uses
+  codes, `render_card` (`%PDF`, no warning, the rights gate), the preview, that the four
+  golden cards (one a dark ground built under 240 % through FOGRA39, which exercises the
+  ink-limiting transform) are byte-identical to the native rendering, that every string the page uses
   exists in all seven languages, and — when the tools are present — that the QR code read
   back from the PDF with `pdftoppm` + `zbarimg` is the upper-case claim URL and that
   `ebc preflight` passes.

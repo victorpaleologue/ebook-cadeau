@@ -239,7 +239,7 @@ fn subpaths(path: &Path) -> Vec<Path> {
 }
 
 /// The axis-aligned box of a rectangle mapped through a transform.
-fn transform_rect(t: &Transform, r: Rect) -> Rect {
+pub(crate) fn transform_rect(t: &Transform, r: Rect) -> Rect {
     let corners = [
         t.apply(Point::new(r.x, r.y)),
         t.apply(Point::new(r.right(), r.y)),

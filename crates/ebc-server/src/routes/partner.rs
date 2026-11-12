@@ -32,7 +32,7 @@ use std::net::SocketAddr;
 use axum::body::Bytes;
 use axum::extract::{ConnectInfo, Path, Query, Request, State};
 use axum::http::request::Parts;
-use axum::http::{HeaderValue, StatusCode, header};
+use axum::http::{HeaderName, HeaderValue, StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use ebc_model::{Delivery, GiftStatus};
 use serde::Deserialize;
@@ -430,6 +430,9 @@ pub(crate) async fn put_cover(
     .await
 }
 
+/// Response header of `card.pdf` listing the composer's warning codes.
+pub(crate) const CARD_WARNINGS_HEADER: &str = "x-ebc-card-warnings";
+
 /// Query of `card.pdf`.
 #[derive(Debug, Deserialize)]
 struct CardQuery {
@@ -500,10 +503,10 @@ pub(crate) async fn card_pdf(
         created_unix: gift.created_at,
     };
     let renderer = std::sync::Arc::clone(&state.card_renderer);
-    let rendered = tokio::task::spawn_blocking(move || renderer.render(&card))
+    let rendered = tokio::task::spawn_blocking(move || renderer.render_with_warnings(&card))
         .await
         .map_err(ApiError::internal)?;
-    let pdf = rendered.map_err(|error| match error {
+    let rendered = rendered.map_err(|error| match error {
         CardRenderError::NotImplemented => {
             ApiError::new(StatusCode::NOT_IMPLEMENTED, "not_implemented", error.to_string())
         }
@@ -516,11 +519,29 @@ pub(crate) async fn card_pdf(
         other => ApiError::internal(other),
     })?;
     let file_name = ascii_file_name(&format!("carte {}", gift.book.title), "pdf");
-    let mut response = (StatusCode::OK, pdf).into_response();
+    let mut response = (StatusCode::OK, rendered.pdf).into_response();
     let headers = response.headers_mut();
     headers.insert(header::CONTENT_TYPE, HeaderValue::from_static("application/pdf"));
     if let Ok(value) = HeaderValue::from_str(&content_disposition(&file_name, None)) {
         headers.insert(header::CONTENT_DISPOSITION, value);
+    }
+    // The composer's warnings as stable codes, comma-separated (`docs/api.md` §4.2).
+    // Only plain `snake_case` codes are sent; anything else a renderer reports is left out.
+    let codes: Vec<&str> = rendered
+        .warnings
+        .iter()
+        .map(String::as_str)
+        .filter(|code| {
+            !code.is_empty()
+                && code.len() <= 64
+                && code.bytes().all(|b| b.is_ascii_lowercase() || b.is_ascii_digit() || b == b'_')
+        })
+        .take(32)
+        .collect();
+    if !codes.is_empty()
+        && let Ok(value) = HeaderValue::from_str(&codes.join(", "))
+    {
+        headers.insert(HeaderName::from_static(CARD_WARNINGS_HEADER), value);
     }
     Ok(response)
 }

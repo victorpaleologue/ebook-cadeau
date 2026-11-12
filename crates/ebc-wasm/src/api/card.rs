@@ -430,57 +430,37 @@ pub struct WarningDto {
 
 fn warning_dto(warning: &CardWarning) -> WarningDto {
     let rounded = |v: f64| format!("{v:.0}");
-    let (code, params): (&'static str, Vec<(&'static str, String)>) = match warning {
-        CardWarning::CoverWithoutRights => ("cover_without_rights", vec![]),
-        CardWarning::LowResolution { ppi, threshold_ppi, below_minimum } => (
-            if *below_minimum { "resolution_below_minimum" } else { "low_resolution" },
-            vec![("ppi", rounded(*ppi)), ("threshold", rounded(*threshold_ppi))],
-        ),
+    let params: Vec<(&'static str, String)> = match warning {
+        CardWarning::LowResolution { ppi, threshold_ppi, .. } => {
+            vec![("ppi", rounded(*ppi)), ("threshold", rounded(*threshold_ppi))]
+        }
         CardWarning::CoverDownsampled { from_ppi, to_ppi } => {
-            ("cover_downsampled", vec![("from", rounded(*from_ppi)), ("to", rounded(*to_ppi))])
+            vec![("from", rounded(*from_ppi)), ("to", rounded(*to_ppi))]
         }
-        CardWarning::HeavyCrop { percent, dimension } => (
-            "heavy_crop",
-            vec![("percent", rounded(*percent)), ("dimension", (*dimension).to_owned())],
-        ),
-        CardWarning::CoverCreditMissing => ("cover_credit_missing", vec![]),
-        CardWarning::CoverNotConverted => ("cover_not_converted", vec![]),
-        CardWarning::CoverProfileIgnored => ("cover_profile_ignored", vec![]),
-        CardWarning::OwnPrinterOnly => ("own_printer_only", vec![]),
-        CardWarning::Spine(_) => ("spine", vec![]),
-        CardWarning::SpineChoiceIgnored { style } => {
-            ("spine_choice_ignored", vec![("style", (*style).to_owned())])
+        CardWarning::HeavyCrop { percent, dimension } => {
+            vec![("percent", rounded(*percent)), ("dimension", (*dimension).to_owned())]
         }
-        CardWarning::MissingGlyphs { field, characters } => (
-            "missing_glyphs",
-            vec![("field", field.to_string()), ("characters", characters.clone())],
-        ),
-        CardWarning::TextClamped { field } => ("text_clamped", vec![("field", field.to_string())]),
-        CardWarning::StepsReduced { size_pt } => {
-            ("steps_reduced", vec![("size", format!("{size_pt:.1}"))])
+        CardWarning::SpineChoiceIgnored { style } => vec![("style", (*style).to_owned())],
+        CardWarning::MissingGlyphs { field, characters } => {
+            vec![("field", field.to_string()), ("characters", characters.clone())]
         }
-        CardWarning::CodeReduced { size_pt } => {
-            ("code_reduced", vec![("size", format!("{size_pt:.1}"))])
+        CardWarning::TextClamped { field } => vec![("field", field.to_string())],
+        CardWarning::StepsReduced { size_pt } | CardWarning::CodeReduced { size_pt } => {
+            vec![("size", format!("{size_pt:.1}"))]
         }
-        CardWarning::QrModuleBelowMinimum { .. } => ("qr_module_below_minimum", vec![]),
-        CardWarning::QrModuleSmall { .. } => ("qr_module_small", vec![]),
-        CardWarning::QrVersionHigh { version } => {
-            ("qr_version_high", vec![("version", version.to_string())])
-        }
-        CardWarning::QrPayloadNotUpperCased => ("qr_payload_not_upper_cased", vec![]),
-        CardWarning::FallbackOutputProfile => ("fallback_output_profile", vec![]),
-        CardWarning::OutputProfileNotPrinterClass { class } => {
-            ("output_profile_not_printer_class", vec![("class", class.clone())])
-        }
-        CardWarning::GuidesIncluded => ("guides_included", vec![]),
-        CardWarning::ColourNotManaged { reason } => {
-            ("colour_not_managed", vec![("reason", reason.clone())])
-        }
+        CardWarning::QrVersionHigh { version } => vec![("version", version.to_string())],
+        CardWarning::OutputProfileNotPrinterClass { class } => vec![("class", class.clone())],
+        CardWarning::ColourNotManaged { reason } => vec![("reason", reason.clone())],
         CardWarning::SpineOutsideTextRange { spine_mm } => {
-            ("spine_outside_text_range", vec![("spine", format!("{spine_mm:.1}"))])
+            vec![("spine", format!("{spine_mm:.1}"))]
         }
-        _ => ("other", vec![]),
+        CardWarning::DarkAcrossCreases { max_ink_percent, min_lightness } => vec![
+            ("ink", rounded(f64::from(*max_ink_percent))),
+            ("lightness", rounded(f64::from(*min_lightness))),
+        ],
+        _ => vec![],
     };
+    let code = warning.code();
     WarningDto { code, message: warning.to_string(), params }
 }
 

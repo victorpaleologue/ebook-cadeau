@@ -1,4 +1,4 @@
-//! The golden cards, natively: three fixed requests (`tests/fixtures/golden-*.json`)
+//! The golden cards, natively: four fixed requests (`tests/fixtures/golden-*.json`)
 //! must render, deterministically, to well-formed print files.
 //!
 //! The same fixtures are rendered by the WebAssembly build in
@@ -11,7 +11,7 @@
 #[path = "common/golden.rs"]
 mod golden;
 
-use golden::{CASES, digests, render, sha256_hex};
+use golden::{CASES, CC0_ICC, FOGRA39_ICC, digests, render, sha256_hex};
 
 fn count(haystack: &[u8], needle: &[u8]) -> usize {
     haystack.windows(needle.len()).filter(|window| *window == needle).count()
@@ -41,7 +41,7 @@ fn golden_cards_render_deterministically() {
 #[test]
 fn golden_cards_are_what_they_claim() {
     // Typographic, home A4: a plain two-page PDF without any image or output intent.
-    let typographic = render("typographic", false, false);
+    let typographic = render("typographic", false, None);
     assert!(typographic.pdf.starts_with(b"%PDF-1."));
     assert!(typographic.pdf.ends_with(b"%%EOF\n") || typographic.pdf.ends_with(b"%%EOF"));
     assert_eq!(images(&typographic.pdf), 0);
@@ -49,13 +49,19 @@ fn golden_cards_are_what_they_claim() {
     assert_eq!(typographic.warnings_json, "[]");
 
     // A declared cover: one image, and a credit line on file.
-    let cover = render("cover", true, false);
+    let cover = render("cover", true, None);
     assert!(images(&cover.pdf) >= 1);
     assert!(!cover.warnings_json.contains("cover_without_rights"));
 
     // PDF/X-4 for an online printer: an output intent with the profile handed over.
-    let pdfx = render("pdfx", false, true);
+    let pdfx = render("pdfx", false, Some(CC0_ICC));
     assert!(count(&pdfx.pdf, b"/OutputIntent") >= 1);
     assert!(count(&pdfx.pdf, b"GTS_PDFX") >= 1);
     assert!(!pdfx.warnings_json.contains("fallback_output_profile"));
+
+    // A dark ground through FOGRA39 under the upload limit of 240 %: rebuilt by
+    // grey-component replacement (not dropped to white), with the lamination advice.
+    let dark = render("pdfx-dark", false, Some(FOGRA39_ICC));
+    assert!(count(&dark.pdf, b"GTS_PDFX") >= 1);
+    assert!(dark.warnings_json.contains("dark_across_creases"), "{}", dark.warnings_json);
 }

@@ -180,7 +180,8 @@ mod tests {
         assert_eq!((digital.bleed_mm, digital.min_ppi), (3.0, 150.0));
         assert!(digital.require_output_intent);
         assert!(digital.allow_rgb && digital.allow_transparency, "digital products accept RGB");
-        assert_eq!(digital.max_total_ink_percent, Some(300.0));
+        assert_eq!(digital.max_total_ink_percent, Some(240.0));
+        assert_eq!(expectations(offset()).max_total_ink_percent, Some(300.0));
         assert_eq!(digital.min_qr_module_mm, Some(MIN_QR_MODULE_MM));
         assert!(!digital.marks_allowed && digital.require_media_equals_bleed, "an upload");
         let press = expectations(offset());

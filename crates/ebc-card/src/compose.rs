@@ -118,18 +118,21 @@ pub(crate) fn compose(
         None
     };
     // Covers, images and flat colours of a PDF/X file go through one ICC transform to
-    // the output intent (docs/research/03-print-requirements.md §3.4).
+    // the output intent (docs/research/03-print-requirements.md §3.4), built under the
+    // printer's total ink limit by grey-component replacement (`ebc_color::ink`).
     let link = match (&output_profile, purpose) {
-        (Some(profile), Purpose::Print) => match profile.colour_link() {
-            Ok(link) => Some(link),
-            Err(error) => {
-                // The fallback profile is already reported as such.
-                if !profile.is_fallback() {
-                    warnings.push(CardWarning::ColourNotManaged { reason: error.to_string() });
+        (Some(profile), Purpose::Print) => {
+            match profile.colour_link_with_ink_limit(req.profile.max_total_ink_percent) {
+                Ok(link) => Some(link),
+                Err(error) => {
+                    // The fallback profile is already reported as such.
+                    if !profile.is_fallback() {
+                        warnings.push(CardWarning::ColourNotManaged { reason: error.to_string() });
+                    }
+                    None
                 }
-                None
             }
-        },
+        }
         _ => None,
     };
 
@@ -193,6 +196,9 @@ pub(crate) fn compose(
     composer.doc.info = composer.doc_info(effective_rights);
     composer.check_cover_is_untouched()?;
     composer.convert_images();
+    if pdfx && purpose == Purpose::Print {
+        composer.advise_on_creases();
+    }
 
     Ok((composer.doc, composer.warnings))
 }
@@ -402,6 +408,23 @@ impl Composer<'_> {
                 format: PixelFormat::Cmyk8,
             };
             resource.icc_profile = None;
+        }
+    }
+
+    /// Adds [`CardWarning::DarkAcrossCreases`] when dark or heavy ink lies on a crease of
+    /// the outside (see `crease.rs`). After [`convert_images`](Self::convert_images), so
+    /// that images are measured as they are printed.
+    fn advise_on_creases(&mut self) {
+        let spine = self.req.format.outside().spine;
+        let profile = self.paint.link().and_then(ebc_color::SrgbToCmyk::profile);
+        if let Some(advice) = crate::crease::advice(
+            &self.doc,
+            0,
+            &[spine.x, spine.right()],
+            self.geometry.trim.h,
+            profile,
+        ) {
+            self.warnings.push(advice);
         }
     }
 

@@ -311,6 +311,26 @@ impl OutputProfile {
         ebc_color::CmykProfile::parse(&self.icc).map(|profile| SrgbToCmyk::relative_bpc(&profile))
     }
 
+    /// [`colour_link`](Self::colour_link) under a printer's total ink limit, in per cent
+    /// (`PrintProfile::max_total_ink_percent`): colours the profile would build above it
+    /// are rebuilt by grey-component replacement, the build closest to the original
+    /// through this profile ([`SrgbToCmyk::with_ink_limit`]). A limit that is not a
+    /// positive number sets none.
+    ///
+    /// # Errors
+    /// As [`colour_link`](Self::colour_link).
+    pub fn colour_link_with_ink_limit(
+        &self,
+        max_total_ink_percent: f32,
+    ) -> Result<SrgbToCmyk, ebc_color::IccError> {
+        let profile = ebc_color::CmykProfile::parse(&self.icc)?;
+        let link = SrgbToCmyk::relative_bpc(&profile);
+        Ok(match ebc_color::InkLimit::new(max_total_ink_percent) {
+            Some(limit) => link.with_ink_limit(&profile, limit),
+            None => link,
+        })
+    }
+
     pub(crate) fn to_output_intent(&self) -> OutputIntent {
         OutputIntent {
             condition_identifier: self.condition_identifier.clone(),

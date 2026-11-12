@@ -66,7 +66,10 @@ pub struct Product {
     pub marks_allowed: bool,
     /// Minimum effective image resolution, in pixels per inch.
     pub min_ppi: f64,
-    /// Total ink limit, in percent.
+    /// Total ink limit, in percent: 240 % for the digital, print-on-demand products (the
+    /// strictest common upload limit, IngramSpark's; `ebc_layout::UPLOAD_MAX_TOTAL_INK_PERCENT`,
+    /// what the `upload_eu` card profile builds under), 300 % for offset on coated stock
+    /// (FOGRA39 "ISO Coated v2 300 %"; `ebc_layout::OFFSET_MAX_TOTAL_INK_PERCENT`).
     pub max_total_ink_percent: f32,
     /// Smallest quantity that can be ordered.
     pub min_quantity: u32,
@@ -122,7 +125,7 @@ const fn digital(
         output_intent_required: true,
         marks_allowed: false,
         min_ppi: 150.0,
-        max_total_ink_percent: 300.0,
+        max_total_ink_percent: UPLOAD_INK_PERCENT,
         min_quantity: 1,
         price_cents: PriceLadder(price_cents),
         currency: "EUR",
@@ -131,6 +134,11 @@ const fn digital(
         ships_to: SHIPS_TO,
     }
 }
+
+/// Total ink limit of the digital products, in per cent (the card's `upload_eu` limit).
+pub const UPLOAD_INK_PERCENT: f32 = 240.0;
+/// Total ink limit of the offset product, in per cent (the card's `professional_eu` limit).
+pub const OFFSET_INK_PERCENT: f32 = 300.0;
 
 /// Bleed asked by every product, in millimetres.
 pub const BLEED_MM: f64 = 3.0;
@@ -177,7 +185,7 @@ static PRODUCTS: [Product; 5] = [
         output_intent_required: true,
         marks_allowed: true,
         min_ppi: 150.0,
-        max_total_ink_percent: 300.0,
+        max_total_ink_percent: OFFSET_INK_PERCENT,
         min_quantity: 250,
         price_cents: PriceLadder(&[(250, 12_900), (500, 16_900), (1000, 22_900)]),
         currency: "EUR",

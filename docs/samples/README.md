@@ -6,7 +6,11 @@ and the book is fictional. Page 1 is the outside (back | spine | front), page 2 
 
 | File | What it shows |
 |---|---|
-| `poche-professional_eu-cover` | 110 × 178 mm card for a professional printer: bleed, crop and fold marks, a 100 % K job line with the crease positions, FOGRA39 output intent; the cover converted to FOGRA39 CMYK (relative colorimetric + black-point compensation), letterboxed, never cropped. Its navy frame would need about 276 % ink through the profile — above the 240 % house limit for a ground that crosses both creases — so the ground is paper white (on a home sheet the same cover gets a navy ground) |
+| `poche-professional_eu-cover` | 110 × 178 mm card for an offset printer: bleed, crop and fold marks, a 100 % K job line with the crease positions, FOGRA39 output intent; the cover converted to FOGRA39 CMYK (relative colorimetric + black-point compensation), letterboxed, never cropped. One dark jacket: the ground is the cover's navy frame, C89 M79 Y38 K68 = 273.6 %, within the profile's 300 % limit. The card advises matt or soft-touch lamination and the grain parallel to the spine for the dark creases (`dark_across_creases`; the preflight's `INK_HEAVY_AT_CREASE` warning) |
+| `poche-upload_eu-cover` | The same card for an upload/print-on-demand printer (no marks), under a **240 %** total ink limit. The navy is rebuilt with more black and less colour ink — C72 M61 Y21 K80 = 233.7 % — instead of turning white; every pixel of the converted cover is under 240 % too. Through the profile it prints as the offset version does: Little CMS gives sRGB 45/46/61 (Lab 19.2/3/−10) against 43/45/61 (Lab 18.8/2/−11), ΔE2000 ≈ 1.2 from the unlimited build. The PNGs are rendered without colour management, so both look a little greyer than the home sheet's sRGB navy (on which they are modelled) |
 | `poche-home_a4-typographic-fr` | Print-at-home A4 sheet, typographic card (no cover rights declared), French; one ground from the title-hashed palette |
 | `poche-home_a4-promo-reduced` | Reduced-size cover layout used for the `promo_all_media` rights basis |
-| `poche-upload_eu-proof-with-guides` | Proof with the guides layer (trim, bleed, safe areas) a viewer can hide; written as a plain PDF without the PDF/X label and output intent, because it is not a print file |
+| `poche-upload_eu-proof-with-guides` | Proof with the guides layer (trim, bleed, safe areas) a viewer can hide, on the dark 240 % jacket; written as a plain PDF without the PDF/X label and output intent, because it is not a print file |
+
+The cover sample of the home profile (`poche-home_a4-cover`, written by the test suite)
+has the same navy ground in sRGB.

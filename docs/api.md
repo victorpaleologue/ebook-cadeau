@@ -230,7 +230,21 @@ rules as §3 with `X-Rights-Basis: licensed_distributor`).
 print (JPEG/PNG/WebP, ≤ 20 MB). The server never fetches third-party URLs itself.
 
 `GET /api/partner/v1/gifts/{id}/card.pdf?format=poche|a6|digest|a5&profile=pro|home-a4|home-letter`
-→ the print-ready card rendered server-side with the same library the browser uses.
+→ the print-ready card rendered server-side with the same library the browser uses. `pro`
+is the upload profile: PDF/X-4, FOGRA39, every colour built under **240 % total ink** (dark
+colours rebuilt with more black and less colour ink, not lightened).
+
+When the composer has something to say about the card, the response carries
+`X-EBC-Card-Warnings: <code>, <code>, …` — stable `snake_case` codes, in the order they were
+raised, each once (absent when there is nothing to say). The card is printable either way;
+the codes are the `CardWarning::code` values of `ebc-card`, e.g.:
+
+| Code | Meaning, what to do |
+|---|---|
+| `dark_across_creases` | Dark or heavy ink (above 180 % or darker than L\* 35) lies within 2 mm of a crease: order **matt or soft-touch lamination** and the **paper grain parallel to the spine**, or the folds may crack |
+| `cover_credit_missing` | No credit line for the cover and no publisher: a generic credit is printed |
+| `low_resolution` | The cover prints below 250 ppi (a cover below 150 ppi is refused with `422 card_unprocessable`) |
+| `cover_downsampled`, `heavy_crop`, `text_clamped`, `missing_glyphs`, `steps_reduced`, `code_reduced`, `qr_version_high`, … | See `crates/ebc-card/src/error.rs` |
 
 `GET /api/partner/v1/gifts/{id}` → status as in §3 plus `order_ref`.
 `POST /api/partner/v1/gifts/{id}/cancel` → voids the code (refund path).

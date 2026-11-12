@@ -140,7 +140,7 @@ defaults: `poche`, `pro`). The same gift always gives the same bytes.
 
 | `profile` | Output |
 |---|---|
-| `pro` | trim + 3 mm bleed, no marks, PDF/X-4 (the composer's `upload_eu` profile: what web-to-print portals accept) |
+| `pro` | trim + 3 mm bleed, no marks, PDF/X-4, every colour built under 240 % total ink (the composer's `upload_eu` profile: what web-to-print and print-on-demand portals accept) |
 | `home-a4`, `home-letter` | the card centred on the sheet with cut and fold guides, plain PDF, to print duplex at 100 % |
 
 **Covers and rights.** The cover a partner uploads with `PUT …/cover` is printed only
@@ -153,7 +153,7 @@ the reduced-size layout of home-printed cards.
 
 | Answer | When |
 |---|---|
-| `200 application/pdf` | the card |
+| `200 application/pdf` | the card; when the composer has something to say about it, `X-EBC-Card-Warnings: code, code, …` lists its warning codes (e.g. `dark_across_creases`: order matt or soft-touch lamination, grain parallel to the spine — see `docs/api.md` §4.2) |
 | `400 invalid_parameter` | unknown `format` / `profile` |
 | `422 invalid_cover_rights` | an unknown `cover_rights` value (creation or cover upload) |
 | `422 cover_rights_refused` | the declared basis does not allow this print route (e.g. `promo_all_media` with `profile=pro`) |

@@ -7,7 +7,9 @@
 
 mod common;
 
-use common::{errors, expectations, fonts, poche, request, warnings, with_cover};
+use common::{
+    errors, expectations, fonts, poche, request, warnings, with_cover, without_crease_advice,
+};
 use ebc_card::{CardError, RightsBasis, compose, render_pdf};
 use ebc_layout::{CardFormat, LayoutError, PrintProfile, Sheet};
 use ebc_model::Locale;
@@ -28,12 +30,25 @@ fn every_format_profile_and_locale_passes_preflight() {
                 let label = format!("{format_name} / {profile_name} / {locale}");
                 match render_pdf(&req, &fonts) {
                     Ok((pdf, card_warnings)) => {
-                        assert!(card_warnings.is_empty(), "{label}: {card_warnings:?}");
+                        let rest = without_crease_advice(&card_warnings);
+                        assert!(rest.is_empty(), "{label}: {card_warnings:?}");
+                        // Lamination advice only for professional files.
+                        if profile.standard == PdfStandard::Plain {
+                            assert!(card_warnings.is_empty(), "{label}: {card_warnings:?}");
+                        }
                         let report = check(&pdf, &expectations(&req, false)).unwrap();
                         assert!(errors(&report).is_empty(), "{label}: {:#?}", errors(&report));
                         assert_eq!(report.pages.len(), 2, "{label}");
+                        // Heavy ink at a crease is advice the card gives too: the referee
+                        // and the composer agree (the composer also flags dark K-only
+                        // grounds, which the referee, judging ink alone, does not).
+                        if report.has(ebc_preflight::codes::INK_HEAVY_AT_CREASE) {
+                            assert_ne!(rest.len(), card_warnings.len(), "{label}: no advice");
+                        }
                         for w in warnings(&report) {
-                            preflight_warnings.insert(w);
+                            if !w.starts_with(ebc_preflight::codes::INK_HEAVY_AT_CREASE) {
+                                preflight_warnings.insert(w);
+                            }
                         }
                         // The QR code is found by the referee, with printable modules.
                         let qr = &report.pages[1].qr_candidates;
@@ -153,7 +168,7 @@ fn the_default_output_profile_is_a_printer_profile_and_others_are_reported() {
     let fonts = fonts();
     let mut req = poche(PrintProfile::upload_eu());
     let (pdf, card_warnings) = render_pdf(&req, &fonts).unwrap();
-    assert!(card_warnings.is_empty());
+    assert!(without_crease_advice(&card_warnings).is_empty(), "{card_warnings:?}");
     let report = check(&pdf, &expectations(&req, false)).unwrap();
     assert!(!report.has(ebc_preflight::codes::OUTPUT_INTENT_INVALID), "{:?}", report.codes());
     let intent = report.document.output_intent.as_ref().unwrap();
@@ -166,7 +181,7 @@ fn the_default_output_profile_is_a_printer_profile_and_others_are_reported() {
     // scanner profile is not a printing condition).
     req.output_profile = Some(OutputProfile::bundled_cc0_fallback().unwrap());
     let (pdf, card_warnings) = render_pdf(&req, &fonts).unwrap();
-    assert_eq!(card_warnings, [CardWarning::FallbackOutputProfile]);
+    assert_eq!(without_crease_advice(&card_warnings), [CardWarning::FallbackOutputProfile]);
     // The same file named as the caller's own profile: not managed, and said so.
     let mut own_cc0 = req.clone();
     own_cc0.output_profile = Some(
@@ -180,7 +195,7 @@ fn the_default_output_profile_is_a_printer_profile_and_others_are_reported() {
     let (_, own_warnings) = compose(&own_cc0, &fonts).unwrap();
     assert!(own_warnings.iter().any(|w| matches!(w, CardWarning::ColourNotManaged { .. })));
     assert_eq!(
-        card_warnings[0].to_string(),
+        without_crease_advice(&card_warnings)[0].to_string(),
         "fallback output profile — supply FOGRA39/FOGRA51 for European printers"
     );
     let report = check(&pdf, &expectations(&req, false)).unwrap();
@@ -200,7 +215,7 @@ fn the_default_output_profile_is_a_printer_profile_and_others_are_reported() {
     .unwrap();
     req.output_profile = Some(own);
     let (doc, card_warnings) = compose(&req, &fonts).unwrap();
-    assert!(card_warnings.is_empty());
+    assert!(without_crease_advice(&card_warnings).is_empty(), "{card_warnings:?}");
     assert_eq!(doc.output_intent.unwrap().condition_identifier, "FOGRA51");
 
     // PDF/X needs a creation time; the composer does not read the clock.

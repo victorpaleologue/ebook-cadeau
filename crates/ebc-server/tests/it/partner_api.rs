@@ -11,8 +11,8 @@ use axum::body::{Body, Bytes};
 use axum::http::{Method, StatusCode};
 use ebc_server::codes::{redirect_signature, request_signature, verify_request_signature};
 use ebc_server::{
-    AppState, CardRenderError, CardRenderer, CardRequest, CoverRights, ManualClock, NoCardRenderer,
-    app,
+    AppState, CardProfile, CardRenderError, CardRenderer, CardRequest, CoverRights, ManualClock,
+    NoCardRenderer, RenderedCard, app,
 };
 use serde_json::json;
 
@@ -618,6 +618,21 @@ impl CardRenderer for RecordingRenderer {
         }
         Ok(b"%PDF-1.6 fake card".to_vec())
     }
+
+    fn render_with_warnings(&self, request: &CardRequest) -> Result<RenderedCard, CardRenderError> {
+        let pdf = self.render(request)?;
+        // A professional card reports its warnings; one code a header could not carry is
+        // dropped by the server.
+        let warnings = match request.profile {
+            CardProfile::Pro => vec![
+                "dark_across_creases".to_owned(),
+                "Bad\r\nInjected: yes".to_owned(),
+                "cover_credit_missing".to_owned(),
+            ],
+            _ => Vec::new(),
+        };
+        Ok(RenderedCard { pdf, warnings })
+    }
 }
 
 #[tokio::test]
@@ -733,6 +748,8 @@ async fn uploads_cover_and_card_rendering_through_the_renderer_seam() {
         "attachment; filename=\"carte-Madame-Bovary.pdf\""
     );
     assert_eq!(pdf.body.as_ref(), b"%PDF-1.6 fake card");
+    // No warnings, no header.
+    assert!(!pdf.has_header("x-ebc-card-warnings"));
     let request = renderer.0.lock().unwrap().last().cloned().unwrap();
     assert_eq!(request.code.compact(), code, "the card carries the code given at creation");
     assert_eq!(request.claim_url, format!("https://ebk.example/k/{code}"));
@@ -747,6 +764,12 @@ async fn uploads_cover_and_card_rendering_through_the_renderer_seam() {
     // Nothing was declared about the cover: the renderer is told so (and must not print it).
     assert_eq!(request.cover_rights, CoverRights::None);
     assert_eq!(put.json()["cover_rights"], "none");
+
+    // A card for a printer reports the composer's warnings as codes (`docs/api.md` §4.2).
+    let pro = format!("/api/partner/v1/gifts/{id}/card.pdf?format=poche&profile=pro");
+    let pro = h.partner(Method::GET, &pro, Bytes::new(), &[]).await;
+    assert_eq!(pro.status, StatusCode::OK, "{}", pro.text());
+    assert_eq!(pro.header("x-ebc-card-warnings"), "dark_across_creases, cover_credit_missing");
 
     // The rights basis is declared on the upload (in the signed path)…
     let declared = h

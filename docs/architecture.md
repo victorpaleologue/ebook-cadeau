@@ -304,8 +304,10 @@ nested (Trim ⊆ Bleed ⊆ Media) with bleed ≥ expected; all fonts embedded (a
 image effective resolution (from CTM) ≥ `min_ppi`; colour spaces used (DeviceRGB flagged
 unless allowed); transparency (SMask, `ca`/`CA` < 1, blend modes); OutputIntent present and
 well-formed; PDF/X version markers consistent; Info `Title` present; `Trapped` set; total
-ink of CMYK vector fills ≤ limit; the `EBC.*` Info keys (spine width, fold positions) match
-the page geometry. Must never panic on malformed PDFs (fuzz-ish tests with truncated input).
+ink of CMYK vector fills ≤ limit, and of the decoded pixels of losslessly stored CMYK images
+(99.5th percentile; CMYK JPEGs are not decoded); heavy ink (> 180 %) within 2 mm of a fold
+listed in `EBC.FoldXMm` (a warning advising lamination); the `EBC.*` Info keys (spine
+width, fold positions) match the page geometry. Must never panic on malformed PDFs (fuzz-ish tests with truncated input).
 
 ### ebc-catalog
 

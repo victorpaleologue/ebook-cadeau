@@ -121,5 +121,6 @@ pub use marks::{
 pub use page::{DuplexFlip, PageGeometry, SheetPlacement, new_page, new_page_for, page_geometry};
 pub use profile::{
     GUIDE_GRAY_LEVEL, HOME_PRINTABLE_MARGIN_MM, MAX_MARGIN_MM, MAX_MARK_WEIGHT_PT, MAX_SHEET_MM,
-    MarkStyle, Marks, PrintProfile, Resolution, Sheet,
+    MarkStyle, Marks, OFFSET_MAX_TOTAL_INK_PERCENT, PrintProfile, Resolution, Sheet,
+    UPLOAD_MAX_TOTAL_INK_PERCENT,
 };

@@ -30,6 +30,17 @@ const MAX_CONTENT_STREAMS: usize = 4_096;
 /// Overlap below this (in points, about 0.01 mm) does not count as touching the bleed box.
 const TOUCH_TOLERANCE_PT: f64 = 0.03;
 
+/// Total ink, in per cent, above which CMYK paint within [`CREASE_BAND_MM`] of a crease
+/// is reported as [`codes::INK_HEAVY_AT_CREASE`]: any four-colour dark build (rich blacks
+/// and dark colours are 240–300 %), not K 100 alone or mid-tones. A house value, the
+/// threshold the card composer uses for its lamination advice.
+pub const HEAVY_INK_AT_CREASE_PERCENT: f32 = 180.0;
+/// Half-width, in millimetres, of the band around each crease (`EBC.FoldXMm`) in which
+/// heavy ink is reported: research 03 §1.2, "no colour boundary within 2 mm of a crease".
+pub const CREASE_BAND_MM: f64 = 2.0;
+/// Percentile of an image's pixels inside a crease band that stands for the image.
+const CREASE_IMAGE_PERCENTILE: f64 = 0.95;
+
 /// Identifies a font dictionary: by object id when it is an indirect object, by resource
 /// name otherwise.
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -55,6 +66,9 @@ pub(crate) struct PageFacts {
     /// (a shading painted with `sh` fills the clip region).
     pub(crate) unbounded_paint: bool,
     pub(crate) qr_candidates: Vec<QrCandidate>,
+    /// The heaviest total ink (per cent) above [`HEAVY_INK_AT_CREASE_PERCENT`] painted
+    /// within [`CREASE_BAND_MM`] of a crease.
+    pub(crate) heavy_at_crease: Option<f32>,
 }
 
 /// A current colour: its space, the last components set and the pattern name, if any.
@@ -202,6 +216,9 @@ pub(crate) struct Interpreter<'a, 's> {
     in_pattern: usize,
     /// Consecutive same-colour rectangle fills, candidates for a QR code.
     rect_run: Vec<qr::Rect>,
+    /// The bands around the creases, in default user space (empty when the file declares
+    /// no folds).
+    creases: Vec<RectPt>,
 }
 
 impl<'a, 's> Interpreter<'a, 's> {
@@ -227,6 +244,32 @@ impl<'a, 's> Interpreter<'a, 's> {
             patterns_done: HashSet::new(),
             in_pattern: 0,
             rect_run: Vec::new(),
+            creases: Vec::new(),
+        }
+    }
+
+    /// Sets the bands around the creases (default user space) in which heavy ink is
+    /// reported.
+    pub(crate) fn with_creases(mut self, bands: Vec<RectPt>) -> Self {
+        self.creases = bands;
+        self
+    }
+
+    /// Records heavy ink painted in a crease band.
+    fn note_heavy_at_crease(&mut self, total_percent: f32) {
+        if total_percent > HEAVY_INK_AT_CREASE_PERCENT {
+            self.facts.heavy_at_crease =
+                Some(self.facts.heavy_at_crease.map_or(total_percent, |v| v.max(total_percent)));
+        }
+    }
+
+    /// Whether `geometry` reaches into a crease band.
+    fn on_crease(&self, geometry: Geometry) -> bool {
+        match geometry {
+            Geometry::Bbox(bbox) => {
+                self.creases.iter().any(|band| band.overlaps(&bbox, TOUCH_TOLERANCE_PT))
+            }
+            Geometry::Unknown => false,
         }
     }
 
@@ -248,6 +291,17 @@ impl<'a, 's> Interpreter<'a, 's> {
             text_render_mode: 0,
         };
         self.exec(&data, resources, state, 0, "page content");
+        if let Some(ink) = self.facts.heavy_at_crease {
+            self.sink.warning(
+                codes::INK_HEAVY_AT_CREASE,
+                Some(self.page),
+                format!(
+                    "{ink:.0} % total ink within {CREASE_BAND_MM} mm of a crease: heavy ink can \
+                     crack when the board is folded; ask for matt or soft-touch lamination \
+                     and the paper grain parallel to the fold"
+                ),
+            );
+        }
         self.facts
     }
 
@@ -851,6 +905,9 @@ impl<'a, 's> Interpreter<'a, 's> {
                 // At most 400.
                 #[allow(clippy::cast_possible_truncation)]
                 let total = total as f32;
+                if self.on_crease(geometry) {
+                    self.note_heavy_at_crease(total);
+                }
                 self.facts.max_ink_percent =
                     Some(self.facts.max_ink_percent.map_or(total, |max| max.max(total)));
                 if let Some(limit) = self.expect.max_total_ink_percent
@@ -1201,7 +1258,7 @@ impl<'a, 's> Interpreter<'a, 's> {
         }
         let bits = if is_mask { Some(1) } else { get_int(self.doc, dict, b"BitsPerComponent") };
         if !is_mask {
-            self.check_image_ink(stream, &display, &filters, bits);
+            self.check_image_ink(stream, &display, &filters, bits, &gs.ctm);
         }
         self.place_image(Placement {
             name: display,
@@ -1377,19 +1434,27 @@ impl<'a, 's> Interpreter<'a, 's> {
     }
 
     /// For losslessly stored 8-bit CMYK images, measures the share of pixels above the
-    /// total ink limit.
+    /// total ink limit (check C4: more than 0.5 % of the pixels, i.e. the 99.5th
+    /// percentile, above the limit is an error) and the ink of the pixels inside the
+    /// crease bands. JPEG-compressed images are not decoded (this crate has no JPEG
+    /// decoder): their ink is not checked.
     fn check_image_ink(
         &mut self,
         stream: &Stream,
         display: &str,
         filters: &[String],
         bits: Option<i64>,
+        ctm: &Matrix,
     ) {
-        /// Share of pixels above the limit that triggers the warning.
+        /// Share of pixels above the limit that triggers the finding.
         const MAX_SHARE: f64 = 0.005;
         /// Largest decoded image examined.
         const MAX_BYTES: usize = 32 * 1024 * 1024;
-        let Some(limit) = self.expect.max_total_ink_percent else { return };
+        let limit = self.expect.max_total_ink_percent;
+        let on_crease = self.on_crease(self.unit_square_geometry(ctm));
+        if limit.is_none() && !on_crease {
+            return;
+        }
         if bits != Some(8) || filters.iter().any(|f| f != "FlateDecode") {
             return;
         }
@@ -1418,6 +1483,10 @@ impl<'a, 's> Interpreter<'a, 's> {
         if data.len() != expected {
             return;
         }
+        if on_crease && let Some(ink) = self.crease_band_ink(&data, width, height, ctm) {
+            self.note_heavy_at_crease(ink);
+        }
+        let Some(limit) = limit else { return };
         let limit_units = f64::from(limit) * 255.0 / 100.0;
         let over = data
             .chunks_exact(4)
@@ -1429,15 +1498,71 @@ impl<'a, 's> Interpreter<'a, 's> {
         #[allow(clippy::cast_precision_loss)]
         let share = over as f64 / (expected / 4) as f64;
         if share > MAX_SHARE {
-            self.sink.warning(
-                codes::IMAGE_INK_TOTAL_TOO_HIGH,
-                Some(self.page),
-                format!(
-                    "{:.0} % of the pixels of CMYK image {display} exceed {limit:.0} % total ink",
-                    share * 100.0
-                ),
+            let message = format!(
+                "{:.0} % of the pixels of CMYK image {display} exceed {limit:.0} % total ink",
+                share * 100.0
             );
+            if self.expect.require_output_intent {
+                self.sink.error(codes::IMAGE_INK_TOTAL_TOO_HIGH, Some(self.page), message);
+            } else {
+                self.sink.warning(codes::IMAGE_INK_TOTAL_TOO_HIGH, Some(self.page), message);
+            }
         }
+    }
+
+    /// The total ink (per cent) of the pixels of an axis-aligned image that fall inside
+    /// the crease bands: the [`CREASE_IMAGE_PERCENTILE`] of them. `None` for a rotated or
+    /// skewed placement, or when no pixel falls inside.
+    fn crease_band_ink(
+        &self,
+        data: &[u8],
+        width: usize,
+        height: usize,
+        ctm: &Matrix,
+    ) -> Option<f32> {
+        if ctm.b.abs() > 1e-9 || ctm.c.abs() > 1e-9 || ctm.a.abs() < 1e-9 || ctm.d.abs() < 1e-9 {
+            return None;
+        }
+        // Image space: u = (x − e) / a across, v = (y − f) / d up; row 0 is at v = 1.
+        let span = |lo: f64, hi: f64, count: usize| {
+            let (lo, hi) = (lo.min(hi).clamp(0.0, 1.0), lo.max(hi).clamp(0.0, 1.0));
+            // Clamped to 0..=count: the conversions cannot overflow.
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let from = ((lo * count as f64).floor() as usize).min(count);
+            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+            let to = ((hi * count as f64).ceil() as usize).min(count);
+            from..to.max(from)
+        };
+        let mut inks: Vec<u32> = Vec::new();
+        for band in &self.creases {
+            let cols = span((band.x0 - ctm.e) / ctm.a, (band.x1 - ctm.e) / ctm.a, width);
+            let rows =
+                span(1.0 - (band.y1 - ctm.f) / ctm.d, 1.0 - (band.y0 - ctm.f) / ctm.d, height);
+            for row in rows {
+                for col in cols.clone() {
+                    let at = (row * width + col) * 4;
+                    if let Some(px) = data.get(at..at + 4) {
+                        inks.push(px.iter().map(|&v| u32::from(v)).sum());
+                    }
+                }
+            }
+        }
+        if inks.is_empty() {
+            return None;
+        }
+        inks.sort_unstable();
+        // A rank in 0..len.
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            clippy::cast_precision_loss
+        )]
+        let rank = (((inks.len() - 1) as f64) * CREASE_IMAGE_PERCENTILE).round() as usize;
+        let units = inks[rank.min(inks.len() - 1)];
+        // At most 1020 units: exact in f32.
+        #[allow(clippy::cast_precision_loss)]
+        let percent = units as f32 * 100.0 / 255.0;
+        Some(percent)
     }
 
     // ---- QR candidates -----------------------------------------------------------------

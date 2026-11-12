@@ -135,7 +135,11 @@ ebc card … --profile pro --icc ISOcoated_v2_300_bas.icc --output-condition FOG
   composes the card without the image instead.
 - Formats: `poche`, `a6`, `digest`, `a5`, or `WIDTHxHEIGHT[xSPINE]` in millimetres.
   Profiles: `upload`, `pro`, `home-a4`, `home-letter`, `home-a3`, `home-sra3` (or any
-  `ebc-layout` profile name).
+  `ebc-layout` profile name). Total ink limits: `upload` 240 % (print-on-demand),
+  `pro` 300 % (offset, coated); `ebc card` builds every colour under it (dark colours with
+  more black, not lighter) and `ebc preflight` checks fills, strokes and lossless images
+  against the same value. A dark card prints a `warning:` advising matt or soft-touch
+  lamination and the paper grain parallel to the spine.
 - The gift code is a bearer secret: it is echoed only when `--random-code` made it.
 - `--created-unix N` (or `SOURCE_DATE_EPOCH`) makes the PDF byte-identical across runs.
 - `--json` prints a summary: file, size, profile, print route, warnings.

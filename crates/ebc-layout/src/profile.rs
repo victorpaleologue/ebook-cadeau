@@ -51,6 +51,28 @@ pub const GUIDE_GRAY_LEVEL: f32 = 0.55;
 /// not a specification of any printer.
 pub const HOME_PRINTABLE_MARGIN_MM: f64 = 6.35;
 
+/// Total ink limit of [`PrintProfile::upload_eu`], in per cent: what upload and
+/// print-on-demand printers accept.
+///
+/// Source: IngramSpark caps total ink at 240 % and recommends C60 M40 Y40 K100 (= 240 %) as
+/// its rich black; digital presses and print-on-demand services generally ask for 240–
+/// 260 % (Onlineprinters express 260 %, Lulu 270 %, `docs/research/03-print-requirements.md`
+/// §4.3). 240 % is the strictest of these, so a file built under it passes all of them;
+/// dark colours keep their look because they are rebuilt with more black and less colour
+/// ink (`ebc_color::ink`), not scaled down. Owner-approved default; not confirmed with a
+/// particular printer.
+pub const UPLOAD_MAX_TOTAL_INK_PERCENT: f32 = 240.0;
+/// Total ink limit of [`PrintProfile::professional_eu`], in per cent: offset on coated
+/// stock.
+///
+/// Source: the ceiling of the FOGRA39 "ISO Coated v2 300 %" and FOGRA51 "PSO Coated v3"
+/// conditions (300 %; the plain ECI "ISO Coated v2" allows 330 %), and the limit published
+/// by Onlineprinters, Saxoprint, Exaprint and Flyeralarm (`docs/research/
+/// 03-print-requirements.md` §3.5, §4.3). Also the nominal value of the home profiles,
+/// whose content is sRGB and grey (a home printer's driver applies its own limit), so
+/// nothing there is ever limited.
+pub const OFFSET_MAX_TOTAL_INK_PERCENT: f32 = 300.0;
+
 /// Image-resolution verdicts within this relative distance of a threshold count as
 /// reaching it, so that a scan made at exactly 300 ppi is not judged "below 300" because
 /// `152.4 / 25.4` is not exactly 6 in binary floating point.
@@ -336,7 +358,14 @@ pub struct PrintProfile {
     pub target_ppi: f64,
     /// Image resolution below which the result is considered unprintable.
     pub min_ppi: f64,
-    /// Total area coverage limit (sum of C, M, Y and K), in percent.
+    /// Total area coverage limit (sum of C, M, Y and K), in percent: the most ink any
+    /// point of the CMYK content may carry. The card composer builds every process colour
+    /// under it — grounds, the converted cover and spine images — by grey-component
+    /// replacement through the output profile (`ebc_color::ink`), and the preflight
+    /// checks fills, strokes and losslessly stored images against it. The defaults are
+    /// [`UPLOAD_MAX_TOTAL_INK_PERCENT`] for upload/print-on-demand,
+    /// [`OFFSET_MAX_TOTAL_INK_PERCENT`] for offset on coated stock and for the nominal
+    /// value of home profiles (whose content is sRGB and grey, never limited).
     pub max_total_ink_percent: f32,
     /// When set, the PDF page is this sheet with the spread centred on it (home printing);
     /// when `None` the page is trim + bleed + slug (the printer imposes it).
@@ -371,7 +400,7 @@ impl PrintProfile {
     /// | marks | solid crop marks and dashed fold marks, 5 mm long, starting 0.5 mm beyond the bleed edge, one object each; 0.25 pt, registration colour; no registration targets, no colour bar |
     /// | PDF | PDF/X-4 |
     /// | images | 300 ppi target, warning below 250 ppi, error below 150 ppi |
-    /// | total ink | 300 % |
+    /// | total ink | 300 % ([`OFFSET_MAX_TOTAL_INK_PERCENT`]: offset, coated stock) |
     /// | colour | CMYK and grey only (`allow_rgb = false`) |
     ///
     /// Many web-to-print portals (Pixartprinting, Flyeralarm, Printoclock, Bookvault, …)
@@ -388,7 +417,7 @@ impl PrintProfile {
             standard: PdfStandard::X4,
             target_ppi: 300.0,
             min_ppi: 150.0,
-            max_total_ink_percent: 300.0,
+            max_total_ink_percent: OFFSET_MAX_TOTAL_INK_PERCENT,
             sheet: None,
             printable_margin: 0.0,
             allow_rgb: false,
@@ -396,7 +425,9 @@ impl PrintProfile {
     }
 
     /// [`professional_eu`](Self::professional_eu) without marks and without a slug, for
-    /// web-to-print upload portals: `MediaBox = BleedBox = trim + 3 mm`, `TrimBox = trim`.
+    /// web-to-print upload portals: `MediaBox = BleedBox = trim + 3 mm`, `TrimBox = trim`,
+    /// and a total ink limit of 240 % ([`UPLOAD_MAX_TOTAL_INK_PERCENT`]), the strictest
+    /// value of print-on-demand and digital presses.
     ///
     /// Not part of the original contract; added because most online printers reject files
     /// with marks (`docs/research/03-print-requirements.md` §2.3), which makes this the
@@ -405,6 +436,7 @@ impl PrintProfile {
     pub fn upload_eu() -> Self {
         let mut p = Self::professional_eu().without_marks();
         p.name = "upload_eu".to_owned();
+        p.max_total_ink_percent = UPLOAD_MAX_TOTAL_INK_PERCENT;
         p
     }
 
@@ -429,6 +461,7 @@ impl PrintProfile {
     /// | PDF | plain PDF (no PDF/X claims, no output intent needed) |
     /// | images | 200 ppi target, warning below 150 ppi, error below 100 ppi |
     /// | colour | sRGB images and colours allowed (`allow_rgb = true`) |
+    /// | total ink | nominally 300 % ([`OFFSET_MAX_TOTAL_INK_PERCENT`]); no CMYK content is written, so nothing is limited — the printer driver applies its own limit |
     ///
     /// Values from `docs/research/03-print-requirements.md` §9.2; the unprintable margin of
     /// a given printer may still be larger at the bottom edge (12–15 mm on some old
@@ -447,7 +480,7 @@ impl PrintProfile {
             standard: PdfStandard::Plain,
             target_ppi: 200.0,
             min_ppi: 100.0,
-            max_total_ink_percent: 300.0,
+            max_total_ink_percent: OFFSET_MAX_TOTAL_INK_PERCENT,
             sheet: Some(sheet),
             printable_margin: HOME_PRINTABLE_MARGIN_MM,
             allow_rgb: true,
@@ -662,6 +695,9 @@ mod tests {
         assert_eq!(p.slug, 0.0);
         assert_eq!(p.bleed, 3.0);
         assert_eq!(p.standard, PdfStandard::X4);
+        // Print-on-demand ink limit; offset keeps 300 %.
+        assert_eq!(p.max_total_ink_percent, 240.0);
+        assert_eq!(PrintProfile::home(Sheet::A4).max_total_ink_percent, 300.0);
         assert_eq!(p.validate(), Ok(()));
         // `without_marks` keeps the style so that re-enabling one mark stays consistent.
         let h = PrintProfile::home(Sheet::A4).without_marks();

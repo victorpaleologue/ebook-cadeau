@@ -543,6 +543,14 @@ fn parse_mm(text: &str) -> Option<f64> {
     (value.is_finite() && (0.0..=100_000.0).contains(&value)).then_some(value)
 }
 
+/// The crease positions of `EBC.FoldXMm` (millimetres from the left edge of the trim
+/// box); empty when the key is missing or malformed ([`check_ebc_geometry`] reports that).
+pub(crate) fn fold_positions(ebc: &BTreeMap<String, String>) -> Vec<f64> {
+    ebc.get("EBC.FoldXMm")
+        .and_then(|raw| raw.split(',').take(16).map(parse_mm).collect::<Option<Vec<f64>>>())
+        .unwrap_or_default()
+}
+
 /// Checks the `EBC.*` Info keys against the trim size of the first page and against the
 /// expectations, and the QR module size against the minimum.
 pub(crate) fn check_ebc_geometry(

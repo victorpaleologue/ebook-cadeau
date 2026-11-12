@@ -62,7 +62,7 @@ mod webhook;
 pub use card::ComposedCardRenderer;
 pub use card::{
     CardFormat, CardProfile, CardRenderError, CardRenderer, CardRequest, CoverRights,
-    NoCardRenderer,
+    NoCardRenderer, RenderedCard,
 };
 pub use clock::{Clock, Entropy, ManualClock, OsEntropy, SystemClock};
 pub use config::{Config, Partner, PartnersFile, WebhookPolicy};

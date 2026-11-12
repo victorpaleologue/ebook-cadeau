@@ -72,8 +72,11 @@
 //! * **Colour** — the colour spaces actually used to paint; RGB-like spaces, spot colours and
 //!   registration colour inside the bleed box are flagged.
 //! * **Transparency** — soft masks, opacity below 1, blend modes, transparency groups.
-//! * **Ink** — total ink of CMYK fills and strokes, and of losslessly stored CMYK images;
-//!   hairline strokes.
+//! * **Ink** — total ink of CMYK fills and strokes, and of losslessly stored CMYK images
+//!   (the decoded pixels; more than 0.5 % of them above the limit is an error in a
+//!   professional file); heavy ink (above [`HEAVY_INK_AT_CREASE_PERCENT`]) within
+//!   [`CREASE_BAND_MM`] of a crease declared in `EBC.FoldXMm`, a warning that advises
+//!   lamination; hairline strokes.
 //! * **Output intent and PDF/X** — a `GTS_PDFX` output intent with identifier and a profile
 //!   whose component count matches; version markers consistent with each other, with the
 //!   file header and with the features used; `Title`, `Trapped`, dates and file identifier.
@@ -86,7 +89,10 @@
 //! # What is not checked
 //!
 //! Text size and safety margins (they need glyph metrics), overprint settings, the ink
-//! coverage of JPEG-compressed images (they would have to be decoded), the content of
+//! coverage of JPEG-compressed images (this crate has no JPEG decoder, so a CMYK JPEG is
+//! neither checked against the ink limit nor at the creases), whether a heavy fill on a
+//! crease is hidden by something painted over it (the crease check does not follow
+//! occlusion), the content of
 //! Type 3 glyph procedures and annotation appearances, and whether the QR code actually
 //! decodes (that needs a renderer — the end-to-end tests do it). Clipping paths are ignored
 //! when deciding where something is painted.
@@ -120,6 +126,7 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use lopdf::{Document, LoadOptions};
 
+pub use content::{CREASE_BAND_MM, HEAVY_INK_AT_CREASE_PERCENT};
 pub use expect::{
     BLEED_TOLERANCE_MM, Expectations, NESTING_TOLERANCE_MM, PreflightError, TRIM_TOLERANCE_MM,
 };
@@ -265,6 +272,7 @@ fn check_parsed(pdf: &[u8], expect: &Expectations) -> Result<Report, PreflightEr
         sink.error(codes::NO_PAGES, None, "the document has no pages");
     }
 
+    let folds = meta::fold_positions(&summary.ebc);
     let mut budget = Budget::new();
     let mut page_summaries = Vec::with_capacity(nodes.len());
     let mut all_boxes = Vec::with_capacity(nodes.len());
@@ -284,7 +292,8 @@ fn check_parsed(pdf: &[u8], expect: &Expectations) -> Result<Report, PreflightEr
             boxes.printed_area(),
             &mut sink,
             &mut budget,
-        );
+        )
+        .with_creases(crease_bands(&folds, &boxes));
         let facts = interpreter.run(node.dict, node.resources);
         if !facts.unbounded_paint {
             pages::check_bleed_painted(&boxes, facts.painted, expect, number, &mut sink);
@@ -364,6 +373,24 @@ fn check_parsed(pdf: &[u8], expect: &Expectations) -> Result<Report, PreflightEr
     );
 
     Ok(Report { findings: sink.into_sorted(), pages: page_summaries, document: summary })
+}
+
+/// The bands of ±[`CREASE_BAND_MM`] around the folds (millimetres from the left edge of
+/// the trim box), over the height of the trim box, in default user space.
+fn crease_bands(folds: &[f64], boxes: &pages::PageBoxes) -> Vec<pdf::RectPt> {
+    let Some(trim) = boxes.trim else { return Vec::new() };
+    let units_per_mm = 72.0 / 25.4 / boxes.user_unit;
+    if !units_per_mm.is_finite() || units_per_mm <= 0.0 {
+        return Vec::new();
+    }
+    folds
+        .iter()
+        .map(|&x| {
+            let centre = trim.x0 + x * units_per_mm;
+            let half = CREASE_BAND_MM * units_per_mm;
+            pdf::RectPt { x0: centre - half, y0: trim.y0, x1: centre + half, y1: trim.y1 }
+        })
+        .collect()
 }
 
 /// The report for a file that cannot be read because it is encrypted.

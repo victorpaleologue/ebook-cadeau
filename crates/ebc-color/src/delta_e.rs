@@ -1,6 +1,11 @@
 //! The CIEDE2000 colour-difference formula.
+//!
+//! Its trigonometry is evaluated with the basic-operation versions of [`crate::detmath`],
+//! so the same pair of colours gives the same bits natively and in WebAssembly: the ink
+//! limiter ([`crate::ink`]) chooses separations by comparing these values.
 
 use crate::Rgb8;
+use crate::detmath::{atan2_deg, cos_deg, exp_neg, hypot, sin_deg};
 use crate::lab::Lab;
 
 /// CIEDE2000 colour difference ΔE₀₀ between two sRGB colours (via CIELAB D65).
@@ -24,20 +29,27 @@ pub fn delta_e2000(a: Rgb8, b: Rgb8) -> f64 {
 /// Formula: Implementation Notes, Supplementary Test Data, and Mathematical Observations"*
 /// (Color Research & Application 30(1), 2005), including its handling of the hue
 /// discontinuities, and is validated against all 34 test pairs of that paper. The function
-/// is symmetric in its arguments.
+/// is symmetric in its arguments. Only `+ − × ÷` and `sqrt` are used (IEEE 754 defines
+/// each exactly), so the result is bit-identical on every platform.
+///
+/// Two hues exactly opposite (180° apart, the formula's discontinuity) are treated as
+/// "not more than 180° apart" whatever the last bit of their angles: differences within
+/// 1e-9° of 180° count as 180°.
 #[must_use]
 pub fn delta_e2000_lab(lab1: Lab, lab2: Lab) -> f64 {
+    /// Hue differences within this many degrees of 180° count as exactly 180°.
+    const HUE_SLACK: f64 = 1e-9;
     const POW25_7: f64 = 6_103_515_625.0; // 25^7
 
     // Step 1: C'ᵢ and h'ᵢ.
-    let c1 = lab1.a.hypot(lab1.b);
-    let c2 = lab2.a.hypot(lab2.b);
-    let c_bar7 = ((c1 + c2) / 2.0).powi(7);
+    let c1 = hypot(lab1.a, lab1.b);
+    let c2 = hypot(lab2.a, lab2.b);
+    let c_bar7 = pow7((c1 + c2) / 2.0);
     let g = 0.5 * (1.0 - (c_bar7 / (c_bar7 + POW25_7)).sqrt());
     let a1p = (1.0 + g) * lab1.a;
     let a2p = (1.0 + g) * lab2.a;
-    let c1p = a1p.hypot(lab1.b);
-    let c2p = a2p.hypot(lab2.b);
+    let c1p = hypot(a1p, lab1.b);
+    let c2p = hypot(a2p, lab2.b);
     let h1p = hue_degrees(lab1.b, a1p);
     let h2p = hue_degrees(lab2.b, a2p);
 
@@ -49,15 +61,15 @@ pub fn delta_e2000_lab(lab1: Lab, lab2: Lab) -> f64 {
         0.0
     } else {
         let d = h2p - h1p;
-        if d > 180.0 {
+        if d > 180.0 + HUE_SLACK {
             d - 360.0
-        } else if d < -180.0 {
+        } else if d < -180.0 - HUE_SLACK {
             d + 360.0
         } else {
             d
         }
     };
-    let dh = 2.0 * (c1p * c2p).sqrt() * (dh_deg / 2.0).to_radians().sin();
+    let dh = 2.0 * (c1p * c2p).sqrt() * sin_deg(dh_deg / 2.0);
 
     // Step 3: the weighted difference.
     let l_bar = (lab1.l + lab2.l) / 2.0;
@@ -65,25 +77,26 @@ pub fn delta_e2000_lab(lab1: Lab, lab2: Lab) -> f64 {
     let h_sum = h1p + h2p;
     let h_bar = if achromatic {
         h_sum
-    } else if (h1p - h2p).abs() <= 180.0 {
+    } else if (h1p - h2p).abs() <= 180.0 + HUE_SLACK {
         h_sum / 2.0
     } else if h_sum < 360.0 {
         (h_sum + 360.0) / 2.0
     } else {
         (h_sum - 360.0) / 2.0
     };
-    let t = 1.0 - 0.17 * (h_bar - 30.0).to_radians().cos()
-        + 0.24 * (2.0 * h_bar).to_radians().cos()
-        + 0.32 * (3.0 * h_bar + 6.0).to_radians().cos()
-        - 0.20 * (4.0 * h_bar - 63.0).to_radians().cos();
-    let d_theta = 30.0 * (-((h_bar - 275.0) / 25.0).powi(2)).exp();
-    let c_bar7 = c_bar.powi(7);
+    let t = 1.0 - 0.17 * cos_deg(h_bar - 30.0)
+        + 0.24 * cos_deg(2.0 * h_bar)
+        + 0.32 * cos_deg(3.0 * h_bar + 6.0)
+        - 0.20 * cos_deg(4.0 * h_bar - 63.0);
+    let hue = (h_bar - 275.0) / 25.0;
+    let d_theta = 30.0 * exp_neg(-(hue * hue));
+    let c_bar7 = pow7(c_bar);
     let r_c = 2.0 * (c_bar7 / (c_bar7 + POW25_7)).sqrt();
-    let l50 = (l_bar - 50.0).powi(2);
+    let l50 = (l_bar - 50.0) * (l_bar - 50.0);
     let s_l = 1.0 + 0.015 * l50 / (20.0 + l50).sqrt();
     let s_c = 1.0 + 0.045 * c_bar;
     let s_h = 1.0 + 0.015 * c_bar * t;
-    let r_t = -(2.0 * d_theta).to_radians().sin() * r_c;
+    let r_t = -sin_deg(2.0 * d_theta) * r_c;
 
     let (tl, tc, th) = (dl / s_l, dc / s_c, dh / s_h);
     // The radicand is non-negative in exact arithmetic; guard against −0.0…1 rounding.
@@ -95,8 +108,14 @@ fn hue_degrees(b: f64, a: f64) -> f64 {
     if a == 0.0 && b == 0.0 {
         return 0.0;
     }
-    let h = b.atan2(a).to_degrees();
+    let h = atan2_deg(b, a);
     if h < 0.0 { h + 360.0 } else { h }
+}
+
+/// x⁷ by multiplication.
+fn pow7(x: f64) -> f64 {
+    let x2 = x * x;
+    x2 * x2 * x2 * x
 }
 
 #[cfg(test)]

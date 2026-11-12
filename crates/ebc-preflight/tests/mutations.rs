@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use common::{
-    BLEED, COVER_H, Fixture, TRIM_W, card_expectations, codes, icc_profile, name, rect_mm, set,
+    BLEED, COVER_H, Fixture, MM, TRIM_W, card_expectations, codes, icc_profile, name, rect_mm, set,
     string, xmp,
 };
 use ebc_preflight::{Expectations, PreflightError, Report, Severity, check, codes as c};
@@ -379,14 +379,110 @@ fn raw_cmyk_image_over_the_ink_limit() {
     f.add_resource(f.page2, "XObject", "Dark", image);
     f.append_content(f.content2, "q 4 0 0 4 300 300 cm /Dark Do Q");
     let report = f.check();
-    assert_only(&report, c::IMAGE_INK_TOTAL_TOO_HIGH, Severity::Warning);
+    // Check C4 is an error in a professional file, a warning otherwise.
+    assert_only(&report, c::IMAGE_INK_TOTAL_TOO_HIGH, Severity::Error);
     assert!(
         finding(&report, c::IMAGE_INK_TOTAL_TOO_HIGH).message.starts_with("100 % of the pixels")
+    );
+    let report =
+        f.check_with(&Expectations { require_output_intent: false, ..card_expectations() });
+    assert!(
+        report
+            .findings
+            .iter()
+            .any(|f| f.code == c::IMAGE_INK_TOTAL_TOO_HIGH && f.severity == Severity::Warning),
+        "{:?}",
+        report.findings
     );
     // With a 400 % limit (i.e. none in practice) the image is fine.
     let report =
         f.check_with(&Expectations { max_total_ink_percent: Some(400.0), ..card_expectations() });
     assert!(report.findings.is_empty());
+}
+
+#[test]
+fn heavy_ink_next_to_a_crease_is_a_warning() {
+    // The reference card's folds are at 110 and 120 mm from the trim's left edge, i.e. at
+    // 113 and 123 mm on the page (3 mm bleed).
+    let heavy_image = |f: &mut Fixture| {
+        // 120 × 240 px (300 ppi on 10 × 20 mm) at C80 M70 Y60 K90 = 300 %, within the 300 % limit.
+        let mut stream = Stream::new(
+            dictionary! {
+                "Type" => "XObject", "Subtype" => "Image", "Width" => 120, "Height" => 240,
+                "ColorSpace" => "DeviceCMYK", "BitsPerComponent" => 8,
+            },
+            [204_u8, 178, 153, 230].repeat(120 * 240),
+        );
+        stream.compress().unwrap();
+        let image = f.doc.add_object(stream);
+        f.add_resource(f.page1, "XObject", "Heavy", image);
+    };
+    let place = |x_mm: f64| {
+        format!("q {} 0 0 {} {} {} cm /Heavy Do Q", 10.0 * MM, 20.0 * MM, x_mm * MM, 50.0 * MM)
+    };
+
+    // Across the first crease: a warning; the file still passes.
+    let mut f = Fixture::reference();
+    heavy_image(&mut f);
+    f.append_content(f.content1, &place(108.0));
+    let report = f.check();
+    assert_only(&report, c::INK_HEAVY_AT_CREASE, Severity::Warning);
+    let advice = finding(&report, c::INK_HEAVY_AT_CREASE);
+    assert_eq!(advice.page, Some(1));
+    assert!(advice.message.starts_with("300 % total ink within 2 mm of a crease"), "{advice}");
+    assert!(advice.message.contains("lamination") && !advice.message.contains("  "), "{advice}");
+    // On the back panel, 10 mm away from it: nothing.
+    let mut f = Fixture::reference();
+    heavy_image(&mut f);
+    f.append_content(f.content1, &place(50.0));
+    assert!(f.check().findings.is_empty(), "{:?}", f.check().findings);
+    // Its light half on the crease, its heavy half 3 mm away: nothing either.
+    let mut f = Fixture::reference();
+    let mut pixels = Vec::new();
+    for _ in 0..240 {
+        for x in 0..120 {
+            pixels.extend_from_slice(if x < 60 { &[204_u8, 178, 153, 230] } else { &[0, 0, 0, 0] });
+        }
+    }
+    let mut stream = Stream::new(
+        dictionary! {
+            "Type" => "XObject", "Subtype" => "Image", "Width" => 120, "Height" => 240,
+            "ColorSpace" => "DeviceCMYK", "BitsPerComponent" => 8,
+        },
+        pixels,
+    );
+    stream.compress().unwrap();
+    let image = f.doc.add_object(stream);
+    f.add_resource(f.page1, "XObject", "Half", image);
+    f.append_content(
+        f.content1,
+        &format!("q {} 0 0 {} {} {} cm /Half Do Q", 10.0 * MM, 20.0 * MM, 105.0 * MM, 50.0 * MM),
+    );
+    assert!(f.check().findings.is_empty(), "{:?}", f.check().findings);
+    // A rotated placement on the crease is not measured (and does not fail).
+    let mut f = Fixture::reference();
+    heavy_image(&mut f);
+    f.append_content(
+        f.content1,
+        &format!("q 0 {} {} 0 {} {} cm /Heavy Do Q", 10.0 * MM, -20.0 * MM, 118.0 * MM, 50.0 * MM),
+    );
+    assert!(!f.check().has(c::INK_HEAVY_AT_CREASE));
+
+    // Flat fills: a rich black band over the second crease, K 100 alone, a mid tone.
+    for (colour, heavy) in [("0.6 0.4 0.4 1", true), ("0 0 0 1", false), ("0.6 0.3 0 0", false)] {
+        let mut f = Fixture::reference();
+        f.append_content(
+            f.content1,
+            &format!("q {colour} k {} {} {} {} re f Q", 121.0 * MM, 10.0 * MM, 4.0 * MM, 50.0 * MM),
+        );
+        assert_eq!(f.check().has(c::INK_HEAVY_AT_CREASE), heavy, "{colour}");
+    }
+    // Without fold keys there is no crease to check.
+    let mut f = Fixture::reference();
+    heavy_image(&mut f);
+    f.append_content(f.content1, &place(108.0));
+    f.dict(f.info).remove(b"EBC.FoldXMm");
+    assert!(!f.check().has(c::INK_HEAVY_AT_CREASE));
 }
 
 // ---- colour --------------------------------------------------------------------------------

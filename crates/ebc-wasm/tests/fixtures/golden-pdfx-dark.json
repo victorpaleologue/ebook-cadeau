@@ -1,0 +1,11 @@
+{
+  "book": { "title": "Nuit d’encre", "contributors": [{ "name": "Jeanne Roy" }], "language": "fr" },
+  "code": "TBLCZHJQPBXF",
+  "base_url": "https://ebk.example",
+  "ground": "#0e1630",
+  "giver": "Alice",
+  "locale": "fr",
+  "format": "poche",
+  "profile": "upload_eu",
+  "created_unix": 1780000000
+}

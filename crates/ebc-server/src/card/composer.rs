@@ -15,10 +15,16 @@
 //! the typographic card. The composer's rights gate (a promotion-only licence cannot go
 //! to a printer) surfaces as [`CardRenderError::RightsRefused`].
 //!
-//! On `pro` the cover is converted to the FOGRA39 CMYK of the output intent; a cover too
+//! On `pro` the cover is converted to the FOGRA39 CMYK of the output intent, under the
+//! profile's 240 % total ink limit (dark colours rebuilt with more black); a cover too
 //! small for print (below 150 ppi on the panel) is refused by the composer, and that
 //! refusal, like an undecodable cover, is the partner's to fix
 //! ([`CardRenderError::Unprocessable`], 422).
+//!
+//! The composer's warnings travel back as their stable codes
+//! ([`ebc_card::CardWarning::code`], [`RenderedCard::warnings`]); the endpoint lists them
+//! in the `X-EBC-Card-Warnings` header — `dark_across_creases`, for instance, tells the
+//! partner to order matt or soft-touch lamination for a dark card.
 //!
 //! The output is deterministic for a given gift: the creation date of the PDF is the
 //! gift's, nothing reads the clock.
@@ -26,7 +32,9 @@
 use ebc_card::{CardError, CoverInput, FontSet, RightsBasis};
 use ebc_layout::{PrintProfile, Sheet};
 
-use super::{CardFormat, CardProfile, CardRenderError, CardRenderer, CardRequest, CoverRights};
+use super::{
+    CardFormat, CardProfile, CardRenderError, CardRenderer, CardRequest, CoverRights, RenderedCard,
+};
 
 /// Renders cards with `ebc-card` and its bundled fonts.
 #[derive(Debug, Clone)]
@@ -113,6 +121,10 @@ fn render_error(error: &CardError) -> CardRenderError {
 
 impl CardRenderer for ComposedCardRenderer {
     fn render(&self, request: &CardRequest) -> Result<Vec<u8>, CardRenderError> {
+        self.render_with_warnings(request).map(|card| card.pdf)
+    }
+
+    fn render_with_warnings(&self, request: &CardRequest) -> Result<RenderedCard, CardRenderError> {
         let mut card =
             ebc_card::CardRequest::new(request.book.clone(), request.code, &request.public_url);
         // The composer derives a bare host from the base URL; a development server on a
@@ -147,7 +159,14 @@ impl CardRenderer for ComposedCardRenderer {
                 "card rendered with warnings"
             );
         }
-        Ok(pdf)
+        let mut codes: Vec<String> = Vec::new();
+        for warning in &warnings {
+            let code = warning.code();
+            if !codes.iter().any(|known| known == code) {
+                codes.push(code.to_owned());
+            }
+        }
+        Ok(RenderedCard { pdf, warnings: codes })
     }
 }
 
@@ -181,6 +200,23 @@ mod tests {
             profile,
             created_unix: 1_794_441_600,
         }
+    }
+
+    #[test]
+    fn warnings_come_back_as_codes() {
+        let renderer = ComposedCardRenderer::new().unwrap();
+        // The typographic card's ground for this title is a deep colour: on a card for a
+        // printer the composer advises lamination for the creases; at home it does not.
+        let pro = renderer.render_with_warnings(&request(CardFormat::Poche, CardProfile::Pro));
+        let pro = pro.unwrap();
+        assert!(pro.pdf.starts_with(b"%PDF-"));
+        assert_eq!(pro.warnings, ["dark_across_creases"]);
+        assert_eq!(
+            pro.pdf,
+            renderer.render(&request(CardFormat::Poche, CardProfile::Pro)).unwrap()
+        );
+        let home = renderer.render_with_warnings(&request(CardFormat::Poche, CardProfile::HomeA4));
+        assert!(home.unwrap().warnings.is_empty());
     }
 
     #[test]

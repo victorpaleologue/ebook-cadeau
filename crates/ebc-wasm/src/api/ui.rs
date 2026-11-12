@@ -1558,6 +1558,18 @@ pub const UI_STRINGS: &[(&str, [&str; LOCALES])] = &[
             "Este estilo de lombada exige uma imagem imprimível: foi usada a lombada padrão.",
         ],
     ),
+    (
+        "warn_dark_across_creases",
+        [
+            "Encre foncée sur les plis (jusqu’à {ink}\u{a0}% d’encre)\u{a0}: demandez à l’imprimeur un pelliculage mat ou soft touch et des fibres parallèles au dos, sinon les plis peuvent se fissurer.",
+            "Dark ink across the folds (up to {ink} % ink): ask the printer for matt or soft-touch lamination and the paper grain parallel to the spine, or the folds may crack.",
+            "Dunkle Farbe auf den Falzen (bis {ink} % Farbauftrag): Bitten Sie die Druckerei um eine matte oder Soft-Touch-Kaschierung und die Laufrichtung parallel zum Rücken, sonst können die Falze brechen.",
+            "Tinta oscura en los pliegues (hasta {ink} % de tinta): pida a la imprenta un laminado mate o soft touch y la fibra del papel paralela al lomo, o los pliegues pueden agrietarse.",
+            "Inchiostro scuro sulle pieghe (fino al {ink} % di copertura): chiedete alla tipografia una plastificazione opaca o soft touch e la fibra della carta parallela al dorso, altrimenti le pieghe possono creparsi.",
+            "Donkere inkt op de vouwen (tot {ink} % inkt): vraag de drukker om matte of soft-touch laminering en de looprichting van het papier evenwijdig aan de rug, anders kunnen de vouwen barsten.",
+            "Tinta escura nas dobras (até {ink} % de tinta): peça à gráfica uma plastificação mate ou soft touch e a fibra do papel paralela à lombada, ou as dobras podem estalar.",
+        ],
+    ),
     // ---- Errors ------------------------------------------------------------------------
     (
         "err_invalid_code",

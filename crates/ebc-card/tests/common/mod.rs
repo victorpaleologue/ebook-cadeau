@@ -8,7 +8,7 @@
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use ebc_card::{CardRequest, CoverInput, FontSet, RightsBasis, bundled_fonts};
+use ebc_card::{CardRequest, CardWarning, CoverInput, FontSet, RightsBasis, bundled_fonts};
 use ebc_layout::{CardFormat, PrintProfile};
 use ebc_model::{BookMeta, Contributor, GiftCode, Locale};
 use ebc_preflight::{Expectations, Report, Severity};
@@ -133,6 +133,17 @@ pub fn warnings(report: &Report) -> Vec<String> {
         .iter()
         .filter(|f| f.severity == Severity::Warning)
         .map(|f| format!("{} (page {:?}): {}", f.code, f.page, f.message))
+        .collect()
+}
+
+/// The card's warnings without the lamination advice for dark creases
+/// ([`CardWarning::DarkAcrossCreases`]), which most professional cards with a deep
+/// ground carry by design.
+pub fn without_crease_advice(warnings: &[CardWarning]) -> Vec<CardWarning> {
+    warnings
+        .iter()
+        .filter(|w| !matches!(w, CardWarning::DarkAcrossCreases { .. }))
+        .cloned()
         .collect()
 }
 

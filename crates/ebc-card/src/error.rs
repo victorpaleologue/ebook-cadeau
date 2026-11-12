@@ -356,4 +356,57 @@ pub enum CardWarning {
     /// The proofing overlay was added: the file is a proof, not a print file.
     #[error("the guides overlay is included: this file is a proof, not a print file")]
     GuidesIncluded,
+    /// Advice for a professional print: dark or heavy ink lies on a crease of the
+    /// outside — the ground, a spine colour, or cover art reaching the crease — more than
+    /// [`DARK_CREASE_INK_PERCENT`](crate::DARK_CREASE_INK_PERCENT) of total ink or darker
+    /// than L\* [`DARK_CREASE_LSTAR`](crate::DARK_CREASE_LSTAR). Heavy ink can crack on
+    /// the fold and a crack shows white on a dark colour: order matt or soft-touch
+    /// lamination and the paper grain parallel to the spine (`docs/research/
+    /// 03-print-requirements.md` §4.3, §6.1). The file is fine as it is.
+    #[error(
+        "dark ink across the creases (up to {max_ink_percent:.0} % total ink, L* down to {min_lightness:.0}): ask the printer for matt or soft-touch lamination and the paper grain parallel to the spine, or the folds may crack"
+    )]
+    DarkAcrossCreases {
+        /// The heaviest total ink found within 2 mm of a crease, in per cent.
+        max_ink_percent: f32,
+        /// The darkest CIELAB lightness found there (relative to the paper white).
+        min_lightness: f32,
+    },
+}
+
+impl CardWarning {
+    /// A stable identifier in `snake_case`, for programs and for translated messages
+    /// (the web app's `warn_<code>` strings, the server's `X-EBC-Card-Warnings` header).
+    /// [`CardWarning::LowResolution`] has two: `resolution_below_minimum` when the
+    /// profile's minimum was missed, else `low_resolution`.
+    #[must_use]
+    pub const fn code(&self) -> &'static str {
+        match self {
+            Self::CoverWithoutRights => "cover_without_rights",
+            Self::LowResolution { below_minimum: true, .. } => "resolution_below_minimum",
+            Self::LowResolution { .. } => "low_resolution",
+            Self::CoverDownsampled { .. } => "cover_downsampled",
+            Self::HeavyCrop { .. } => "heavy_crop",
+            Self::CoverCreditMissing => "cover_credit_missing",
+            Self::CoverNotConverted => "cover_not_converted",
+            Self::ColourNotManaged { .. } => "colour_not_managed",
+            Self::SpineOutsideTextRange { .. } => "spine_outside_text_range",
+            Self::CoverProfileIgnored => "cover_profile_ignored",
+            Self::OwnPrinterOnly => "own_printer_only",
+            Self::Spine(_) => "spine",
+            Self::SpineChoiceIgnored { .. } => "spine_choice_ignored",
+            Self::MissingGlyphs { .. } => "missing_glyphs",
+            Self::TextClamped { .. } => "text_clamped",
+            Self::StepsReduced { .. } => "steps_reduced",
+            Self::CodeReduced { .. } => "code_reduced",
+            Self::QrModuleBelowMinimum { .. } => "qr_module_below_minimum",
+            Self::QrModuleSmall { .. } => "qr_module_small",
+            Self::QrVersionHigh { .. } => "qr_version_high",
+            Self::QrPayloadNotUpperCased => "qr_payload_not_upper_cased",
+            Self::FallbackOutputProfile => "fallback_output_profile",
+            Self::OutputProfileNotPrinterClass { .. } => "output_profile_not_printer_class",
+            Self::GuidesIncluded => "guides_included",
+            Self::DarkAcrossCreases { .. } => "dark_across_creases",
+        }
+    }
 }

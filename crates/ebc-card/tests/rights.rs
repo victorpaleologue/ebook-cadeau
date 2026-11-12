@@ -5,7 +5,10 @@
 
 mod common;
 
-use common::{art, errors, expectations, fonts, images, page_text, poche, text_runs, with_cover};
+use common::{
+    art, errors, expectations, fonts, images, page_text, poche, text_runs, with_cover,
+    without_crease_advice,
+};
 use ebc_card::inspect::{Inspector, LeafKind};
 use ebc_card::{
     CardError, CardWarning, CoverInput, MIN_COVER_INSET_MM, PrintRoute, REDUCED_COVER_SHARE,
@@ -57,7 +60,7 @@ fn a_cover_without_a_rights_basis_never_reaches_the_file() {
             let (doc, warnings) = compose(&req, &fonts).unwrap();
             assert!(doc.images.is_empty());
             assert!(images(&doc, 0).is_empty());
-            assert_eq!(warnings, [CardWarning::CoverWithoutRights]);
+            assert_eq!(without_crease_advice(&warnings), [CardWarning::CoverWithoutRights]);
             assert!(doc.info.custom.contains(&("EBC.RightsBasis".to_owned(), "none".to_owned())));
             // The typographic card: title, subtitle, author and publisher as text.
             let text = page_text(&doc, 0);
@@ -71,7 +74,7 @@ fn a_cover_without_a_rights_basis_never_reaches_the_file() {
     }
     // No image at all: the same card, without a warning.
     let (doc, warnings) = compose(&poche(pro()), &fonts).unwrap();
-    assert!(doc.images.is_empty() && warnings.is_empty());
+    assert!(doc.images.is_empty() && without_crease_advice(&warnings).is_empty());
 }
 
 #[test]
@@ -128,7 +131,7 @@ fn the_print_route_gate() {
                 RightsBasis::None => {
                     let (doc, warnings) = result.unwrap();
                     assert!(doc.images.is_empty());
-                    assert_eq!(warnings, [CardWarning::CoverWithoutRights]);
+                    assert_eq!(without_crease_advice(&warnings), [CardWarning::CoverWithoutRights]);
                 }
                 RightsBasis::PrintLicence
                 | RightsBasis::RightsHolderDeclared
@@ -513,7 +516,10 @@ fn a_flat_colour_computed_from_the_cover_needs_no_authorisation() {
     req.spine = SpineChoice::CoverColour;
     let (doc, warnings) = compose(&req, &fonts).unwrap();
     assert!(doc.images.is_empty());
-    assert_eq!(warnings, [CardWarning::SpineChoiceIgnored { style: "cover_colour" }]);
+    assert_eq!(
+        without_crease_advice(&warnings),
+        [CardWarning::SpineChoiceIgnored { style: "cover_colour" }]
+    );
 }
 
 #[test]
@@ -546,7 +552,7 @@ fn pdf_x_1a_carries_a_converted_cover_but_never_an_rgb_one() {
         profile.standard = standard;
         let req = poche(profile.clone());
         let (pdf, warnings) = render_pdf(&req, &fonts).unwrap();
-        assert!(warnings.is_empty());
+        assert!(without_crease_advice(&warnings).is_empty(), "{warnings:?}");
         let report = check(&pdf, &expectations(&req, false)).unwrap();
         assert!(errors(&report).is_empty(), "{standard:?}: {:#?}", errors(&report));
     }

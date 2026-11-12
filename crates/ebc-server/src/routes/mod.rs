@@ -116,7 +116,12 @@ async fn security_headers(request: Request, next: Next) -> Response {
 
 /// Anything that is not a route: `GET /{CODE}` is a shortcut to the gift page; the rest
 /// is `404` (JSON under `/api/`, a page elsewhere).
-async fn fallback(State(state): State<AppState>, visitor: Visitor, method: Method, uri: Uri) -> Response {
+async fn fallback(
+    State(state): State<AppState>,
+    visitor: Visitor,
+    method: Method,
+    uri: Uri,
+) -> Response {
     let path = uri.path();
     if path.starts_with("/api/") {
         return ApiError::not_found("no such endpoint").into_response();
@@ -129,7 +134,11 @@ async fn fallback(State(state): State<AppState>, visitor: Visitor, method: Metho
     }
     let chrome = visitor.chrome(&state, visitor.locale(), None);
     let text = s(chrome.locale, S::NotFound);
-    html(StatusCode::NOT_FOUND, pages::message(chrome, text, &[], Some(("/", s(chrome.locale, S::EnterCode)))), None)
+    html(
+        StatusCode::NOT_FOUND,
+        pages::message(chrome, text, &[], Some(("/", s(chrome.locale, S::EnterCode)))),
+        None,
+    )
 }
 
 /// What the request says about who is asking.
@@ -150,9 +159,19 @@ impl Visitor {
     }
 
     /// The page context for `locale` and an optional `?device=` value.
-    pub(crate) fn chrome<'a>(&self, state: &'a AppState, locale: Locale, device: Option<&str>) -> Chrome<'a> {
+    pub(crate) fn chrome<'a>(
+        &self,
+        state: &'a AppState,
+        locale: Locale,
+        device: Option<&str>,
+    ) -> Chrome<'a> {
         let chosen = device.and_then(DeviceClass::from_choice);
-        Chrome { locale, device: chosen.unwrap_or(self.detected), chosen, host: state.config.public_host() }
+        Chrome {
+            locale,
+            device: chosen.unwrap_or(self.detected),
+            chosen,
+            host: state.config.public_host(),
+        }
     }
 }
 
@@ -243,15 +262,29 @@ pub(crate) fn with_retry_after(mut response: Response, seconds: u64) -> Response
 /// A JSON response.
 pub(crate) fn json(status: StatusCode, value: &serde_json::Value) -> Response {
     let mut response = (status, value.to_string()).into_response();
-    response.headers_mut().insert(header::CONTENT_TYPE, HeaderValue::from_static("application/json"));
+    response
+        .headers_mut()
+        .insert(header::CONTENT_TYPE, HeaderValue::from_static("application/json"));
     response
 }
 
 /// Reads a request body of at most `limit` bytes (`413 payload_too_large` beyond).
-pub(crate) async fn read_body(headers: &HeaderMap, body: Body, limit: usize) -> Result<Bytes, ApiError> {
-    let too_large =
-        || ApiError::new(StatusCode::PAYLOAD_TOO_LARGE, "payload_too_large", format!("the body may not exceed {limit} bytes"));
-    let declared = headers.get(header::CONTENT_LENGTH).and_then(|v| v.to_str().ok()).and_then(|v| v.parse::<u64>().ok());
+pub(crate) async fn read_body(
+    headers: &HeaderMap,
+    body: Body,
+    limit: usize,
+) -> Result<Bytes, ApiError> {
+    let too_large = || {
+        ApiError::new(
+            StatusCode::PAYLOAD_TOO_LARGE,
+            "payload_too_large",
+            format!("the body may not exceed {limit} bytes"),
+        )
+    };
+    let declared = headers
+        .get(header::CONTENT_LENGTH)
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.parse::<u64>().ok());
     if declared.is_some_and(|length| length > limit as u64) {
         return Err(too_large());
     }
@@ -262,7 +295,9 @@ pub(crate) async fn read_body(headers: &HeaderMap, body: Body, limit: usize) -> 
 /// invalid_request` for JSON that does not fit (missing member, invalid ISBN…).
 pub(crate) fn parse_json<T: serde::de::DeserializeOwned>(body: &[u8]) -> Result<T, ApiError> {
     serde_json::from_slice(body).map_err(|error| match error.classify() {
-        serde_json::error::Category::Data => ApiError::unprocessable("invalid_request", error.to_string()),
+        serde_json::error::Category::Data => {
+            ApiError::unprocessable("invalid_request", error.to_string())
+        }
         _ => ApiError::bad_request("invalid_json", error.to_string()),
     })
 }
@@ -273,11 +308,17 @@ pub(crate) fn header_text<'a>(headers: &'a HeaderMap, name: &str) -> Option<&'a 
 }
 
 /// The members of the answer to a gift creation or a reissue.
-pub(crate) fn code_members(state: &AppState, code: &GiftCode) -> serde_json::Map<String, serde_json::Value> {
+pub(crate) fn code_members(
+    state: &AppState,
+    code: &GiftCode,
+) -> serde_json::Map<String, serde_json::Value> {
     let mut members = serde_json::Map::new();
     members.insert("code".to_owned(), code.compact().into());
     members.insert("code_display".to_owned(), code.grouped().into());
-    members.insert("claim_url".to_owned(), ebc_model::claim_url(&state.config.public_url, code).into());
+    members.insert(
+        "claim_url".to_owned(),
+        ebc_model::claim_url(&state.config.public_url, code).into(),
+    );
     members
 }
 
@@ -313,8 +354,14 @@ mod tests {
         assert_eq!(client_key(false, &none, peer("203.0.113.77")), "203.0.113.0/24");
         assert_eq!(client_key(false, &none, peer("203.0.113.1")), "203.0.113.0/24");
         assert_eq!(client_key(false, &none, peer("203.0.114.1")), "203.0.114.0/24");
-        assert_eq!(client_key(false, &none, peer("2001:db8:aa:bbcc:1::1")), "2001:db8:aa:bb00::/56");
-        assert_eq!(client_key(false, &none, peer("2001:db8:aa:bbdd:ffff::9")), "2001:db8:aa:bb00::/56");
+        assert_eq!(
+            client_key(false, &none, peer("2001:db8:aa:bbcc:1::1")),
+            "2001:db8:aa:bb00::/56"
+        );
+        assert_eq!(
+            client_key(false, &none, peer("2001:db8:aa:bbdd:ffff::9")),
+            "2001:db8:aa:bb00::/56"
+        );
         assert_eq!(client_key(false, &none, peer("::ffff:198.51.100.7")), "198.51.100.0/24");
         assert_eq!(client_key(false, &none, None), "unknown");
     }

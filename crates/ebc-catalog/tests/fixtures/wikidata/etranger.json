@@ -1,0 +1,75 @@
+{
+ "head": {
+  "vars": [
+   "item",
+   "itemLabel",
+   "title",
+   "subtitle",
+   "authorLabel",
+   "workAuthorLabel",
+   "translatorLabel",
+   "publisherLabel",
+   "date",
+   "langCode",
+   "pages",
+   "isbn13",
+   "isbn10"
+  ]
+ },
+ "results": {
+  "bindings": [
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q112233445"
+    },
+    "itemLabel": {
+     "type": "literal",
+     "value": "L'Étranger",
+     "xml:lang": "fr"
+    },
+    "title": {
+     "type": "literal",
+     "value": "L'Étranger",
+     "xml:lang": "fr"
+    },
+    "publisherLabel": {
+     "type": "literal",
+     "value": "Éditions Gallimard",
+     "xml:lang": "fr"
+    },
+    "date": {
+     "type": "literal",
+     "value": "1971-01-01T00:00:00Z",
+     "datatype": "http://www.w3.org/2001/XMLSchema#dateTime"
+    },
+    "langCode": {
+     "type": "literal",
+     "value": "fr"
+    },
+    "pages": {
+     "type": "literal",
+     "value": "185",
+     "datatype": "http://www.w3.org/2001/XMLSchema#decimal"
+    },
+    "isbn13": {
+     "type": "literal",
+     "value": "978-2-07-036002-4"
+    },
+    "isbn10": {
+     "type": "literal",
+     "value": "2-07-036002-4"
+    },
+    "workAuthorLabel": {
+     "type": "literal",
+     "value": "Albert Camus",
+     "xml:lang": "fr"
+    },
+    "translatorLabel": {
+     "type": "literal",
+     "value": "Q98765432"
+    }
+   }
+  ]
+ }
+}

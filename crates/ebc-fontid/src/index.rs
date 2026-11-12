@@ -18,6 +18,11 @@ use crate::gray::Gray;
 pub const REFERENCE_CHARS: &str =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789&!?";
 
+/// The licences (SPDX identifiers) a font must carry to enter an index through
+/// [`FontIndex::build_checked`]: the product only ever proposes fonts it may typeset
+/// with and redistribute (see `docs/research/08-legal-fonts-and-genai.md`).
+pub const OPEN_LICENCES: [&str; 2] = ["OFL-1.1", "Apache-2.0"];
+
 /// Resolution at which reference glyphs are rendered, in pixels per em.
 pub(crate) const REF_PX_PER_EM: f32 = 96.0;
 /// Geometry bytes stored after the features of a reference glyph.
@@ -158,6 +163,20 @@ impl FaceDescriptor {
         } else {
             None
         }
+    }
+
+    /// The same records over another character table (looked up by character).
+    fn rebased(&self, table: &Arc<CharTable>) -> Self {
+        let n = table.len();
+        let mut present = vec![false; n];
+        let mut records = vec![0u8; n * RECORD_LEN];
+        for (slot, &ch) in table.chars().iter().enumerate() {
+            if let Some(record) = self.record(ch) {
+                present[slot] = true;
+                records[slot * RECORD_LEN..(slot + 1) * RECORD_LEN].copy_from_slice(record);
+            }
+        }
+        Self { table: Arc::clone(table), present, records }
     }
 
     /// Number of characters this face has a record for.
@@ -368,7 +387,7 @@ impl fmt::Debug for FontIndex {
 
 impl Default for FontIndex {
     fn default() -> Self {
-        Self::from_entries(CharTable::reference(), Vec::new())
+        Self::assemble(CharTable::reference(), Vec::new())
     }
 }
 
@@ -388,10 +407,53 @@ impl FontIndex {
             .iter()
             .map(|(meta, font)| IndexEntry::with_table(meta.clone(), font, &table))
             .collect();
-        Self::from_entries(table, entries)
+        Self::assemble(table, entries)
     }
 
-    fn from_entries(table: Arc<CharTable>, entries: Vec<IndexEntry>) -> Self {
+    /// Like [`build`](Self::build), but refuses fonts the product must not propose:
+    /// a font whose recorded licence is not one of [`OPEN_LICENCES`] (compared
+    /// exactly, as SPDX identifiers), or whose embedding permissions forbid bundling.
+    /// Use this for every index that ships; `build` is for experiments.
+    ///
+    /// # Errors
+    /// [`FontIdError::LicenceNotAllowed`] or [`FontIdError::EmbeddingRestricted`] for
+    /// the first offending font; nothing is built.
+    pub fn build_checked(fonts: &[(IndexEntryMeta, Font)]) -> Result<Self, FontIdError> {
+        for (meta, font) in fonts {
+            if !OPEN_LICENCES.contains(&meta.licence.as_str()) {
+                return Err(FontIdError::LicenceNotAllowed {
+                    family: meta.family.clone(),
+                    style: meta.style.clone(),
+                    licence: meta.licence.clone(),
+                });
+            }
+            if !font.allows_bundling() {
+                return Err(FontIdError::EmbeddingRestricted {
+                    family: meta.family.clone(),
+                    style: meta.style.clone(),
+                });
+            }
+        }
+        Ok(Self::build(fonts))
+    }
+
+    /// An index of the given entries (in that order) — to keep part of an index, or to
+    /// join entries described separately with [`IndexEntry::from_font`].
+    #[must_use]
+    pub fn from_entries(entries: impl IntoIterator<Item = IndexEntry>) -> Self {
+        let mut entries: Vec<IndexEntry> = entries.into_iter().collect();
+        let table = entries
+            .first()
+            .map_or_else(CharTable::reference, |e| Arc::clone(&e.descriptor.table));
+        for entry in &mut entries {
+            if !Arc::ptr_eq(&entry.descriptor.table, &table) {
+                entry.descriptor = Arc::new(entry.descriptor.rebased(&table));
+            }
+        }
+        Self::assemble(table, entries)
+    }
+
+    fn assemble(table: Arc<CharTable>, entries: Vec<IndexEntry>) -> Self {
         let centroids =
             Arc::new(FaceDescriptor::centroid(&table, entries.iter().map(|e| &*e.descriptor)));
         Self { table, entries, centroids }
@@ -573,7 +635,7 @@ impl FontIndex {
         if r.remaining() != 0 {
             return Err(FontIdError::Corrupt("trailing bytes after the last entry"));
         }
-        Ok(Self::from_entries(table, entries))
+        Ok(Self::assemble(table, entries))
     }
 }
 

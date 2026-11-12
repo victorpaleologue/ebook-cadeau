@@ -34,15 +34,9 @@ ebc-text = { path = "crates/ebc-text", version = "0.1.0" }
 ebc-layout = { path = "crates/ebc-layout", version = "0.1.0" }
 ebc-pdf = { path = "crates/ebc-pdf", version = "0.1.0" }
 ebc-preflight = { path = "crates/ebc-preflight", version = "0.1.0" }
-ebc-catalog = { path = "crates/ebc-catalog", version = "0.1.0" }
-ebc-covers = { path = "crates/ebc-covers", version = "0.1.0" }
 ebc-fontid = { path = "crates/ebc-fontid", version = "0.1.0" }
 ebc-spine = { path = "crates/ebc-spine", version = "0.1.0" }
-ebc-card = { path = "crates/ebc-card", version = "0.1.0" }
-ebc-server = { path = "crates/ebc-server", version = "0.1.0" }
-ebc-demo-stores = { path = "demo/stores", version = "0.1.0" }
 ebc-demo-printer = { path = "demo/printer", version = "0.1.0" }
-ebc-demo-ereaders = { path = "demo/ereaders", version = "0.1.0" }
 
 # Shared third-party crates (keep this list short; crate-specific deps go in the crate's own Cargo.toml).
 serde = { version = "1", features = ["derive"] }

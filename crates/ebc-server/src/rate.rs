@@ -93,7 +93,8 @@ impl RateLimiter {
     pub fn record_failure(&self, client: &str, now: i64) -> Verdict {
         let mut state = self.lock();
         prune(&mut state.global, now);
-        let under_attack = self.global_limit > 0 && state.global.len() >= self.global_limit as usize;
+        let under_attack =
+            self.global_limit > 0 && state.global.len() >= self.global_limit as usize;
         let global_retry = retry_after(state.global.front().copied(), now);
 
         state.global.push_back(now);
@@ -115,13 +116,15 @@ impl RateLimiter {
             return Verdict::Blocked { retry_after_secs: global_retry, global: true };
         }
         Verdict::Allowed {
-            remaining: (self.per_client_limit > 0).then(|| self.per_client_limit.saturating_sub(used)),
+            remaining: (self.per_client_limit > 0)
+                .then(|| self.per_client_limit.saturating_sub(used)),
         }
     }
 
     fn verdict(&self, state: &mut State, client: &str, now: i64) -> Verdict {
         prune(&mut state.global, now);
-        let under_attack = self.global_limit > 0 && state.global.len() >= self.global_limit as usize;
+        let under_attack =
+            self.global_limit > 0 && state.global.len() >= self.global_limit as usize;
         let global_retry = retry_after(state.global.front().copied(), now);
         let (used, oldest) = match state.per_client.get_mut(client) {
             Some(entry) => {
@@ -238,14 +241,20 @@ mod tests {
         assert!(limiter.record_failure("bot-9", T0 + 300).is_blocked());
         // …and it recovers once the window has slid past the burst.
         assert_eq!(limiter.check("bot-0", T0 + 601), Verdict::Allowed { remaining: Some(10) });
-        assert_eq!(limiter.record_failure("late", T0 + 901), Verdict::Allowed { remaining: Some(9) });
+        assert_eq!(
+            limiter.record_failure("late", T0 + 901),
+            Verdict::Allowed { remaining: Some(9) }
+        );
     }
 
     #[test]
     fn zero_disables_a_budget() {
         let limiter = RateLimiter::new(0, 0);
         for i in 0..1_000 {
-            assert_eq!(limiter.record_failure("a", T0 + i % 7), Verdict::Allowed { remaining: None });
+            assert_eq!(
+                limiter.record_failure("a", T0 + i % 7),
+                Verdict::Allowed { remaining: None }
+            );
         }
         assert_eq!(limiter.check("a", T0 + 8), Verdict::Allowed { remaining: None });
 

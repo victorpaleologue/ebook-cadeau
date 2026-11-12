@@ -1,0 +1,27 @@
+{
+  "@context": "http://lobid.org/resources/context.jsonld",
+  "id": "http://lobid.org/resources/search?q=isbn%3A9783596294312&format=json",
+  "totalItems": 1,
+  "member": [
+    {
+      "@context": "http://lobid.org/resources/context.jsonld",
+      "id": "http://lobid.org/resources/990123456780206441#!",
+      "type": ["BibliographicResource", "Book"],
+      "medium": [{"id": "http://rdaregistry.info/termList/RDAMediaType/1007", "label": "Print"}],
+      "title": "Die Verwandlung",
+      "otherTitleInformation": ["Erzählung"],
+      "responsibilityStatement": ["Franz Kafka. Mit einem Nachwort von Reiner Stach"],
+      "contribution": [
+        {"agent": {"id": "https://d-nb.info/gnd/118559230", "label": "Kafka, Franz", "type": ["Person"], "dateOfBirth": "1883", "dateOfDeath": "1924"}, "role": {"id": "http://id.loc.gov/vocabulary/relators/aut", "label": "Autor/in"}, "type": ["Contribution"]},
+        {"agent": {"id": "https://d-nb.info/gnd/120541890", "label": "Stach, Reiner", "type": ["Person"]}, "role": {"id": "http://id.loc.gov/vocabulary/relators/aft", "label": "Verfasser/in eines Nachworts"}, "type": ["Contribution"]},
+        {"agent": {"label": "S. Fischer Verlag", "type": ["CorporateBody"]}, "role": {"id": "http://id.loc.gov/vocabulary/relators/pbl", "label": "Verlag"}, "type": ["Contribution"]}
+      ],
+      "publication": [{"type": ["PublicationEvent"], "location": ["Frankfurt am Main"], "publishedBy": ["Fischer"], "startDate": "2011"}],
+      "isbn": ["9783596294312", "3596294312"],
+      "language": [{"id": "http://id.loc.gov/vocabulary/iso639-2/ger", "label": "Deutsch"}],
+      "extent": "96 Seiten ; 19 cm",
+      "isPartOf": [{"type": ["IsPartOfRelation"], "hasSuperordinate": [{"id": "http://lobid.org/resources/990000000000206441#!", "label": "Fischer Klassik"}], "numbering": "90431"}],
+      "hbzId": "HT016789012"
+    }
+  ]
+}

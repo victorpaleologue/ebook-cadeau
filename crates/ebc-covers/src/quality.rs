@@ -234,7 +234,7 @@ mod tests {
         assert_eq!(q.target_px.1, (500.0 * q.upscale_factor).ceil() as u32);
         // Upscaled pixels reach the target at the placed size.
         let ppi_after = f64::from(q.target_px.1) / (q.placed_mm.h / 25.4);
-        assert!(ppi_after >= 300.0 && ppi_after < 301.0, "{ppi_after}");
+        assert!((300.0..301.0).contains(&ppi_after), "{ppi_after}");
 
         let big = rate(3000, 4800, POCHE);
         assert_eq!(big.verdict, Verdict::Excellent);

@@ -86,7 +86,10 @@ impl DeviceClass {
     /// Whether the device is a dedicated e-ink reader.
     #[must_use]
     pub const fn is_eink(self) -> bool {
-        matches!(self, Self::Kobo | Self::Kindle | Self::Pocketbook | Self::Tolino | Self::EinkOther)
+        matches!(
+            self,
+            Self::Kobo | Self::Kindle | Self::Pocketbook | Self::Tolino | Self::EinkOther
+        )
     }
 
     /// Whether the built-in browser of this class saves a file of this media type to the
@@ -185,16 +188,8 @@ pub fn classify(user_agent: &str) -> DeviceClass {
     if has("x11; linux armv") && !has("android") {
         return DeviceClass::EinkOther;
     }
-    let mobile = [
-        "iphone",
-        "ipad",
-        "ipod",
-        "android",
-        "mobi",
-        "windows phone",
-        "opera mini",
-        "blackberry",
-    ];
+    let mobile =
+        ["iphone", "ipad", "ipod", "android", "mobi", "windows phone", "opera mini", "blackberry"];
     if mobile.iter().any(|token| has(token)) {
         return DeviceClass::Mobile;
     }
@@ -212,51 +207,150 @@ mod tests {
     /// browser strings. None was captured on hardware by this project.
     const TABLE: &[(&str, DeviceClass)] = &[
         // --- Kobo ---------------------------------------------------------------------
-        ("Mozilla/5.0 (Linux; U; Android 2.0; en-us;) AppleWebKit/533.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/533.1 (Kobo Touch)", Kobo),
-        ("Mozilla/5.0 (Linux; U; Android 2.0; en-us;) AppleWebKit/538.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/538.1 (Kobo Touch 0390/4.38.23038)", Kobo),
-        ("Mozilla/5.0 (Linux; U; Android 2.0; en-us;) AppleWebKit/538.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/538.1 (Kobo Touch 0384/4.35.20400)", Kobo),
+        (
+            "Mozilla/5.0 (Linux; U; Android 2.0; en-us;) AppleWebKit/533.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/533.1 (Kobo Touch)",
+            Kobo,
+        ),
+        (
+            "Mozilla/5.0 (Linux; U; Android 2.0; en-us;) AppleWebKit/538.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/538.1 (Kobo Touch 0390/4.38.23038)",
+            Kobo,
+        ),
+        (
+            "Mozilla/5.0 (Linux; U; Android 2.0; en-us;) AppleWebKit/538.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/538.1 (Kobo Touch 0384/4.35.20400)",
+            Kobo,
+        ),
         // Kobo Libra Colour / Kobo-based tolino since 2024: only "eReader".
-        ("Mozilla/5.0 (Linux; U; Android 2.0; en-us;) AppleWebKit/538.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/538.1 (eReader)", EinkOther),
-        ("Mozilla/5.0 (Linux; U; en-us) AppleWebKit/534.34 (KHTML, like Gecko) Version/4.0 Safari/534.34 eReader", EinkOther),
+        (
+            "Mozilla/5.0 (Linux; U; Android 2.0; en-us;) AppleWebKit/538.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/538.1 (eReader)",
+            EinkOther,
+        ),
+        (
+            "Mozilla/5.0 (Linux; U; en-us) AppleWebKit/534.34 (KHTML, like Gecko) Version/4.0 Safari/534.34 eReader",
+            EinkOther,
+        ),
         // --- Kindle (e-ink) -----------------------------------------------------------
-        ("Mozilla/5.0 (Linux; U; en-US) AppleWebKit/528.5+ (KHTML, like Gecko, Safari/528.5+) Version/4.0 Kindle/3.0 (screen 600x800; rotate)", Kindle),
-        ("Mozilla/5.0 (X11; U; Linux armv7l like Android; en-us) AppleWebKit/531.2+ (KHTML, like Gecko) Version/5.0 Safari/533.2+ Kindle/3.0+", Kindle),
-        ("Mozilla/4.0 (compatible; Linux 2.6.22) NetFront/3.4 Kindle/2.5 (screen 824x1200; rotate)", Kindle),
+        (
+            "Mozilla/5.0 (Linux; U; en-US) AppleWebKit/528.5+ (KHTML, like Gecko, Safari/528.5+) Version/4.0 Kindle/3.0 (screen 600x800; rotate)",
+            Kindle,
+        ),
+        (
+            "Mozilla/5.0 (X11; U; Linux armv7l like Android; en-us) AppleWebKit/531.2+ (KHTML, like Gecko) Version/5.0 Safari/533.2+ Kindle/3.0+",
+            Kindle,
+        ),
+        (
+            "Mozilla/4.0 (compatible; Linux 2.6.22) NetFront/3.4 Kindle/2.5 (screen 824x1200; rotate)",
+            Kindle,
+        ),
         ("Mozilla/4.0 (compatible; Linux 2.6.10) NetFront/3.3 Kindle/1.0 (screen 600x800)", Kindle),
         // Kindle 11th gen (2024), firmware 5.18.x: no "Kindle" token at all.
-        ("Mozilla/5.0 (X11; Linux armv7l) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.142 Safari/537.36", EinkOther),
+        (
+            "Mozilla/5.0 (X11; Linux armv7l) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/75.0.3770.142 Safari/537.36",
+            EinkOther,
+        ),
         // --- Kindle Fire tablets are tablets ----------------------------------------
-        ("Mozilla/5.0 (Linux; U; Android 2.3.4; en-us; Kindle Fire Build/GINGERBREAD) AppleWebKit/533.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/533.1", Mobile),
-        ("Mozilla/5.0 (Linux; U; Android 4.0.3; en-us; KFTT Build/IML74K) AppleWebKit/535.19 (KHTML, like Gecko) Silk/3.4 Mobile Safari/535.19 Silk-Accelerated=true", Mobile),
-        ("Mozilla/5.0 (Linux; Android 9; KFMAWI) AppleWebKit/537.36 (KHTML, like Gecko) Silk/108.4.1 like Chrome/108.0.5359.220 Safari/537.36", Mobile),
-        ("Mozilla/5.0 (Linux; Android 5.1.1; KFFOWI Build/LVY48F) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/59.0.3071.125 Safari/537.36", Mobile),
+        (
+            "Mozilla/5.0 (Linux; U; Android 2.3.4; en-us; Kindle Fire Build/GINGERBREAD) AppleWebKit/533.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/533.1",
+            Mobile,
+        ),
+        (
+            "Mozilla/5.0 (Linux; U; Android 4.0.3; en-us; KFTT Build/IML74K) AppleWebKit/535.19 (KHTML, like Gecko) Silk/3.4 Mobile Safari/535.19 Silk-Accelerated=true",
+            Mobile,
+        ),
+        (
+            "Mozilla/5.0 (Linux; Android 9; KFMAWI) AppleWebKit/537.36 (KHTML, like Gecko) Silk/108.4.1 like Chrome/108.0.5359.220 Safari/537.36",
+            Mobile,
+        ),
+        (
+            "Mozilla/5.0 (Linux; Android 5.1.1; KFFOWI Build/LVY48F) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/59.0.3071.125 Safari/537.36",
+            Mobile,
+        ),
         // --- PocketBook / Vivlio ----------------------------------------------------
-        ("Mozilla/5.0 (Linux; U; Android 2.3.4; en-us; PocketBook/629 Build/GRJ22) AppleWebKit/533.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/533.1", Pocketbook),
-        ("Mozilla/5.0 (Linux; U; en-us) AppleWebKit/534.34 (KHTML, like Gecko) Version/4.0 Safari/534.34 PocketBook/623 (screen 758x1024; FW T623.4.4.616) Mobile", Pocketbook),
-        ("Mozilla/5.0 (X11; U; Linux armv7l; en-US) AppleWebKit/534.34 (KHTML, like Gecko) PocketBook/740 (screen 1404x1872; FW U740.6.8.2154) Version/4.0 Safari/534.34", Pocketbook),
+        (
+            "Mozilla/5.0 (Linux; U; Android 2.3.4; en-us; PocketBook/629 Build/GRJ22) AppleWebKit/533.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/533.1",
+            Pocketbook,
+        ),
+        (
+            "Mozilla/5.0 (Linux; U; en-us) AppleWebKit/534.34 (KHTML, like Gecko) Version/4.0 Safari/534.34 PocketBook/623 (screen 758x1024; FW T623.4.4.616) Mobile",
+            Pocketbook,
+        ),
+        (
+            "Mozilla/5.0 (X11; U; Linux armv7l; en-US) AppleWebKit/534.34 (KHTML, like Gecko) PocketBook/740 (screen 1404x1872; FW U740.6.8.2154) Version/4.0 Safari/534.34",
+            Pocketbook,
+        ),
         // --- tolino -------------------------------------------------------------------
-        ("Mozilla/5.0 (Linux; Android 4.4.2; tolino vision 4 HD Build/KOT49H) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/30.0.0.0 Safari/537.36", Tolino),
-        ("Mozilla/5.0 (Linux; U; Android 4.0.4; de-de; tolino shine Build/IMM76D) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Safari/534.30", Tolino),
-        ("Mozilla/5.0 (Linux; U; Android 2.3.4; de-de; TOLINO_BROWSER Build/GRJ22) AppleWebKit/533.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/533.1", Tolino),
+        (
+            "Mozilla/5.0 (Linux; Android 4.4.2; tolino vision 4 HD Build/KOT49H) AppleWebKit/537.36 (KHTML, like Gecko) Version/4.0 Chrome/30.0.0.0 Safari/537.36",
+            Tolino,
+        ),
+        (
+            "Mozilla/5.0 (Linux; U; Android 4.0.4; de-de; tolino shine Build/IMM76D) AppleWebKit/534.30 (KHTML, like Gecko) Version/4.0 Safari/534.30",
+            Tolino,
+        ),
+        (
+            "Mozilla/5.0 (Linux; U; Android 2.3.4; de-de; TOLINO_BROWSER Build/GRJ22) AppleWebKit/533.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/533.1",
+            Tolino,
+        ),
         // --- other e-ink --------------------------------------------------------------
-        ("Mozilla/5.0 (Linux; U; Android 2.2.1; en-us; NOOK BNRV200 Build/ERD79 1.4.3) Apple WebKit/533.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/533.1", EinkOther),
-        ("Mozilla/5.0 (Linux; U; en-us; EBRD1101; EXT) AppleWebKit/533.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/533.1", EinkOther),
-        ("Mozilla/5.0 (Linux; U; Android 2.2; fr-fr; Cybook Odyssey Build/FRF85B) AppleWebKit/533.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/533.1", EinkOther),
-        ("Mozilla/5.0 (Linux; Android 11; BOOX NoteAir2P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.104 Safari/537.36", EinkOther),
+        (
+            "Mozilla/5.0 (Linux; U; Android 2.2.1; en-us; NOOK BNRV200 Build/ERD79 1.4.3) Apple WebKit/533.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/533.1",
+            EinkOther,
+        ),
+        (
+            "Mozilla/5.0 (Linux; U; en-us; EBRD1101; EXT) AppleWebKit/533.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/533.1",
+            EinkOther,
+        ),
+        (
+            "Mozilla/5.0 (Linux; U; Android 2.2; fr-fr; Cybook Odyssey Build/FRF85B) AppleWebKit/533.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/533.1",
+            EinkOther,
+        ),
+        (
+            "Mozilla/5.0 (Linux; Android 11; BOOX NoteAir2P) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/96.0.4664.104 Safari/537.36",
+            EinkOther,
+        ),
         // --- phones and tablets -----------------------------------------------------
-        ("Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1", Mobile),
-        ("Mozilla/5.0 (iPad; CPU OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1", Mobile),
-        ("Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36", Mobile),
-        ("Mozilla/5.0 (Linux; Android 13; SM-X200) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36", Mobile),
+        (
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1",
+            Mobile,
+        ),
+        (
+            "Mozilla/5.0 (iPad; CPU OS 16_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.6 Mobile/15E148 Safari/604.1",
+            Mobile,
+        ),
+        (
+            "Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36",
+            Mobile,
+        ),
+        (
+            "Mozilla/5.0 (Linux; Android 13; SM-X200) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+            Mobile,
+        ),
         ("Mozilla/5.0 (Android 14; Mobile; rv:132.0) Gecko/132.0 Firefox/132.0", Mobile),
-        ("Mozilla/5.0 (Windows Phone 10.0; Android 6.0.1; Microsoft; Lumia 950) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.116 Mobile Safari/537.36 Edge/15.15254", Mobile),
-        ("Opera/9.80 (J2ME/MIDP; Opera Mini/9.80 (S60; SymbOS; Opera Mobi/23.348; U; en) Presto/2.5.25 Version/10.54", Mobile),
+        (
+            "Mozilla/5.0 (Windows Phone 10.0; Android 6.0.1; Microsoft; Lumia 950) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/52.0.2743.116 Mobile Safari/537.36 Edge/15.15254",
+            Mobile,
+        ),
+        (
+            "Opera/9.80 (J2ME/MIDP; Opera Mini/9.80 (S60; SymbOS; Opera Mobi/23.348; U; en) Presto/2.5.25 Version/10.54",
+            Mobile,
+        ),
         // --- desktop ------------------------------------------------------------------
-        ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36", Desktop),
-        ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15", Desktop),
+        (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+            Desktop,
+        ),
+        (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Safari/605.1.15",
+            Desktop,
+        ),
         ("Mozilla/5.0 (X11; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0", Desktop),
-        ("Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Thorium/3.1.0 Chrome/130.0.0.0 Electron/33.0.0 Safari/537.36", Desktop),
-        ("Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36", Desktop),
+        (
+            "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Thorium/3.1.0 Chrome/130.0.0.0 Electron/33.0.0 Safari/537.36",
+            Desktop,
+        ),
+        (
+            "Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
+            Desktop,
+        ),
         ("Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)", Desktop),
         ("curl/8.5.0", Desktop),
         ("ebc-demo-stores/0.1.0", Desktop),
@@ -290,7 +384,12 @@ mod tests {
         // "Kindle" alone on an Android agent (the reading app's web view) is not the e-ink device.
         assert_eq!(classify("Mozilla/5.0 (Linux; Android 14; Pixel 8) Kindle App"), Mobile);
         // A desktop mentioning the word in passing stays what it is.
-        assert_eq!(classify("Mozilla/5.0 (Windows NT 10.0) Chrome/130 Safari/537.36 SendToKindleExtension"), Desktop);
+        assert_eq!(
+            classify(
+                "Mozilla/5.0 (Windows NT 10.0) Chrome/130 Safari/537.36 SendToKindleExtension"
+            ),
+            Desktop
+        );
     }
 
     #[test]
@@ -309,7 +408,10 @@ mod tests {
             assert_eq!(DeviceClass::from_choice(unknown), None, "{unknown:?}");
         }
         let names: Vec<&str> = DeviceClass::ALL.iter().map(|c| c.as_str()).collect();
-        assert_eq!(names, ["kobo", "kindle", "pocketbook", "tolino", "eink_other", "mobile", "desktop"]);
+        assert_eq!(
+            names,
+            ["kobo", "kindle", "pocketbook", "tolino", "eink_other", "mobile", "desktop"]
+        );
         assert_eq!(Kobo.to_string(), "kobo");
     }
 

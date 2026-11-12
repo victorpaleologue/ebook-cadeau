@@ -8,6 +8,7 @@ use ttf_parser::{Tag, name_id};
 
 use crate::error::FontError;
 use crate::guard::contain;
+use crate::outline::{self, GlyfCosts, MAX_GLYPH_COST, Outliner};
 
 /// Millimetres per font unit at `size_pt` points — the one conversion every measurement
 /// in this crate goes through, so that metrics, shaping and fitting agree to the last bit.
@@ -256,6 +257,9 @@ struct StaticInfo {
     italic: bool,
     monospaced: bool,
     outlines: OutlineFormat,
+    /// Expanded size of the most expensive `glyf` glyph (see `outline::GlyfCosts`);
+    /// 1 for fonts without TrueType outlines.
+    max_glyph_cost: u32,
 }
 
 #[derive(Debug)]
@@ -334,7 +338,12 @@ impl Font {
                 },
                 other => FontError::Parse(other.to_string()),
             })?;
-            Ok((static_info(&face), metrics_of(&face)))
+            let tables = outline::collect_tables(face.raw_face());
+            let info = static_info(&face, &tables);
+            // Measuring "H" or "x" runs glyph outlines: only ever through the outliner.
+            let mut outliner = Outliner::new(tables, &[])
+                .ok_or_else(|| FontError::Parse("the font tables are inconsistent".into()))?;
+            Ok((info, metrics_of(&mut outliner)))
         })
         .unwrap_or_else(|| Err(FontError::Parse("the font parser gave up on this data".into())))?;
         Ok(Self {
@@ -470,6 +479,20 @@ impl Font {
         self.embedding().allows_embedding() && !self.embedding_flags().bitmap_only
     }
 
+    /// `true` when the font contains a TrueType glyph that this crate refuses to draw
+    /// because its composite structure expands to more than 65 536 points and component
+    /// references (or contains itself) — the signature of a "glyph bomb", never of a
+    /// real font. Such a font still loads, shapes and draws its other glyphs, but it
+    /// should not be embedded in a document that other software will render.
+    ///
+    /// PostScript (`CFF `/`CFF2`) glyphs are only examined when they are drawn; an
+    /// oversized one shows up as [`FontError::OutlineTooComplex`] from
+    /// [`ShapedText::try_to_outline`](crate::ShapedText::try_to_outline).
+    #[must_use]
+    pub fn has_oversized_glyphs(&self) -> bool {
+        self.inner.info.max_glyph_cost > MAX_GLYPH_COST
+    }
+
     /// Global metrics of this face (of the selected instance for variable fonts).
     #[must_use]
     pub fn metrics(&self) -> FontMetrics {
@@ -578,8 +601,8 @@ impl Font {
             return self.clone();
         }
         let metrics = contain(|| {
-            parse_face(&self.inner.data, self.inner.face_index, &variations)
-                .map(|face| metrics_of(&face))
+            let mut outliner = Outliner::new(self.tables()?, &variations)?;
+            Some(metrics_of(&mut outliner))
         })
         .flatten()
         .unwrap_or(self.inner.metrics);
@@ -634,15 +657,32 @@ impl Font {
     }
 
     /// Parses the face with the variation settings applied. Cheap (table directory only).
+    /// For names and character mapping; outlines go through [`Self::outliner`].
     pub(crate) fn tt_face(&self) -> Option<ttf_parser::Face<'_>> {
         parse_face(&self.inner.data, self.inner.face_index, &self.inner.variations)
     }
 
-    /// Parses the face for shaping, with the variation settings applied.
+    /// The tables of this face, as every parser of this crate gets them.
+    fn tables(&self) -> Option<ttf_parser::RawFaceTables<'_>> {
+        let raw = ttf_parser::RawFace::parse(&self.inner.data, self.inner.face_index).ok()?;
+        Some(outline::collect_tables(&raw))
+    }
+
+    /// A budgeted source of glyph outlines for the selected instance.
+    pub(crate) fn outliner(&self) -> Option<Outliner<'_>> {
+        Outliner::new(self.tables()?, &self.inner.variations)
+    }
+
+    /// Parses the face for shaping, with the variation settings applied — without the
+    /// tables through which a hostile font could make the shaper do unbounded work
+    /// (see `outline::shaping_tables`).
     pub(crate) fn hb_face(&self) -> Option<rustybuzz::Face<'_>> {
+        let tables = self.tables()?;
+        let hide_glyf = outline::glyf_must_be_hidden(&tables, self.inner.info.max_glyph_cost);
+        let tables = outline::shaping_tables(tables, hide_glyf);
         // `from_face` takes the `ttf_parser::Face` of the crate version rustybuzz was
         // built with; this line stops compiling if the two versions ever diverge.
-        Some(rustybuzz::Face::from_face(self.tt_face()?))
+        Some(rustybuzz::Face::from_face(outline::face_from_tables(tables, &self.inner.variations)?))
     }
 }
 
@@ -694,7 +734,10 @@ fn tag_to_string(tag: Tag) -> String {
         .collect()
 }
 
-fn static_info(face: &ttf_parser::Face<'_>) -> StaticInfo {
+fn static_info(
+    face: &ttf_parser::Face<'_>,
+    font_tables: &ttf_parser::RawFaceTables<'_>,
+) -> StaticInfo {
     let name = |id: u16| best_name(face, id);
     let legacy_family = name(name_id::FAMILY);
     let legacy_style = name(name_id::SUBFAMILY);
@@ -771,21 +814,28 @@ fn static_info(face: &ttf_parser::Face<'_>) -> StaticInfo {
         italic: face.is_italic() || face.is_oblique(),
         monospaced: face.is_monospaced(),
         outlines,
+        // One pass over the glyph headers; every glyph is looked at once.
+        max_glyph_cost: GlyfCosts::new(font_tables)
+            .zip(std::num::NonZeroU16::new(face.number_of_glyphs()))
+            .map_or(1, |(mut costs, glyphs)| costs.max_cost(glyphs)),
     }
 }
 
-fn metrics_of(face: &ttf_parser::Face<'_>) -> FontMetrics {
+/// The global metrics of the outliner's face. Measuring a letter when the font states no
+/// capital or x-height draws its outline — through the outliner, hence under its budget.
+fn metrics_of(outliner: &mut Outliner<'_>) -> FontMetrics {
+    let face = outliner.face().clone();
     let units_per_em = face.units_per_em();
     let em = f64::from(units_per_em);
     let fraction_of_em = |f: f64| -> i16 {
         // units_per_em <= 16384, so the product always fits an i16.
         i16::try_from((em * f).round() as i64).unwrap_or(i16::MAX)
     };
-    let top_of = |chars: &[char]| -> Option<i16> {
+    let mut top_of = |chars: &[char]| -> Option<i16> {
         chars
             .iter()
             .filter_map(|&c| face.glyph_index(c))
-            .filter_map(|g| face.glyph_bounding_box(g))
+            .filter_map(|g| outliner.bounding_box(g.0))
             .map(|bbox| bbox.y_max)
             .find(|&top| top > 0)
     };

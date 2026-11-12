@@ -1,0 +1,34 @@
+{
+  "ISBN:9782070360024": {
+    "bib_key": "ISBN:9782070360024",
+    "info_url": "https://openlibrary.org/books/OL8838946M/L'étranger",
+    "preview": "noview",
+    "preview_url": "https://openlibrary.org/books/OL8838946M/L'étranger",
+    "thumbnail_url": "https://covers.openlibrary.org/b/id/8231856-S.jpg",
+    "details": {
+      "publishers": ["Gallimard"],
+      "number_of_pages": 185,
+      "isbn_10": ["2070360024"],
+      "series": ["Collection Folio ; 2"],
+      "covers": [8231856, -1],
+      "physical_format": "Poche",
+      "key": "/books/OL8838946M",
+      "authors": [{"key": "/authors/OL124171A", "name": "Albert Camus"}],
+      "publish_places": ["[Paris]"],
+      "languages": [{"key": "/languages/fre"}],
+      "title": "L' étranger",
+      "identifiers": {"goodreads": ["15688"], "librarything": ["3411"]},
+      "isbn_13": ["9782070360024"],
+      "publish_date": "1971",
+      "by_statement": "Albert Camus.",
+      "works": [{"key": "/works/OL1168007W"}],
+      "type": {"key": "/type/edition"},
+      "subjects": ["Roman français", "Absurde (Philosophie) -- Romans"],
+      "description": {"type": "/type/text", "value": "<p>Roman &eacute;crit en 1940, publi&eacute; en 1942.</p>"},
+      "latest_revision": 12,
+      "revision": 12,
+      "created": {"type": "/type/datetime", "value": "2008-04-30T09:38:13.731961"},
+      "last_modified": {"type": "/type/datetime", "value": "2023-01-14T20:51:26.409373"}
+    }
+  }
+}

@@ -33,4 +33,13 @@ pub enum FontError {
     /// The font produced outline coordinates that are not finite numbers.
     #[error("the font produced non-finite outline coordinates")]
     NonFiniteOutline,
+    /// A glyph was left out of an outline because drawing it would take an unreasonable
+    /// amount of work: either the glyph itself expands to more than any real glyph needs
+    /// (deeply nested composite glyphs or subroutines — a "glyph bomb"), or the text as
+    /// a whole exceeded the outline budget of one call.
+    #[error("glyph {glyph} was not drawn: the outline is too complex")]
+    OutlineTooComplex {
+        /// The first glyph that was left out.
+        glyph: u16,
+    },
 }

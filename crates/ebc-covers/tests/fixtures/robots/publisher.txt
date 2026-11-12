@@ -1,0 +1,21 @@
+# robots.txt of a fictional publisher site (hand-written; demo — not affiliated).
+User-agent: *
+Disallow: /panier/
+Disallow: /compte/
+Disallow: /recherche?
+Disallow: /*?tri=
+Disallow: /*.pdf$
+Allow: /media/couvertures/
+Disallow: /media/
+Crawl-delay: 10
+
+User-agent: GPTBot
+User-agent: CCBot
+Disallow: /
+
+User-agent: eBookCadeauBot
+Disallow: /espace-presse/
+Allow: /espace-presse/communiques/
+Crawl-delay: 2
+
+Sitemap: https://www.phare-imaginaire.example/sitemap.xml

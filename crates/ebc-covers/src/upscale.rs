@@ -171,7 +171,7 @@ impl Taps {
 /// Turns real weights into integers summing exactly to [`WEIGHT_ONE`].
 fn quantise(weights: &[f64], out: &mut [i32]) {
     let sum: f64 = weights.iter().sum();
-    if !(sum.abs() > 1e-9) {
+    if sum.is_nan() || sum.abs() <= 1e-9 {
         // Cannot happen for the kernels used here; fall back to the middle tap.
         out.fill(0);
         if let Some(mid) = out.get_mut(weights.len() / 2) {
@@ -468,14 +468,12 @@ pub fn upscale_with(
     if ratio >= 1.5 {
         let factor = (ratio.ceil() as u32).clamp(2, MAX_MODEL_FACTOR);
         let expected = (src.width().checked_mul(factor), src.height().checked_mul(factor));
-        if let (Some(ew), Some(eh)) = expected {
-            if check_size(ew, eh, options).is_ok() {
-                if let Some(enhanced) = model.upscale(src, factor) {
-                    if (enhanced.width(), enhanced.height()) == (ew, eh) {
-                        return upscale(&enhanced, width, height, options);
-                    }
-                }
-            }
+        if let (Some(ew), Some(eh)) = expected
+            && check_size(ew, eh, options).is_ok()
+            && let Some(enhanced) = model.upscale(src, factor)
+            && (enhanced.width(), enhanced.height()) == (ew, eh)
+        {
+            return upscale(&enhanced, width, height, options);
         }
     }
     upscale(src, width, height, options)
@@ -648,7 +646,18 @@ mod tests {
         let plain = upscale(&src, 97, 151, &UpscaleOptions::plain()).expect("resample");
         let again = upscale(&src, 97, 151, &UpscaleOptions::plain()).expect("resample");
         assert_eq!(plain, again);
-        let sharp = upscale(&src, 97, 151, &UpscaleOptions::mild_sharpen()).expect("resample");
+        // The unsharp mask only acts on edges, so pin it on an image that has some.
+        let mut blocks = Pixmap::filled(19, 29, [250, 20, 30, 255]);
+        for y in 0..29 {
+            for x in 0..19 {
+                if (x / 4 + y / 4) % 2 == 1 {
+                    blocks.set(x, y, [10, 200, 90, 255]);
+                }
+            }
+        }
+        let sharp = upscale(&blocks, 97, 151, &UpscaleOptions::mild_sharpen()).expect("resample");
+        let unsharpened = upscale(&blocks, 97, 151, &UpscaleOptions::plain()).expect("resample");
+        assert_ne!(sharp, unsharpened);
         let small = upscale(&src, 9, 11, &UpscaleOptions::plain()).expect("resample");
         assert_eq!(
             [fnv(plain.data()), fnv(sharp.data()), fnv(small.data())],
@@ -657,8 +666,9 @@ mod tests {
         );
     }
 
-    // Filled in from the first run; see `output_is_pinned_bit_for_bit`.
-    const PINNED: [u64; 3] = [0, 0, 0];
+    // Recorded on x86-64 Linux; see `output_is_pinned_bit_for_bit`.
+    const PINNED: [u64; 3] =
+        [1_657_750_346_625_254_244, 12_354_784_532_352_411_889, 13_372_679_121_941_524_204];
 
     #[test]
     fn size_limits_and_bad_factors() {

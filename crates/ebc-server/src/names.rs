@@ -65,8 +65,12 @@ fn fold(c: char) -> Option<&'static str> {
 /// is dropped from it).
 #[must_use]
 pub fn ascii_file_name(title: &str, extension: &str) -> String {
-    let extension: String =
-        extension.chars().filter(char::is_ascii_alphanumeric).take(8).collect::<String>().to_ascii_lowercase();
+    let extension: String = extension
+        .chars()
+        .filter(char::is_ascii_alphanumeric)
+        .take(8)
+        .collect::<String>()
+        .to_ascii_lowercase();
     let budget = MAX_ASCII_NAME.saturating_sub(extension.len() + 1);
     let mut stem = String::new();
     let mut pending_hyphen = false;
@@ -102,11 +106,8 @@ pub fn ascii_file_name(title: &str, extension: &str) -> String {
 /// most 120 characters, plus the extension.
 #[must_use]
 pub fn display_file_name(title: &str, extension: &str) -> String {
-    let cleaned: String = title
-        .chars()
-        .filter(|c| !c.is_control() && !matches!(c, '/' | '\\'))
-        .take(120)
-        .collect();
+    let cleaned: String =
+        title.chars().filter(|c| !c.is_control() && !matches!(c, '/' | '\\')).take(120).collect();
     let cleaned = cleaned.trim().trim_matches('.').trim();
     let stem = if cleaned.is_empty() { FALLBACK_STEM } else { cleaned };
     format!("{stem}.{extension}")
@@ -155,8 +156,14 @@ mod tests {
     #[test]
     fn titles_become_plain_ascii_names() {
         assert_eq!(ascii_file_name("L’Étranger", "epub"), "L-Etranger.epub");
-        assert_eq!(ascii_file_name("Les Misérables — tome 1", "epub"), "Les-Miserables-tome-1.epub");
-        assert_eq!(ascii_file_name("Œuvres complètes: Maßstäbe", "pdf"), "OEuvres-completes-Massstabe.pdf");
+        assert_eq!(
+            ascii_file_name("Les Misérables — tome 1", "epub"),
+            "Les-Miserables-tome-1.epub"
+        );
+        assert_eq!(
+            ascii_file_name("Œuvres complètes: Maßstäbe", "pdf"),
+            "OEuvres-completes-Massstabe.pdf"
+        );
         assert_eq!(ascii_file_name("  ...Candide!!!  ", "epub"), "Candide.epub");
         assert_eq!(ascii_file_name("1984", "epub"), "1984.epub");
     }
@@ -184,8 +191,14 @@ mod tests {
             let name = ascii_file_name(title, "epub");
             assert!(name.len() <= MAX_ASCII_NAME, "{name}");
             assert!(name.ends_with(".epub"));
-            assert!(name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-')), "{name}");
-            assert!(!name.contains("--") && !name.starts_with('-') && !name.contains("-."), "{name}");
+            assert!(
+                name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '-')),
+                "{name}"
+            );
+            assert!(
+                !name.contains("--") && !name.starts_with('-') && !name.contains("-."),
+                "{name}"
+            );
         }
     }
 
@@ -197,12 +210,18 @@ mod tests {
              filename*=UTF-8''L%E2%80%99%C3%89tranger%20%E2%80%94%20%C3%A9t%C3%A9.epub"
         );
         assert_eq!(content_disposition("a.epub", None), "attachment; filename=\"a.epub\"");
-        assert_eq!(content_disposition("a.epub", Some("a.epub")), "attachment; filename=\"a.epub\"");
-        let hostile = content_disposition("a\"\r\nX-Evil: 1.epub", Some("b\"\r\nX-Evil: 2\u{0}.epub"));
+        assert_eq!(
+            content_disposition("a.epub", Some("a.epub")),
+            "attachment; filename=\"a.epub\""
+        );
+        let hostile =
+            content_disposition("a\"\r\nX-Evil: 1.epub", Some("b\"\r\nX-Evil: 2\u{0}.epub"));
         assert!(hostile.is_ascii());
         assert!(!hostile.contains('\r') && !hostile.contains('\n'));
         assert_eq!(hostile.matches('"').count(), 2);
-        assert!(hostile.starts_with("attachment; filename=\"a___X-Evil__1.epub\"; filename*=UTF-8''b%22%0D%0AX-Evil"));
+        assert!(hostile.starts_with(
+            "attachment; filename=\"a___X-Evil__1.epub\"; filename*=UTF-8''b%22%0D%0AX-Evil"
+        ));
     }
 
     #[test]

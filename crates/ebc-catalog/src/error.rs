@@ -95,13 +95,23 @@ pub enum CatalogError {
         /// The URL of the request, shortened.
         url: String,
     },
-    /// A follow-up request pointed outside the provider's own hosts and was not issued.
-    #[error("{provider}: refused a follow-up request to {url}")]
+    /// A request pointed outside the provider's own hosts, or at a host this project must
+    /// never contact, and was not issued.
+    #[error("{provider}: refused a request to {url}")]
     ForbiddenFollowUp {
         /// Provider identifier.
         provider: &'static str,
         /// The URL of the request, shortened.
         url: String,
+    },
+    /// The request could not be executed (connection, TLS, timeout…): reported by the
+    /// host's transport, not by the provider.
+    #[error("{provider}: transport error: {message}")]
+    Transport {
+        /// Provider identifier.
+        provider: &'static str,
+        /// What the transport said, shortened.
+        message: String,
     },
 }
 
@@ -119,14 +129,18 @@ impl CatalogError {
             | Self::Remote { provider, .. }
             | Self::TooLarge { provider, .. }
             | Self::UnknownRequest { provider, .. }
-            | Self::ForbiddenFollowUp { provider, .. } => provider,
+            | Self::ForbiddenFollowUp { provider, .. }
+            | Self::Transport { provider, .. } => provider,
         }
     }
 
-    /// `true` when trying again later can succeed (rate limit, outage).
+    /// `true` when trying again later can succeed (rate limit, outage, transport failure).
     #[must_use]
     pub fn is_transient(&self) -> bool {
-        matches!(self, Self::RateLimited { .. } | Self::Unavailable { .. })
+        matches!(
+            self,
+            Self::RateLimited { .. } | Self::Unavailable { .. } | Self::Transport { .. }
+        )
     }
 
     /// Seconds the server asked to wait before retrying, if it said.

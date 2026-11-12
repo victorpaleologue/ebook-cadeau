@@ -1,0 +1,54 @@
+{
+  "kind": "books#volumes",
+  "totalItems": 2,
+  "items": [
+    {
+      "kind": "books#volume",
+      "id": "zzAAAAAAMAAJ",
+      "etag": "abc123",
+      "selfLink": "https://www.googleapis.com/books/v1/volumes/zzAAAAAAMAAJ",
+      "volumeInfo": {
+        "title": "Un autre livre",
+        "authors": ["Jeanne Exemple"],
+        "industryIdentifiers": [{"type": "OTHER", "identifier": "UOM:39015000000000"}],
+        "printType": "BOOK",
+        "language": "fr"
+      }
+    },
+    {
+      "kind": "books#volume",
+      "id": "sfUsAAAAYAAJ",
+      "etag": "kY7sQ1zRGzU",
+      "selfLink": "https://www.googleapis.com/books/v1/volumes/sfUsAAAAYAAJ",
+      "volumeInfo": {
+        "title": "L'étranger",
+        "authors": ["Albert Camus"],
+        "publisher": "Editions Gallimard",
+        "publishedDate": "1971-12",
+        "description": "<p><b>« Aujourd'hui, maman est morte. »</b></p><p>Le premier roman d'Albert Camus.</p>",
+        "industryIdentifiers": [
+          {"type": "ISBN_10", "identifier": "2070360024"},
+          {"type": "ISBN_13", "identifier": "9782070360024"}
+        ],
+        "readingModes": {"text": false, "image": false},
+        "pageCount": 191,
+        "printType": "BOOK",
+        "categories": ["Fiction"],
+        "maturityRating": "NOT_MATURE",
+        "allowAnonLogging": false,
+        "contentVersion": "0.1.1.0.preview.0",
+        "imageLinks": {
+          "smallThumbnail": "http://books.google.com/books/content?id=sfUsAAAAYAAJ&printsec=frontcover&img=1&zoom=5&source=gbs_api",
+          "thumbnail": "http://books.google.com/books/content?id=sfUsAAAAYAAJ&printsec=frontcover&img=1&zoom=1&source=gbs_api"
+        },
+        "language": "fr",
+        "previewLink": "http://books.google.fr/books?id=sfUsAAAAYAAJ&dq=isbn:9782070360024&hl=&cd=1&source=gbs_api",
+        "infoLink": "http://books.google.fr/books?id=sfUsAAAAYAAJ&dq=isbn:9782070360024&hl=&source=gbs_api",
+        "canonicalVolumeLink": "https://books.google.com/books/about/L_%C3%A9tranger.html?hl=&id=sfUsAAAAYAAJ"
+      },
+      "saleInfo": {"country": "FR", "saleability": "NOT_FOR_SALE", "isEbook": false},
+      "accessInfo": {"country": "FR", "viewability": "NO_PAGES", "embeddable": false, "publicDomain": false, "epub": {"isAvailable": false}, "pdf": {"isAvailable": false}, "accessViewStatus": "NONE"},
+      "searchInfo": {"textSnippet": "Aujourd&#39;hui, maman est morte."}
+    }
+  ]
+}

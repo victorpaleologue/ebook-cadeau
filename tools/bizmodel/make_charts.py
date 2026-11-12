@@ -6,7 +6,9 @@ Writes, under ``docs/business/``:
 
 * ``results.json``             every number quoted in the report;
 * ``charts/NN-name.svg|png``   light theme, and ``NN-name-dark.svg|png``;
-* ``charts/data/NN-name.csv``  the table behind each chart.
+* ``charts/data/NN-name.csv``  the table behind each chart;
+* ``README.md``                only the blocks between ``<!-- BEGIN GENERATED:x -->`` and
+                               ``<!-- END GENERATED:x -->`` (result and assumption tables).
 
 Output is deterministic: fixed Monte Carlo seed, no timestamps in the files,
 text converted to outlines in the SVGs so they render the same everywhere.
@@ -61,9 +63,8 @@ THEMES = {
         "red": "#e34948",
         "context": "#c3c2b7",  # de-emphasised marks
         "context_strong": "#898781",
-        "ramp": ("#86b6ef", "#2a78d6", "#104281"),  # ordinal, small -> large
-        "classes": ("#cde2fb", "#6da7ec", "#184f95"),  # sequential steps 100 / 300 / 600
-        "class_ink": ("#0b0b0b", "#0b0b0b", "#ffffff"),
+        "ramp": ("#86b6ef", "#2a78d6", "#104281"),  # ordinal steps 250 / 450 / 650, small -> large
+        "ramp_ink": ("#0b0b0b", "#ffffff", "#ffffff"),  # label inside each step
         "negative_alpha": 0.30,
     },
     "dark": {
@@ -77,9 +78,8 @@ THEMES = {
         "red": "#e66767",
         "context": "#52514e",
         "context_strong": "#898781",
-        "ramp": ("#184f95", "#3987e5", "#9ec5f4"),  # ordinal flips in dark: larger = lighter
-        "classes": ("#0d366b", "#256abf", "#86b6ef"),  # steps 700 / 500 / 250
-        "class_ink": ("#f0efec", "#ffffff", "#0b0b0b"),
+        "ramp": ("#184f95", "#3987e5", "#9ec5f4"),  # steps 600 / 400 / 200: the ramp flips in dark, larger = lighter
+        "ramp_ink": ("#ffffff", "#ffffff", "#0b0b0b"),  # by APCA, as the palette prescribes for the blue slot
         "negative_alpha": 0.38,
     },
 }
@@ -276,7 +276,7 @@ def panel_title(ax, t: dict, text: str, sub: str | None = None) -> None:
     """Bold panel title with an optional subtitle of one or two lines, above the axes."""
     height = ax.get_window_extent().height  # px at 100 px per inch
     lines = sub.count("\n") + 1 if sub else 0
-    title_y = 1.0 + (9 + 15 * lines) / height
+    title_y = 1.0 + (11 + 15.5 * lines) / height
     ax.text(0.0, title_y, text, transform=ax.transAxes, fontsize=10, fontweight="bold", color=t["ink"], va="bottom", ha="left")
     if sub:
         ax.text(0.0, 1.0 + 6 / height, sub, transform=ax.transAxes, fontsize=8.5, color=t["ink2"], va="bottom", ha="left",
@@ -388,6 +388,15 @@ def corner_overrides(inputs: dict, score, keep_decisions: bool = True) -> tuple:
     return adverse, favourable
 
 
+def roi_crossing(volumes: list, curve: list):
+    """Volume at which an ROI curve crosses zero (log interpolation), or ``None``."""
+    for i in range(1, len(volumes)):
+        if curve[i - 1] < 0 <= curve[i]:
+            share = -curve[i - 1] / (curve[i] - curve[i - 1])
+            return 10 ** (math.log10(volumes[i - 1]) + share * (math.log10(volumes[i]) - math.log10(volumes[i - 1])))
+    return None
+
+
 def compute(inputs: dict) -> dict:
     """Everything the charts and the report need."""
     v = model.values(inputs)
@@ -428,8 +437,45 @@ def compute(inputs: dict) -> dict:
             "base_price": v[model.CHANNEL_PRICE_INPUT[channel]],
         }
     data["breakeven_levels"] = {
-        level: {channel: model.break_even_volume(v, level, channel) for channel in ("a", "b", "c", "d")}
+        level: {channel: model.break_even_volume(v, level, channel) for channel in ("a", "b", "c", "d", "d_plan")}
         for level in model.LEVELS
+    }
+    som_base = 26520  # R12 section 2.5: base-case cards a year in France in year 3
+    data["extras"] = {
+        "minimal_break_even_mailed_at_8_90": model.break_even_volume(v, "minimal", "b", 8.90),
+        "minimal_mailed_contribution_at_8_90": model.channel_contribution(v, "minimal", "b", 8.90),
+        "company_mailed_contribution_at_8_90": model.channel_contribution(v, "seed", "b", 8.90),
+        "minimal_resellers_on_minimum_to_cover_costs": model.partners_needed(
+            v, model.annual_fixed_cash(v, "minimal", "C_reseller"), v["reseller_orders_small"], 0.001, "micro_franchise"),
+        "som_base_cards_per_year_r12": som_base,
+        "revenue_per_card_needed_at_som_base": {
+            level: model.annual_fixed_cash(v, level, "C_reseller") / som_base for level in model.LEVELS
+        },
+        "december_and_november_share_of_volume": (model.seasonality_weights(v["season_december_share"])[11]
+                                                  + model.seasonality_weights(v["season_december_share"])[10]) / 12.0,
+        "minimal_annual_fixed_cash_all_low_all_high": [
+            model.annual_fixed_cash(model.values(inputs, which), "minimal", "MIX") for which in ("low", "high")
+        ],
+        "what_if_minimal_mix": {
+            name: {key: model.summarise(model.simulate(dict(v, **overrides), "minimal", "MIX"))[key]
+                   for key in ("cum_cash_36", "peak_cash_need", "payback_month", "last_year_net_cash")}
+            for name, overrides in {
+                "no_monthly_minimum": {"price_reseller_monthly_minimum": 0.0},
+                "minimum_99": {"price_reseller_monthly_minimum": 99.0},
+                "attach_rate_0.5pct": {"reseller_attach_rate": 0.005},
+                "attach_rate_5pct": {"reseller_attach_rate": 0.05},
+                "attach_rate_5pct_no_minimum": {"reseller_attach_rate": 0.05, "price_reseller_monthly_minimum": 0.0},
+            }.items()
+        },
+        "what_if_seed_mix": {
+            name: {key: model.summarise(model.simulate(dict(v, **overrides), "seed", "MIX"))[key]
+                   for key in ("cum_cash_36", "peak_cash_need", "payback_month", "last_year_net_cash")}
+            for name, overrides in {
+                "developer_4_days_a_month": {"seed_dev_days_month": 4.0},
+                "attach_rate_5pct": {"reseller_attach_rate": 0.05},
+                "attach_rate_5pct_fee_0.50": {"reseller_attach_rate": 0.05, "price_reseller_fee_per_card": 0.5},
+            }.items()
+        },
     }
     data["annual_fixed"] = {
         level: {scenario: model.annual_fixed_cash(v, level, scenario) for scenario in model.SCENARIOS}
@@ -454,6 +500,10 @@ def compute(inputs: dict) -> dict:
             for horizon in curves:
                 curves[horizon].append(model.roi(flows, horizon))
         data["roi"]["levels"][level] = curves
+    data["roi"]["break_even_cards_per_month"] = {
+        level: {horizon: roi_crossing(volumes, curve) for horizon, curve in curves.items()}
+        for level, curves in data["roi"]["levels"].items()
+    }
 
     # Sweet spot: yearly net cash of the minimal set-up by author base and reseller volume.
     author_steps = [0, 25, 50, 100, 200, 400]
@@ -562,7 +612,6 @@ def chart_waterfall(data: dict, t: dict):
 
 
 def chart_breakeven(data: dict, t: dict):
-    v = data["base"]
     fixed = data["annual_fixed"]["minimal"]
     panels = [
         ("a", "A'. Paid print-at-home PDF", "Price per PDF, EUR incl. VAT", "Paid PDFs", ("minimal", "A_fee")),
@@ -677,8 +726,9 @@ def chart_cumulative(data: dict, t: dict):
             ax.annotate(f"EUR {k_eur(p50[-1], signed=True)}", (36, p50[-1] / scale), xytext=(-2, 9), textcoords="offset points",
                         fontsize=8.5, color=t["ink"], fontweight="bold", ha="right", va="bottom")
         else:
-            ax.text(0.93, 0.80, note + f"\npaid back by month 36 in {pct(mc['prob_payback'])} of draws",
-                    transform=ax.transAxes, fontsize=8.2, color=t["ink"], ha="right", va="top", linespacing=1.3)
+            back = "not paid back in any draw" if mc["prob_payback"] == 0 else f"paid back in {pct(mc['prob_payback'])} of draws"
+            ax.text(0.95, 0.82, f"{note}\n{back}", transform=ax.transAxes, fontsize=8.2, color=t["ink"], ha="right",
+                    va="top", linespacing=1.3)
         for month, a, b, c in zip(months, p10, p50, p90):
             rows_csv.append([level, month, a, b, c])
     write_csv("03-cumulative-cash-by-investment-level", ["level", "month", "p10_eur", "median_eur", "p90_eur"], rows_csv)
@@ -691,7 +741,7 @@ def chart_roi(data: dict, t: dict):
         t, 5.5,
         "How much monthly volume does each investment level need before the money comes back?",
         "ROI = net cash generated ÷ cash committed (set-up, fixed costs, people, marketing); −100 % means all of it is gone, "
-        "0 % means it just came back. Volume grows in a straight line from zero to the figure on the horizontal axis in "
+        "0 % means it just came back (dot: after 36 months). Volume grows in a straight line from zero to the figure on the horizontal axis in "
         "month 36: reseller cards at the metered fee (no minimum) plus 16 % author jackets, up to the ceiling of paying authors.",
     )
     axes = add_panels(fig, 1, 3, top=top + 1.15, left=0.8, wspace=0.55, bottom=0.95)
@@ -721,23 +771,17 @@ def chart_roi(data: dict, t: dict):
                               solid_joinstyle="round")
             handles.append(line)
         # Break-even volume at 36 months.
-        curve = curves[36]
-        crossing = None
-        for i in range(1, len(volumes)):
-            if curve[i - 1] < 0 <= curve[i]:
-                share = -curve[i - 1] / (curve[i] - curve[i - 1])
-                crossing = 10 ** (math.log10(volumes[i - 1]) + share * (math.log10(volumes[i]) - math.log10(volumes[i - 1])))
-                break
+        crossing = data["roi"]["break_even_cards_per_month"][level][36]
         if crossing:
             ax.plot([crossing], [0], marker="o", markersize=7, color=t["ramp"][2], markeredgecolor=t["surface"],
                     markeredgewidth=1.6, zorder=6)
             digits = -2 if crossing >= 1000 else -1
-            back = f"back by month 36 from ≈ {compact(round(crossing, digits))} cards a month (dot)"
+            back = f"money back from ≈ {compact(round(crossing, digits))} cards a month"
         else:
-            back = "not back by month 36 at any volume shown"
+            back = "money not back at any volume shown"
         title = {"minimal": "Minimal", "seed": "Seed", "funded": "Funded"}[level]
         committed = data["summary"][(level, "MIX")]["outlay_total"]
-        panel_title(ax, t, title, f"about EUR {k_eur(committed)} committed over 36 months\n{back}")
+        panel_title(ax, t, title, f"EUR {k_eur(committed)} committed over 36 months\n{back}")
         for i, volume in enumerate(volumes):
             rows_csv.append([level, volume, curves[12][i], curves[24][i], curves[36][i]])
     fig.legend(handles, ["after 12 months", "after 24 months", "after 36 months"], loc="upper left",
@@ -785,7 +829,8 @@ def chart_tornado(data: dict, t: dict):
             ax.annotate(label, (value, index), xytext=(5 if better else -5, 0), textcoords="offset points", fontsize=8.2,
                         color=t["ink"], ha="left" if better else "right", va="center")
         rows_csv.append([row["input"], row["role"], row["low"], row["high"], row["value_at_low"], row["value_at_high"], base])
-    handles = [plt.Rectangle((0, 0), 1, 1, color=t["red"]), plt.Rectangle((0, 0), 1, 1, color=t["blue"])]
+    handles = [plt.Rectangle((0, 0), 1, 1, facecolor=t["red"], edgecolor="none"),
+               plt.Rectangle((0, 0), 1, 1, facecolor=t["blue"], edgecolor="none")]
     legend(ax, t, handles, ["worse than base", "better than base"], loc="lower right", anchor=(1.0, 0.02))
     write_csv("05-sensitivity-tornado",
               ["input", "role", "low", "high", "cum_cash_36_at_low", "cum_cash_36_at_high", "cum_cash_36_base"], rows_csv)
@@ -803,7 +848,7 @@ def chart_sweet_spot(data: dict, t: dict):
         f"Yearly net cash of a solo founder (about EUR {k_eur(need['p10'])} to {k_eur(need['p90'])} put in, own time unpaid), by number of "
         f"paying authors and by reseller volume at EUR {v['price_reseller_fee_per_card']:.2f} a card. A reseller on the "
         f"EUR {v['price_reseller_monthly_minimum']:.0f} monthly minimum counts like {sweet['cards_per_minimum']:,.0f} cards a year. "
-        f"Base case, year 3: {base['authors_end']:.0f} authors and {base['partners_end']:.1f} resellers, "
+        f"Base case in year 3: {base['authors_end']:.0f} authors and {base['last_year_partners_avg']:.1f} resellers on the minimum, "
         f"about EUR {k_eur(base['last_year_net_cash'], signed=True)}.",
     )
     (ax,) = add_panels(fig, 1, 1, top=top + 0.85, left=1.25, right=0.35, bottom=0.85)
@@ -827,7 +872,7 @@ def chart_sweet_spot(data: dict, t: dict):
                 colour, alpha, ink = t["red"], t["negative_alpha"], t["ink"]
             else:
                 tier = 0 if value < thresholds[1] else (1 if value < thresholds[2] else 2)
-                colour, alpha, ink = t["classes"][tier], 1.0, t["class_ink"][tier]
+                colour, alpha, ink = t["ramp"][tier], 1.0, t["ramp_ink"][tier]
             bar(ax, c - 0.5 + gap, c + 0.5 - gap, r - 0.5 + gap * 1.6, r + 0.5 - gap * 1.6, colour, round_at="all", alpha=alpha)
             ax.text(c, r, k_eur(value, signed=True), ha="center", va="center", fontsize=9, color=ink, zorder=6)
             rows_csv.append([author_count, card_count, value])
@@ -837,8 +882,8 @@ def chart_sweet_spot(data: dict, t: dict):
         f"funds growth: a freelance day a week (EUR {sweet['growth_threshold'] / 1000:.0f}K a year)",
         f"pays one founder salary (EUR {sweet['salary_threshold'] / 1000:.0f}K a year)",
     ]
-    handles = [plt.Rectangle((0, 0), 1, 1, color=t["red"], alpha=t["negative_alpha"])] + [
-        plt.Rectangle((0, 0), 1, 1, color=colour) for colour in t["classes"]
+    handles = [plt.Rectangle((0, 0), 1, 1, facecolor=t["red"], edgecolor="none", alpha=t["negative_alpha"])] + [
+        plt.Rectangle((0, 0), 1, 1, facecolor=colour, edgecolor="none") for colour in t["ramp"]
     ]
     fig.legend(handles, labels, loc="upper left", bbox_to_anchor=(1.25 / FIG_W, 1.0 - (top + 0.1) / 5.9), ncol=2, frameon=False,
                fontsize=8.5, handlelength=1.3, handleheight=1.0, columnspacing=2.0, labelcolor=t["ink2"], borderaxespad=0.0)
@@ -966,6 +1011,8 @@ def build_results(inputs: dict, data: dict) -> dict:
         "tornado_minimal_mix": data["tornado"][:15],
         "tornado_seed_mix": data["tornado_seed"][:10],
         "sweet_spot": data["sweet"],
+        "roi_break_even_cards_per_month_reached_in_month_36": data["roi"]["break_even_cards_per_month"],
+        "extras": data["extras"],
         "partners_needed_at_base_attach": {
             target: {
                 size: model.partners_needed(v, amount, v[f"reseller_orders_{size}"], v["reseller_attach_rate"])
@@ -980,6 +1027,110 @@ def build_results(inputs: dict, data: dict) -> dict:
     return rounded(results)
 
 
+# --------------------------------------------------------------------------- #
+# Generated blocks of docs/business/README.md
+# --------------------------------------------------------------------------- #
+
+
+def eur(value: float) -> str:
+    """Rounded amount for a table: 2,573 -> '2.6K', -143,336 -> '−143K'."""
+    return k_eur(value) if abs(value) >= 950 else f"{value:,.0f}".replace("-", "−")
+
+
+def number(value: float) -> str:
+    if float(value).is_integer() and abs(value) >= 1000:
+        return f"{value:,.0f}"
+    return f"{value:g}"
+
+
+def results_table(data: dict) -> str:
+    lines = [
+        "| Level | Scenario | Cash to put in | Cumulative cash, month 36 | Paid back by month 36 | Net cash in year 3 | ROI at 36 months, cash (founder time valued) |",
+        "|---|---|---|---|---|---|---|",
+    ]
+    for level in model.LEVELS:
+        for scenario in model.SCENARIOS:
+            base = data["summary"][(level, scenario)]
+            mc = data["mc"][(level, scenario)]
+            need, end, year3 = mc["peak_cash_need"], mc["cum_cash_end"], mc["last_year_net_cash"]
+            if mc["prob_payback"] == 0:
+                payback = "never"
+            else:
+                payback = f"{pct(mc['prob_payback'])} of draws (median month {mc['median_payback_month']:.0f})"
+            lines.append(
+                f"| {level} | {model.SCENARIOS[scenario].label} | {eur(need['p10'])} to {eur(need['p90'])} | "
+                f"{eur(end['p10'])} / **{eur(end['p50'])}** / {eur(end['p90'])} | {payback} | "
+                f"{eur(year3['p10'])} to {eur(year3['p90'])} | "
+                + f"{pct(base['roi_36'])} ({pct(base['roi_36_valued'])}) |".replace("-", "−")
+            )
+    return "\n".join(lines)
+
+
+def unit_table(data: dict) -> str:
+    v = data["base"]
+    lines = [
+        "| Channel, unit | Price | Micro-entreprise, VAT franchise (minimal) | Company with VAT (seed, funded) | Founder or support time per unit |",
+        "|---|---|---|---|---|",
+    ]
+    names = {
+        "a": "A'. Paid print-at-home PDF",
+        "b": "B. Printed-and-posted card",
+        "c": "C. Reseller fee, one card",
+        "d": "D. Author pack, one jacket",
+        "d_plan": "D. Author plan, one year",
+    }
+    for channel, name in names.items():
+        micro = data["unit"]["micro_franchise"][channel]
+        company = data["unit"]["company"][channel]
+        minutes = f"{micro.minutes:.2f} min" if micro.minutes else "none"
+        lines.append(f"| {name} | {micro.price:.2f} | {micro.contribution:+.2f} | {company.contribution:+.2f} | {minutes} |")
+    lines.append("")
+    lines.append(f"Micro-entreprise charges used: {pct(v['tax_micro_social_goods'], 1)} of turnover on goods, "
+                 f"{pct(v['tax_micro_social_services'], 1)} on services. Company figures are before corporate tax.")
+    return "\n".join(lines)
+
+
+def assumptions_table(inputs: dict) -> str:
+    documents = model.load_meta()["documents"]
+    legend_line = "Abbreviations in the notes: " + "; ".join(
+        f"{key} = `{path}`" for key, path in documents.items() if key not in ("MODEL", "STATUS")) + "."
+    lines = [
+        legend_line,
+        "",
+        "| Input | Low | Base | High | Unit | Role | Conf. | Source, section | Note; **fact-check** |",
+        "|---|---|---|---|---|---|---|---|---|",
+    ]
+    for name, row in inputs.items():
+        source = "this model" if row["source"] == "MODEL" else f"`{documents[row['source']]}`"
+        section = "" if row["section"] in ("", "-") else f", {row['section']}"
+        note = row.get("note", "")
+        if row.get("factcheck"):
+            note = (note + " " if note else "") + f"**{row['factcheck']}**"
+        cells = [f"`{name}`", number(row["low"]), number(row["base"]), number(row["high"]), row["unit"], row["role"],
+                 row["confidence"], source + section, note]
+        lines.append("| " + " | ".join(cell.replace("|", "/") for cell in cells) + " |")
+    return "\n".join(lines)
+
+
+def update_readme(inputs: dict, data: dict) -> list:
+    """Rewrite the generated blocks of the report; prose outside them is left alone."""
+    path = OUT / "README.md"
+    if not path.exists():
+        return []
+    text = path.read_text(encoding="utf-8")
+    blocks = {"results": results_table(data), "unit-economics": unit_table(data), "assumptions": assumptions_table(inputs)}
+    done = []
+    for name, body in blocks.items():
+        begin, end = f"<!-- BEGIN GENERATED:{name} -->", f"<!-- END GENERATED:{name} -->"
+        if begin in text and end in text:
+            head, rest = text.split(begin, 1)
+            _, tail = rest.split(end, 1)
+            text = f"{head}{begin}\n{body}\n{end}{tail}"
+            done.append(name)
+    path.write_text(text, encoding="utf-8")
+    return done
+
+
 def main() -> None:
     setup_matplotlib()
     inputs = model.load_inputs()
@@ -991,8 +1142,10 @@ def main() -> None:
     for theme in ("light", "dark"):
         for name, function in CHART_FUNCTIONS:
             save(function(data, THEMES[theme]), name, theme)
+    blocks = update_readme(inputs, data)
     print(f"Wrote {len(CHART_FUNCTIONS) * 4} chart files to {CHARTS.relative_to(ROOT)}/, "
-          f"{len(CHART_FUNCTIONS)} tables to {DATA.relative_to(ROOT)}/ and {(OUT / 'results.json').relative_to(ROOT)}")
+          f"{len(CHART_FUNCTIONS)} tables to {DATA.relative_to(ROOT)}/ and {(OUT / 'results.json').relative_to(ROOT)}; "
+          f"refreshed README blocks: {', '.join(blocks) if blocks else 'none'}")
 
 
 if __name__ == "__main__":

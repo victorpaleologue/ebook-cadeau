@@ -8,13 +8,34 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
+[features]
+default = []
+# reqwest + rustls executor (`ebc_catalog::client`). Off by default and never built for
+# wasm32: browsers bring their own `fetch`.
+client = ["dep:reqwest", "dep:rustls", "dep:tokio"]
+
 [dependencies]
 ebc-isbn.workspace = true
 ebc-model.workspace = true
 quick-xml = { version = "0.42.0", default-features = false }
-serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider"], optional = true }
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std"], optional = true }
+tokio = { version = "1.54.1", default-features = false, features = ["time", "sync"], optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+tokio = { version = "1.54.1", default-features = false, features = ["rt", "macros", "time"] }
+
+[[example]]
+name = "record-fixtures"
+required-features = ["client"]
+
+[[test]]
+name = "client"
+required-features = ["client"]
 
 [lints]
 workspace = true

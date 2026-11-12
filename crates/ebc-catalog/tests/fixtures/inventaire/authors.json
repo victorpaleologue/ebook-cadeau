@@ -1,0 +1,11 @@
+{
+  "entities": {
+    "wd:Q34670": {
+      "uri": "wd:Q34670", "type": "human",
+      "labels": {"en": "Albert Camus", "fr": "Albert Camus", "ja": "アルベール・カミュ"},
+      "claims": {"wdt:P31": ["wd:Q5"], "wdt:P569": ["1913-11-07"], "wdt:P570": ["1960-01-04"]},
+      "image": {"url": "/img/remote/abcdef"}
+    }
+  },
+  "redirects": {}
+}

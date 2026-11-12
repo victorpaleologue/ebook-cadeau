@@ -13,6 +13,7 @@ ebc-isbn.workspace = true
 ebc-model.workspace = true
 ebc-scene.workspace = true
 md-5 = { version = "0.11", default-features = false }
+serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 url = "2.5"

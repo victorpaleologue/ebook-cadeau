@@ -1,0 +1,231 @@
+//! The evaluation harness: synthesises covers, runs the pipeline, prints the tables of
+//! `docs/research/fontid-eval.md`.
+//!
+//! ```sh
+//! cargo run -p ebc-fontid --release --example eval --features synth
+//! cargo run -p ebc-fontid --release --example eval --features synth -- \
+//!     --cases 96 --seed 7 --corpus DIR [--only-bundled-covers]
+//! ```
+//!
+//! * `--cases N`: covers per condition (default 64).
+//! * `--seed S`: seed of everything random (default 2026).
+//! * `--corpus DIR`: adds every `.ttf`/`.otf` file of `DIR` (and of its sub-directories)
+//!   to the gallery. Their licence is taken from the font's name table and is **not**
+//!   checked: this is for measuring only, never for shipping an index.
+//! * `--only-bundled-covers`: with a corpus, draw covers with the bundled fonts only
+//!   (the corpus fonts are distractors).
+//! * `--rerank-top K`: candidates passed to the render-and-compare stage (default 5).
+//! * `--only NAME`: run only the conditions whose name contains `NAME`.
+//! * `--verbose`: one line per cover that went wrong somewhere (on standard error).
+
+use std::io::Write;
+use std::path::{Path, PathBuf};
+use std::process::ExitCode;
+use std::time::Instant;
+
+use ebc_fontid::eval::{
+    CaseReport, Condition, EvalOptions, evaluate, evaluate_holdout, format_holdout, format_table,
+    standard_conditions,
+};
+use ebc_fontid::synth::{CoverSpec, Degradation, render_cover, Background};
+use ebc_fontid::{FontIndex, IndexEntry, IndexEntryMeta, find_title_regions, identify_detailed};
+use ebc_text::Font;
+
+fn font_files(dir: &Path, depth: usize, out: &mut Vec<PathBuf>) {
+    let Ok(entries) = std::fs::read_dir(dir) else { return };
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if path.is_dir() {
+            if depth > 0 {
+                font_files(&path, depth - 1, out);
+            }
+        } else if path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case("ttf") || e.eq_ignore_ascii_case("otf"))
+        {
+            out.push(path);
+        }
+    }
+}
+
+fn load(dir: &Path, licence: Option<&str>) -> Vec<(IndexEntryMeta, Font)> {
+    let mut files = Vec::new();
+    font_files(dir, 2, &mut files);
+    files.sort();
+    let mut fonts: Vec<(IndexEntryMeta, Font)> = Vec::new();
+    for path in files {
+        let Ok(data) = std::fs::read(&path) else { continue };
+        let Ok(font) = Font::from_bytes(data, 0) else { continue };
+        let mut meta = IndexEntryMeta::from_font(&font, path.display().to_string());
+        if let Some(licence) = licence {
+            meta.licence = licence.to_string();
+        }
+        // Family and style must identify a face.
+        if fonts.iter().any(|(m, _)| m.family == meta.family && m.style == meta.style) {
+            continue;
+        }
+        fonts.push((meta, font));
+    }
+    fonts
+}
+
+fn run() -> Result<(), String> {
+    let crate_dir = Path::new(env!("CARGO_MANIFEST_DIR"));
+    let mut cases = 64usize;
+    let mut seed = 2026u64;
+    let mut rerank_top = 5usize;
+    let mut corpus: Option<PathBuf> = None;
+    let mut only_bundled_covers = false;
+    let mut only: Option<String> = None;
+    let mut verbose = false;
+    let mut args = std::env::args().skip(1);
+    while let Some(arg) = args.next() {
+        let mut value = || args.next().ok_or_else(|| format!("{arg} needs a value"));
+        match arg.as_str() {
+            "--cases" => cases = value()?.parse().map_err(|_| "--cases: not a number")?,
+            "--seed" => seed = value()?.parse().map_err(|_| "--seed: not a number")?,
+            "--rerank-top" => {
+                rerank_top = value()?.parse().map_err(|_| "--rerank-top: not a number")?;
+            }
+            "--corpus" => corpus = Some(PathBuf::from(value()?)),
+            "--only-bundled-covers" => only_bundled_covers = true,
+            "--only" => only = Some(value()?),
+            "--verbose" => verbose = true,
+            other => return Err(format!("unknown argument {other} (see the file header)")),
+        }
+    }
+
+    let bundled = load(&crate_dir.join("../../assets/fonts"), Some("OFL-1.1"));
+    if bundled.is_empty() {
+        return Err("no fonts found in assets/fonts".into());
+    }
+    let mut gallery = bundled.clone();
+    if let Some(dir) = &corpus {
+        for (meta, font) in load(dir, None) {
+            if !gallery.iter().any(|(m, _)| m.family == meta.family && m.style == meta.style) {
+                gallery.push((meta, font));
+            }
+        }
+    }
+    let cover_fonts = if only_bundled_covers { bundled.clone() } else { gallery.clone() };
+
+    let start = Instant::now();
+    let clock = move || start.elapsed().as_secs_f64() * 1000.0;
+    let t0 = clock();
+    let index = FontIndex::build(&gallery);
+    let build_ms = clock() - t0;
+    let bytes = index.to_bytes();
+    let families = {
+        let mut f: Vec<&str> = index.entries().iter().map(|e| e.family.as_str()).collect();
+        f.sort_unstable();
+        f.dedup();
+        f.len()
+    };
+
+    let mut out = std::io::stdout().lock();
+    let mut line = |s: String| writeln!(out, "{s}").map_err(|e| e.to_string());
+    line(format!(
+        "Gallery: {} faces in {} families ({} bundled); covers drawn with {} faces; index {} bytes, built in {:.0} ms ({:.1} ms per face).",
+        index.len(),
+        families,
+        bundled.len(),
+        cover_fonts.len(),
+        bytes.len(),
+        build_ms,
+        build_ms / index.len() as f64
+    ))?;
+    line(format!("Covers: 600 x 900 px, {cases} per condition, seed {seed}; rerank on the best {rerank_top}.\n"))?;
+
+    let observer = |r: &CaseReport| {
+        let wrong = !r.detected || r.id_rank != Some(0) || r.auto_rank != Some(0);
+        if verbose && wrong {
+            let _ = writeln!(
+                std::io::stderr(),
+                "[{}] #{} {} \"{}\" cap {:.0}px: detected={} truth={:?} found={:?} labelled={} id_rank={:?} rerank={:?} auto_rank={:?} best={} true_score={:.2} confident={}",
+                r.condition, r.case, r.font, r.title, r.cap_height_px, r.detected,
+                (r.truth.x, r.truth.y, r.truth.w, r.truth.h),
+                r.found.map(|f| (f.x, f.y, f.w, f.h)),
+                r.labelled_glyphs, r.id_rank, r.rerank_rank, r.auto_rank, r.best, r.true_score,
+                r.confident,
+            );
+        }
+    };
+    let opts = EvalOptions {
+        cases,
+        seed,
+        width: 600,
+        height: 900,
+        rerank_top,
+        clock: Some(&clock),
+        observer: Some(&observer),
+    };
+    let conditions: Vec<Condition> = standard_conditions()
+        .into_iter()
+        .filter(|c| only.as_ref().is_none_or(|o| c.name.contains(o.as_str())))
+        .collect();
+    let rows = evaluate(&cover_fonts, &index, &conditions, &opts);
+    line(format_table(&rows))?;
+
+    let holdout: Vec<_> = [Condition::clean(), Condition::typical()]
+        .iter()
+        .map(|c| evaluate_holdout(&cover_fonts, &index, c, &opts))
+        .collect();
+    line("Hold-out (true face removed from the index; title box given):\n".to_string())?;
+    line(format_holdout(&holdout))?;
+
+    // Scaling: one typical cover against galleries of growing size (entries repeated).
+    let spec = CoverSpec {
+        width: 600,
+        height: 900,
+        title_lines: vec!["Voyage au bout".into(), "de la nuit".into()],
+        cap_height_px: 44.0,
+        letter_spacing_em: 0.02,
+        light_on_dark: false,
+        background: Background::Gradient,
+        author: Some("Camille Vasseur".into()),
+        ornaments: true,
+        degradation: Degradation {
+            rotation_degrees: 0.7,
+            blur_sigma: 0.6,
+            noise_sigma: 3.0,
+            jpeg_quality: Some(75),
+        },
+        seed,
+    };
+    let (_, title_font) = &bundled[bundled.len().min(4) - 1];
+    let (_, author_font) = &bundled[0];
+    if let Some(cover) = render_cover(&spec, title_font, author_font) {
+        let title = "Voyage au bout de la nuit";
+        line("Scaling of identify() on one 600 x 900 cover (title box given; entries repeated to reach the size):\n".to_string())?;
+        line("| Faces in the index | detect ms | identify ms |\n|---|---|---|".to_string())?;
+        for size in [index.len(), 100, 300, 1000] {
+            let entries: Vec<IndexEntry> =
+                index.entries().iter().cycle().take(size).cloned().collect();
+            let big = FontIndex::from_entries(entries);
+            let runs = 10;
+            let t0 = clock();
+            for _ in 0..runs {
+                let _ = find_title_regions(&cover.image, title);
+            }
+            let detect = (clock() - t0) / f64::from(runs);
+            let t0 = clock();
+            for _ in 0..runs {
+                let _ = identify_detailed(&cover.image, &cover.title_region, Some(title), &big);
+            }
+            let identify = (clock() - t0) / f64::from(runs);
+            line(format!("| {size} | {detect:.1} | {identify:.1} |"))?;
+        }
+    }
+    Ok(())
+}
+
+fn main() -> ExitCode {
+    match run() {
+        Ok(()) => ExitCode::SUCCESS,
+        Err(message) => {
+            let _ = writeln!(std::io::stderr(), "eval: {message}");
+            ExitCode::FAILURE
+        }
+    }
+}

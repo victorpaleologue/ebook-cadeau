@@ -433,10 +433,10 @@ pub fn assess_pixels(image: &Pixmap, thresholds: &PixelThresholds, gallery: &[u6
     }
     if !gallery.is_empty() {
         let hash = dhash(image);
-        if let Some(distance) = gallery.iter().map(|known| hamming(hash, *known)).min() {
-            if distance <= thresholds.max_hash_distance {
-                out.reasons.push(Reason::KnownHash { distance });
-            }
+        if let Some(distance) = gallery.iter().map(|known| hamming(hash, *known)).min()
+            && distance <= thresholds.max_hash_distance
+        {
+            out.reasons.push(Reason::KnownHash { distance });
         }
     }
     if out.reasons.is_empty() {

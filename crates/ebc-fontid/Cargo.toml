@@ -22,11 +22,19 @@ default = []
 # `synth`: procedural test covers and image degradations (used by the tests, the `eval`
 # example and demos). Deterministic: every random choice comes from a caller-supplied seed.
 synth = []
-# `bundled_index()`: an index of the seven OFL fonts in `assets/fonts`, embedded in the binary
-# (about 60 KB). Regenerate with `cargo run -p ebc-fontid --example build-index`.
+# `bundled_index()`: an index of the eight OFL fonts in `assets/fonts`, embedded in the binary
+# (about 70 KB). Regenerate with `cargo run -p ebc-fontid --example build-index`.
 bundled-index = []
 
-# Examples `build-index` and `eval` are planned (see docs/STATUS.md); not written yet.
+# Fonts directory + manifest -> index file; without arguments it regenerates the bundled index.
+[[example]]
+name = "build-index"
+required-features = ["bundled-index"]
+
+# The evaluation harness: prints the accuracy/timing table of docs/research/fontid-eval.md.
+[[example]]
+name = "eval"
+required-features = ["synth"]
 
 [lints]
 workspace = true

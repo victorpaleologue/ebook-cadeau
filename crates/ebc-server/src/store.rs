@@ -693,7 +693,15 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let file = FileStore::open(dir.path()).unwrap();
         let memory = MemoryStore::new();
-        for name in ["", "../db.json", "..", "/etc/passwd", &SHA.to_uppercase(), &format!("{SHA}/x"), &SHA[..63]] {
+        for name in [
+            "",
+            "../db.json",
+            "..",
+            "/etc/passwd",
+            &SHA.to_uppercase(),
+            &format!("{SHA}/x"),
+            &SHA[..63],
+        ] {
             assert_eq!(file.put_blob(name, b"x"), Err(StoreError::InvalidBlobName), "{name}");
             assert!(matches!(file.open_blob(name), Err(StoreError::InvalidBlobName)), "{name}");
             assert_eq!(file.delete_blob(name), Err(StoreError::InvalidBlobName), "{name}");
@@ -717,8 +725,10 @@ mod tests {
         };
         db.sessions.insert("old".to_owned(), session(50, true));
         db.sessions.insert("live".to_owned(), session(500, false));
-        db.pairs.insert("old".to_owned(), PairRecord { gift_id: "g_1".to_owned(), expires_at: 100 });
-        db.pairs.insert("live".to_owned(), PairRecord { gift_id: "g_1".to_owned(), expires_at: 101 });
+        db.pairs
+            .insert("old".to_owned(), PairRecord { gift_id: "g_1".to_owned(), expires_at: 100 });
+        db.pairs
+            .insert("live".to_owned(), PairRecord { gift_id: "g_1".to_owned(), expires_at: 101 });
         let upload = |created_at, gift_id: Option<&str>| UploadRecord {
             id: "u".to_owned(),
             sha256: "ab".repeat(32),

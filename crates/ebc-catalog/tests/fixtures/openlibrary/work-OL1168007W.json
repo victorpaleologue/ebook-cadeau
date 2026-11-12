@@ -1,0 +1,11 @@
+{
+  "title": "L'Étranger",
+  "key": "/works/OL1168007W",
+  "authors": [{"author": {"key": "/authors/OL124171A"}, "type": {"key": "/type/author_role"}}],
+  "type": {"key": "/type/work"},
+  "description": "Le récit de Meursault, employé de bureau à Alger.",
+  "subjects": ["Fiction", "French fiction", "Algeria -- Fiction"],
+  "covers": [8231856],
+  "latest_revision": 87,
+  "revision": 87
+}

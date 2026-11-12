@@ -124,7 +124,11 @@ impl OpenLibrary {
         let mut book = BookMeta::default();
         let title = jstr(details, "title").unwrap_or("");
         book.title = match jstr(details, "title_prefix") {
-            Some(prefix) if !title.is_empty() => format!("{prefix} {title}").replace("' ", "'"),
+            // Old records split the article off: "L'" + "étranger", "The" + "stranger".
+            Some(prefix) if !title.is_empty() && prefix.ends_with(['\'', '’']) => {
+                format!("{prefix}{title}")
+            }
+            Some(prefix) if !title.is_empty() => format!("{prefix} {title}"),
             _ => title.to_owned(),
         };
         if book.title.is_empty() {

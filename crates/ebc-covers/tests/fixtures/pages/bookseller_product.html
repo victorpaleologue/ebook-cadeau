@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<!-- Fictional independent bookseller page (demo — not affiliated with any real retailer). -->
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<title>Le Phare des brumes - Jeanne Exemple - Librairie du Coin Fictif</title>
+<!-- <meta property="og:image" content="https://www.coin-fictif.example/commented-out.jpg"> -->
+<meta property="og:image" content="http://www.coin-fictif.example/img/produits/9782999900011_1_75.jpg">
+<meta property="og:image:secure_url" content="https://www.coin-fictif.example/img/produits/9782999900011_1_75.jpg">
+<meta property="og:image:width" content="340">
+<meta property="og:image:height" content="500">
+<meta property="og:image" content="https://www.coin-fictif.example/img/boutique/vitrine.jpg">
+<meta property="og:image" content="https://www.coin-fictif.example/img/produits/9782999900011_1_75.jpg">
+<meta name="twitter:image:src" content="https://www.coin-fictif.example/img/produits/9782999900011_1_75.jpg">
+<script type="application/ld+json">
+{
+  "@context": "http://schema.org/",
+  "@type": "Product",
+  "name": "Le Phare des brumes",
+  "description": "Un roman d'hiver. <p>Extrait : « Elle écrivit </script> sur la vitre. »</p>
+Suite du résumé sur une deuxième ligne, avec une tabulation	ici.",
+  "sku": "LCF-000123",
+  "gtin13": "9782999900011",
+  "image": [
+    "https://www.coin-fictif.example/img/produits/9782999900011_1_75.jpg",
+    "https://www.coin-fictif.example/img/produits/9782999900011_2_75.jpg"
+  ],
+  "offers": { "@type": "Offer", "price": "8.99", "priceCurrency": "EUR" },
+  "aggregateRating": { "@type": "AggregateRating", "ratingValue": "4.5", "reviewCount": "12" },
+  "review": [{ "@type": "Review", "author": "Un lecteur", "reviewBody": "Très beau." }],
+  "isRelatedTo": [
+    { "@type": "Product", "name": "Autre roman", "gtin13": "9782999900035",
+      "image": "https://www.coin-fictif.example/img/produits/9782999900035_1_75.jpg" }
+  ]
+}
+</script>
+<script>
+  var tpl = "<meta property='og:image' content='https://www.coin-fictif.example/from-javascript.jpg'>";
+  if (1 < 2) { document.title = "x"; }
+</script>
+<style>
+  .hero::after { content: "<meta property='og:image' content='https://www.coin-fictif.example/from-css.jpg'>"; }
+</style>
+</head>
+<body itemscope itemtype="https://schema.org/Book">
+  <h1 itemprop="name">Le Phare des brumes</h1>
+  <img itemprop="image" src="/img/produits/9782999900011_1_75.jpg" width="340" height="500" alt="">
+  <a itemprop="image thumbnailUrl" href="/img/produits/9782999900011_zoom.jpg">Agrandir</a>
+  <p>EAN13 : <span itemprop="isbn">9782999900011</span> — ISBN-10 : 2-9999-0001-5</p>
+  <section class="avis"><h2>Avis des lecteurs</h2><p>Très beau. — Un lecteur</p></section>
+  <section class="aussi"><h2>Vous aimerez aussi</h2>
+    <a href="/livre/9782999900035"><img src="/img/produits/9782999900035_1_75.jpg" alt="Autre roman"></a>
+  </section>
+</body>
+</html>

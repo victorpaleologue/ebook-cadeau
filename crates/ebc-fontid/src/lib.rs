@@ -62,5 +62,5 @@ pub use bundled::{BUNDLED_FONT_FILES, BUNDLED_INDEX_BYTES, bundled_index};
 pub use detect::{TextRegion, find_text_regions, find_title_regions};
 pub use error::FontIdError;
 pub use identify::{CaseUsed, Identification, Match, identify, identify_detailed};
-pub use index::{FontIndex, IndexEntry, IndexEntryMeta, REFERENCE_CHARS};
+pub use index::{FontIndex, IndexEntry, IndexEntryMeta, OPEN_LICENCES, REFERENCE_CHARS};
 pub use rerank::{rerank, rerank_detailed};

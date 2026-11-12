@@ -1,0 +1,43 @@
+{
+  "status": "ok",
+  "message-type": "work-list",
+  "message-version": "1.0.0",
+  "message": {
+    "facets": {},
+    "total-results": 2,
+    "items": [
+      {
+        "DOI": "10.5555/9780061120084.ch3",
+        "type": "book-chapter",
+        "title": ["Chapter Three"],
+        "ISBN": ["9780061120084"],
+        "publisher": "Example University Press"
+      },
+      {
+        "indexed": {"date-parts": [[2026, 3, 2]], "date-time": "2026-03-02T08:11:42Z", "timestamp": 1772439102000},
+        "publisher-location": "Oxford",
+        "reference-count": 0,
+        "publisher": "Example University Press",
+        "isbn-type": [{"type": "print", "value": "9780061120084"}, {"type": "electronic", "value": "9780141439518"}],
+        "DOI": "10.5555/9780061120084",
+        "type": "monograph",
+        "created": {"date-parts": [[2019, 5, 2]]},
+        "source": "Crossref",
+        "title": ["Reading the Absurd"],
+        "subtitle": ["Camus and His Critics"],
+        "prefix": "10.5555",
+        "author": [{"given": "Ada", "family": "Example", "sequence": "first", "affiliation": []}],
+        "editor": [{"given": "Brian", "family": "Sample", "sequence": "additional", "affiliation": []}],
+        "member": "9999",
+        "published-print": {"date-parts": [[2019, 5, 2]]},
+        "language": "en",
+        "ISBN": ["9780061120084", "9780141439518"],
+        "URL": "https://doi.org/10.5555/9780061120084",
+        "issued": {"date-parts": [[2019, 5]]},
+        "score": 1.0
+      }
+    ],
+    "items-per-page": 5,
+    "query": {"start-index": 0, "search-terms": null}
+  }
+}

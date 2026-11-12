@@ -87,8 +87,8 @@ impl PartnersFile {
     /// [`ServerError::Config`] for invalid TOML, duplicate or unusable ids, short secrets
     /// or malformed webhook URLs.
     pub fn parse(text: &str) -> Result<Self, ServerError> {
-        let file: Self = toml::from_str(text)
-            .map_err(|e| ServerError::Config(format!("partners file: {e}")))?;
+        let file: Self =
+            toml::from_str(text).map_err(|e| ServerError::Config(format!("partners file: {e}")))?;
         let mut seen = std::collections::BTreeSet::new();
         for partner in &file.partners {
             let id_ok = !partner.id.is_empty()
@@ -331,6 +331,11 @@ impl Config {
             }
         }
         if let Some(from) = get("EBC_SEND_FROM") {
+            if from.parse::<lettre::message::Mailbox>().is_err() {
+                return Err(ServerError::Config(
+                    "EBC_SEND_FROM must be an e-mail address".to_owned(),
+                ));
+            }
             config.send_from = from;
         }
         if let Some(domains) = get("EBC_SEND_DOMAINS") {
@@ -374,6 +379,32 @@ impl Config {
             }
         };
         Ok(config)
+    }
+
+    /// What makes the public URL a poor fit for a printed card, as human-readable
+    /// warnings (none for loopback addresses). The card prints the host in lower case and
+    /// its QR code encodes the URL in upper case, so the host should be short and made of
+    /// letters and dots only (`docs/research/05-ereader-distribution-ux.md`, implication 23).
+    #[must_use]
+    pub fn public_url_warnings(&self) -> Vec<String> {
+        let mut warnings = Vec::new();
+        if is_development_url(&self.public_url) {
+            return warnings;
+        }
+        let host = self.public_host();
+        if !self.public_url.starts_with("https://") {
+            warnings.push("EBC_PUBLIC_URL is not https: codes travel in clear".to_owned());
+        }
+        if !host.bytes().all(|b| b.is_ascii_lowercase() || b == b'.') {
+            warnings.push(format!(
+                "EBC_PUBLIC_URL host {host:?} is not made of lower-case letters and dots only: \
+                 it is typed by hand on e-readers and upper-cased in the QR code"
+            ));
+        }
+        if host.len() > 12 {
+            warnings.push(format!("EBC_PUBLIC_URL host {host:?} is long to type on an e-reader"));
+        }
+        warnings
     }
 
     /// The partner with this id, if configured.

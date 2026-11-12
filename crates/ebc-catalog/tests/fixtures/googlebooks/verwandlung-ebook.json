@@ -1,0 +1,27 @@
+{
+  "kind": "books#volumes",
+  "totalItems": 1,
+  "items": [
+    {
+      "kind": "books#volume",
+      "id": "Qm9vazEyMzQ1",
+      "volumeInfo": {
+        "title": "Die Verwandlung",
+        "subtitle": "Erzählung",
+        "authors": ["Franz Kafka"],
+        "publisher": "S. Fischer Verlag",
+        "publishedDate": "2011-05-12",
+        "industryIdentifiers": [
+          {"type": "ISBN_13", "identifier": "9783596294312"},
+          {"type": "ISBN_10", "identifier": "3596294312"}
+        ],
+        "pageCount": 96,
+        "printType": "BOOK",
+        "language": "de",
+        "infoLink": "https://play.google.com/store/books/details?id=Qm9vazEyMzQ1&source=gbs_api"
+      },
+      "saleInfo": {"country": "DE", "saleability": "FOR_SALE", "isEbook": true},
+      "accessInfo": {"country": "DE", "epub": {"isAvailable": true}}
+    }
+  ]
+}

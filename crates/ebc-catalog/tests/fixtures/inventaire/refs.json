@@ -1,0 +1,20 @@
+{
+  "entities": {
+    "wd:Q11142": {
+      "uri": "wd:Q11142", "type": "work",
+      "labels": {"en": "The Stranger", "fr": "L'Étranger", "de": "Der Fremde"},
+      "claims": {"wdt:P31": ["wd:Q7725634"], "wdt:P50": ["wd:Q34670"], "wdt:P577": ["1942"], "wdt:P407": ["wd:Q150"]}
+    },
+    "wd:Q1492608": {
+      "uri": "wd:Q1492608", "type": "publisher",
+      "labels": {"en": "Éditions Gallimard", "fr": "Éditions Gallimard"},
+      "claims": {"wdt:P31": ["wd:Q2085381"]}
+    },
+    "inv:00112233445566778899aabbccddeeff": {
+      "uri": "inv:00112233445566778899aabbccddeeff", "type": "collection",
+      "labels": {"fromclaims": "Folio"},
+      "claims": {"wdt:P1476": ["Folio"], "wdt:P123": ["wd:Q1492608"]}
+    }
+  },
+  "redirects": {}
+}

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<srw:searchRetrieveResponse xmlns:srw="http://www.loc.gov/zing/srw/">
+  <srw:version>1.2</srw:version>
+  <srw:numberOfRecords>0</srw:numberOfRecords>
+  <srw:diagnostics xmlns:sd="http://www.loc.gov/zing/srw/diagnostic/">
+    <sd:diagnostic>
+      <sd:uri>info:srw/diagnostic/1/10</sd:uri>
+      <sd:details>bib.isbn all</sd:details>
+      <sd:message>Query syntax error</sd:message>
+    </sd:diagnostic>
+  </srw:diagnostics>
+</srw:searchRetrieveResponse>

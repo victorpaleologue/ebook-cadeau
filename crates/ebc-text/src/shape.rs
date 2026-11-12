@@ -1,10 +1,11 @@
 //! Shaping: text → positioned glyphs in millimetres, glyph items and vector outlines.
 
 use ebc_scene::{Color, FontId, Glyph, Item, Path, PathSeg, Point, Rect};
-use ttf_parser::GlyphId;
 
+use crate::error::FontError;
 use crate::font::{Font, mm_per_unit};
 use crate::guard::contain;
+use crate::outline::{MAX_GLYPH_SEGMENTS, Outliner, Refusal};
 
 /// Largest font size accepted by [`shape`], in points. Larger (or non-finite) sizes are
 /// clamped so that every computed coordinate stays a finite number.
@@ -111,16 +112,45 @@ impl ShapedText {
     /// Quadratic (TrueType) and cubic (CFF) curves are kept as they are in the font.
     /// `font` must be the font (and variation instance) the run was shaped with. Glyphs
     /// without a scalable outline (spaces, bitmap or colour-only glyphs) add nothing.
+    ///
+    /// The amount of work and the size of the result are bounded: a glyph that is
+    /// malformed, or that would expand to more than any real glyph needs (see "Untrusted
+    /// fonts" in the crate documentation), adds nothing, and so does everything after
+    /// the point where a huge text has used up the outline budget of one call. Use
+    /// [`try_to_outline`](Self::try_to_outline) to be told when glyphs were left out
+    /// for being too complex.
+    ///
+    /// A run built by hand with non-finite positions or size yields non-finite
+    /// coordinates, for which [`outline_bounds`] reports `None`; runs made by [`shape`]
+    /// never do.
     #[must_use]
     pub fn to_outline(&self, font: &Font, origin: Point) -> Path {
+        self.outline(font, origin).0
+    }
+
+    /// Like [`to_outline`](Self::to_outline), but fails instead of silently leaving out
+    /// glyphs that are too complex to draw.
+    ///
+    /// # Errors
+    /// [`FontError::OutlineTooComplex`] with the first glyph that was left out, because
+    /// it is a "glyph bomb" or because the outline budget of one call was used up.
+    pub fn try_to_outline(&self, font: &Font, origin: Point) -> Result<Path, FontError> {
+        match self.outline(font, origin) {
+            (path, None) => Ok(path),
+            (_, Some(Refusal::GlyphTooComplex(glyph) | Refusal::BudgetExhausted(glyph))) => {
+                Err(FontError::OutlineTooComplex { glyph })
+            }
+        }
+    }
+
+    fn outline(&self, font: &Font, origin: Point) -> (Path, Option<Refusal>) {
         contain(|| {
             let mut path = Path::new();
-            if let Some(face) = font.tt_face() {
-                let scale = mm_per_unit(face.units_per_em(), self.size_pt);
-                let placed = self.glyphs.iter().map(|g| (g.id, origin.x + g.x, origin.y + g.y));
-                append_outlines(&face, placed, scale, &mut path);
-            }
-            path
+            let Some(mut outliner) = font.outliner() else { return (path, None) };
+            let scale = mm_per_unit(outliner.face().units_per_em(), self.size_pt);
+            let placed = self.glyphs.iter().map(|g| (g.id, origin.x + g.x, origin.y + g.y));
+            append_outlines(&mut outliner, placed, scale, &mut path);
+            (path, outliner.refusal())
         })
         .unwrap_or_default()
     }
@@ -445,16 +475,18 @@ pub(crate) fn is_drawable(face: &rustybuzz::Face<'_>, c: char) -> bool {
 /// Appends the outlines of `glyphs` — `(glyph id, x, y)` with the glyph origin already in
 /// output coordinates (y down) — to `path`, scaling font units by `scale`.
 pub(crate) fn append_outlines(
-    face: &ttf_parser::Face<'_>,
+    outliner: &mut Outliner<'_>,
     glyphs: impl Iterator<Item = (u16, f64, f64)>,
     scale: f64,
     path: &mut Path,
 ) {
     for (id, x, y) in glyphs {
         let keep = path.segs.len();
-        let mut sink = OutlineSink { path, scale, x, y };
-        if face.outline_glyph(GlyphId(id), &mut sink).is_none() {
-            // No outline, or a malformed one: drop whatever was emitted for this glyph.
+        let mut sink = OutlineSink { path, scale, x, y, limit: keep + MAX_GLYPH_SEGMENTS };
+        let drawn = outliner.outline(id, &mut sink).is_some();
+        if !drawn || sink.limit == 0 {
+            // No outline, a malformed one, a refused one or an absurdly long one: drop
+            // whatever was emitted for this glyph.
             path.segs.truncate(keep);
         }
     }
@@ -467,40 +499,60 @@ struct OutlineSink<'p> {
     scale: f64,
     x: f64,
     y: f64,
+    /// The path length this glyph may not exceed; set to 0 once it tried to.
+    limit: usize,
 }
 
 impl OutlineSink<'_> {
     fn map(&self, x: f32, y: f32) -> (f64, f64) {
         (self.x + f64::from(x) * self.scale, self.y - f64::from(y) * self.scale)
     }
+
+    /// `false` (for good) once the glyph has more segments than any real glyph.
+    fn has_room(&mut self) -> bool {
+        if self.path.segs.len() >= self.limit {
+            self.limit = 0;
+        }
+        self.limit != 0
+    }
 }
 
 impl ttf_parser::OutlineBuilder for OutlineSink<'_> {
     fn move_to(&mut self, x: f32, y: f32) {
-        let (x, y) = self.map(x, y);
-        self.path.move_to(x, y);
+        if self.has_room() {
+            let (x, y) = self.map(x, y);
+            self.path.move_to(x, y);
+        }
     }
 
     fn line_to(&mut self, x: f32, y: f32) {
-        let (x, y) = self.map(x, y);
-        self.path.line_to(x, y);
+        if self.has_room() {
+            let (x, y) = self.map(x, y);
+            self.path.line_to(x, y);
+        }
     }
 
     fn quad_to(&mut self, x1: f32, y1: f32, x: f32, y: f32) {
-        let (cx, cy) = self.map(x1, y1);
-        let (x, y) = self.map(x, y);
-        self.path.quad_to(cx, cy, x, y);
+        if self.has_room() {
+            let (cx, cy) = self.map(x1, y1);
+            let (x, y) = self.map(x, y);
+            self.path.quad_to(cx, cy, x, y);
+        }
     }
 
     fn curve_to(&mut self, x1: f32, y1: f32, x2: f32, y2: f32, x: f32, y: f32) {
-        let (c1x, c1y) = self.map(x1, y1);
-        let (c2x, c2y) = self.map(x2, y2);
-        let (x, y) = self.map(x, y);
-        self.path.cubic_to(c1x, c1y, c2x, c2y, x, y);
+        if self.has_room() {
+            let (c1x, c1y) = self.map(x1, y1);
+            let (c2x, c2y) = self.map(x2, y2);
+            let (x, y) = self.map(x, y);
+            self.path.cubic_to(c1x, c1y, c2x, c2y, x, y);
+        }
     }
 
     fn close(&mut self) {
-        self.path.close();
+        if self.has_room() {
+            self.path.close();
+        }
     }
 }
 
@@ -540,7 +592,8 @@ mod tests {
     #[test]
     fn outline_sink_flips_y_scales_and_keeps_curve_types() {
         let mut path = Path::new();
-        let mut sink = OutlineSink { path: &mut path, scale: 0.5, x: 10.0, y: 100.0 };
+        let mut sink =
+            OutlineSink { path: &mut path, scale: 0.5, x: 10.0, y: 100.0, limit: usize::MAX };
         sink.move_to(0.0, 0.0);
         sink.line_to(20.0, 0.0);
         sink.quad_to(40.0, 20.0, 20.0, 40.0);

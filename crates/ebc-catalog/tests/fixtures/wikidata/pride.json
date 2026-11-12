@@ -1,0 +1,79 @@
+{
+ "head": {
+  "vars": [
+   "item",
+   "itemLabel",
+   "title",
+   "subtitle",
+   "authorLabel",
+   "workAuthorLabel",
+   "translatorLabel",
+   "publisherLabel",
+   "date",
+   "langCode",
+   "pages",
+   "isbn13",
+   "isbn10"
+  ]
+ },
+ "results": {
+  "bindings": [
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q223344556"
+    },
+    "itemLabel": {
+     "type": "literal",
+     "value": "Q223344556"
+    },
+    "title": {
+     "type": "literal",
+     "value": "Pride and Prejudice",
+     "xml:lang": "en"
+    },
+    "authorLabel": {
+     "type": "literal",
+     "value": "Jane Austen",
+     "xml:lang": "en"
+    },
+    "publisherLabel": {
+     "type": "literal",
+     "value": "Penguin Books",
+     "xml:lang": "en"
+    },
+    "date": {
+     "type": "literal",
+     "value": "2003-01-30T00:00:00Z"
+    },
+    "langCode": {
+     "type": "literal",
+     "value": "en"
+    },
+    "pages": {
+     "type": "literal",
+     "value": "480"
+    },
+    "isbn13": {
+     "type": "literal",
+     "value": "978-0-14-143951-8"
+    }
+   },
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q999000111"
+    },
+    "itemLabel": {
+     "type": "literal",
+     "value": "Pride and Prejudice (duplicate item)",
+     "xml:lang": "en"
+    },
+    "isbn13": {
+     "type": "literal",
+     "value": "978-0-14-143951-8"
+    }
+   }
+  ]
+ }
+}

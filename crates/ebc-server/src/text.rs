@@ -12,7 +12,7 @@
 use ebc_model::Locale;
 
 macro_rules! strings {
-    ($( $(#[$doc:meta])* $name:ident => [$fr:expr, $en:expr, $de:expr, $es:expr, $it:expr, $nl:expr, $pt:expr]; )+) => {
+    ($( $(#[$doc:meta])* $name:ident => [$fr:expr, $en:expr, $de:expr, $es:expr, $it:expr, $nl:expr, $pt:expr $(,)?]; )+) => {
         /// A server-only message.
         #[derive(Debug, Clone, Copy, PartialEq, Eq)]
         pub(crate) enum S {
@@ -482,8 +482,17 @@ mod tests {
     #[test]
     fn no_string_uses_a_stored_value_word_or_markup() {
         let banned = [
-            "carte cadeau", "bon d", "gift card", "voucher", "gutschein", "cadeaubon", "tarjeta regalo",
-            "buono", "vale", "<", ">",
+            "carte cadeau",
+            "bon d",
+            "gift card",
+            "voucher",
+            "gutschein",
+            "cadeaubon",
+            "tarjeta regalo",
+            "buono",
+            "vale",
+            "<",
+            ">",
         ];
         for msg in S::ALL {
             for locale in Locale::ALL {

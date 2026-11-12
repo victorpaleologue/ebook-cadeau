@@ -66,14 +66,14 @@ pub(crate) fn role_from_term(term: &str) -> Option<ContributorRole> {
         return None;
     }
     let has = |needles: &[&str]| needles.iter().any(|n| key.contains(n));
-    Some(if has(&["ubers", "transl", "traduc", "trad "]) || key == "trad" {
+    Some(if has(&["ubers", "transl", "traduc", "trad ", "kaant", "oversatt"]) || key == "trad" {
         ContributorRole::Translator
-    } else if has(&["illustr", "dessin", "zeichn", "cover", "couverture"]) {
+    } else if has(&["illustr", "dessin", "zeichn", "cover", "couverture", "kuvitt"]) {
         ContributorRole::Illustrator
     } else if has(&["vorw", "nachw", "pref", "postf", "introd", "foreword", "afterword", "geleitw"])
     {
         ContributorRole::Preface
-    } else if has(&["hrsg", "herausg", "editeur scientifique", "editor", "directeur", "compil"])
+    } else if has(&["hrsg", "herausg", "editeur scientifique", "editor", "directeur", "compil", "toimitt"])
         || key == "ed"
     {
         ContributorRole::Editor
@@ -99,9 +99,9 @@ fn role_from_statement(statement: &str, surname: &str) -> Option<ContributorRole
     let at = statement_key.find(&surname_key)?;
     let before = &statement_key[..at];
     // Keep the last clause: text after the previous " ; " equivalent is lost in the key, so
-    // look at the last six words only.
+    // look at the last eight words only.
     let words: Vec<&str> = before.split(' ').filter(|w| !w.is_empty()).collect();
-    let tail = words.iter().rev().take(6).rev().copied().collect::<Vec<_>>().join(" ");
+    let tail = words.iter().rev().take(8).rev().copied().collect::<Vec<_>>().join(" ");
     match role_from_term(&tail) {
         Some(ContributorRole::Other(_)) | None => Some(ContributorRole::Author),
         known => known,
@@ -344,6 +344,8 @@ fn dc_creator(value: &str) -> (String, Option<ContributorRole>) {
         && !role.contains(',')
         && role.split_whitespace().count() <= 4
         && role.chars().next().is_some_and(char::is_uppercase)
+        // "Tolkien, J. R. R." ends with an initial, not with a role.
+        && role.split_whitespace().next().is_some_and(|w| w.chars().count() >= 4)
         && name.chars().count() > 3
         && let Some(parsed) = role_from_term(role)
     {
@@ -385,7 +387,7 @@ pub(crate) fn dublin_core(dc: &Node) -> Extracted {
     }
     book.page_count =
         values("format").chain(values("extent")).find_map(normalize::page_count);
-    book.series = values("relation").find_map(|relation| {
+    book.series = values("relation").chain(values("description")).find_map(|relation| {
         let rest = relation
             .strip_prefix("Appartient à : ")
             .or_else(|| relation.strip_prefix("Collection : "))?;

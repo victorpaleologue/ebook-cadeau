@@ -8,7 +8,33 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
+[features]
+default = ["bundled-fonts", "bundled-icc", "bundled-fogra39"]
+# `bundled_fonts()`: the OFL fonts of `assets/fonts` compiled into the crate (about 1 MB).
+bundled-fonts = []
+# The 8 kB CC0 CMYK profile of `assets/icc` as a last-resort output intent (with a warning).
+bundled-icc = []
+# "ISO Coated v2 300% (basICColor)" (FOGRA39L, zlib licence, about 1 MB) as the default
+# output intent of PDF/X profiles. Switch it off for small wasm bundles and pass the
+# profile in `CardRequest::output_profile` instead.
+bundled-fogra39 = []
+
 [dependencies]
+ebc-color.workspace = true
+ebc-i18n.workspace = true
+ebc-layout.workspace = true
+ebc-model.workspace = true
+ebc-pdf.workspace = true
+ebc-qr.workspace = true
+ebc-scene.workspace = true
+ebc-spine.workspace = true
+ebc-text.workspace = true
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+thiserror.workspace = true
+
+[dev-dependencies]
+ebc-preflight.workspace = true
+jpeg-encoder = "0.7"
 
 [lints]
 workspace = true

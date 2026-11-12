@@ -315,7 +315,7 @@ impl MarcRecord {
 
     /// First occurrence of subfield `code` in the fields tagged `tag`.
     pub(crate) fn first(&self, tag: &str, code: char) -> Option<&str> {
-        self.fields(tag).find_map(|f| f.sub(code))
+        self.fields.iter().filter(|f| f.tag == tag).find_map(|f| f.sub(code))
     }
 }
 

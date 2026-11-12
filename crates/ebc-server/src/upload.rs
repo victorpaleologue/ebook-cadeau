@@ -194,7 +194,8 @@ fn sniff_epub(bytes: &[u8]) -> Result<FileKind, UploadError> {
 
 /// Accepts an `encryption.xml` only if every encrypted resource uses font obfuscation.
 fn check_encryption_xml(xml: &str) -> Result<(), UploadError> {
-    let options = roxmltree::ParsingOptions { allow_dtd: false, nodes_limit: 200_000, ..Default::default() };
+    let options =
+        roxmltree::ParsingOptions { allow_dtd: false, nodes_limit: 200_000, ..Default::default() };
     let document = roxmltree::Document::parse_with_options(xml, options)
         .map_err(|_| UploadError::DrmProtected("unreadable encryption.xml".to_owned()))?;
     let elements = || document.descendants().filter(roxmltree::Node::is_element);
@@ -213,14 +214,18 @@ fn check_encryption_xml(xml: &str) -> Result<(), UploadError> {
                 let algorithm = node.attribute("Algorithm").unwrap_or("");
                 if !FONT_OBFUSCATION.contains(&algorithm) {
                     let shown: String = algorithm.chars().take(80).collect();
-                    return Err(UploadError::DrmProtected(format!("encryption algorithm {shown:?}")));
+                    return Err(UploadError::DrmProtected(format!(
+                        "encryption algorithm {shown:?}"
+                    )));
                 }
             }
             _ => {}
         }
     }
     if methods < encrypted {
-        return Err(UploadError::DrmProtected("encrypted resource without a declared method".to_owned()));
+        return Err(UploadError::DrmProtected(
+            "encrypted resource without a declared method".to_owned(),
+        ));
     }
     Ok(())
 }
@@ -261,12 +266,16 @@ pub fn decode_file_name(header: &str, kind: FileKind) -> Option<String> {
     let decoded = percent_encoding::percent_decode_str(header).decode_utf8().ok()?;
     let last = decoded.rsplit(['/', '\\']).next().unwrap_or("");
     let cleaned: String = last.chars().filter(|c| !c.is_control()).collect();
-    let cleaned = cleaned.trim().trim_matches('.').trim();
+    let cleaned = cleaned.trim();
+    // The extension goes first (it is replaced by the sniffed one), then stray dots, so
+    // that a bare ".epub" leaves nothing rather than a file called "epub".
     let stem = match cleaned.rsplit_once('.') {
-        Some((stem, ext)) if ext.len() <= 5 && ext.chars().all(|c| c.is_ascii_alphanumeric()) => stem,
+        Some((stem, ext)) if ext.len() <= 5 && ext.chars().all(|c| c.is_ascii_alphanumeric()) => {
+            stem
+        }
         _ => cleaned,
     };
-    let stem: String = stem.trim().chars().take(120).collect();
+    let stem: String = stem.trim().trim_matches('.').trim().chars().take(120).collect();
     let stem = stem.trim();
     if stem.is_empty() {
         return None;
@@ -291,7 +300,8 @@ pub(crate) mod testing {
     pub(crate) fn zip_of(entries: &[(&str, &[u8], bool)]) -> Vec<u8> {
         let mut zip = ZipWriter::new(Cursor::new(Vec::new()));
         for (name, content, deflate) in entries {
-            let method = if *deflate { CompressionMethod::Deflated } else { CompressionMethod::Stored };
+            let method =
+                if *deflate { CompressionMethod::Deflated } else { CompressionMethod::Stored };
             zip.start_file(*name, SimpleFileOptions::DEFAULT.compression_method(method)).unwrap();
             zip.write_all(content).unwrap();
         }
@@ -319,7 +329,8 @@ pub(crate) mod testing {
 
     /// A minimal PDF-looking file.
     pub(crate) fn pdf() -> Vec<u8> {
-        b"%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n".to_vec()
+        b"%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n"
+            .to_vec()
     }
 }
 
@@ -427,12 +438,20 @@ mod tests {
 
     #[test]
     fn drm_is_refused_but_font_obfuscation_is_not() {
-        let drm = |extra: &[(&str, &[u8])]| matches!(sniff(&epub_with(extra)), Err(UploadError::DrmProtected(_)));
+        let drm = |extra: &[(&str, &[u8])]| {
+            matches!(sniff(&epub_with(extra)), Err(UploadError::DrmProtected(_)))
+        };
         assert!(drm(&[("META-INF/encryption.xml", ADEPT_ENCRYPTION.as_bytes())]));
         assert!(drm(&[("META-INF/encryption.xml", LCP_ENCRYPTION.as_bytes())]));
-        assert!(drm(&[("META-INF/rights.xml", b"<adept:rights xmlns:adept=\"http://ns.adobe.com/adept\"/>")]));
+        assert!(drm(&[(
+            "META-INF/rights.xml",
+            b"<adept:rights xmlns:adept=\"http://ns.adobe.com/adept\"/>"
+        )]));
         assert!(drm(&[("META-INF/license.lcpl", b"{}")]));
-        assert!(drm(&[("meta-inf/RIGHTS.XML", b"<rights/>")]), "names are matched case-insensitively");
+        assert!(
+            drm(&[("meta-inf/RIGHTS.XML", b"<rights/>")]),
+            "names are matched case-insensitively"
+        );
         // rights.xml wins even next to a harmless encryption.xml.
         assert!(drm(&[
             ("META-INF/encryption.xml", FONT_OBFUSCATION_ONLY.as_bytes()),
@@ -499,7 +518,13 @@ mod tests {
         assert_eq!(sniff_image(&[0xff, 0xd8, 0xff, 0xe0, 0, 0]), Some("image/jpeg"));
         assert_eq!(sniff_image(b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR"), Some("image/png"));
         assert_eq!(sniff_image(b"RIFF\x24\0\0\0WEBPVP8 "), Some("image/webp"));
-        for other in [&b"GIF89a"[..], b"RIFF\x24\0\0\0WAVE", b"<svg xmlns=\"http://www.w3.org/2000/svg\"/>", b"", b"\xff\xd8"] {
+        for other in [
+            &b"GIF89a"[..],
+            b"RIFF\x24\0\0\0WAVE",
+            b"<svg xmlns=\"http://www.w3.org/2000/svg\"/>",
+            b"",
+            b"\xff\xd8",
+        ] {
             assert_eq!(sniff_image(other), None);
         }
     }
@@ -525,7 +550,10 @@ mod tests {
         assert_eq!(name("book.pdf").as_deref(), Some("book.epub"), "extension follows the content");
         assert_eq!(name("..%2F..%2Fetc%2Fpasswd").as_deref(), Some("passwd.epub"));
         assert_eq!(name("C%3A%5CUsers%5Cme%5Clivre.epub").as_deref(), Some("livre.epub"));
-        assert_eq!(name("a%0D%0AContent-Type%3A%20x.epub").as_deref(), Some("aContent-Type: x.epub"));
+        assert_eq!(
+            name("a%0D%0AContent-Type%3A%20x.epub").as_deref(),
+            Some("aContent-Type: x.epub")
+        );
         assert_eq!(name("  spaced  .epub").as_deref(), Some("spaced.epub"));
         assert_eq!(name("v1.2 final.epub").as_deref(), Some("v1.2 final.epub"));
         for unusable in ["", ".", "..", "%2F", ".epub", "%00", "%FF%FE", "   "] {

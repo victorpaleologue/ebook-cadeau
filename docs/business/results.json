@@ -30,19 +30,91 @@
    "a": 172061.83,
    "b": null,
    "c": 590569.46,
-   "d": 505709.02
+   "d": 505709.02,
+   "d_plan": 5509.94
   },
   "minimal": {
    "a": 932.54,
    "b": 3864.76,
    "c": 5146.05,
-   "d": 3232.88
+   "d": 3232.88,
+   "d_plan": 34.5
   },
   "seed": {
    "a": 49331.89,
    "b": null,
    "c": 175391.5,
-   "d": 145156.24
+   "d": 145156.24,
+   "d_plan": 1581.55
+  }
+ },
+ "extras": {
+  "company_mailed_contribution_at_8_90": 1.63,
+  "december_and_november_share_of_volume": 0.41,
+  "minimal_annual_fixed_cash_all_low_all_high": [
+   511.0,
+   2668.0
+  ],
+  "minimal_break_even_mailed_at_8_90": 724.57,
+  "minimal_mailed_contribution_at_8_90": 2.12,
+  "minimal_resellers_on_minimum_to_cover_costs": 0.64,
+  "revenue_per_card_needed_at_som_base": {
+   "funded": 6.47,
+   "minimal": 0.05,
+   "seed": 1.92
+  },
+  "som_base_cards_per_year_r12": 26520,
+  "what_if_minimal_mix": {
+   "attach_rate_0.5pct": {
+    "cum_cash_36": 3999.28,
+    "last_year_net_cash": 4018.46,
+    "payback_month": 25,
+    "peak_cash_need": 2478.35
+   },
+   "attach_rate_5pct": {
+    "cum_cash_36": 4453.16,
+    "last_year_net_cash": 4362.62,
+    "payback_month": 24,
+    "peak_cash_need": 2479.04
+   },
+   "attach_rate_5pct_no_minimum": {
+    "cum_cash_36": 1775.82,
+    "last_year_net_cash": 2929.31,
+    "payback_month": 31,
+    "peak_cash_need": 2585.24
+   },
+   "minimum_99": {
+    "cum_cash_36": 1424.09,
+    "last_year_net_cash": 2435.91,
+    "payback_month": 30,
+    "peak_cash_need": 2557.36
+   },
+   "no_monthly_minimum": {
+    "cum_cash_36": 138.43,
+    "last_year_net_cash": 1826.5,
+    "payback_month": 36,
+    "peak_cash_need": 2614.54
+   }
+  },
+  "what_if_seed_mix": {
+   "attach_rate_5pct": {
+    "cum_cash_36": -107663.18,
+    "last_year_net_cash": -15300.73,
+    "payback_month": null,
+    "peak_cash_need": 112340.77
+   },
+   "attach_rate_5pct_fee_0.50": {
+    "cum_cash_36": -95725.62,
+    "last_year_net_cash": -4899.76,
+    "payback_month": null,
+    "peak_cash_need": 106728.31
+   },
+   "developer_4_days_a_month": {
+    "cum_cash_36": -44712.4,
+    "last_year_net_cash": 642.21,
+    "payback_month": null,
+    "peak_cash_need": 48035.61
+   }
   }
  },
  "generated_by": "tools/bizmodel/make_charts.py",
@@ -70,6 +142,23 @@
    "small": 72.32
   }
  },
+ "roi_break_even_cards_per_month_reached_in_month_36": {
+  "funded": {
+   "12": null,
+   "24": 273470.88,
+   "36": 153688.91
+  },
+  "minimal": {
+   "12": 1944.51,
+   "24": 801.16,
+   "36": 491.21
+  },
+  "seed": {
+   "12": 300747.77,
+   "24": 70859.86,
+   "36": 37434.57
+  }
+ },
  "scenarios": {
   "funded": {
    "A_fee": {
@@ -84,6 +173,7 @@
      "founder_value_total": 0.0,
      "last_year_cards": 497.25,
      "last_year_net_cash": -186211.02,
+     "last_year_partners_avg": 0.0,
      "last_year_paying_units": 497.25,
      "last_year_revenue": 824.61,
      "level": "funded",
@@ -153,6 +243,7 @@
      "founder_value_total": 0.0,
      "last_year_cards": 2213.74,
      "last_year_net_cash": -171068.64,
+     "last_year_partners_avg": 0.0,
      "last_year_paying_units": 0.0,
      "last_year_revenue": 0.0,
      "level": "funded",
@@ -222,6 +313,7 @@
      "founder_value_total": 0.0,
      "last_year_cards": 10442.25,
      "last_year_net_cash": -187407.36,
+     "last_year_partners_avg": 0.0,
      "last_year_paying_units": 497.25,
      "last_year_revenue": 2859.19,
      "level": "funded",
@@ -291,6 +383,7 @@
      "founder_value_total": 0.0,
      "last_year_cards": 68363.41,
      "last_year_net_cash": -149530.02,
+     "last_year_partners_avg": 6.98,
      "last_year_paying_units": 68363.41,
      "last_year_revenue": 26110.14,
      "level": "funded",
@@ -360,6 +453,7 @@
      "founder_value_total": 0.0,
      "last_year_cards": 25000.0,
      "last_year_net_cash": -148385.78,
+     "last_year_partners_avg": 0.0,
      "last_year_paying_units": 25000.0,
      "last_year_revenue": 62083.33,
      "level": "funded",
@@ -429,6 +523,7 @@
      "founder_value_total": 0.0,
      "last_year_cards": 95577.16,
      "last_year_net_cash": -126460.44,
+     "last_year_partners_avg": 6.98,
      "last_year_paying_units": 93363.41,
      "last_year_revenue": 88193.47,
      "level": "funded",
@@ -500,6 +595,7 @@
      "founder_value_total": 56736.16,
      "last_year_cards": 110.69,
      "last_year_net_cash": -655.8,
+     "last_year_partners_avg": 0.0,
      "last_year_paying_units": 110.69,
      "last_year_revenue": 220.27,
      "level": "minimal",
@@ -569,6 +665,7 @@
      "founder_value_total": 56700.0,
      "last_year_cards": 2213.74,
      "last_year_net_cash": -805.97,
+     "last_year_partners_avg": 0.0,
      "last_year_paying_units": 0.0,
      "last_year_revenue": 0.0,
      "level": "minimal",
@@ -638,6 +735,7 @@
      "founder_value_total": 56736.16,
      "last_year_cards": 2324.43,
      "last_year_net_cash": -1143.88,
+     "last_year_partners_avg": 0.0,
      "last_year_paying_units": 110.69,
      "last_year_revenue": 763.74,
      "level": "minimal",
@@ -707,6 +805,7 @@
      "founder_value_total": 63569.84,
      "last_year_cards": 3184.23,
      "last_year_net_cash": 2512.83,
+     "last_year_partners_avg": 1.78,
      "last_year_paying_units": 3184.23,
      "last_year_revenue": 4270.3,
      "level": "minimal",
@@ -776,6 +875,7 @@
      "founder_value_total": 57328.89,
      "last_year_cards": 1737.38,
      "last_year_net_cash": 1107.0,
+     "last_year_partners_avg": 0.0,
      "last_year_paying_units": 1737.38,
      "last_year_revenue": 5177.39,
      "level": "minimal",
@@ -845,6 +945,7 @@
      "founder_value_total": 64198.73,
      "last_year_cards": 7135.35,
      "last_year_net_cash": 4009.86,
+     "last_year_partners_avg": 1.78,
      "last_year_paying_units": 4921.61,
      "last_year_revenue": 9447.69,
      "level": "minimal",
@@ -916,6 +1017,7 @@
      "founder_value_total": 100800.0,
      "last_year_cards": 410.69,
      "last_year_net_cash": -61998.18,
+     "last_year_partners_avg": 0.0,
      "last_year_paying_units": 410.69,
      "last_year_revenue": 681.06,
      "level": "seed",
@@ -985,6 +1087,7 @@
      "founder_value_total": 100800.0,
      "last_year_cards": 2213.74,
      "last_year_net_cash": -50528.64,
+     "last_year_partners_avg": 0.0,
      "last_year_paying_units": 0.0,
      "last_year_revenue": 0.0,
      "level": "seed",
@@ -1054,6 +1157,7 @@
      "founder_value_total": 100800.0,
      "last_year_cards": 8624.43,
      "last_year_net_cash": -63045.34,
+     "last_year_partners_avg": 0.0,
      "last_year_paying_units": 410.69,
      "last_year_revenue": 2361.45,
      "level": "seed",
@@ -1123,6 +1227,7 @@
      "founder_value_total": 100800.0,
      "last_year_cards": 22719.02,
      "last_year_net_cash": -41585.91,
+     "last_year_partners_avg": 3.43,
      "last_year_paying_units": 22719.02,
      "last_year_revenue": 10884.82,
      "level": "seed",
@@ -1192,6 +1297,7 @@
      "founder_value_total": 100800.0,
      "last_year_cards": 24040.09,
      "last_year_net_cash": -32287.24,
+     "last_year_partners_avg": 0.0,
      "last_year_paying_units": 24040.09,
      "last_year_revenue": 59699.56,
      "level": "seed",
@@ -1261,6 +1367,7 @@
      "founder_value_total": 100800.0,
      "last_year_cards": 48972.85,
      "last_year_net_cash": -23357.79,
+     "last_year_partners_avg": 3.43,
      "last_year_paying_units": 46759.11,
      "last_year_revenue": 70584.38,
      "level": "seed",

@@ -128,42 +128,59 @@ fn error_box(messages: &[String]) -> Markup {
 /// with `errors` above it. `prefill` puts the typed text back in the field.
 pub(crate) fn home(chrome: Chrome<'_>, errors: &[String], prefill: Option<&str>) -> String {
     let title = t(chrome.locale, Msg::RedeemTitle);
-    layout(chrome, title, html! {
-        h1 { (title) }
-        (error_box(errors))
-        (code_form(chrome, prefill))
-    })
+    layout(
+        chrome,
+        title,
+        html! {
+            h1 { (title) }
+            (error_box(errors))
+            (code_form(chrome, prefill))
+        },
+    )
 }
 
 /// A page that only says something, e.g. a cancelled gift or an expired download link.
-pub(crate) fn message(chrome: Chrome<'_>, title: &str, messages: &[String], back: Option<(&str, &str)>) -> String {
-    layout(chrome, title, html! {
-        h1 { (title) }
-        (error_box(messages))
-        @if let Some((href, label)) = back {
-            p { a href=(href) { (label) } }
-        }
-    })
+pub(crate) fn message(
+    chrome: Chrome<'_>,
+    title: &str,
+    messages: &[String],
+    back: Option<(&str, &str)>,
+) -> String {
+    layout(
+        chrome,
+        title,
+        html! {
+            h1 { (title) }
+            (error_box(messages))
+            @if let Some((href, label)) = back {
+                p { a href=(href) { (label) } }
+            }
+        },
+    )
 }
 
 /// `GET /aide`: the three ways to get the book.
 pub(crate) fn help(chrome: Chrome<'_>) -> String {
     let locale = chrome.locale;
     let title = s(locale, S::HelpTitle);
-    layout(chrome, title, html! {
-        h1 { (title) }
-        div id="help" {
-            h2 { (s(locale, S::HelpPhoneHead)) }
-            p { (s(locale, S::HelpPhoneText)) }
-            h2 { (t(locale, Msg::DeviceEreader)) " (Kobo, PocketBook, Vivlio, tolino)" }
-            p { (tf(locale, Msg::EreaderBrowserHint, &[("url", chrome.host)])) }
-            p.note { (s(locale, S::CodeHint)) }
-            h2 { (s(locale, S::OnKindle)) }
-            p { (s(locale, S::KindleExplain)) }
-            h2 { (t(locale, Msg::DeviceComputer)) }
-            p { (s(locale, S::UsbHint)) }
-        }
-    })
+    layout(
+        chrome,
+        title,
+        html! {
+            h1 { (title) }
+            div id="help" {
+                h2 { (s(locale, S::HelpPhoneHead)) }
+                p { (s(locale, S::HelpPhoneText)) }
+                h2 { (t(locale, Msg::DeviceEreader)) " (Kobo, PocketBook, Vivlio, tolino)" }
+                p { (tf(locale, Msg::EreaderBrowserHint, &[("url", chrome.host)])) }
+                p.note { (s(locale, S::CodeHint)) }
+                h2 { (s(locale, S::OnKindle)) }
+                p { (s(locale, S::KindleExplain)) }
+                h2 { (t(locale, Msg::DeviceComputer)) }
+                p { (s(locale, S::UsbHint)) }
+            }
+        },
+    )
 }
 
 /// Send-to-device settings shown with the e-mail form.
@@ -194,7 +211,14 @@ pub(crate) struct GiftView<'a> {
     pub(crate) notices: &'a [String],
 }
 
-fn post_form(view: &GiftView<'_>, id: &str, action: &str, button_id: &str, label: &str, extra: Markup) -> Markup {
+fn post_form(
+    view: &GiftView<'_>,
+    id: &str,
+    action: &str,
+    button_id: &str,
+    label: &str,
+    extra: Markup,
+) -> Markup {
     html! {
         form id=(id) method="post" action=(format!("/k/{}/{action}", view.code.compact())) {
             (view.chrome.hidden_device())
@@ -283,16 +307,22 @@ pub(crate) fn gift(view: &GiftView<'_>) -> String {
     if !view.revealed {
         let date = gift.reveal_at.map(|at| format_unix_date(locale, at)).unwrap_or_default();
         let title = s(locale, S::WrappedTitle);
-        return layout(chrome, title, html! {
-            h1 { (title) }
-            p id="gift-from" { (from) }
-            p id="reveal-date" { (sf(locale, S::RevealOn, &[("date", &date)])) }
-        });
+        return layout(
+            chrome,
+            title,
+            html! {
+                h1 { (title) }
+                p id="gift-from" { (from) }
+                p id="reveal-date" { (sf(locale, S::RevealOn, &[("date", &date)])) }
+            },
+        );
     }
 
     let store = view.store_name;
     let (primary, others) = match &gift.delivery {
-        _ if view.status == GiftStatus::Exhausted => (html! { p { (s(locale, S::Exhausted)) } }, html! {}),
+        _ if view.status == GiftStatus::Exhausted => {
+            (html! { p { (s(locale, S::Exhausted)) } }, html! {})
+        }
         Delivery::HostedFile { media_type, .. } => hosted_actions(view, media_type),
         Delivery::ResellerRedirect { .. } if view.status == GiftStatus::Fulfilled => (
             html! {
@@ -342,35 +372,39 @@ pub(crate) fn gift(view: &GiftView<'_>) -> String {
         (DeviceClass::Desktop, "device-computer", s(locale, S::Computer)),
     ];
 
-    layout(chrome, &gift.book.title, html! {
-        p id="gift-from" { (from) }
-        h1 id="gift-title" { (gift.book.title) }
-        p id="gift-author" { (gift.book.author_line().unwrap_or_default()) }
-        p id="gift-message" {
-            @if let Some(message) = &gift.message {
-                @for (index, line) in message.lines().enumerate() {
-                    @if index > 0 { br; }
-                    (line)
+    layout(
+        chrome,
+        &gift.book.title,
+        html! {
+            p id="gift-from" { (from) }
+            h1 id="gift-title" { (gift.book.title) }
+            p id="gift-author" { (gift.book.author_line().unwrap_or_default()) }
+            p id="gift-message" {
+                @if let Some(message) = &gift.message {
+                    @for (index, line) in message.lines().enumerate() {
+                        @if index > 0 { br; }
+                        (line)
+                    }
                 }
             }
-        }
-        (error_box(view.notices))
-        div id="primary-action" { (primary) }
-        div id="other-ways" {
-            h2 { (s(locale, S::OtherWays)) }
-            (others)
-            p { a href=(chrome.link("/aide")) { (s(locale, S::HelpTitle)) } }
-        }
-        div id="device-chooser" {
-            h2 { (t(locale, Msg::ChooseDevice)) }
-            @for (class, id, label) in choices {
-                @let href = format!("/k/{}?device={}", view.code.compact(), class.choice().unwrap_or("computer"));
-                a id=(id) href=(href) class=[(chrome.device == class).then_some("on")] { (label) }
-                " "
+            (error_box(view.notices))
+            div id="primary-action" { (primary) }
+            div id="other-ways" {
+                h2 { (s(locale, S::OtherWays)) }
+                (others)
+                p { a href=(chrome.link("/aide")) { (s(locale, S::HelpTitle)) } }
             }
-        }
-        p.note id="claim-count" { (claims) }
-    })
+            div id="device-chooser" {
+                h2 { (t(locale, Msg::ChooseDevice)) }
+                @for (class, id, label) in choices {
+                    @let href = format!("/k/{}?device={}", view.code.compact(), class.choice().unwrap_or("computer"));
+                    a id=(id) href=(href) class=[(chrome.device == class).then_some("on")] { (label) }
+                    " "
+                }
+            }
+            p.note id="claim-count" { (claims) }
+        },
+    )
 }
 
 /// `HH:MM` (UTC) of a Unix time.
@@ -380,55 +414,79 @@ fn clock_time(unix: i64) -> String {
 }
 
 /// The answer to `POST /k/{code}/pair`: the pair code, where to type it, until when.
-pub(crate) fn pair_created(chrome: Chrome<'_>, code: &GiftCode, pair: &str, expires_at: i64, ttl_secs: i64) -> String {
+pub(crate) fn pair_created(
+    chrome: Chrome<'_>,
+    code: &GiftCode,
+    pair: &str,
+    expires_at: i64,
+    ttl_secs: i64,
+) -> String {
     let locale = chrome.locale;
     let title = s(locale, S::PairTitle);
     let url = format!("{}/e", chrome.host);
     let minutes = (ttl_secs / 60).max(1).to_string();
-    layout(chrome, title, html! {
-        h1 { (title) }
-        p.code id="pair-code" { (pair) }
-        p { (sf(locale, S::PairSteps, &[("url", &url)])) }
-        p.code id="pair-url" { (url) }
-        p id="pair-expires" {
-            (sf(locale, S::PairExpires, &[("time", &clock_time(expires_at)), ("minutes", &minutes)]))
-        }
-        div.alt {
-            form id="pair-renew-form" method="post" action=(format!("/k/{}/pair", code.compact())) {
-                (chrome.hidden_device())
-                button id="pair-renew" type="submit" { (s(locale, S::PairCta)) }
+    layout(
+        chrome,
+        title,
+        html! {
+            h1 { (title) }
+            p.code id="pair-code" { (pair) }
+            p { (sf(locale, S::PairSteps, &[("url", &url)])) }
+            p.code id="pair-url" { (url) }
+            p id="pair-expires" {
+                (sf(locale, S::PairExpires, &[("time", &clock_time(expires_at)), ("minutes", &minutes)]))
             }
-        }
-        p { a href=(chrome.link(&format!("/k/{}", code.compact()))) { (s(locale, S::BackToGift)) } }
-    })
+            div.alt {
+                form id="pair-renew-form" method="post" action=(format!("/k/{}/pair", code.compact())) {
+                    (chrome.hidden_device())
+                    button id="pair-renew" type="submit" { (s(locale, S::PairCta)) }
+                }
+            }
+            p { a href=(chrome.link(&format!("/k/{}", code.compact()))) { (s(locale, S::BackToGift)) } }
+        },
+    )
 }
 
 /// `GET /e` and the error answers of `POST /e`: the pair-code form.
 pub(crate) fn pair_form(chrome: Chrome<'_>, errors: &[String]) -> String {
     let locale = chrome.locale;
     let title = s(locale, S::PairFormTitle);
-    layout(chrome, title, html! {
-        h1 { (title) }
-        (error_box(errors))
-        form id="pair-form" method="post" action="/e" {
-            label for="pair-input" { (s(locale, S::PairLabel)) }
-            input id="pair-input" name="p" type="text" autocapitalize="characters" autocomplete="off"
-                autocorrect="off" spellcheck="false";
-            (chrome.hidden_device())
-            button id="pair-submit" type="submit" { (t(locale, Msg::DownloadCta)) }
-        }
-        p { a href=(chrome.link("/")) { (s(locale, S::UseCardCode)) } }
-    })
+    layout(
+        chrome,
+        title,
+        html! {
+            h1 { (title) }
+            (error_box(errors))
+            form id="pair-form" method="post" action="/e" {
+                label for="pair-input" { (s(locale, S::PairLabel)) }
+                input id="pair-input" name="p" type="text" autocapitalize="characters" autocomplete="off"
+                    autocorrect="off" spellcheck="false";
+                (chrome.hidden_device())
+                button id="pair-submit" type="submit" { (t(locale, Msg::DownloadCta)) }
+            }
+            p { a href=(chrome.link("/")) { (s(locale, S::UseCardCode)) } }
+        },
+    )
 }
 
 /// The answer to `POST /k/{code}/send`.
-pub(crate) fn send_result(chrome: Chrome<'_>, code: &GiftCode, title: &str, text: &str, ok: bool) -> String {
+pub(crate) fn send_result(
+    chrome: Chrome<'_>,
+    code: &GiftCode,
+    title: &str,
+    text: &str,
+    ok: bool,
+) -> String {
     let locale = chrome.locale;
-    layout(chrome, title, html! {
-        h1 { (title) }
-        p id="send-result" class=[(!ok).then_some("err")] { (text) }
-        p { a href=(chrome.link(&format!("/k/{}", code.compact()))) { (s(locale, S::BackToGift)) } }
-    })
+    layout(
+        chrome,
+        title,
+        html! {
+            h1 { (title) }
+            p id="send-result" class=[(!ok).then_some("err")] { (text) }
+            p { a href=(chrome.link(&format!("/k/{}", code.compact()))) { (s(locale, S::BackToGift)) } }
+        },
+    )
 }
 
 #[cfg(test)]
@@ -445,7 +503,17 @@ mod tests {
     #[test]
     fn the_style_sheet_avoids_what_old_e_reader_browsers_lack() {
         let css = STYLE.to_ascii_lowercase();
-        for banned in ["flex", "grid", "@font-face", "@import", "animation", "transition", "position:fixed", "sticky", "url("] {
+        for banned in [
+            "flex",
+            "grid",
+            "@font-face",
+            "@import",
+            "animation",
+            "transition",
+            "position:fixed",
+            "sticky",
+            "url(",
+        ] {
             assert!(!css.contains(banned), "{banned}");
         }
         assert!(STYLE.len() < 2_500);

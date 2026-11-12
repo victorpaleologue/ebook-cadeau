@@ -1,0 +1,15 @@
+{
+  "ISBN:9782070360024": {
+    "bib_key": "ISBN:9782070360024",
+    "details": {
+      "publishers": ["Gallimard"],
+      "isbn_13": ["9782070360024"],
+      "key": "/books/OL8838946M",
+      "title": "L'ETRANGER",
+      "publish_date": "Jan 05, 1972",
+      "pagination": "185 p. ;",
+      "works": [{"key": "/works/OL1168007W"}],
+      "type": {"key": "/type/edition"}
+    }
+  }
+}

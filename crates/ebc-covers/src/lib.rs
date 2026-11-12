@@ -53,7 +53,7 @@ pub mod upscale;
 
 pub use cascade::{
     CandidateRole, CoverCandidate, Mode, OptOutList, Policy, Risk, SOURCES, SourceInfo,
-    SourceStatus, Use, candidates, page_candidate, source,
+    SourceStatus, Use, candidates, page_candidate, page_image_candidates, source,
 };
 pub use ebc_model::CoverKind;
 pub use guard::{Refusal, check_url, is_denied_host};

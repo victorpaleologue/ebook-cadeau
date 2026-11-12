@@ -785,6 +785,7 @@ def summarise(result: SimResult) -> dict:
         "last_year_cards": result.total("cards", *last_year),
         "last_year_paying_units": result.total("paying_units", *last_year),
         "partners_end": result.rows[-1].partners_live,
+        "last_year_partners_avg": result.total("partners_live", *last_year) / 12.0,
         "authors_end": result.rows[-1].authors,
         "outlay_total": outlay(result, months),
         "founder_hours_total": result.total("founder_hours"),

@@ -1,0 +1,22 @@
+{
+  "resultCount": 1,
+  "records": [
+    {
+      "id": "helka.9916548763506253",
+      "title": "L'étranger",
+      "nonPresenterAuthors": [
+        {"name": "Camus, Albert", "role": "kirjoittaja"},
+        {"name": "Kiviniemi, Kalle", "role": "kääntäjä"}
+      ],
+      "publishers": ["Gallimard"],
+      "year": "1971",
+      "languages": ["fre"],
+      "isbns": ["2-07-036002-4 (nid.)"],
+      "cleanIsbn": "2070360024",
+      "series": [{"name": "Collection Folio", "additional": "2"}],
+      "physicalDescriptions": ["185 sivua ; 18 cm"],
+      "formats": [{"value": "0/Book/", "translated": "Kirja"}, {"value": "1/Book/Book/", "translated": "Kirja"}]
+    }
+  ],
+  "status": "OK"
+}

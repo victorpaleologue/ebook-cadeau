@@ -26,6 +26,18 @@ pub(crate) enum MailError {
     Transport(String),
 }
 
+impl MailError {
+    /// A word for logs that cannot contain the recipient's address (SMTP error texts
+    /// sometimes quote it, and the address is deliberately not kept anywhere).
+    pub(crate) fn kind(&self) -> &'static str {
+        match self {
+            Self::Config(_) => "configuration",
+            Self::Message(_) => "message",
+            Self::Transport(_) => "transport",
+        }
+    }
+}
+
 /// Parses a device address typed by a recipient. `None` unless it is a plain
 /// `local@domain` whose domain is one of `allowed_domains` (lower case).
 pub(crate) fn parse_device_address(input: &str, allowed_domains: &[String]) -> Option<Address> {
@@ -35,7 +47,9 @@ pub(crate) fn parse_device_address(input: &str, allowed_domains: &[String]) -> O
     }
     let (local, domain) = input.rsplit_once('@')?;
     let local_ok = (1..=64).contains(&local.len())
-        && local.bytes().all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-' | b'+'))
+        && local
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'_' | b'-' | b'+'))
         && !local.starts_with('.')
         && !local.ends_with('.')
         && !local.contains("..");
@@ -86,11 +100,9 @@ pub(crate) fn build_message(outgoing: Outgoing<'_>) -> Result<Message, MailError
         .subject(outgoing.subject)
         .date(date)
         .message_id(Some(message_id))
-        .multipart(
-            MultiPart::mixed()
-                .singlepart(SinglePart::plain(outgoing.text))
-                .singlepart(Attachment::new(outgoing.attachment_name).body(outgoing.bytes, content_type)),
-        )
+        .multipart(MultiPart::mixed().singlepart(SinglePart::plain(outgoing.text)).singlepart(
+            Attachment::new(outgoing.attachment_name).body(outgoing.bytes, content_type),
+        ))
         .map_err(|e| MailError::Message(e.to_string()))
 }
 

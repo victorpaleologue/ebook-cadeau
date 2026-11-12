@@ -1,0 +1,41 @@
+{
+  "@context": "/context.jsonld",
+  "@id": "/find?q=9782070360024&_limit=5",
+  "@type": "PartialCollectionView",
+  "itemOffset": 0,
+  "itemsPerPage": 5,
+  "totalItems": 2,
+  "items": [
+    {
+      "@id": "https://libris.kb.se/q7xz5dkc0t2wvnh#it",
+      "@type": "Instance",
+      "issuanceType": "Monograph",
+      "identifiedBy": [
+        {"@type": "ISBN", "value": "2-07-036002-4"},
+        {"@type": "LibrisIIINumber", "value": "8234567"}
+      ],
+      "hasTitle": [{"@type": "Title", "mainTitle": "L' étranger"}],
+      "responsibilityStatement": "Albert Camus",
+      "publication": [
+        {"@type": "PrimaryPublication", "country": {"@id": "https://id.kb.se/country/fr"}, "place": [{"@type": "Place", "label": "Paris"}], "agent": {"@type": "Agent", "label": "Gallimard"}, "year": "1972"}
+      ],
+      "extent": [{"@type": "Extent", "label": "185, [2] s."}],
+      "seriesMembership": [{"@type": "SeriesMembership", "seriesStatement": "Collection Folio ; 2"}],
+      "instanceOf": {
+        "@type": "Text",
+        "language": [{"@id": "https://id.kb.se/language/fre", "@type": "Language", "code": "fre", "prefLabelByLang": {"sv": "Franska", "en": "French"}}],
+        "contribution": [
+          {"@type": "PrimaryContribution", "agent": {"@id": "https://libris.kb.se/qn247n18248vs58#it", "@type": "Person", "familyName": "Camus", "givenName": "Albert", "lifeSpan": "1913-1960"}, "role": [{"@id": "https://id.kb.se/relator/author"}]}
+        ],
+        "genreForm": [{"@id": "https://id.kb.se/marc/Novel"}]
+      },
+      "meta": {"@id": "https://libris.kb.se/q7xz5dkc0t2wvnh", "@type": "Record", "controlNumber": "8234567", "created": "1996-02-14T00:00:00+01:00"}
+    },
+    {
+      "@id": "https://libris.kb.se/zz00000000000000#it",
+      "@type": "Instance",
+      "identifiedBy": [{"@type": "ISBN", "value": "9782080700124"}],
+      "hasTitle": [{"@type": "Title", "mainTitle": "Un autre livre : där 9782070360024 nämns"}]
+    }
+  ]
+}

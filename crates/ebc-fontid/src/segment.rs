@@ -411,8 +411,8 @@ fn reference_height(comps: &[Comp], usable: &[usize]) -> Option<f32> {
         return None;
     }
     heights.sort_by(f32::total_cmp);
-    let upper = &mut heights[heights.len() / 2..];
-    Some(median(upper))
+    let half = heights.len() / 2;
+    Some(median(&mut heights[half..]))
 }
 
 /// Groups components into lines of glyphs.

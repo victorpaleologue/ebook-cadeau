@@ -116,12 +116,22 @@ fn os2_with_cap_height() -> Vec<u8> {
 /// `fan_out ^ levels` copies of the leaf. `levels` must stay below ttf-parser's nesting
 /// limit of 32.
 fn composite_bomb(levels: u16, fan_out: u16, solid_leaf: bool, with_os2: bool) -> Vec<u8> {
+    common::build_sfnt(composite_bomb_tables(levels, fan_out, solid_leaf, with_os2))
+}
+
+/// The tables of [`composite_bomb`], for tests that add some of their own.
+fn composite_bomb_tables(
+    levels: u16,
+    fan_out: u16,
+    solid_leaf: bool,
+    with_os2: bool,
+) -> Vec<(&'static [u8; 4], Vec<u8>)> {
     assert!(levels < 31);
     let glyph_count = levels + 3; // .notdef, `levels` composites, leaf, space
     let mut glyf = Vec::new();
     let mut loca = Vec::new();
-    let mut end_glyph = |glyf: &mut Vec<u8>, loca: &mut Vec<u8>| {
-        while glyf.len() % 4 != 0 {
+    let end_glyph = |glyf: &mut Vec<u8>, loca: &mut Vec<u8>| {
+        while !glyf.len().is_multiple_of(4) {
             glyf.push(0);
         }
         push_u32(loca, glyf.len() as u32);
@@ -165,7 +175,7 @@ fn composite_bomb(levels: u16, fan_out: u16, solid_leaf: bool, with_os2: bool) -
     push_u16(&mut maxp, glyph_count);
     maxp.extend_from_slice(&[0; 26]);
 
-    let mut tables: Vec<(&[u8; 4], Vec<u8>)> = vec![
+    let mut tables: Vec<(&'static [u8; 4], Vec<u8>)> = vec![
         (b"cmap", cmap((glyph_count - 1) as u8)),
         (b"glyf", glyf),
         (b"head", head(1000, true)),
@@ -177,7 +187,7 @@ fn composite_bomb(levels: u16, fan_out: u16, solid_leaf: bool, with_os2: bool) -
     if with_os2 {
         tables.push((b"OS/2", os2_with_cap_height()));
     }
-    common::build_sfnt(tables)
+    tables
 }
 
 /// A CFF `INDEX` with two-byte offsets.
@@ -431,4 +441,165 @@ fn growth_of_the_cost_with_the_nesting_depth() {
             started.elapsed()
         );
     }
+}
+
+// ---------------------------------------------------------------------------------------
+// Added with the fix: what the bounded outline path promises beyond "it returns".
+// ---------------------------------------------------------------------------------------
+
+use ebc_text::{FontError, ShapedGlyph, ShapedText};
+
+/// An `fvar` table with one axis, "wght" 100..900, default 400, and no named instance.
+fn fvar_weight_axis() -> Vec<u8> {
+    let mut fvar = Vec::new();
+    push_u32(&mut fvar, 0x0001_0000);
+    for v in [16u16, 2, 1, 20, 0, 8] {
+        push_u16(&mut fvar, v); // axes offset, reserved, axis count and size, instances
+    }
+    fvar.extend_from_slice(b"wght");
+    for v in [100u32, 400, 900] {
+        push_u32(&mut fvar, v << 16);
+    }
+    push_u16(&mut fvar, 0);
+    push_u16(&mut fvar, 256);
+    fvar
+}
+
+fn one_glyph(id: u16) -> ShapedText {
+    let glyph = ShapedGlyph { id, x: 0.0, y: 0.0, advance: 0.0, text: String::new() };
+    ShapedText { glyphs: vec![glyph], width: 0.0, size_pt: 72.0 }
+}
+
+#[test]
+fn an_oversized_glyph_is_reported_and_the_rest_of_the_font_still_draws() {
+    let font = Font::from_bytes(composite_bomb(18, 2, true, true), 0).expect("parses");
+    assert!(font.has_oversized_glyphs());
+    let origin = Point::new(0.0, 0.0);
+    let run = shape(&font, "H", 12.0, &ShapeOptions::default());
+    assert!(run.to_outline(&font, origin).is_empty(), "the bomb draws nothing");
+    assert_eq!(run.try_to_outline(&font, origin), Err(FontError::OutlineTooComplex { glyph: 1 }));
+    assert_eq!(run.ink_bounds(&font, origin), None);
+    #[cfg(feature = "raster")]
+    assert_eq!(
+        ebc_text::try_rasterize(&font, "H", 32.0, &ShapeOptions::default()),
+        Err(FontError::OutlineTooComplex { glyph: 1 })
+    );
+
+    // Glyph 1 + k is the composite k levels down: 2^(18 − k) rectangles. The ones that
+    // stay within 65 536 points and component references are drawn in full.
+    let rectangle = one_glyph(19).to_outline(&font, origin).segs.len();
+    assert!(rectangle >= 5);
+    for (levels_down, copies) in [(17u16, 2usize), (10, 256), (6, 4_096)] {
+        let path = one_glyph(1 + levels_down)
+            .try_to_outline(&font, origin)
+            .expect("an ordinary composite glyph");
+        assert_eq!(path.segs.len(), copies * rectangle, "{levels_down} levels down");
+    }
+    // 2^14 rectangles are 16 384 x 4 points plus 32 766 references: too many.
+    assert_eq!(
+        one_glyph(1 + 4).try_to_outline(&font, origin),
+        Err(FontError::OutlineTooComplex { glyph: 5 })
+    );
+
+    // A font without such glyphs says so.
+    let fine = Font::from_bytes(composite_bomb(3, 2, true, true), 0).expect("parses");
+    assert!(!fine.has_oversized_glyphs());
+    for (label, bytes) in common::ALL {
+        assert!(!common::font(bytes).has_oversized_glyphs(), "{label}");
+    }
+}
+
+/// A glyph just under the per-glyph limit, repeated: the whole call has a budget too.
+#[test]
+fn a_long_text_cannot_multiply_an_expensive_glyph() {
+    // 30 + 30² + 30³ = 27 930 references to an empty glyph: legal on its own.
+    let font = Font::from_bytes(composite_bomb(3, 30, false, true), 0).expect("parses");
+    assert!(!font.has_oversized_glyphs());
+    assert_eq!(
+        one_glyph(1).try_to_outline(&font, Point::new(0.0, 0.0)),
+        Ok(ebc_scene::Path::new())
+    );
+
+    let text = "H".repeat(20_000); // 20 000 x 55 861 = 10^9 component visits if unchecked
+    let started = Instant::now();
+    let done = within(Duration::from_secs(10), move || {
+        let run = shape(&font, &text, 12.0, &ShapeOptions::default());
+        assert_eq!(run.glyphs.len(), 20_000);
+        let outline = run.try_to_outline(&font, Point::new(0.0, 0.0));
+        #[cfg(feature = "raster")]
+        let raster = ebc_text::try_rasterize(&font, &text, 16.0, &ShapeOptions::default());
+        #[cfg(not(feature = "raster"))]
+        let raster = outline.clone().map(|_| ());
+        (outline, raster.is_err(), run.to_outline(&font, Point::new(0.0, 0.0)).is_empty())
+    });
+    let (outline, raster_failed, plain_is_empty) =
+        done.unwrap_or_else(|| panic!("still running after {:?}", started.elapsed()));
+    assert_eq!(outline, Err(FontError::OutlineTooComplex { glyph: 1 }));
+    assert!(raster_failed && plain_is_empty);
+}
+
+/// The shaper itself outlines glyphs in one situation — a variable font without `HVAR`,
+/// at a non-default instance, for glyphs without `gvar` data — once per glyph of the
+/// text. Neither a bomb nor a merely expensive glyph may be reachable that way.
+#[test]
+fn shaping_an_instance_of_a_variable_bomb_takes_bounded_time() {
+    for (levels, fan_out) in [(14, 4), (3, 30)] {
+        let mut tables = composite_bomb_tables(levels, fan_out, false, true);
+        tables.push((b"fvar", fvar_weight_axis()));
+        let font = Font::from_bytes(common::build_sfnt(tables), 0).expect("parses");
+        assert!(font.is_variable());
+        let bold = font.with_variations(&[("wght", 700.0)]);
+        assert_ne!(bold, font, "the instance is not the default one");
+        let started = Instant::now();
+        let done = within(Duration::from_secs(5), move || {
+            let text = "H".repeat(5_000);
+            let opts = ShapeOptions::default();
+            let run = shape(&bold, &text, 12.0, &opts);
+            let lines = ebc_text::wrap(&bold, &text, 12.0, 50.0, &opts);
+            let size = ebc_text::fit_size(&bold, &text, 100.0, 5.0, 1.0, 50.0, &opts);
+            (run.glyphs.len(), lines.concat().len(), size.is_some(), bold.missing_chars(&text))
+        });
+        let (glyphs, wrapped, _, missing) = done.unwrap_or_else(|| {
+            panic!("{levels} x {fan_out}: shaping still running after {:?}", started.elapsed())
+        });
+        assert_eq!((glyphs, wrapped), (5_000, 5_000), "{levels} x {fan_out}");
+        assert!(missing.is_empty());
+    }
+}
+
+#[test]
+fn postscript_bombs_are_reported_and_ordinary_subroutines_still_work() {
+    let origin = Point::new(0.0, 0.0);
+    let bomb = Font::from_bytes(cff_subroutine_bomb(10, 8, true), 0).expect("parses");
+    let run = shape(&bomb, "H", 12.0, &ShapeOptions::default());
+    assert_eq!(run.try_to_outline(&bomb, origin), Err(FontError::OutlineTooComplex { glyph: 1 }));
+    assert!(run.to_outline(&bomb, origin).is_empty());
+
+    // Without an OS/2 table the bomb is met while loading: the font still loads, with
+    // the default capital height of 0.7 em.
+    let bomb = Font::from_bytes(cff_subroutine_bomb(10, 8, false), 0).expect("parses");
+    assert_eq!(bomb.metrics().cap_height, 700);
+    let glyf_bomb = Font::from_bytes(composite_bomb(14, 4, false, false), 0).expect("parses");
+    assert_eq!(glyf_bomb.metrics().cap_height, 700);
+
+    // 8^4 = 4 096 calls that draw nothing are within the budget of one glyph…
+    let busy = Font::from_bytes(cff_subroutine_bomb(4, 8, true), 0).expect("parses");
+    assert_eq!(one_glyph(1).try_to_outline(&busy, origin), Ok(ebc_scene::Path::new()));
+    // …but not 20 000 times over.
+    let text = "H".repeat(20_000);
+    let started = Instant::now();
+    let done = within(Duration::from_secs(10), move || {
+        shape(&busy, &text, 12.0, &ShapeOptions::default()).try_to_outline(&busy, origin)
+    });
+    let outline = done.unwrap_or_else(|| panic!("still running after {:?}", started.elapsed()));
+    assert_eq!(outline, Err(FontError::OutlineTooComplex { glyph: 1 }));
+
+    // The ordinary CFF fixture is unaffected: "O" is four curves, "H" a rectangle.
+    let font = Font::from_bytes(common::synthetic_cff_font(), 0).expect("parses");
+    let run = shape(&font, "OH", 72.0, &ShapeOptions::default());
+    let path = run.try_to_outline(&font, origin).expect("ordinary glyphs");
+    let curves = path.segs.iter().filter(|s| matches!(s, ebc_scene::PathSeg::CubicTo(..))).count();
+    assert_eq!(curves, 4);
+    let ink = run.ink_bounds(&font, origin).expect("ink");
+    assert!(common::close(ink.h, 0.7 * 25.4, 1e-6), "{ink:?}");
 }

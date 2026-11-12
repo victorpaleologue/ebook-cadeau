@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<record>
+  <leader>     cam0 22        450 </leader>
+  <controlfield tag="001">000136085</controlfield>
+  <controlfield tag="003">http://www.sudoc.fr/000136085</controlfield>
+  <controlfield tag="005">20240105120000.000</controlfield>
+  <datafield tag="010" ind1=" " ind2=" "><subfield code="a">2-07-036002-4</subfield><subfield code="b">br.</subfield></datafield>
+  <datafield tag="100" ind1=" " ind2=" "><subfield code="a">19840612d1971    k  y0frey50      ba</subfield></datafield>
+  <datafield tag="101" ind1="0" ind2=" "><subfield code="a">fre</subfield></datafield>
+  <datafield tag="102" ind1=" " ind2=" "><subfield code="a">FR</subfield></datafield>
+  <datafield tag="200" ind1="1" ind2=" "><subfield code="a">L'@étranger</subfield><subfield code="f">Albert Camus</subfield></datafield>
+  <datafield tag="210" ind1=" " ind2=" "><subfield code="a">[Paris]</subfield><subfield code="c">Gallimard</subfield><subfield code="d">impr. 1984, cop. 1942</subfield></datafield>
+  <datafield tag="215" ind1=" " ind2=" "><subfield code="a">185 p.</subfield><subfield code="c">couv. ill.</subfield><subfield code="d">18 cm</subfield></datafield>
+  <datafield tag="225" ind1="2" ind2=" "><subfield code="a">Collection Folio</subfield><subfield code="v">2</subfield></datafield>
+  <datafield tag="410" ind1=" " ind2="|"><subfield code="0">001030280</subfield><subfield code="t">Collection Folio</subfield><subfield code="v">2</subfield></datafield>
+  <datafield tag="606" ind1=" " ind2=" "><subfield code="3">02731667X</subfield><subfield code="a">Roman français</subfield><subfield code="2">rameau</subfield></datafield>
+  <datafield tag="700" ind1=" " ind2="1"><subfield code="3">026765535</subfield><subfield code="a">Camus</subfield><subfield code="b">Albert</subfield><subfield code="f">1913-1960</subfield><subfield code="4">070</subfield></datafield>
+  <datafield tag="801" ind1=" " ind2="3"><subfield code="a">FR</subfield><subfield code="b">Abes</subfield><subfield code="c">20240105</subfield><subfield code="g">AFNOR</subfield></datafield>
+</record>

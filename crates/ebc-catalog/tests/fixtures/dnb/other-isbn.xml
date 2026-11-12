@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<searchRetrieveResponse xmlns="http://www.loc.gov/zing/srw/">
+  <version>1.1</version>
+  <numberOfRecords>1</numberOfRecords>
+  <records>
+    <record>
+      <recordSchema>MARC21-xml</recordSchema>
+      <recordPacking>xml</recordPacking>
+      <recordData>
+        <record xmlns="http://www.loc.gov/MARC21/slim" type="Bibliographic">
+          <leader>00000nam a2200000 c 4500</leader>
+          <controlfield tag="001">1000000001</controlfield>
+          <datafield tag="020" ind1=" " ind2=" ">
+            <subfield code="a">9783208020018</subfield>
+          </datafield>
+          <datafield tag="100" ind1="1" ind2=" ">
+            <subfield code="a">Beispiel, Erika</subfield>
+            <subfield code="4">aut</subfield>
+          </datafield>
+          <datafield tag="245" ind1="1" ind2="0">
+            <subfield code="a">Ein anderes Buch</subfield>
+          </datafield>
+        </record>
+      </recordData>
+      <recordPosition>1</recordPosition>
+    </record>
+  </records>
+</searchRetrieveResponse>

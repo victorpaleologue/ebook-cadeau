@@ -378,7 +378,7 @@ impl Robots {
         let specific =
             !token.is_empty() && self.groups.iter().any(|g| g.agents.iter().any(|a| a == token));
         let wanted = if specific { token.to_owned() } else { "*".to_owned() };
-        self.groups.iter().filter(move |g| g.agents.iter().any(|a| *a == wanted))
+        self.groups.iter().filter(move |g| g.agents.contains(&wanted))
     }
 
     /// Whether `user_agent` may fetch `path`.
@@ -421,7 +421,7 @@ impl Robots {
     pub fn crawl_delay(&self, user_agent: &str) -> Option<f32> {
         let token = product_token(user_agent);
         let specific =
-            !token.is_empty() && self.groups.iter().any(|g| g.agents.iter().any(|a| *a == token));
+            !token.is_empty() && self.groups.iter().any(|g| g.agents.contains(&token));
         let wanted = if specific { token.as_str() } else { "*" };
         self.delays
             .iter()

@@ -1,0 +1,40 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<searchRetrieveResponse xmlns="http://www.loc.gov/zing/srw/">
+  <version>1.1</version>
+  <numberOfRecords>1</numberOfRecords>
+  <records>
+    <record>
+      <recordSchema>MARC21-xml</recordSchema>
+      <recordPacking>xml</recordPacking>
+      <recordData>
+        <record xmlns="http://www.loc.gov/MARC21/slim" type="Bibliographic">
+          <leader>00000nam a2200000 c 4500</leader>
+          <controlfield tag="001">1198765432</controlfield>
+          <controlfield tag="008">191105s2019    gw |||||o|||| 00||||ger  </controlfield>
+          <datafield tag="020" ind1=" " ind2=" ">
+            <subfield code="a">9783596294312</subfield>
+            <subfield code="c">EPUB</subfield>
+          </datafield>
+          <datafield tag="245" ind1="1" ind2="4">
+            <subfield code="a">Die Verwandlung /</subfield>
+            <subfield code="c">Franz Kafka</subfield>
+          </datafield>
+          <datafield tag="264" ind1=" " ind2="1">
+            <subfield code="a">Frankfurt am Main</subfield>
+            <subfield code="b">FISCHER E-Books</subfield>
+            <subfield code="c">2019</subfield>
+          </datafield>
+          <datafield tag="300" ind1=" " ind2=" ">
+            <subfield code="a">1 Online-Ressource (96 Seiten)</subfield>
+          </datafield>
+          <datafield tag="338" ind1=" " ind2=" ">
+            <subfield code="a">Online-Ressource</subfield>
+            <subfield code="b">cr</subfield>
+            <subfield code="2">rdacarrier</subfield>
+          </datafield>
+        </record>
+      </recordData>
+      <recordPosition>1</recordPosition>
+    </record>
+  </records>
+</searchRetrieveResponse>

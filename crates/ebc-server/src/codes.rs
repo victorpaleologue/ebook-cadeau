@@ -102,10 +102,16 @@ pub fn random_hex(entropy: &dyn Entropy, n: usize) -> Result<String, EntropyErro
 ///
 /// Returns `None` only if the model refuses 32 random bytes, which it never does.
 #[must_use]
-pub fn derive_gift_code(secret: &[u8], nonce_hex: &str, start_counter: u32) -> Option<(GiftCode, u32)> {
+pub fn derive_gift_code(
+    secret: &[u8],
+    nonce_hex: &str,
+    start_counter: u32,
+) -> Option<(GiftCode, u32)> {
     (start_counter..start_counter.saturating_add(64)).find_map(|counter| {
-        let material =
-            hmac_sha256(secret, format!("ebc:derived-gift-code:v1:{nonce_hex}:{counter}").as_bytes());
+        let material = hmac_sha256(
+            secret,
+            format!("ebc:derived-gift-code:v1:{nonce_hex}:{counter}").as_bytes(),
+        );
         let code = GiftCode::from_random_bytes(&material).ok()?;
         (!code.has_unfortunate_letters()).then_some((code, counter))
     })
@@ -141,7 +147,12 @@ pub fn random_pair_code(entropy: &dyn Entropy) -> Result<PairCode, EntropyError>
 /// The string a partner signs for an API request, and the server for a webhook (§4.1):
 /// `"{timestamp}.{METHOD}.{path-with-query}.{hex sha256(body)}"`.
 #[must_use]
-pub fn request_signing_string(timestamp: i64, method: &str, path_and_query: &str, body: &[u8]) -> String {
+pub fn request_signing_string(
+    timestamp: i64,
+    method: &str,
+    path_and_query: &str,
+    body: &[u8],
+) -> String {
     format!("{timestamp}.{}.{path_and_query}.{}", method.to_ascii_uppercase(), sha256_hex(body))
 }
 
@@ -226,13 +237,17 @@ mod tests {
 
     #[test]
     fn derived_codes_are_stable_and_secret_dependent() {
-        let (code, counter) = derive_gift_code(b"secret", "00112233445566778899aabbccddeeff", 0).unwrap();
-        let (again, same) = derive_gift_code(b"secret", "00112233445566778899aabbccddeeff", counter).unwrap();
+        let (code, counter) =
+            derive_gift_code(b"secret", "00112233445566778899aabbccddeeff", 0).unwrap();
+        let (again, same) =
+            derive_gift_code(b"secret", "00112233445566778899aabbccddeeff", counter).unwrap();
         assert_eq!((code, counter), (again, same));
         assert!(!code.has_unfortunate_letters());
-        let (other, _) = derive_gift_code(b"other-secret", "00112233445566778899aabbccddeeff", 0).unwrap();
+        let (other, _) =
+            derive_gift_code(b"other-secret", "00112233445566778899aabbccddeeff", 0).unwrap();
         assert_ne!(code, other);
-        let (third, _) = derive_gift_code(b"secret", "ffffffffffffffffffffffffffffffff", 0).unwrap();
+        let (third, _) =
+            derive_gift_code(b"secret", "ffffffffffffffffffffffffffffffff", 0).unwrap();
         assert_ne!(code, third);
         // Derived codes are well-formed codes.
         assert_eq!(GiftCode::parse(&code.grouped()), Ok(code));
@@ -268,26 +283,77 @@ mod tests {
     #[test]
     fn request_signatures_follow_the_contract() {
         let body = br#"{"order_ref":"ORD-1"}"#;
-        let signing = request_signing_string(1_800_000_000, "post", "/api/partner/v1/gifts?x=1", body);
+        let signing =
+            request_signing_string(1_800_000_000, "post", "/api/partner/v1/gifts?x=1", body);
         assert_eq!(
             signing,
             format!("1800000000.POST./api/partner/v1/gifts?x=1.{}", sha256_hex(body))
         );
-        let header = request_signature("s3cret", 1_800_000_000, "POST", "/api/partner/v1/gifts?x=1", body);
+        let header =
+            request_signature("s3cret", 1_800_000_000, "POST", "/api/partner/v1/gifts?x=1", body);
         assert!(header.starts_with("v1=") && header.len() == 3 + 64);
         let verify = |secret: &str, ts: i64, method: &str, path: &str, body: &[u8], value: &str| {
             verify_request_signature(secret, ts, method, path, body, value)
         };
-        assert!(verify("s3cret", 1_800_000_000, "POST", "/api/partner/v1/gifts?x=1", body, &header));
-        assert!(verify("s3cret", 1_800_000_000, "post", "/api/partner/v1/gifts?x=1", body, &header.to_uppercase().replacen("V1=", "v1=", 1)));
-        assert!(!verify("other", 1_800_000_000, "POST", "/api/partner/v1/gifts?x=1", body, &header));
-        assert!(!verify("s3cret", 1_800_000_001, "POST", "/api/partner/v1/gifts?x=1", body, &header));
-        assert!(!verify("s3cret", 1_800_000_000, "PUT", "/api/partner/v1/gifts?x=1", body, &header));
+        assert!(verify(
+            "s3cret",
+            1_800_000_000,
+            "POST",
+            "/api/partner/v1/gifts?x=1",
+            body,
+            &header
+        ));
+        assert!(verify(
+            "s3cret",
+            1_800_000_000,
+            "post",
+            "/api/partner/v1/gifts?x=1",
+            body,
+            &header.to_uppercase().replacen("V1=", "v1=", 1)
+        ));
+        assert!(!verify(
+            "other",
+            1_800_000_000,
+            "POST",
+            "/api/partner/v1/gifts?x=1",
+            body,
+            &header
+        ));
+        assert!(!verify(
+            "s3cret",
+            1_800_000_001,
+            "POST",
+            "/api/partner/v1/gifts?x=1",
+            body,
+            &header
+        ));
+        assert!(!verify(
+            "s3cret",
+            1_800_000_000,
+            "PUT",
+            "/api/partner/v1/gifts?x=1",
+            body,
+            &header
+        ));
         assert!(!verify("s3cret", 1_800_000_000, "POST", "/api/partner/v1/gifts", body, &header));
-        assert!(!verify("s3cret", 1_800_000_000, "POST", "/api/partner/v1/gifts?x=1", b"{}", &header));
+        assert!(!verify(
+            "s3cret",
+            1_800_000_000,
+            "POST",
+            "/api/partner/v1/gifts?x=1",
+            b"{}",
+            &header
+        ));
         for malformed in ["", "v1=", "v2=00", &header[3..], "v1=zz", "v1=00"] {
             assert!(
-                !verify("s3cret", 1_800_000_000, "POST", "/api/partner/v1/gifts?x=1", body, malformed),
+                !verify(
+                    "s3cret",
+                    1_800_000_000,
+                    "POST",
+                    "/api/partner/v1/gifts?x=1",
+                    body,
+                    malformed
+                ),
                 "{malformed:?}"
             );
         }

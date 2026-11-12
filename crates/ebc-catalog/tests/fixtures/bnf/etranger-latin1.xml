@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>
+<srw:searchRetrieveResponse xmlns:srw="http://www.loc.gov/zing/srw/" xmlns:mxc="info:lc/xmlns/marcxchange-v2" xmlns:ixm="http://catalogue.bnf.fr/namespaces/InterXMarc" xmlns:mn="http://catalogue.bnf.fr/namespaces/motsnotices" xmlns:sd="http://www.loc.gov/zing/srw/diagnostic/">
+  <srw:version>1.2</srw:version>
+  <srw:echoedSearchRetrieveRequest>
+    <srw:query>(bib.isbn all &quot;2070360024&quot; or bib.isbn all &quot;9782070360024&quot;)</srw:query>
+    <srw:version>1.2</srw:version>
+  </srw:echoedSearchRetrieveRequest>
+  <srw:numberOfRecords>1</srw:numberOfRecords>
+  <srw:records>
+    <srw:record>
+      <srw:recordSchema>marcxchange</srw:recordSchema>
+      <srw:recordPacking>xml</srw:recordPacking>
+      <srw:recordData>
+        <mxc:record id="ark:/12148/cb35113948q" format="Unimarc" type="Bibliographic">
+          <mxc:leader>00000cam  2200000   450 </mxc:leader>
+          <mxc:controlfield tag="001">FRBNF351139480000004</mxc:controlfield>
+          <mxc:controlfield tag="003">http://catalogue.bnf.fr/ark:/12148/cb35113948q</mxc:controlfield>
+          <mxc:datafield tag="010" ind1=" " ind2=" "><mxc:subfield code="a">2-07-036002-4</mxc:subfield><mxc:subfield code="b">br.</mxc:subfield><mxc:subfield code="d">3,50 F</mxc:subfield></mxc:datafield>
+          <mxc:datafield tag="100" ind1=" " ind2=" "><mxc:subfield code="a">19720531d1971    m  y0frey50      ba</mxc:subfield></mxc:datafield>
+          <mxc:datafield tag="101" ind1="0" ind2=" "><mxc:subfield code="a">fre</mxc:subfield></mxc:datafield>
+          <mxc:datafield tag="102" ind1=" " ind2=" "><mxc:subfield code="a">FR</mxc:subfield></mxc:datafield>
+          <mxc:datafield tag="200" ind1="1" ind2=" "><mxc:subfield code="a">L'étranger</mxc:subfield><mxc:subfield code="b">Texte imprimé</mxc:subfield><mxc:subfield code="f">Albert Camus</mxc:subfield></mxc:datafield>
+          <mxc:datafield tag="210" ind1=" " ind2=" "><mxc:subfield code="a">[Paris]</mxc:subfield><mxc:subfield code="c">Gallimard</mxc:subfield><mxc:subfield code="d">1971</mxc:subfield><mxc:subfield code="e">27-Mesnil-sur-l'Estrée</mxc:subfield><mxc:subfield code="g">impr. Firmin-Didot</mxc:subfield></mxc:datafield>
+          <mxc:datafield tag="215" ind1=" " ind2=" "><mxc:subfield code="a">185 p.</mxc:subfield><mxc:subfield code="d">18 cm</mxc:subfield></mxc:datafield>
+          <mxc:datafield tag="225" ind1="|" ind2=" "><mxc:subfield code="a">Collection Folio</mxc:subfield><mxc:subfield code="v">2</mxc:subfield></mxc:datafield>
+          <mxc:datafield tag="700" ind1=" " ind2="|"><mxc:subfield code="3">11894985</mxc:subfield><mxc:subfield code="a">Camus</mxc:subfield><mxc:subfield code="b">Albert</mxc:subfield><mxc:subfield code="f">1913-1960</mxc:subfield><mxc:subfield code="4">070</mxc:subfield></mxc:datafield>
+          <mxc:datafield tag="801" ind1=" " ind2="0"><mxc:subfield code="a">FR</mxc:subfield><mxc:subfield code="b">BNF</mxc:subfield><mxc:subfield code="c">19720531</mxc:subfield><mxc:subfield code="g">AFNOR</mxc:subfield></mxc:datafield>
+        </mxc:record>
+      </srw:recordData>
+      <srw:recordIdentifier>ark:/12148/cb35113948q</srw:recordIdentifier>
+    </srw:record>
+  </srw:records>
+</srw:searchRetrieveResponse>

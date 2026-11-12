@@ -4,7 +4,9 @@
 
 use axum::body::Bytes;
 use axum::http::StatusCode;
-use ebc_model::{BookMeta, Delivery, Gift, GiftCode, GiftId, GiftStatus, LicenceFormat, Locale, PairCode};
+use ebc_model::{
+    BookMeta, Delivery, Gift, GiftCode, GiftId, GiftStatus, LicenceFormat, Locale, PairCode,
+};
 use serde::Deserialize;
 
 use crate::codes;
@@ -164,12 +166,21 @@ fn unprocessable(code: &'static str, message: impl Into<String>) -> ApiError {
 
 /// Bounds the free-form parts of the book metadata (the whole body is already capped).
 fn check_book(book: &BookMeta) -> Result<(), ApiError> {
-    let bad_text = |text: &str, max: usize| text.chars().count() > max || text.chars().any(char::is_control);
+    let bad_text =
+        |text: &str, max: usize| text.chars().count() > max || text.chars().any(char::is_control);
     if book.title.trim().is_empty() || bad_text(&book.title, 300) {
-        return Err(unprocessable("invalid_book", "book.title must be 1 to 300 characters without control characters"));
+        return Err(unprocessable(
+            "invalid_book",
+            "book.title must be 1 to 300 characters without control characters",
+        ));
     }
-    if book.contributors.len() > 20 || book.contributors.iter().any(|c| c.name.trim().is_empty() || bad_text(&c.name, 200)) {
-        return Err(unprocessable("invalid_book", "book.contributors: at most 20 names of 1 to 200 characters"));
+    if book.contributors.len() > 20
+        || book.contributors.iter().any(|c| c.name.trim().is_empty() || bad_text(&c.name, 200))
+    {
+        return Err(unprocessable(
+            "invalid_book",
+            "book.contributors: at most 20 names of 1 to 200 characters",
+        ));
     }
     if book.publisher.as_deref().is_some_and(|p| bad_text(p, 200)) {
         return Err(unprocessable("invalid_book", "book.publisher is too long"));
@@ -194,7 +205,11 @@ impl AppState {
         let kind = upload::sniff(&bytes).map_err(|e| match e {
             upload::UploadError::DrmProtected(_) => unprocessable("drm_protected", e.to_string()),
             upload::UploadError::Empty => ApiError::bad_request("empty_body", e.to_string()),
-            other => ApiError::new(StatusCode::UNSUPPORTED_MEDIA_TYPE, "unsupported_media_type", other.to_string()),
+            other => ApiError::new(
+                StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                "unsupported_media_type",
+                other.to_string(),
+            ),
         })?;
         let sha256 = codes::sha256_hex(&bytes);
         let size_bytes = bytes.len() as u64;
@@ -211,7 +226,11 @@ impl AppState {
             gift_id: None,
         };
         let stale = self.db.update(|db| {
-            let stale = db.purge(self.now(), self.config.idempotency_ttl_secs, self.config.upload_orphan_ttl_secs);
+            let stale = db.purge(
+                self.now(),
+                self.config.idempotency_ttl_secs,
+                self.config.upload_orphan_ttl_secs,
+            );
             db.uploads.insert(record.id.clone(), record.clone());
             stale
         })?;
@@ -239,17 +258,32 @@ impl AppState {
     }
 
     /// Creates a gift (`POST /api/v1/gifts`, `POST /api/partner/v1/gifts`).
-    pub(crate) fn create_gift(&self, request: GiftRequest, partner: Option<&Partner>) -> Result<CreatedGift, ApiError> {
+    pub(crate) fn create_gift(
+        &self,
+        request: GiftRequest,
+        partner: Option<&Partner>,
+    ) -> Result<CreatedGift, ApiError> {
         let now = self.now();
         check_book(&request.book)?;
         let locale = match request.locale.as_deref().map(str::trim).filter(|l| !l.is_empty()) {
-            Some(tag) => Locale::from_tag(tag)
-                .ok_or_else(|| unprocessable("invalid_locale", "locale must be one of fr, en, de, es, it, nl, pt"))?,
+            Some(tag) => Locale::from_tag(tag).ok_or_else(|| {
+                unprocessable("invalid_locale", "locale must be one of fr, en, de, es, it, nl, pt")
+            })?,
             None => Locale::default(),
         };
-        let order_ref = request.order_ref.as_deref().map(str::trim).filter(|r| !r.is_empty()).map(str::to_owned);
-        if order_ref.as_deref().is_some_and(|r| r.chars().count() > 128 || r.chars().any(|c| c.is_control() || c.is_whitespace())) {
-            return Err(unprocessable("invalid_order_ref", "order_ref: at most 128 characters without spaces"));
+        let order_ref = request
+            .order_ref
+            .as_deref()
+            .map(str::trim)
+            .filter(|r| !r.is_empty())
+            .map(str::to_owned);
+        if order_ref.as_deref().is_some_and(|r| {
+            r.chars().count() > 128 || r.chars().any(|c| c.is_control() || c.is_whitespace())
+        }) {
+            return Err(unprocessable(
+                "invalid_order_ref",
+                "order_ref: at most 128 characters without spaces",
+            ));
         }
         let text = |value: &Option<String>| value.as_deref().and_then(Gift::normalise_text);
 
@@ -260,8 +294,14 @@ impl AppState {
                     .db
                     .view(|db| db.uploads.get(upload_id).cloned())
                     .filter(|u| u.partner.as_deref() == partner.map(|p| p.id.as_str()))
-                    .ok_or_else(|| unprocessable("unknown_upload", "delivery.upload_id does not name an upload of yours"))?;
-                let extension = FileKind::from_media_type(&upload.media_type).map_or("bin", FileKind::extension);
+                    .ok_or_else(|| {
+                        unprocessable(
+                            "unknown_upload",
+                            "delivery.upload_id does not name an upload of yours",
+                        )
+                    })?;
+                let extension = FileKind::from_media_type(&upload.media_type)
+                    .map_or("bin", FileKind::extension);
                 let delivery = Delivery::HostedFile {
                     file_name: ascii_file_name(&request.book.title, extension),
                     media_type: upload.media_type.clone(),
@@ -270,9 +310,13 @@ impl AppState {
                 };
                 (delivery, Some(upload.id))
             }
-            DeliveryRequest::ResellerRedirect { url } | DeliveryRequest::ResellerLicence { url, .. } => {
+            DeliveryRequest::ResellerRedirect { url }
+            | DeliveryRequest::ResellerLicence { url, .. } => {
                 let Some(partner) = partner else {
-                    return Err(unprocessable("unsupported_delivery", "only hosted_file gifts can be created without a partner"));
+                    return Err(unprocessable(
+                        "unsupported_delivery",
+                        "only hosted_file gifts can be created without a partner",
+                    ));
                 };
                 if !partner.allows_url(url) {
                     return Err(unprocessable(
@@ -281,9 +325,10 @@ impl AppState {
                     ));
                 }
                 let delivery = match &request.delivery {
-                    DeliveryRequest::ResellerLicence { format, .. } => {
-                        Delivery::ResellerLicence { format: LicenceFormat::from(format.as_str()), url: url.clone() }
-                    }
+                    DeliveryRequest::ResellerLicence { format, .. } => Delivery::ResellerLicence {
+                        format: LicenceFormat::from(format.as_str()),
+                        url: url.clone(),
+                    },
                     _ => Delivery::ResellerRedirect { url: url.clone() },
                 };
                 (delivery, None)
@@ -304,8 +349,9 @@ impl AppState {
             let (code, nonce, counter) = match partner {
                 Some(_) => {
                     let nonce = codes::random_hex(self.entropy.as_ref(), 16)?;
-                    let (code, counter) = codes::derive_gift_code(&self.config.code_secret, &nonce, 0)
-                        .ok_or_else(|| ApiError::internal("no gift code could be derived"))?;
+                    let (code, counter) =
+                        codes::derive_gift_code(&self.config.code_secret, &nonce, 0)
+                            .ok_or_else(|| ApiError::internal("no gift code could be derived"))?;
                     (code, Some(nonce), counter)
                 }
                 None => (codes::random_gift_code(self.entropy.as_ref())?, None, 0),
@@ -354,17 +400,21 @@ impl AppState {
                 sends: Vec::new(),
             };
             let inserted = self.db.update(|db| -> Result<Option<GiftRecord>, ApiError> {
-                if db.codes.contains_key(&record.code_hash) || db.voided.contains_key(&record.code_hash) {
+                if db.codes.contains_key(&record.code_hash)
+                    || db.voided.contains_key(&record.code_hash)
+                {
                     return Ok(None);
                 }
                 let mut record = record;
                 if let Some(upload_id) = &record.upload_id {
-                    let upload = db
-                        .uploads
-                        .get_mut(upload_id)
-                        .ok_or_else(|| unprocessable("unknown_upload", "the upload no longer exists"))?;
+                    let upload = db.uploads.get_mut(upload_id).ok_or_else(|| {
+                        unprocessable("unknown_upload", "the upload no longer exists")
+                    })?;
                     if upload.gift_id.is_some() {
-                        return Err(ApiError::conflict("upload_already_used", "this upload already belongs to a gift"));
+                        return Err(ApiError::conflict(
+                            "upload_already_used",
+                            "this upload already belongs to a gift",
+                        ));
                     }
                     upload.gift_id = Some(record.id.clone());
                     record.rights_basis = Some(upload.rights_basis);
@@ -388,7 +438,8 @@ impl AppState {
     /// The clear code of a partner gift, re-derived from its nonce.
     pub(crate) fn derived_code(&self, gift: &GiftRecord) -> Option<GiftCode> {
         let nonce = gift.code_nonce.as_deref()?;
-        let (code, _) = codes::derive_gift_code(&self.config.code_secret, nonce, gift.code_counter)?;
+        let (code, _) =
+            codes::derive_gift_code(&self.config.code_secret, nonce, gift.code_counter)?;
         // Guard against a secret that changed since the gift was created.
         (codes::gift_code_hash(&self.config.code_secret, &code) == gift.code_hash).then_some(code)
     }
@@ -407,7 +458,9 @@ impl AppState {
                 if let Delivery::HostedFile { sha256, .. } = &record.delivery {
                     files.push(sha256.clone());
                 }
-                files.extend(record.card_pdf.iter().chain(record.cover.iter()).map(|b| b.sha256.clone()));
+                files.extend(
+                    record.card_pdf.iter().chain(record.cover.iter()).map(|b| b.sha256.clone()),
+                );
                 if let Some(upload_id) = &record.upload_id {
                     db.uploads.remove(upload_id);
                 }
@@ -438,7 +491,10 @@ impl AppState {
         let now = self.now();
         let current = self.gift(id).ok_or_else(|| ApiError::not_found("no such gift"))?;
         if !current.status_at(now).allows_claim() {
-            return Err(ApiError::conflict("not_reissuable", "only a gift that can still be claimed gets a new code"));
+            return Err(ApiError::conflict(
+                "not_reissuable",
+                "only a gift that can still be claimed gets a new code",
+            ));
         }
         for _ in 0..8 {
             let (code, nonce, counter) = if current.partner.is_some() {
@@ -454,9 +510,13 @@ impl AppState {
                 if db.codes.contains_key(&hash) || db.voided.contains_key(&hash) {
                     return Ok(None);
                 }
-                let gift = db.gifts.get_mut(id).ok_or_else(|| ApiError::not_found("no such gift"))?;
+                let gift =
+                    db.gifts.get_mut(id).ok_or_else(|| ApiError::not_found("no such gift"))?;
                 if !gift.status_at(now).allows_claim() {
-                    return Err(ApiError::conflict("not_reissuable", "the gift can no longer be claimed"));
+                    return Err(ApiError::conflict(
+                        "not_reissuable",
+                        "the gift can no longer be claimed",
+                    ));
                 }
                 let old = std::mem::replace(&mut gift.code_hash, hash.clone());
                 gift.code_nonce = nonce;
@@ -510,8 +570,13 @@ impl AppState {
         let cap = self.config.max_download_sessions;
         self.db
             .update(|db| -> Result<(GiftRecord, bool, Vec<String>), ClaimError> {
-                let stale = db.purge(now, self.config.idempotency_ttl_secs, self.config.upload_orphan_ttl_secs);
-                let gift = db.gifts.get_mut(gift_id).ok_or(ClaimError::Gone(GiftStatus::Cancelled))?;
+                let stale = db.purge(
+                    now,
+                    self.config.idempotency_ttl_secs,
+                    self.config.upload_orphan_ttl_secs,
+                );
+                let gift =
+                    db.gifts.get_mut(gift_id).ok_or(ClaimError::Gone(GiftStatus::Cancelled))?;
                 match gift.status_at(now) {
                     status if status.is_gone() => return Err(ClaimError::Gone(status)),
                     GiftStatus::Exhausted => return Err(ClaimError::Exhausted),
@@ -546,16 +611,16 @@ impl AppState {
         match &gift.delivery {
             Delivery::HostedFile { file_name, media_type, size_bytes, sha256 } => {
                 let extension = file_name.rsplit_once('.').map_or("bin", |(_, e)| e);
-                let uploaded_name = gift
-                    .upload_id
-                    .as_deref()
-                    .and_then(|id| self.db.view(|db| db.uploads.get(id).and_then(|u| u.file_name.clone())));
+                let uploaded_name = gift.upload_id.as_deref().and_then(|id| {
+                    self.db.view(|db| db.uploads.get(id).and_then(|u| u.file_name.clone()))
+                });
                 Ok(Payload {
                     sha256: sha256.clone(),
                     size_bytes: *size_bytes,
                     media_type: media_type.clone(),
                     file_name: file_name.clone(),
-                    display_name: uploaded_name.unwrap_or_else(|| display_file_name(&gift.book.title, extension)),
+                    display_name: uploaded_name
+                        .unwrap_or_else(|| display_file_name(&gift.book.title, extension)),
                     licence: false,
                 })
             }
@@ -568,7 +633,10 @@ impl AppState {
                 Ok(Payload {
                     sha256,
                     size_bytes,
-                    media_type: format.media_type().unwrap_or("application/octet-stream").to_owned(),
+                    media_type: format
+                        .media_type()
+                        .unwrap_or("application/octet-stream")
+                        .to_owned(),
                     file_name: ascii_file_name(&gift.book.title, extension),
                     display_name: display_file_name(&gift.book.title, extension),
                     licence: true,
@@ -625,7 +693,11 @@ impl AppState {
     }
 
     /// Mints a download session for a `hosted_file` or `reseller_licence` gift.
-    pub(crate) async fn open_session(&self, gift_id: &str, device: DeviceClass) -> Result<Ticket, ClaimError> {
+    pub(crate) async fn open_session(
+        &self,
+        gift_id: &str,
+        device: DeviceClass,
+    ) -> Result<Ticket, ClaimError> {
         let gift = self.gift(gift_id).ok_or(ClaimError::Gone(GiftStatus::Cancelled))?;
         self.check_claimable(&gift)?;
         let payload = self.payload(&gift).await?;
@@ -666,7 +738,9 @@ impl AppState {
     /// Counts the press of `redeem` on a `reseller_redirect` gift and returns where to
     /// send the browser.
     pub(crate) fn redeem_redirect(&self, gift: &GiftRecord) -> Result<reqwest::Url, ClaimError> {
-        let Delivery::ResellerRedirect { url } = &gift.delivery else { return Err(ClaimError::NotAvailable) };
+        let Delivery::ResellerRedirect { url } = &gift.delivery else {
+            return Err(ClaimError::NotAvailable);
+        };
         self.check_claimable(gift)?;
         let target = self.signed_store_url(gift, url).ok_or(ClaimError::StoreUnavailable)?;
         let (record, first, stale) = self.record_claim(&gift.id, false, |_, _| {})?;
@@ -685,7 +759,8 @@ impl AppState {
         self.check_claimable(gift)?;
         let expires_at = self.now().saturating_add(self.config.pair_ttl_secs);
         for _ in 0..8 {
-            let code = codes::random_pair_code(self.entropy.as_ref()).map_err(ClaimError::internal)?;
+            let code =
+                codes::random_pair_code(self.entropy.as_ref()).map_err(ClaimError::internal)?;
             let hash = codes::pair_code_hash(&self.config.code_secret, &code);
             let now = self.now();
             let inserted = self
@@ -713,7 +788,9 @@ impl AppState {
         if !self.db.view(|db| db.pairs.contains_key(&hash)) {
             return Ok(None);
         }
-        self.db.update(|db| db.pairs.remove(&hash).filter(|pair| pair.expires_at > now).map(|pair| pair.gift_id))
+        self.db.update(|db| {
+            db.pairs.remove(&hash).filter(|pair| pair.expires_at > now).map(|pair| pair.gift_id)
+        })
     }
 
     /// Whether the hosted file of `gift` may be sent to a device address now: the gift
@@ -753,7 +830,12 @@ impl AppState {
     }
 
     /// Attaches a stored file (cover, card PDF) to a gift; the previous one is deleted.
-    pub(crate) fn attach_blob(&self, gift_id: &str, blob: BlobRef, cover: bool) -> Result<(), ApiError> {
+    pub(crate) fn attach_blob(
+        &self,
+        gift_id: &str,
+        blob: BlobRef,
+        cover: bool,
+    ) -> Result<(), ApiError> {
         let previous = self
             .db
             .update(|db| {

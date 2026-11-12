@@ -2054,7 +2054,7 @@ L 551.4725 370.564639
 L 551.4725 364.614639 
 L 537.8725 364.614639 
 z
-" style="fill: #e34948; stroke: #e34948; stroke-linejoin: miter"/>
+" style="fill: #e34948"/>
     </g>
     <g id="text_45">
      <!-- worse than base -->
@@ -2082,7 +2082,7 @@ L 551.4725 385.099307
 L 551.4725 379.149307 
 L 537.8725 379.149307 
 z
-" style="fill: #2a78d6; stroke: #2a78d6; stroke-linejoin: miter"/>
+" style="fill: #2a78d6"/>
     </g>
     <g id="text_46">
      <!-- better than base -->

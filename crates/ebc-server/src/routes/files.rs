@@ -36,7 +36,11 @@ pub(crate) async fn style() -> Response {
 
 /// The live session behind a token, or the page saying the link is dead (`404` for a
 /// token that never existed or was purged, `410` for one that has just expired).
-fn session_of(state: &AppState, visitor: &Visitor, token: &str) -> Result<SessionRecord, Box<Response>> {
+fn session_of(
+    state: &AppState,
+    visitor: &Visitor,
+    token: &str,
+) -> Result<SessionRecord, Box<Response>> {
     let dead = |status: StatusCode| {
         let chrome = visitor.chrome(state, visitor.locale(), None);
         let locale = chrome.locale;
@@ -74,7 +78,9 @@ pub(crate) enum ByteRange {
 
 /// Parses a single `bytes=` range against a file of `len` bytes.
 pub(crate) fn parse_range(header: Option<&str>, len: u64) -> ByteRange {
-    let Some(spec) = header.and_then(|h| h.trim().strip_prefix("bytes=")) else { return ByteRange::Full };
+    let Some(spec) = header.and_then(|h| h.trim().strip_prefix("bytes=")) else {
+        return ByteRange::Full;
+    };
     if spec.contains(',') {
         return ByteRange::Full;
     }
@@ -117,7 +123,8 @@ async fn serve_blob(
     let quoted_etag = format!("\"{etag}\"");
     let text = |name: header::HeaderName| request.get(name).and_then(|v| v.to_str().ok());
     // `If-Range` with another validator: the client's partial copy is of another file.
-    let range_header = text(header::RANGE).filter(|_| text(header::IF_RANGE).is_none_or(|v| v.trim() == quoted_etag));
+    let range_header = text(header::RANGE)
+        .filter(|_| text(header::IF_RANGE).is_none_or(|v| v.trim() == quoted_etag));
     let (status, start, end) = match parse_range(range_header, len) {
         ByteRange::Full => (StatusCode::OK, 0, len.saturating_sub(1)),
         ByteRange::Partial(start, end) => (StatusCode::PARTIAL_CONTENT, start, end),
@@ -135,7 +142,10 @@ async fn serve_blob(
     } else {
         match blob {
             Blob::Memory(bytes) => {
-                let (from, to) = (usize::try_from(start).unwrap_or(usize::MAX), usize::try_from(end).unwrap_or(usize::MAX));
+                let (from, to) = (
+                    usize::try_from(start).unwrap_or(usize::MAX),
+                    usize::try_from(end).unwrap_or(usize::MAX),
+                );
                 match bytes.get(from..=to) {
                     Some(_) => Body::from(bytes.slice(from..=to)),
                     None => return StatusCode::INTERNAL_SERVER_ERROR.into_response(),
@@ -148,7 +158,9 @@ async fn serve_blob(
                     Ok::<_, std::io::Error>(file)
                 };
                 match opened.await {
-                    Ok(file) => Body::from_stream(tokio_util::io::ReaderStream::new(file.take(count))),
+                    Ok(file) => {
+                        Body::from_stream(tokio_util::io::ReaderStream::new(file.take(count)))
+                    }
                     Err(error) => {
                         tracing::error!(%error, "a stored file cannot be opened");
                         return StatusCode::INTERNAL_SERVER_ERROR.into_response();
@@ -205,10 +217,13 @@ pub(crate) async fn download(
             return StatusCode::INTERNAL_SERVER_ERROR.into_response();
         }
     };
-    let chosen_eink = DeviceClass::ALL.iter().any(|class| class.is_eink() && class.as_str() == session.device);
-    let display = (!chosen_eink && !visitor.detected.is_eink()).then_some(session.display_name.as_str());
+    let chosen_eink =
+        DeviceClass::ALL.iter().any(|class| class.is_eink() && class.as_str() == session.device);
+    let display =
+        (!chosen_eink && !visitor.detected.is_eink()).then_some(session.display_name.as_str());
     let disposition = content_disposition(&session.file_name, display);
-    serve_blob(blob, &method, &headers, &session.media_type, &session.sha256, Some(&disposition)).await
+    serve_blob(blob, &method, &headers, &session.media_type, &session.sha256, Some(&disposition))
+        .await
 }
 
 /// `GET /o/{session}/cover`: the cover the partner supplied, for OPDS clients.
@@ -227,7 +242,9 @@ pub(crate) async fn opds_cover(
         return StatusCode::NOT_FOUND.into_response();
     };
     match state.db.store().open_blob(&cover.sha256) {
-        Ok(Some(blob)) => serve_blob(blob, &method, &headers, &cover.media_type, &cover.sha256, None).await,
+        Ok(Some(blob)) => {
+            serve_blob(blob, &method, &headers, &cover.media_type, &cover.sha256, None).await
+        }
         _ => StatusCode::NOT_FOUND.into_response(),
     }
 }
@@ -255,7 +272,12 @@ pub(crate) fn xml_escape(text: &str) -> String {
 pub(crate) fn rfc3339(unix: i64) -> String {
     let (year, month, day) = ebc_i18n::date_from_unix(unix);
     let seconds = unix.rem_euclid(86_400);
-    format!("{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z", seconds / 3600, seconds % 3600 / 60, seconds % 60)
+    format!(
+        "{year:04}-{month:02}-{day:02}T{:02}:{:02}:{:02}Z",
+        seconds / 3600,
+        seconds % 3600 / 60,
+        seconds % 60
+    )
 }
 
 /// The identifier of the publication: its ISBN as a URN, or one derived from the gift.
@@ -267,7 +289,11 @@ fn publication_id(gift: &GiftRecord) -> String {
 }
 
 /// The gift a session belongs to, with the session; `404` when either is gone.
-fn feed_source(state: &AppState, visitor: &Visitor, token: &str) -> Result<(SessionRecord, GiftRecord), Box<Response>> {
+fn feed_source(
+    state: &AppState,
+    visitor: &Visitor,
+    token: &str,
+) -> Result<(SessionRecord, GiftRecord), Box<Response>> {
     let session = session_of(state, visitor, token)?;
     match state.gift(&session.gift_id) {
         Some(gift) => Ok((session, gift)),
@@ -276,7 +302,11 @@ fn feed_source(state: &AppState, visitor: &Visitor, token: &str) -> Result<(Sess
 }
 
 /// `GET /o/{session}/catalog.xml`: OPDS 1.2 acquisition feed with the one publication.
-pub(crate) async fn opds_atom(State(state): State<AppState>, visitor: Visitor, Path(token): Path<String>) -> Response {
+pub(crate) async fn opds_atom(
+    State(state): State<AppState>,
+    visitor: Visitor,
+    Path(token): Path<String>,
+) -> Response {
     let (session, gift) = match feed_source(&state, &visitor, &token) {
         Ok(found) => found,
         Err(response) => return *response,
@@ -327,7 +357,13 @@ pub(crate) async fn opds_atom(State(state): State<AppState>, visitor: Visitor, P
         session.size_bytes
     ));
     xml.push_str("  </entry>\n</feed>\n");
-    ([(header::CONTENT_TYPE, HeaderValue::from_static("application/atom+xml;profile=opds-catalog;kind=acquisition"))], xml)
+    (
+        [(
+            header::CONTENT_TYPE,
+            HeaderValue::from_static("application/atom+xml;profile=opds-catalog;kind=acquisition"),
+        )],
+        xml,
+    )
         .into_response()
 }
 
@@ -335,7 +371,11 @@ pub(crate) async fn opds_atom(State(state): State<AppState>, visitor: Visitor, P
 ///
 /// OPDS 2.0 asks every publication for an `images` collection; it is present only when
 /// the partner supplied a cover (the server has no image of its own to offer).
-pub(crate) async fn opds_json(State(state): State<AppState>, visitor: Visitor, Path(token): Path<String>) -> Response {
+pub(crate) async fn opds_json(
+    State(state): State<AppState>,
+    visitor: Visitor,
+    Path(token): Path<String>,
+) -> Response {
     let (session, gift) = match feed_source(&state, &visitor, &token) {
         Ok(found) => found,
         Err(response) => return *response,
@@ -377,7 +417,8 @@ pub(crate) async fn opds_json(State(state): State<AppState>, visitor: Visitor, P
         "links": [{ "rel": "self", "href": format!("/o/{token}/catalog.json"), "type": "application/opds+json" }],
         "publications": [publication],
     });
-    ([(header::CONTENT_TYPE, HeaderValue::from_static("application/opds+json"))], feed.to_string()).into_response()
+    ([(header::CONTENT_TYPE, HeaderValue::from_static("application/opds+json"))], feed.to_string())
+        .into_response()
 }
 
 #[cfg(test)]
@@ -419,7 +460,10 @@ mod tests {
 
     #[test]
     fn xml_text_is_escaped_and_forbidden_characters_dropped() {
-        assert_eq!(xml_escape("Tom & \"Jerry\" <b>'s</b>"), "Tom &amp; &quot;Jerry&quot; &lt;b&gt;&apos;s&lt;/b&gt;");
+        assert_eq!(
+            xml_escape("Tom & \"Jerry\" <b>'s</b>"),
+            "Tom &amp; &quot;Jerry&quot; &lt;b&gt;&apos;s&lt;/b&gt;"
+        );
         assert_eq!(xml_escape("a\u{0}b\u{1b}c\u{ffff}d\né"), "abcd\né");
     }
 

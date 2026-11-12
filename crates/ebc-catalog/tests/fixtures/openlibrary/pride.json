@@ -1,0 +1,25 @@
+{
+  "ISBN:9780141439518": {
+    "bib_key": "ISBN:9780141439518",
+    "info_url": "https://openlibrary.org/books/OL7360807M/Pride_and_Prejudice",
+    "preview": "borrow",
+    "preview_url": "https://archive.org/details/prideprejudice00aust",
+    "thumbnail_url": "https://covers.openlibrary.org/b/id/8091016-S.jpg",
+    "details": {
+      "publishers": ["Penguin Books"],
+      "number_of_pages": 480,
+      "isbn_10": ["0141439513"],
+      "series": ["Penguin Classics"],
+      "physical_format": "Paperback",
+      "key": "/books/OL7360807M",
+      "authors": [{"key": "/authors/OL21594A", "name": "Jane Austen"}],
+      "contributors": [{"role": "Editor", "name": "Vivien Jones"}, {"role": "Introduction", "name": "Tony Tanner"}],
+      "languages": [{"key": "/languages/eng"}],
+      "title": "Pride and Prejudice",
+      "isbn_13": ["9780141439518"],
+      "publish_date": "December 31, 2002",
+      "works": [{"key": "/works/OL66554W"}],
+      "type": {"key": "/type/edition"}
+    }
+  }
+}

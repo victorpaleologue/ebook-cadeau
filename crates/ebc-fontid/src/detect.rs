@@ -26,7 +26,7 @@ pub struct TextRegion {
 }
 
 /// Longest side of the image at the finer of the two working scales, in pixels.
-const WORK_SIDE: usize = 640;
+const WORK_SIDE: usize = 960;
 /// Most components per polarity and scale that are grouped (the largest are kept).
 const MAX_CANDIDATES: usize = 2500;
 /// Most regions returned.
@@ -130,8 +130,8 @@ fn detect(img: &Pixmap, title: Option<&str>) -> Vec<TextRegion> {
         let window = ((w.max(h) / 10) | 1).clamp(31, 65);
         let (dark, light) = local_contrast_masks(&gray, window, 0.3, c_min);
         for (mask, is_light) in [(&dark, false), (&light, true)] {
-            let (_, comps) = label_components(mask, w, h);
-            let lines = find_lines(&comps, w, h);
+            let (labels, comps) = label_components(mask, w, h);
+            let lines = find_lines(&gray, &labels, &comps, is_light, c_min);
             let start = candidates.len();
             for line in &lines {
                 candidates.push(Candidate {
@@ -254,7 +254,8 @@ fn letter_like(c: &Comp, w: usize, h: usize) -> bool {
     if c.x0 == 0 || c.y0 == 0 || c.x1 as usize >= w || c.y1 as usize >= h {
         return false;
     }
-    if ch as usize * 2 > h || cw as usize * 2 > w || cw * 2 > ch * 7 || ch > cw * 14 {
+    // Up to six times as wide as tall: a few touching letters still count.
+    if ch as usize * 2 > h || cw as usize * 2 > w || cw > ch * 6 || ch > cw * 14 {
         return false;
     }
     let fill = c.area as f32 / (cw * ch) as f32;
@@ -262,20 +263,23 @@ fn letter_like(c: &Comp, w: usize, h: usize) -> bool {
         return false;
     }
     // Solid blocks are letters only when they are bars (I, l, 1).
-    if fill > 0.92 && cw * 2 > ch {
+    if (fill > 0.92 && cw * 2 > ch) || (cw > ch * 3 && fill > 0.75) {
         return false;
     }
     c.stroke_width() <= 0.5 * ch as f32
 }
 
-/// Groups letter-like components into lines.
-fn find_lines(comps: &[Comp], w: usize, h: usize) -> Vec<LineBox> {
-    let mut letters: Vec<&Comp> = comps.iter().filter(|c| letter_like(c, w, h)).collect();
-    if letters.len() > MAX_CANDIDATES {
-        letters.sort_by(|a, b| b.area.cmp(&a.area));
-        letters.truncate(MAX_CANDIDATES);
+/// Groups letter-like components into lines. `labels` and `comps` describe the ink mask
+/// of one polarity of `gray` (`light`: the ink is lighter than its surroundings).
+fn find_lines(gray: &Gray, labels: &[u32], comps: &[Comp], light: bool, c_min: f32) -> Vec<LineBox> {
+    let (w, h) = (gray.w, gray.h);
+    let mut order: Vec<usize> = (0..comps.len()).filter(|&i| letter_like(&comps[i], w, h)).collect();
+    if order.len() > MAX_CANDIDATES {
+        order.sort_by(|&a, &b| comps[b].area.cmp(&comps[a].area));
+        order.truncate(MAX_CANDIDATES);
     }
-    letters.sort_by_key(|c| (c.x0, c.y0));
+    order.sort_by_key(|&i| (comps[i].x0, comps[i].y0));
+    let letters: Vec<&Comp> = order.iter().map(|&i| &comps[i]).collect();
     let n = letters.len();
     let mut parent: Vec<usize> = (0..n).collect();
     fn find(parent: &mut [usize], mut i: usize) -> usize {
@@ -297,7 +301,7 @@ fn find_lines(comps: &[Comp], w: usize, h: usize) -> Vec<LineBox> {
             }
             let hb = b.h() as f32;
             let (tall, short) = (ha.max(hb), ha.min(hb));
-            if gap > tall || tall > 2.3 * short {
+            if gap > 1.6 * tall || tall > 2.3 * short {
                 continue;
             }
             let overlap = a.y1.min(b.y1) as f32 - a.y0.max(b.y0) as f32;
@@ -314,14 +318,72 @@ fn find_lines(comps: &[Comp], w: usize, h: usize) -> Vec<LineBox> {
             }
         }
     }
+    // Second stage: words on one line whose gap is wide for their letters (letter-spaced
+    // or monospaced lower case) are joined by the size of the words instead.
+    {
+        // (root, x0, y0, x1, y1, reference height) of every group so far.
+        let mut words: Vec<(usize, f32, f32, f32, f32, f32)> = Vec::new();
+        let mut members: Vec<Vec<usize>> = vec![Vec::new(); n];
+        for i in 0..n {
+            let root = find(&mut parent, i);
+            members[root].push(i);
+        }
+        for (root, group) in members.iter().enumerate().filter(|(_, g)| !g.is_empty()) {
+            let mut heights: Vec<f32> = group.iter().map(|&i| letters[i].h() as f32).collect();
+            heights.sort_by(f32::total_cmp);
+            let reference = median(&mut heights[group.len() / 2..]);
+            let x0 = group.iter().map(|&i| letters[i].x0).min().unwrap_or(0) as f32;
+            let y0 = group.iter().map(|&i| letters[i].y0).min().unwrap_or(0) as f32;
+            let x1 = group.iter().map(|&i| letters[i].x1).max().unwrap_or(0) as f32;
+            let y1 = group.iter().map(|&i| letters[i].y1).max().unwrap_or(0) as f32;
+            words.push((root, x0, y0, x1, y1, reference));
+        }
+        words.sort_by(|a, b| a.1.total_cmp(&b.1));
+        for i in 0..words.len() {
+            let a = words[i];
+            for b in &words[i + 1..] {
+                let gap = b.1 - a.3;
+                let tall = a.5.max(b.5);
+                if gap > 1.3 * tall {
+                    if gap > max_gap {
+                        break;
+                    }
+                    continue;
+                }
+                let overlap = a.4.min(b.4) - a.2.max(b.2);
+                if tall > 1.8 * a.5.min(b.5) || overlap < 0.6 * (a.4 - a.2).min(b.4 - b.2) {
+                    continue;
+                }
+                let (ra, rb) = (find(&mut parent, a.0), find(&mut parent, b.0));
+                if ra != rb {
+                    parent[ra] = rb;
+                }
+            }
+        }
+    }
     let mut groups: Vec<Vec<usize>> = vec![Vec::new(); n];
+    // Group of every component (`u32::MAX`: none), to sum grey levels per group.
+    let mut group_of = vec![u32::MAX; comps.len()];
     for i in 0..n {
         let root = find(&mut parent, i);
         groups[root].push(i);
+        group_of[order[i]] = root as u32;
+    }
+    let mut level_sum = vec![0u64; n];
+    let mut level_count = vec![0u32; n];
+    for (&label, &v) in labels.iter().zip(&gray.px) {
+        if label == 0 {
+            continue;
+        }
+        let group = group_of[label as usize - 1];
+        if group != u32::MAX {
+            level_sum[group as usize] += u64::from(v);
+            level_count[group as usize] += 1;
+        }
     }
 
     let mut lines = Vec::new();
-    for members in groups.into_iter().filter(|g| g.len() >= 2) {
+    for (root, members) in groups.into_iter().enumerate().filter(|(_, g)| g.len() >= 2) {
         let mut heights: Vec<f32> = members.iter().map(|&i| letters[i].h() as f32).collect();
         heights.sort_by(f32::total_cmp);
         let reference = median(&mut heights[members.len() / 2..]);
@@ -354,6 +416,16 @@ fn find_lines(comps: &[Comp], w: usize, h: usize) -> Vec<LineBox> {
             x1 = x1.max(c.x1);
             y1 = y1.max(c.y1);
         }
+        // Real lettering differs from what lies just around the line. The halo that
+        // dark text leaves in the light mask (and vice versa) and the counters of
+        // letters do not: they have the level of the background.
+        let pad = (0.35 * reference).round().max(2.0) as u32;
+        let ring = ring_level(gray, x0.saturating_sub(pad), y0.saturating_sub(pad), x1 + pad, y1 + pad);
+        let ink = level_sum[root] as f32 / level_count[root].max(1) as f32;
+        let contrast = if light { ink - ring } else { ring - ink };
+        if contrast < c_min.max(20.0) {
+            continue;
+        }
         lines.push(LineBox {
             x0: x0 as f32,
             y0: y0 as f32,
@@ -365,6 +437,33 @@ fn find_lines(comps: &[Comp], w: usize, h: usize) -> Vec<LineBox> {
         });
     }
     lines
+}
+
+/// Median grey level on the outline of a rectangle (clamped to the image).
+fn ring_level(gray: &Gray, x0: u32, y0: u32, x1: u32, y1: u32) -> f32 {
+    let (w, h) = (gray.w, gray.h);
+    let (x0, y0) = ((x0 as usize).min(w - 1), (y0 as usize).min(h - 1));
+    let (x1, y1) = ((x1 as usize).clamp(x0 + 1, w), (y1 as usize).clamp(y0 + 1, h));
+    let mut hist = [0u32; 256];
+    let mut n = 0u32;
+    for x in x0..x1 {
+        hist[usize::from(gray.px[y0 * w + x])] += 1;
+        hist[usize::from(gray.px[(y1 - 1) * w + x])] += 1;
+        n += 2;
+    }
+    for y in y0..y1 {
+        hist[usize::from(gray.px[y * w + x0])] += 1;
+        hist[usize::from(gray.px[y * w + x1 - 1])] += 1;
+        n += 2;
+    }
+    let mut acc = 0u32;
+    for (level, &count) in hist.iter().enumerate() {
+        acc += count;
+        if acc * 2 >= n {
+            return level as f32;
+        }
+    }
+    255.0
 }
 
 /// Blocks of two to four stacked lines of similar letter height.

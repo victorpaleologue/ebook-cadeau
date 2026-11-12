@@ -1,0 +1,12 @@
+{
+  "name": "Albert Camus",
+  "personal_name": "Camus, Albert",
+  "birth_date": "7 November 1913",
+  "death_date": "4 January 1960",
+  "key": "/authors/OL124171A",
+  "type": {"key": "/type/author"},
+  "remote_ids": {"wikidata": "Q34670", "viaf": "7396281"},
+  "latest_revision": 33,
+  "revision": 33,
+  "last_modified": {"type": "/type/datetime", "value": "2024-02-11T08:22:10.118732"}
+}

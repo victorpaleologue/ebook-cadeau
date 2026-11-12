@@ -5,6 +5,7 @@ use ebc_scene::{Path, PathSeg};
 use crate::error::FontError;
 use crate::font::Font;
 use crate::guard::contain;
+use crate::outline::Refusal;
 use crate::shape::{ShapeOptions, append_outlines, shape_units};
 
 /// Largest width or height of a [`Mask`], in pixels (before cropping to the ink). The
@@ -94,6 +95,8 @@ pub fn rasterize(font: &Font, text: &str, px_per_em: f32, opts: &ShapeOptions) -
 /// * [`FontError::RasterTooLarge`] — the text would exceed [`MAX_MASK_SIDE`] pixels in
 ///   one direction or [`MAX_MASK_PIXELS`] in total;
 /// * [`FontError::NonFiniteOutline`] — the font produced unusable coordinates;
+/// * [`FontError::OutlineTooComplex`] — a glyph of the text is a "glyph bomb", or the
+///   text as a whole is beyond the outline budget (see the crate documentation);
 /// * [`FontError::Malformed`] — the font libraries gave up on the font data.
 pub fn try_rasterize(
     font: &Font,
@@ -120,8 +123,14 @@ fn rasterize_run(
 
     // Outlines in pixel coordinates relative to the run origin, y down.
     let mut path = Path::new();
+    let Some(mut outliner) = font.outliner() else { return Ok(RasterizedText::default()) };
     let placed = run.glyphs.iter().map(|g| (g.id, (g.pen + g.dx) * scale, -g.dy * scale));
-    append_outlines(face.as_ref(), placed, scale, &mut path);
+    append_outlines(&mut outliner, placed, scale, &mut path);
+    if let Some(Refusal::GlyphTooComplex(glyph) | Refusal::BudgetExhausted(glyph)) =
+        outliner.refusal()
+    {
+        return Err(FontError::OutlineTooComplex { glyph });
+    }
     let empty = RasterizedText { mask: Mask::default(), left: 0, top: 0, advance };
     if path.is_empty() {
         return Ok(empty);

@@ -1,6 +1,7 @@
 //! Error type of the crate.
 
-/// Everything that can go wrong when reading a serialised [`FontIndex`](crate::FontIndex).
+/// Everything that can go wrong when reading a serialised [`FontIndex`](crate::FontIndex)
+/// or building one with [`FontIndex::build_checked`](crate::FontIndex::build_checked).
 ///
 /// The image functions ([`find_text_regions`](crate::find_text_regions),
 /// [`identify`](crate::identify), [`rerank`](crate::rerank)) do not fail: an image or
@@ -33,6 +34,26 @@ pub enum FontIdError {
     /// The trailing checksum does not match the content.
     #[error("font index checksum mismatch")]
     Checksum,
+    /// A font was refused by [`FontIndex::build_checked`](crate::FontIndex::build_checked)
+    /// because its licence is not one of [`OPEN_LICENCES`](crate::OPEN_LICENCES).
+    #[error("font \"{family} {style}\" refused: licence \"{licence}\" is not an allowed open licence")]
+    LicenceNotAllowed {
+        /// Family of the refused font.
+        family: String,
+        /// Style of the refused font.
+        style: String,
+        /// The licence recorded for it.
+        licence: String,
+    },
+    /// A font was refused by [`FontIndex::build_checked`](crate::FontIndex::build_checked)
+    /// because its embedding permissions (`OS/2.fsType`) do not allow bundling.
+    #[error("font \"{family} {style}\" refused: its embedding permissions forbid bundling")]
+    EmbeddingRestricted {
+        /// Family of the refused font.
+        family: String,
+        /// Style of the refused font.
+        style: String,
+    },
     /// A field holds a value that cannot be right.
     #[error("font index is corrupt: {0}")]
     Corrupt(&'static str),

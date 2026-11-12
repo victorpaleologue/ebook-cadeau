@@ -1,0 +1,22 @@
+{
+ "head": {
+  "vars": [
+   "item",
+   "itemLabel",
+   "title",
+   "subtitle",
+   "authorLabel",
+   "workAuthorLabel",
+   "translatorLabel",
+   "publisherLabel",
+   "date",
+   "langCode",
+   "pages",
+   "isbn13",
+   "isbn10"
+  ]
+ },
+ "results": {
+  "bindings": []
+ }
+}

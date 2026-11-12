@@ -1,0 +1,38 @@
+{
+ "head": {
+  "vars": [
+   "item",
+   "itemLabel",
+   "title",
+   "subtitle",
+   "authorLabel",
+   "workAuthorLabel",
+   "translatorLabel",
+   "publisherLabel",
+   "date",
+   "langCode",
+   "pages",
+   "isbn13",
+   "isbn10"
+  ]
+ },
+ "results": {
+  "bindings": [
+   {
+    "item": {
+     "type": "uri",
+     "value": "http://www.wikidata.org/entity/Q555"
+    },
+    "title": {
+     "type": "literal",
+     "value": "Un autre livre",
+     "xml:lang": "fr"
+    },
+    "isbn13": {
+     "type": "literal",
+     "value": "978-2-08-070012-4"
+    }
+   }
+  ]
+ }
+}

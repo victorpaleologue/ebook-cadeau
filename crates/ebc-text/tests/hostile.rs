@@ -268,3 +268,113 @@ fn pathological_options_are_harmless() {
         let _ = ebc_text::rasterize(&font, TEXT, 32.0, opts);
     }
 }
+
+/// Every numeric argument of the public API, with every kind of nonsense: nothing may
+/// panic, and whatever comes back is either empty/`None` or made of finite numbers.
+#[test]
+fn hostile_sizes_widths_and_origins_are_harmless() {
+    let numbers = [
+        0.0,
+        -0.0,
+        -1.0,
+        f64::NAN,
+        f64::INFINITY,
+        f64::NEG_INFINITY,
+        f64::MAX,
+        f64::MIN,
+        f64::MIN_POSITIVE,
+        5e-324,
+        1e300,
+        12.0,
+    ];
+    let opts = ShapeOptions::default();
+    let cff = Font::from_bytes(common::synthetic_cff_font(), 0).expect("parses");
+    for font in [common::atkinson(), cff] {
+        let text = "Été AV — OH fi";
+        for &size in &numbers {
+            let run = shape(&font, text, size, &opts);
+            assert!(run.width.is_finite() && run.size_pt.is_finite(), "size {size}");
+            assert!((0.0..=ebc_text::MAX_SIZE_PT).contains(&run.size_pt));
+            assert!(run.glyphs.iter().all(|g| g.x.is_finite() && g.advance.is_finite()));
+            let metrics = font.metrics();
+            let _ = (metrics.cap_height_mm(size), metrics.line_height_mm(size));
+            let _ = metrics.size_for_cap_height(size);
+            for &other in &numbers {
+                // The origin is the caller's: a finite one gives finite outlines.
+                let outline = run.to_outline(&font, Point::new(other, 3.0));
+                let finite = outline_bounds(&outline).is_some() || outline.is_empty();
+                assert!(finite || !other.is_finite() || other.abs() > 1e290, "{size} {other}");
+                let _ = run.ink_bounds(&font, Point::new(1.0, other));
+                let _ = run.try_to_outline(&font, Point::new(other, other));
+
+                let lines = wrap(&font, text, size, other, &opts);
+                assert_eq!(squeeze(&lines.concat()), squeeze(text), "wrap({size}, {other})");
+                let ranges = wrap_ranges(&font, text, size, other, &opts);
+                assert_eq!(ranges.last().map(|r| r.end), Some(text.len()));
+
+                for (min_pt, max_pt) in [(size, other), (other, size), (6.0, size), (size, 40.0)] {
+                    for (width, cap) in [(size, other), (other, 5.0), (100.0, other)] {
+                        if let Some(fitted) =
+                            fit_size(&font, text, width, cap, min_pt, max_pt, &opts)
+                        {
+                            assert!(fitted.is_finite() && fitted > 0.0);
+                            assert!(fitted >= min_pt && fitted <= max_pt);
+                            assert!(shape(&font, text, fitted, &opts).width <= width);
+                        }
+                    }
+                }
+            }
+            #[cfg(feature = "raster")]
+            match ebc_text::try_rasterize(&font, text, size as f32, &opts) {
+                Ok(raster) => {
+                    assert!(size.is_finite() && size > 0.0, "size {size} was accepted");
+                    let mask = raster.mask;
+                    assert_eq!(mask.data.len(), mask.width as usize * mask.height as usize);
+                    assert!(raster.advance.is_finite());
+                }
+                Err(_) => assert!(ebc_text::rasterize(&font, text, size as f32, &opts).is_empty()),
+            }
+        }
+    }
+}
+
+/// A megabyte of text: everything stays proportional to its length, and the pieces that
+/// build geometry stop at their budget instead of allocating gigabytes.
+#[test]
+fn a_megabyte_of_text_is_handled_in_bounded_time_and_memory() {
+    use std::sync::mpsc;
+    use std::time::{Duration, Instant};
+
+    let started = Instant::now();
+    let (tx, rx) = mpsc::channel();
+    std::thread::spawn(move || {
+        let font = common::atkinson();
+        let opts = ShapeOptions::default();
+        let text = "Tout le malheur des hommes vient d'une seule chose. ".repeat(20_000);
+        assert!(text.len() > 1_000_000);
+
+        let run = shape(&font, &text, 10.0, &opts);
+        let reassembled: usize = run.glyphs.iter().map(|g| g.text.len()).sum();
+        assert_eq!(reassembled, text.len());
+        assert!(run.width.is_finite() && run.width > 0.0);
+
+        // About 40 million points if drawn in full: the outline stops at its budget of
+        // about one million.
+        let outline = run.to_outline(&font, Point::new(0.0, 0.0));
+        assert!(outline.segs.len() > 100_000, "the beginning of the text is drawn");
+        assert!(outline.segs.len() < 2 << 20, "{} segments", outline.segs.len());
+        let refused = run.try_to_outline(&font, Point::new(0.0, 0.0));
+        assert!(matches!(refused, Err(ebc_text::FontError::OutlineTooComplex { .. })));
+        #[cfg(feature = "raster")]
+        assert!(ebc_text::try_rasterize(&font, &text, 20.0, &opts).is_err());
+
+        let lines = wrap(&font, &text, 10.0, 60.0, &opts);
+        assert_eq!(lines.iter().map(String::len).sum::<usize>() + lines.len(), text.len());
+        assert_eq!(fit_size(&font, &text, 100.0, 5.0, 1.0, 50.0, &opts), None);
+        assert!(font.missing_chars(&text).is_empty());
+        let _ = tx.send(());
+    });
+    // Generous: this is a debug build on a shared machine. Release takes about a second.
+    let finished = rx.recv_timeout(Duration::from_secs(120));
+    assert!(finished.is_ok(), "failed or still running after {:?}", started.elapsed());
+}

@@ -14,7 +14,6 @@ ebc-i18n.workspace = true
 ebc-isbn.workspace = true
 ebc-model.workspace = true
 hmac = "0.13.0"
-http-body-util = "0.1.5"
 lettre = { version = "0.11.23", default-features = false, features = ["builder", "ring", "smtp-transport", "tokio1", "tokio1-rustls", "webpki-roots"] }
 maud = "0.27.0"
 percent-encoding = "2.3.2"
@@ -27,7 +26,6 @@ serde_json.workspace = true
 sha2 = "0.11.1"
 subtle = "2.6.1"
 thiserror.workspace = true
-time = { version = "0.3.55", features = ["formatting"] }
 tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "time", "signal", "sync", "fs", "io-util"] }
 tokio-util = { version = "0.7.20", features = ["io"] }
 toml = "1.2.1"
@@ -38,6 +36,13 @@ zip = { version = "9.5.1", default-features = false, features = ["deflate-flate2
 
 [lints]
 workspace = true
+
+[[bin]]
+name = "ebc-server"
+path = "src/main.rs"
+# The binary only wires the library to the environment; it has no tests of its own.
+test = false
+doctest = false
 
 [dev-dependencies]
 axum = { version = "0.8.9", features = ["multipart"] }

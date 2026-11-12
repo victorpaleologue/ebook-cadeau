@@ -59,8 +59,12 @@ fn wait_text(locale: Locale, retry_after_secs: u64) -> String {
 
 /// The `429` page.
 fn too_many(chrome: Chrome<'_>, retry_after_secs: u64, pair: bool) -> Response {
-    let errors = [t(chrome.locale, Msg::ErrorTooManyAttempts).to_owned(), wait_text(chrome.locale, retry_after_secs)];
-    let page = if pair { pages::pair_form(chrome, &errors) } else { pages::home(chrome, &errors, None) };
+    let errors = [
+        t(chrome.locale, Msg::ErrorTooManyAttempts).to_owned(),
+        wait_text(chrome.locale, retry_after_secs),
+    ];
+    let page =
+        if pair { pages::pair_form(chrome, &errors) } else { pages::home(chrome, &errors, None) };
     with_retry_after(html(StatusCode::TOO_MANY_REQUESTS, page, None), retry_after_secs)
 }
 
@@ -100,16 +104,27 @@ fn typo(chrome: Chrome<'_>, error: &CodeError, raw: &str) -> Response {
 /// `429` when the client is out of attempts (nothing is looked up), `400` for a typo (not
 /// counted), `410` for a voided, cancelled or expired code, `404` for an unknown one
 /// (counted, with the attempts left).
-fn resolve(state: &AppState, visitor: &Visitor, raw: &str, device: Option<&str>) -> Result<(GiftRecord, GiftCode), Box<Response>> {
+fn resolve(
+    state: &AppState,
+    visitor: &Visitor,
+    raw: &str,
+    device: Option<&str>,
+) -> Result<(GiftRecord, GiftCode), Box<Response>> {
     let now = state.now();
     let chrome = visitor.chrome(state, visitor.locale(), device);
-    if let Verdict::Blocked { retry_after_secs, .. } = state.code_limiter.check(&visitor.client, now) {
+    if let Verdict::Blocked { retry_after_secs, .. } =
+        state.code_limiter.check(&visitor.client, now)
+    {
         return Err(Box::new(too_many(chrome, retry_after_secs, false)));
     }
     let code = parse_code(raw).map_err(|error| Box::new(typo(chrome, &error, raw)))?;
     let gone = |chrome: Chrome<'_>, text: &str| {
         let title = t(chrome.locale, Msg::RedeemTitle);
-        Box::new(html(StatusCode::GONE, pages::message(chrome, title, &[text.to_owned()], None), None))
+        Box::new(html(
+            StatusCode::GONE,
+            pages::message(chrome, title, &[text.to_owned()], None),
+            None,
+        ))
     };
     match state.lookup_code(&code) {
         CodeLookup::Gift(gift) => {
@@ -123,9 +138,15 @@ fn resolve(state: &AppState, visitor: &Visitor, raw: &str, device: Option<&str>)
         }
         CodeLookup::Voided => Err(gone(chrome, s(chrome.locale, S::Reissued))),
         CodeLookup::Unknown => match state.code_limiter.record_failure(&visitor.client, now) {
-            Verdict::Blocked { retry_after_secs, .. } => Err(Box::new(too_many(chrome, retry_after_secs, false))),
+            Verdict::Blocked { retry_after_secs, .. } => {
+                Err(Box::new(too_many(chrome, retry_after_secs, false)))
+            }
             Verdict::Allowed { remaining } => {
-                let lines = unknown_lines(chrome.locale, t(chrome.locale, Msg::ErrorCodeUnknown), remaining);
+                let lines = unknown_lines(
+                    chrome.locale,
+                    t(chrome.locale, Msg::ErrorCodeUnknown),
+                    remaining,
+                );
                 Err(Box::new(html(StatusCode::NOT_FOUND, pages::home(chrome, &lines, None), None)))
             }
         },
@@ -161,10 +182,19 @@ fn gift_response(
         }
         _ => None,
     };
-    let send = state.config.smtp_url.as_ref().filter(|_| !state.config.send_domains.is_empty()).map(|_| SendView {
-        from: &state.config.send_from,
-        domains: state.config.send_domains.iter().map(|d| format!("@{d}")).collect::<Vec<_>>().join(", "),
-    });
+    let send =
+        state.config.smtp_url.as_ref().filter(|_| !state.config.send_domains.is_empty()).map(
+            |_| SendView {
+                from: &state.config.send_from,
+                domains: state
+                    .config
+                    .send_domains
+                    .iter()
+                    .map(|d| format!("@{d}"))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            },
+        );
     let view = GiftView {
         chrome,
         gift,
@@ -180,18 +210,39 @@ fn gift_response(
 }
 
 /// The page for a claim that could not go ahead.
-fn claim_failed(state: &AppState, visitor: &Visitor, gift_id: &str, code: &GiftCode, device: Option<&str>, error: &ClaimError) -> Response {
+fn claim_failed(
+    state: &AppState,
+    visitor: &Visitor,
+    gift_id: &str,
+    code: &GiftCode,
+    device: Option<&str>,
+    error: &ClaimError,
+) -> Response {
     let Some(gift) = state.gift(gift_id) else {
         let chrome = visitor.chrome(state, visitor.locale(), device);
-        let page = pages::message(chrome, t(chrome.locale, Msg::RedeemTitle), &[t(chrome.locale, Msg::ErrorGiftRevoked).to_owned()], None);
+        let page = pages::message(
+            chrome,
+            t(chrome.locale, Msg::RedeemTitle),
+            &[t(chrome.locale, Msg::ErrorGiftRevoked).to_owned()],
+            None,
+        );
         return html(StatusCode::GONE, page, None);
     };
     let locale = gift.locale;
     let chrome = visitor.chrome(state, locale, device);
     let notice = match error {
         ClaimError::Gone(status) => {
-            let text = if *status == GiftStatus::Expired { Msg::ErrorGiftExpired } else { Msg::ErrorGiftRevoked };
-            let page = pages::message(chrome, t(locale, Msg::RedeemTitle), &[t(locale, text).to_owned()], None);
+            let text = if *status == GiftStatus::Expired {
+                Msg::ErrorGiftExpired
+            } else {
+                Msg::ErrorGiftRevoked
+            };
+            let page = pages::message(
+                chrome,
+                t(locale, Msg::RedeemTitle),
+                &[t(locale, text).to_owned()],
+                None,
+            );
             return html(StatusCode::GONE, page, None);
         }
         // The page itself says why: the reveal date, or that the limit is reached.
@@ -206,25 +257,39 @@ fn claim_failed(state: &AppState, visitor: &Visitor, gift_id: &str, code: &GiftC
 }
 
 /// `GET /`.
-pub(crate) async fn home(State(state): State<AppState>, visitor: Visitor, Query(query): Query<PageQuery>) -> Response {
+pub(crate) async fn home(
+    State(state): State<AppState>,
+    visitor: Visitor,
+    Query(query): Query<PageQuery>,
+) -> Response {
     let chrome = visitor.chrome(&state, visitor.locale(), query.device.as_deref());
     html(StatusCode::OK, pages::home(chrome, &[], None), None)
 }
 
 /// `GET /aide`.
-pub(crate) async fn help(State(state): State<AppState>, visitor: Visitor, Query(query): Query<PageQuery>) -> Response {
+pub(crate) async fn help(
+    State(state): State<AppState>,
+    visitor: Visitor,
+    Query(query): Query<PageQuery>,
+) -> Response {
     let chrome = visitor.chrome(&state, visitor.locale(), query.device.as_deref());
     html(StatusCode::OK, pages::help(chrome), None)
 }
 
 /// `GET /k?code=…`: normalises the typed code and redirects to its gift page.
-pub(crate) async fn code_query(State(state): State<AppState>, visitor: Visitor, Query(query): Query<PageQuery>) -> Response {
+pub(crate) async fn code_query(
+    State(state): State<AppState>,
+    visitor: Visitor,
+    Query(query): Query<PageQuery>,
+) -> Response {
     let chrome = visitor.chrome(&state, visitor.locale(), query.device.as_deref());
     let raw = query.code.as_deref().map(str::trim).unwrap_or("");
     if raw.is_empty() {
         return see_other(&chrome_link(chrome, "/"));
     }
-    if let Verdict::Blocked { retry_after_secs, .. } = state.code_limiter.check(&visitor.client, state.now()) {
+    if let Verdict::Blocked { retry_after_secs, .. } =
+        state.code_limiter.check(&visitor.client, state.now())
+    {
         return too_many(chrome, retry_after_secs, false);
     }
     match parse_code(raw) {
@@ -250,14 +315,21 @@ pub(crate) async fn gift_page(
 ) -> Response {
     let device = query.device.as_deref();
     match resolve(&state, &visitor, &raw, device) {
-        Ok((gift, code)) => gift_response(&state, &visitor, &gift, &code, device, StatusCode::OK, &[]),
+        Ok((gift, code)) => {
+            gift_response(&state, &visitor, &gift, &code, device, StatusCode::OK, &[])
+        }
         Err(page) => *page,
     }
 }
 
 /// `POST /k/{code}/download`: mints a download session and redirects to the file (or,
 /// with `opds=1`, to the OPDS feed of the session).
-pub(crate) async fn download(State(state): State<AppState>, visitor: Visitor, Path(raw): Path<String>, posted: PostedForm) -> Response {
+pub(crate) async fn download(
+    State(state): State<AppState>,
+    visitor: Visitor,
+    Path(raw): Path<String>,
+    posted: PostedForm,
+) -> Response {
     let form = form_of(posted);
     let device = form.device.as_deref();
     let (gift, code) = match resolve(&state, &visitor, &raw, device) {
@@ -269,7 +341,9 @@ pub(crate) async fn download(State(state): State<AppState>, visitor: Visitor, Pa
     }
     let chrome = visitor.chrome(&state, gift.locale, device);
     match state.open_session(&gift.id, chrome.device).await {
-        Ok(ticket) if form.opds.as_deref() == Some("1") => see_other(&format!("/o/{}/catalog.xml", ticket.token)),
+        Ok(ticket) if form.opds.as_deref() == Some("1") => {
+            see_other(&format!("/o/{}/catalog.xml", ticket.token))
+        }
         Ok(ticket) => see_other(&ticket.download_path()),
         Err(error) => claim_failed(&state, &visitor, &gift.id, &code, device, &error),
     }
@@ -277,7 +351,12 @@ pub(crate) async fn download(State(state): State<AppState>, visitor: Visitor, Pa
 
 /// `POST /k/{code}/redeem`: to the store with signed parameters (`reseller_redirect`), or
 /// to a download session serving the licence (`reseller_licence`).
-pub(crate) async fn redeem(State(state): State<AppState>, visitor: Visitor, Path(raw): Path<String>, posted: PostedForm) -> Response {
+pub(crate) async fn redeem(
+    State(state): State<AppState>,
+    visitor: Visitor,
+    Path(raw): Path<String>,
+    posted: PostedForm,
+) -> Response {
     let form = form_of(posted);
     let device = form.device.as_deref();
     let (gift, code) = match resolve(&state, &visitor, &raw, device) {
@@ -285,7 +364,9 @@ pub(crate) async fn redeem(State(state): State<AppState>, visitor: Visitor, Path
         Err(page) => return *page,
     };
     let outcome = match &gift.delivery {
-        Delivery::ResellerRedirect { .. } => state.redeem_redirect(&gift).map(|url| url.to_string()),
+        Delivery::ResellerRedirect { .. } => {
+            state.redeem_redirect(&gift).map(|url| url.to_string())
+        }
         Delivery::ResellerLicence { .. } => {
             let chrome = visitor.chrome(&state, gift.locale, device);
             state.open_session(&gift.id, chrome.device).await.map(|ticket| ticket.download_path())
@@ -299,7 +380,12 @@ pub(crate) async fn redeem(State(state): State<AppState>, visitor: Visitor, Path
 }
 
 /// `POST /k/{code}/pair`: creates the pair code and shows it.
-pub(crate) async fn pair(State(state): State<AppState>, visitor: Visitor, Path(raw): Path<String>, posted: PostedForm) -> Response {
+pub(crate) async fn pair(
+    State(state): State<AppState>,
+    visitor: Visitor,
+    Path(raw): Path<String>,
+    posted: PostedForm,
+) -> Response {
     let form = form_of(posted);
     let device = form.device.as_deref();
     let (gift, code) = match resolve(&state, &visitor, &raw, device) {
@@ -309,7 +395,13 @@ pub(crate) async fn pair(State(state): State<AppState>, visitor: Visitor, Path(r
     match state.create_pair(&gift) {
         Ok((pair, expires_at)) => {
             let chrome = visitor.chrome(&state, gift.locale, device);
-            let page = pages::pair_created(chrome, &code, &pair.grouped(), expires_at, state.config.pair_ttl_secs);
+            let page = pages::pair_created(
+                chrome,
+                &code,
+                &pair.grouped(),
+                expires_at,
+                state.config.pair_ttl_secs,
+            );
             html(StatusCode::OK, page, None)
         }
         Err(error) => claim_failed(&state, &visitor, &gift.id, &code, device, &error),
@@ -317,20 +409,30 @@ pub(crate) async fn pair(State(state): State<AppState>, visitor: Visitor, Path(r
 }
 
 /// `GET /e`: the pair-code form, on the e-reader.
-pub(crate) async fn pair_form(State(state): State<AppState>, visitor: Visitor, Query(query): Query<PageQuery>) -> Response {
+pub(crate) async fn pair_form(
+    State(state): State<AppState>,
+    visitor: Visitor,
+    Query(query): Query<PageQuery>,
+) -> Response {
     let chrome = visitor.chrome(&state, visitor.locale(), query.device.as_deref());
     html(StatusCode::OK, pages::pair_form(chrome, &[]), None)
 }
 
 /// `POST /e`: validates the pair code and redirects to the file. Wrong codes count
 /// against the per-client and the global failure budgets.
-pub(crate) async fn pair_submit(State(state): State<AppState>, visitor: Visitor, posted: PostedForm) -> Response {
+pub(crate) async fn pair_submit(
+    State(state): State<AppState>,
+    visitor: Visitor,
+    posted: PostedForm,
+) -> Response {
     let form = form_of(posted);
     let device = form.device.as_deref();
     let chrome = visitor.chrome(&state, visitor.locale(), device);
     let locale = chrome.locale;
     let now = state.now();
-    if let Verdict::Blocked { retry_after_secs, .. } = state.code_limiter.check(&visitor.client, now) {
+    if let Verdict::Blocked { retry_after_secs, .. } =
+        state.code_limiter.check(&visitor.client, now)
+    {
         return too_many(chrome, retry_after_secs, true);
     }
     let Ok(code) = PairCode::parse(form.p.as_deref().unwrap_or("")) else {
@@ -341,7 +443,9 @@ pub(crate) async fn pair_submit(State(state): State<AppState>, visitor: Visitor,
         Ok(Some(gift_id)) => gift_id,
         Ok(None) => {
             return match state.code_limiter.record_failure(&visitor.client, now) {
-                Verdict::Blocked { retry_after_secs, .. } => too_many(chrome, retry_after_secs, true),
+                Verdict::Blocked { retry_after_secs, .. } => {
+                    too_many(chrome, retry_after_secs, true)
+                }
                 Verdict::Allowed { remaining } => {
                     let lines = unknown_lines(locale, s(locale, S::PairUnknown), remaining);
                     html(StatusCode::NOT_FOUND, pages::pair_form(chrome, &lines), None)
@@ -351,7 +455,11 @@ pub(crate) async fn pair_submit(State(state): State<AppState>, visitor: Visitor,
         Err(error) => {
             tracing::error!(%error, "pair code lookup failed");
             let errors = [t(locale, Msg::ErrorGeneric).to_owned()];
-            return html(StatusCode::INTERNAL_SERVER_ERROR, pages::pair_form(chrome, &errors), None);
+            return html(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                pages::pair_form(chrome, &errors),
+                None,
+            );
         }
     };
     match state.open_session(&gift_id, chrome.device).await {
@@ -370,7 +478,12 @@ pub(crate) async fn pair_submit(State(state): State<AppState>, visitor: Visitor,
 }
 
 /// `POST /k/{code}/send`: e-mails the hosted file to a device address.
-pub(crate) async fn send(State(state): State<AppState>, visitor: Visitor, Path(raw): Path<String>, posted: PostedForm) -> Response {
+pub(crate) async fn send(
+    State(state): State<AppState>,
+    visitor: Visitor,
+    Path(raw): Path<String>,
+    posted: PostedForm,
+) -> Response {
     let form = form_of(posted);
     let device = form.device.as_deref();
     let (gift, code) = match resolve(&state, &visitor, &raw, device) {
@@ -380,14 +493,31 @@ pub(crate) async fn send(State(state): State<AppState>, visitor: Visitor, Path(r
     let chrome = visitor.chrome(&state, gift.locale, device);
     let locale = chrome.locale;
     let title = t(locale, Msg::SendToEreaderCta);
-    let result = |status: StatusCode, text: &str, ok: bool| html(status, pages::send_result(chrome, &code, title, text, ok), None);
+    let result = |status: StatusCode, text: &str, ok: bool| {
+        html(status, pages::send_result(chrome, &code, title, text, ok), None)
+    };
 
-    let (Some(smtp_url), Delivery::HostedFile { sha256, media_type, file_name, .. }) = (&state.config.smtp_url, &gift.delivery) else {
+    let (Some(smtp_url), Delivery::HostedFile { sha256, media_type, file_name, .. }) =
+        (&state.config.smtp_url, &gift.delivery)
+    else {
         return claim_failed(&state, &visitor, &gift.id, &code, device, &ClaimError::NotAvailable);
     };
-    let Some(to) = mail::parse_device_address(form.device_email.as_deref().unwrap_or(""), &state.config.send_domains) else {
-        let domains = state.config.send_domains.iter().map(|d| format!("@{d}")).collect::<Vec<_>>().join(", ");
-        return result(StatusCode::BAD_REQUEST, &sf(locale, S::SendBadAddress, &[("domains", &domains)]), false);
+    let Some(to) = mail::parse_device_address(
+        form.device_email.as_deref().unwrap_or(""),
+        &state.config.send_domains,
+    ) else {
+        let domains = state
+            .config
+            .send_domains
+            .iter()
+            .map(|d| format!("@{d}"))
+            .collect::<Vec<_>>()
+            .join(", ");
+        return result(
+            StatusCode::BAD_REQUEST,
+            &sf(locale, S::SendBadAddress, &[("domains", &domains)]),
+            false,
+        );
     };
     if let Err(error) = state.can_send(&gift) {
         return claim_failed(&state, &visitor, &gift.id, &code, device, &error);
@@ -404,14 +534,18 @@ pub(crate) async fn send(State(state): State<AppState>, visitor: Visitor, Path(r
     };
     // Send-to-PocketBook only takes short ASCII names without commas; a Kindle shows the
     // title from the file itself. The URL name already has that shape.
-    let subject = file_name.rsplit_once('.').map_or(file_name.as_str(), |(stem, _)| stem).to_owned();
+    let subject =
+        file_name.rsplit_once('.').map_or(file_name.as_str(), |(stem, _)| stem).to_owned();
     let outgoing = mail::Outgoing {
         smtp_url,
         from: &state.config.send_from,
         to,
         subject,
         text: sf(locale, S::MailBody, &[("title", &gift.book.title)]),
-        attachment_name: ascii_file_name(&gift.book.title, file_name.rsplit_once('.').map_or("epub", |(_, ext)| ext)),
+        attachment_name: ascii_file_name(
+            &gift.book.title,
+            file_name.rsplit_once('.').map_or("epub", |(_, ext)| ext),
+        ),
         media_type,
         bytes: bytes.to_vec(),
         now_unix: state.now(),
@@ -419,8 +553,8 @@ pub(crate) async fn send(State(state): State<AppState>, visitor: Visitor, Path(r
     };
     let timeout = std::time::Duration::from_millis(state.config.outbound_timeout_ms.max(1));
     if let Err(error) = mail::send(outgoing, timeout).await {
-        // The address is not logged.
-        tracing::warn!(gift = %gift.id, %error, "send-to-device failed");
+        // Only the kind of failure is logged: SMTP error texts may quote the address.
+        tracing::warn!(gift = %gift.id, kind = error.kind(), "send-to-device failed");
         return result(StatusCode::BAD_GATEWAY, s(locale, S::SendFailed), false);
     }
     if let Err(error) = state.record_send(&gift.id) {

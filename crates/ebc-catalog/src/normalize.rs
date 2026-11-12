@@ -330,6 +330,30 @@ fn strip_trailing_punctuation(input: &str) -> &str {
     }
 }
 
+/// Removes the space that MARC-derived records leave after an elided article
+/// (`"L' étranger"` → `"L'étranger"`, `"d' Artagnan"` → `"d'Artagnan"`). Only a one-letter
+/// word (or `qu`) before the apostrophe counts, so `"Dogs' tales"` is left alone.
+fn close_elisions(input: &str) -> String {
+    let chars: Vec<char> = input.chars().collect();
+    let mut out = String::with_capacity(input.len());
+    for (i, ch) in chars.iter().enumerate() {
+        if *ch == ' '
+            && i >= 2
+            && matches!(chars[i - 1], '\'' | '’')
+            && chars.get(i + 1).is_some_and(|next| next.is_alphabetic())
+        {
+            let word_start = chars[..i - 1].iter().rposition(|c| !c.is_alphabetic()).map_or(0, |p| p + 1);
+            let word: String = chars[word_start..i - 1].iter().collect::<String>().to_lowercase();
+            let boundary = word_start == 0 || chars[word_start - 1].is_whitespace();
+            if boundary && (word.chars().count() == 1 || word == "qu") {
+                continue;
+            }
+        }
+        out.push(*ch);
+    }
+    out
+}
+
 /// Cleans a title: removes non-sorting marks, medium designations, the statement of
 /// responsibility after `" / "`, a parallel title after `" = "` and trailing ISBD
 /// punctuation.
@@ -340,13 +364,15 @@ fn strip_trailing_punctuation(input: &str) -> &str {
 /// assert_eq!(title("\u{98}Die \u{9c}Verwandlung"), "Die Verwandlung");
 /// assert_eq!(title("<<Der>> Zauberberg :"), "Der Zauberberg");
 /// assert_eq!(title("Pride and prejudice /"), "Pride and prejudice");
+/// assert_eq!(title("L' étranger"), "L'étranger");
+/// assert_eq!(title("Dogs' tales"), "Dogs' tales");
 /// ```
 #[must_use]
 pub fn title(input: &str) -> String {
     let s = tidy(input, false);
     let s = strip_nonsorting(&s);
     let s = strip_gmd(&s);
-    let s = tidy(&s, false);
+    let s = close_elisions(&tidy(&s, false));
     let mut cut = s.as_str();
     if let Some(i) = cut.find(" / ") {
         cut = &cut[..i];
@@ -801,6 +827,7 @@ const PAGE_UNITS: &[&str] = &[
 /// assert_eq!(page_count("1 vol. (185 p.)"), Some(185));
 /// assert_eq!(page_count("xli, 435 p. ;"), Some(435));
 /// assert_eq!(page_count("1 Online-Ressource (224 Seiten)"), Some(224));
+/// assert_eq!(page_count("185, [2] s."), Some(185));
 /// assert_eq!(page_count("185"), Some(185));
 /// assert_eq!(page_count("2 vol."), None);
 /// ```
@@ -813,6 +840,8 @@ pub fn page_count(input: &str) -> Option<u32> {
     }
     let chars: Vec<char> = s.chars().collect();
     let mut best: Option<u32> = None;
+    // Numbers of one sequence, as in "185, [2] p.": the unit follows the last of them.
+    let mut run: Vec<u32> = Vec::new();
     let mut i = 0;
     while i < chars.len() {
         if !chars[i].is_ascii_digit() {
@@ -835,9 +864,18 @@ pub fn page_count(input: &str) -> Option<u32> {
             unit.push(chars[j]);
             j += 1;
         }
+        let continues = unit.is_empty() && matches!(chars.get(j), Some(',' | '[' | '+'));
         let unit = fold_key(&unit);
-        if digits <= 5 && value > 0 && PAGE_UNITS.contains(&unit.as_str()) {
-            best = Some(best.map_or(value, |b| b.max(value)));
+        if digits <= 5 && value > 0 {
+            run.push(value);
+        }
+        if PAGE_UNITS.contains(&unit.as_str()) {
+            if let Some(most) = run.iter().copied().max() {
+                best = Some(best.map_or(most, |b| b.max(most)));
+            }
+            run.clear();
+        } else if !continues {
+            run.clear();
         }
     }
     best

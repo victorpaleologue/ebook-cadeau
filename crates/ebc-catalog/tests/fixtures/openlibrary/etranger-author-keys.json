@@ -1,0 +1,19 @@
+{
+  "ISBN:9782070360024": {
+    "bib_key": "ISBN:9782070360024",
+    "info_url": "https://openlibrary.org/books/OL8838946M/L'étranger",
+    "details": {
+      "publishers": ["Gallimard"],
+      "isbn_10": ["2070360024"],
+      "key": "/books/OL8838946M",
+      "authors": [{"key": "/authors/OL124171A"}, {"key": "/authors/OL9999999A"}, {"key": "https://evil.example/authors/OL1A"}],
+      "contributors": [{"role": "Préface", "name": "Jean-Paul Sartre"}],
+      "languages": [{"key": "/languages/fre"}],
+      "title_prefix": "L'",
+      "title": "étranger",
+      "publish_date": "1971",
+      "works": [{"key": "/works/OL1168007W"}],
+      "type": {"key": "/type/edition"}
+    }
+  }
+}

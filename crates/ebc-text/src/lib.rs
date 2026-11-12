@@ -46,6 +46,27 @@
 //! crate then contains the panic and returns an error or an empty result — except where
 //! panics cannot be caught at all (`wasm32-unknown-unknown`, `panic = "abort"`).
 //!
+//! The **amount of work** a font can ask for is bounded as well. Two outline formats let
+//! a file of a kilobyte describe billions of operations — composite glyphs made of
+//! composite glyphs (`glyf`) and subroutines calling subroutines (`CFF `, `CFF2`) — and
+//! the parsers limit the nesting depth of both but not the fan-out. This crate therefore
+//!
+//! * measures the expanded size of a TrueType glyph before drawing it (65 536 points
+//!   and component references at most);
+//! * flattens PostScript charstrings itself, under a budget of 262 144 operators and
+//!   operands, and only lets the parser see subroutine-free charstrings;
+//! * gives every [`ShapedText::to_outline`], [`rasterize`] and font load an overall
+//!   budget (about one million points: some 20 000 letters per call), so a huge text
+//!   cannot turn a merely expensive glyph into minutes of work or gigabytes of path;
+//! * shapes with a view of the font from which the tables that would make the *shaper*
+//!   run outlines or paint graphs are removed (`CFF `, `CFF2`, `COLR`; also `glyf` for
+//!   fonts that contain an oversized glyph — see [`Font::has_oversized_glyphs`]).
+//!
+//! A glyph beyond these limits draws nothing, like a malformed one;
+//! [`ShapedText::try_to_outline`] and [`try_rasterize`] report it as
+//! [`FontError::OutlineTooComplex`]. The cost of shaping, wrapping and fitting is
+//! proportional to the length of the text; this crate sets no limit on that length.
+//!
 //! # Limits (by design)
 //!
 //! * One run has one font, one script and one direction: there is no font fallback, no
@@ -57,10 +78,12 @@
 
 #![forbid(unsafe_code)]
 
+mod cff;
 mod error;
 mod fit;
 mod font;
 mod guard;
+mod outline;
 #[cfg(feature = "raster")]
 mod raster;
 mod shape;

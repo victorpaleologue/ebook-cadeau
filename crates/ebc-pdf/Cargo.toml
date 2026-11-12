@@ -10,11 +10,16 @@ authors.workspace = true
 
 [dependencies]
 ebc-scene.workspace = true
-miniz_oxide = "0.9.1"
+miniz_oxide = "0.8"
 pdf-writer = "0.15.0"
-subsetter = "0.2.6"
+subsetter = { version = "0.2.6", default-features = false }
 thiserror.workspace = true
 ttf-parser = "0.25.1"
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png"] }
+jpeg-encoder = "0.7.1"
+lopdf = { version = "0.47.0", default-features = false }

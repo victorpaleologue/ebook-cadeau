@@ -1,0 +1,135 @@
+# Turns on GitHub auto-merge for low-risk Dependabot pull requests. Explained in docs/ci.md.
+#
+# What merges by itself (squash), once the required check `ci-ok` is green:
+#   - patch and minor updates of any ecosystem (grouped or not);
+#   - every GitHub Actions update, majors included (the workflows themselves are the test).
+# Everything else — major updates, or anything Dependabot's metadata cannot classify — waits
+# for a human.
+#
+# This workflow never merges anything itself: it only *enables auto-merge*, and it refuses to do
+# so unless `ci-ok` is a required status check on the base branch. The merge is done by GitHub
+# when branch protection is satisfied.
+#
+# Why `pull_request_target`: runs triggered by Dependabot on `pull_request` get a read-only
+# token by default, and the dependabot/fetch-metadata README tells workflows that must write to
+# use `pull_request_target`, which runs the workflow file of the base branch with a token that
+# may write. That is safe here because this workflow NEVER checks out or executes code from the
+# pull request — keep it that way.
+name: dependabot-auto-merge
+
+on:
+  pull_request_target:
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+permissions: {}
+
+concurrency:
+  group: dependabot-auto-merge-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  auto-merge:
+    name: auto-merge
+    # Only pull requests opened by Dependabot from a branch of this repository.
+    # (fetch-metadata additionally verifies that every commit is a verified Dependabot commit.)
+    if: >-
+      github.event.pull_request.user.login == 'dependabot[bot]' &&
+      github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    permissions:
+      contents: write # needed to enable auto-merge
+      pull-requests: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      PR_URL: ${{ github.event.pull_request.html_url }}
+      BASE_REF: ${{ github.event.pull_request.base.ref }}
+      REQUIRED_CHECK: ci-ok
+    steps:
+      - name: Fetch Dependabot metadata
+        id: metadata
+        uses: dependabot/fetch-metadata@v3
+
+      - name: Decide whether this update may merge by itself
+        id: decide
+        env:
+          UPDATE_TYPE: ${{ steps.metadata.outputs.update-type }}
+          ECOSYSTEM: ${{ steps.metadata.outputs.package-ecosystem }}
+          DEPENDENCIES: ${{ steps.metadata.outputs.dependency-names }}
+        run: |
+          automerge=false
+          reason="update type '${UPDATE_TYPE:-unknown}' needs a human review"
+          case "$UPDATE_TYPE" in
+            version-update:semver-patch | version-update:semver-minor)
+              automerge=true
+              reason="patch/minor update (${UPDATE_TYPE})"
+              ;;
+          esac
+          # The ecosystem is read from the branch name: dependabot/github_actions/...
+          case "$ECOSYSTEM" in
+            github_actions | github-actions)
+              automerge=true
+              reason="GitHub Actions update (${UPDATE_TYPE:-unknown})"
+              ;;
+          esac
+          echo "automerge=${automerge}" >> "$GITHUB_OUTPUT"
+          {
+            echo "### Dependabot auto-merge"
+            echo
+            echo "- Dependencies: \`${DEPENDENCIES:-unknown}\`"
+            echo "- Ecosystem: \`${ECOSYSTEM:-unknown}\`"
+            echo "- Decision: auto-merge = **${automerge}** — ${reason}"
+          } >> "$GITHUB_STEP_SUMMARY"
+          echo "auto-merge=${automerge}: ${reason}"
+
+      # Auto-merge is only as safe as the checks that gate it. Refuse to enable it unless the
+      # base branch requires `ci-ok` (classic branch protection or a ruleset).
+      - name: Check that the base branch requires the CI check
+        id: gate
+        if: steps.decide.outputs.automerge == 'true'
+        run: |
+          required="$(
+            {
+              gh api "repos/${GH_REPO}/branches/${BASE_REF}" \
+                --jq '.protection.required_status_checks.contexts[]?' || true
+              gh api "repos/${GH_REPO}/rules/branches/${BASE_REF}" \
+                --jq '.[] | select(.type == "required_status_checks") | .parameters.required_status_checks[].context' || true
+            } 2>/dev/null | sort -u
+          )"
+          echo "Required status checks on ${BASE_REF}: ${required:-<none>}"
+          gated=true
+          if ! grep -qxF "$REQUIRED_CHECK" <<<"$required"; then
+            gated=false
+            echo "::warning title=Auto-merge not enabled::'${REQUIRED_CHECK}' is not a required status check on '${BASE_REF}'. Configure branch protection as described in docs/ci.md, then re-run this job."
+          fi
+          allow_auto_merge="$(gh api "repos/${GH_REPO}" --jq '.allow_auto_merge' 2>/dev/null || true)"
+          if [ "$allow_auto_merge" = "false" ]; then
+            gated=false
+            echo "::warning title=Auto-merge not enabled::The repository setting 'Allow auto-merge' is off (Settings > General > Pull Requests). See docs/ci.md."
+          fi
+          echo "gated=${gated}" >> "$GITHUB_OUTPUT"
+
+      - name: Enable auto-merge (squash)
+        if: steps.decide.outputs.automerge == 'true' && steps.gate.outputs.gated == 'true'
+        run: |
+          if out="$(gh pr merge --auto --squash "$PR_URL" 2>&1)"; then
+            echo "$out"
+            echo "Auto-merge enabled: GitHub merges this pull request when '${REQUIRED_CHECK}' is green."
+          elif grep -qi "clean status" <<<"$out"; then
+            # GitHub refuses to *enable* auto-merge on a pull request whose requirements are
+            # already met (typically on a re-run). This workflow never merges directly.
+            echo "$out"
+            echo "::notice title=Auto-merge::Every requirement is already met, so auto-merge cannot be enabled any more. Merge this pull request by hand."
+          else
+            echo "$out"
+            exit 1
+          fi
+
+      # A rebase can turn a minor group into a major one: make sure a stale auto-merge is off.
+      - name: Disable auto-merge for updates that need a human
+        if: steps.decide.outputs.automerge != 'true'
+        run: gh pr merge --disable-auto "$PR_URL" || true

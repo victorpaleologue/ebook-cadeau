@@ -9,6 +9,27 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+axum = "0.8.9"
+getrandom = "0.4.3"
+hmac = "0.13.0"
+maud = "0.27.0"
+percent-encoding = "2.3.2"
+png = "0.18"
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "json", "multipart"] }
+resvg = { version = "0.50.0", default-features = false, features = ["text"] }
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std"] }
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.11.1"
+thiserror.workspace = true
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "time", "signal", "sync"] }
+zip = { version = "9.5.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+ebc-demo-printer.workspace = true
+ebc-isbn.workspace = true
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "json", "multipart", "cookies"] }
+scraper = "0.29.0"

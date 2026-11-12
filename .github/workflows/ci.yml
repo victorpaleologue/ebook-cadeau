@@ -1,0 +1,194 @@
+# Continuous integration for eBook Cadeau. Explained in docs/ci.md.
+#
+# One required check is enough for branch protection: `ci-ok` (last job). It succeeds only when
+# every other job succeeded, so jobs can be added here without touching repository settings.
+name: ci
+
+on:
+  push:
+    branches:
+      - main
+      - "claude/**"
+  pull_request:
+  merge_group:
+  workflow_dispatch:
+
+# Least privilege: every job only reads the repository.
+permissions:
+  contents: read
+
+# A newer run for the same ref supersedes the older one.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  fmt:
+    name: fmt
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install the toolchain pinned in rust-toolchain.toml
+        run: rustup toolchain install --no-self-update || rustup show
+      - name: cargo fmt
+        run: cargo fmt --all -- --check
+
+  clippy:
+    name: clippy
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install the toolchain pinned in rust-toolchain.toml
+        run: rustup toolchain install --no-self-update || rustup show
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Pull requests and merge groups restore the cache; only pushes write it.
+          save-if: ${{ github.event_name == 'push' }}
+      - name: cargo clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+  test:
+    name: test
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install the toolchain pinned in rust-toolchain.toml
+        run: rustup toolchain install --no-self-update || rustup show
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Same key as the `spar` job of claude-review.yml, which restores this cache.
+          shared-key: test
+          save-if: ${{ github.event_name == 'push' }}
+      # The print tests shell out to poppler, qpdf, ghostscript, zbar and mupdf and skip a check
+      # when its tool is missing. The script fails if a tool is absent, so CI never skips.
+      - name: Install PDF and barcode tools
+        run: bash scripts/install-print-tools.sh
+      - name: cargo test
+        run: cargo test --workspace --locked
+
+  wasm:
+    name: wasm
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install the toolchain pinned in rust-toolchain.toml
+        run: rustup toolchain install --no-self-update || rustup show
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name == 'push' }}
+      # The list of host-only crates lives in scripts/wasm-crates.sh and nowhere else.
+      - name: cargo build --target wasm32-unknown-unknown (all pure library crates)
+        run: bash scripts/wasm-crates.sh build --locked
+
+  docs:
+    name: docs
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install the toolchain pinned in rust-toolchain.toml
+        run: rustup toolchain install --no-self-update || rustup show
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name == 'push' }}
+      - name: cargo doc
+        run: cargo doc --workspace --no-deps --locked
+        env:
+          RUSTDOCFLAGS: -D warnings
+
+  deny:
+    name: deny (${{ matrix.checks }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        checks:
+          - advisories
+          - bans licenses sources
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      # Configuration: deny.toml. The action bundles its own cargo-deny (0.20.x at v2).
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check ${{ matrix.checks }}
+
+  actionlint:
+    name: actionlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      # Bump by hand (Dependabot does not see this). Releases: github.com/rhysd/actionlint
+      ACTIONLINT_VERSION: "1.7.12"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Download actionlint
+        id: actionlint
+        run: bash <(curl -sSfL "https://raw.githubusercontent.com/rhysd/actionlint/v${ACTIONLINT_VERSION}/scripts/download-actionlint.bash") "${ACTIONLINT_VERSION}"
+      - name: Lint the workflows (shellcheck is preinstalled on the runner and used by actionlint)
+        env:
+          ACTIONLINT: ${{ steps.actionlint.outputs.executable }}
+        run: |
+          echo "::add-matcher::.github/actionlint-matcher.json"
+          "$ACTIONLINT" -color
+      - name: Lint the helper scripts
+        run: shellcheck scripts/*.sh
+
+  # ------------------------------------------------------------------------------------------
+  # PLACEHOLDER — jobs to add when the code they exercise exists (see docs/ci.md, "Adding the
+  # e2e and print-check jobs"). Do not invent commands here before that.
+  #
+  #   e2e:          Playwright end-to-end tests in e2e/ (needs e2e/package.json, the wasm
+  #                 package built into web/pkg, and the server + demo binaries).
+  #   print-check:  generate the reference cards with the `ebc` CLI, run `ebc-preflight` plus
+  #                 qpdf / poppler / ghostscript on them, upload the PDFs as an artifact.
+  #
+  # When you add one: give it `name: <id>`, add its id to `needs:` of `ci-ok` below.
+  # ------------------------------------------------------------------------------------------
+
+  ci-ok:
+    name: ci-ok
+    # always(): this job must also run — and fail — when a needed job failed or was cancelled.
+    # A job that is skipped would count as "passing" for branch protection.
+    if: always()
+    needs:
+      - fmt
+      - clippy
+      - test
+      - wasm
+      - docs
+      - deny
+      - actionlint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Show the result of every job
+        env:
+          NEEDS: ${{ toJSON(needs) }}
+        run: echo "$NEEDS"
+      - name: Fail unless every job succeeded
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled') || contains(needs.*.result, 'skipped')
+        run: |
+          echo "::error::At least one CI job failed, was cancelled or was skipped."
+          exit 1

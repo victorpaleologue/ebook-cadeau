@@ -10,11 +10,14 @@ authors.workspace = true
 
 [dependencies]
 ebc-scene.workspace = true
+# MIT. Pure Rust, no dependencies, builds for wasm32-unknown-unknown.
 qrcodegen = "1.8.0"
 thiserror.workspace = true
 
+[dev-dependencies]
+# (MIT OR Apache-2.0) AND ISC. Independent decoder for the round-trip tests; the `img`
+# feature (and with it the `image` crate) is not needed: bitmaps are fed as closures.
+rqrr = { version = "0.11.0", default-features = false }
+
 [lints]
 workspace = true
-
-[dev-dependencies]
-rqrr = { version = "0.11.0", default-features = false }

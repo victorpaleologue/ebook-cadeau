@@ -1,0 +1,128 @@
+# cargo-deny configuration for eBook Cadeau.
+#
+# Run locally:  cargo deny check            (install: cargo install cargo-deny --locked)
+# Run in CI:    .github/workflows/ci.yml (job `deny`) and .github/workflows/audit.yml (daily).
+# Reference:    https://embarkstudios.github.io/cargo-deny/
+#
+# Written against cargo-deny 0.20.2, the version bundled by EmbarkStudios/cargo-deny-action@v2.
+# Since cargo-deny 0.16 there is no `deny`/`copyleft`/`unlicensed`/`vulnerability` key any more:
+# every licence that is not in `allow` is rejected, and every vulnerability advisory is an error.
+# Do not add those keys back — they are reported as deprecated.
+
+[graph]
+# Check the graph with every feature enabled, on every target (native + wasm32): nothing a
+# feature flag or a `cfg(target_arch = "wasm32")` dependency pulls in may escape the checks.
+all-features = true
+
+[output]
+feature-depth = 1
+
+# ---------------------------------------------------------------------------------------------
+# Security advisories (RustSec). `cargo deny check advisories`
+# ---------------------------------------------------------------------------------------------
+[advisories]
+# Vulnerabilities are always errors. To accept one, add it here WITH a reason and a review date:
+#   { id = "RUSTSEC-0000-0000", reason = "not reachable: we never parse untrusted X; revisit 2027-01" }
+ignore = [
+  # DECISION NEEDED (found 2026-11-12, deliberately NOT ignored — `cargo deny check advisories`
+  # fails until someone decides). docs/architecture.md prescribes `ttf-parser` + `rustybuzz`
+  # for ebc-text / ebc-pdf, and both are now flagged *unmaintained* (no known vulnerability).
+  # Either migrate (skrifa / harfrust are the alternatives the advisories name) or accept the
+  # risk explicitly by uncommenting these lines with a real review date:
+  # { id = "RUSTSEC-2026-0192", reason = "ttf-parser is unmaintained; no vulnerability known; migration to skrifa to be evaluated; revisit <date>" },
+  # { id = "RUSTSEC-2026-0206", reason = "rustybuzz is unmaintained; no vulnerability known; migration to harfrust to be evaluated; revisit <date>" },
+]
+# Unmaintained-crate advisories: fail only for crates a workspace member depends on directly
+# (we can act on those); a transitive one is for the crate that depends on it to fix.
+unmaintained = "workspace"
+# Unsound-crate advisories: fail anywhere in the graph.
+unsound = "all"
+# A yanked version in Cargo.lock is an error: `cargo update -p <crate>` fixes it.
+yanked = "deny"
+# An entry in `ignore` that no longer matches anything must be removed.
+unused-ignored-advisory = "deny"
+
+# ---------------------------------------------------------------------------------------------
+# Licences. `cargo deny check licenses`
+# ---------------------------------------------------------------------------------------------
+[licenses]
+# Policy (CLAUDE.md, rule 3): permissive licences only. Anything not listed is denied, which is
+# how copyleft (GPL, AGPL, LGPL, EUPL, CC-BY-SA, …) and unlicensed crates are rejected.
+# MPL-2.0 is accepted because its copyleft is file-scoped and we never modify those files.
+allow = [
+  "MIT",
+  "Apache-2.0",
+  "Apache-2.0 WITH LLVM-exception",
+  "BSD-2-Clause",
+  "BSD-3-Clause",
+  "ISC",
+  "Zlib",
+  "MPL-2.0",
+  "Unicode-3.0",
+  "Unicode-DFS-2016",
+  "CC0-1.0",
+  "BSL-1.0",
+  "0BSD",
+  # Font and data licences (crates that embed fonts or data tables).
+  "OFL-1.1",
+  "CDLA-Permissive-2.0",
+]
+# The list above is a policy, not an inventory: do not warn when an entry is not (yet) used.
+unused-allowed-license = "allow"
+confidence-threshold = 0.8
+# Dev- and build-dependencies are held to the same policy as shipped code.
+include-dev = true
+include-build = true
+# Per-crate exceptions need a written justification in the pull request that adds them:
+#   { allow = ["<SPDX id>"], crate = "<name>" },
+exceptions = [
+  # Accepted 2026-11-12, pending the owner's veto: `jpeg-encoder` is
+  # "(MIT OR Apache-2.0) AND IJG". The Independent JPEG Group licence is permissive (it asks
+  # for an acknowledgement in the documentation of products that use the code). The crate is
+  # a DEV-dependency of ebc-pdf only, used to build CMYK JPEG fixtures in tests (the `image`
+  # crate cannot encode CMYK); it is never shipped. If it ever becomes a normal dependency,
+  # add the IJG acknowledgement to the product documentation or drop the crate.
+  { allow = ["IJG"], crate = "jpeg-encoder" },
+]
+unused-license-exception = "deny"
+
+[licenses.private]
+# Workspace crates are checked like any other crate (they are BSD-3-Clause).
+ignore = false
+
+# ---------------------------------------------------------------------------------------------
+# Bans. `cargo deny check bans`
+# ---------------------------------------------------------------------------------------------
+[bans]
+# Duplicate versions cost compile time and wasm size, but must not block a merge.
+multiple-versions = "warn"
+# `foo = "*"` requirements are reported, not fatal (path dependencies carry a version here).
+wildcards = "warn"
+highlight = "all"
+workspace-default-features = "allow"
+external-default-features = "allow"
+allow = []
+deny = [
+  # No C toolchains, no system TLS (CLAUDE.md, rule 3): pure-Rust `rustls` only.
+  { crate = "openssl", reason = "pure-Rust only: use rustls (CLAUDE.md rule 3)" },
+  { crate = "openssl-sys", reason = "pure-Rust only: use rustls (CLAUDE.md rule 3)" },
+  { crate = "native-tls", reason = "pure-Rust only: use rustls (CLAUDE.md rule 3)" },
+]
+skip = []
+skip-tree = []
+
+# ---------------------------------------------------------------------------------------------
+# Sources. `cargo deny check sources`
+# ---------------------------------------------------------------------------------------------
+[sources]
+# Only crates.io. No alternative registries, no git dependencies (they bypass the lockfile's
+# checksums and Dependabot). To allow one repository, list its exact URL in `allow-git`.
+unknown-registry = "deny"
+unknown-git = "deny"
+allow-registry = ["https://github.com/rust-lang/crates.io-index"]
+allow-git = []
+
+[sources.allow-org]
+github = []
+gitlab = []
+bitbucket = []

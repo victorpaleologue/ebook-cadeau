@@ -1,5 +1,77 @@
 //! Font loading, shaping, measuring, fitting and outlining of text for print.
 //!
-//! Skeleton — see `docs/architecture.md` for the contract this crate must fulfil.
+//! This crate turns *(font, string, size)* into things the print pipeline can place on a
+//! page, all in the units of [`ebc_scene`]: **millimetres, y down**, font sizes in points.
+//!
+//! | Need | Use |
+//! |---|---|
+//! | load a font, read its names and licence | [`Font::from_bytes`], [`Font::family_name`], [`Font::licence_description`] |
+//! | may this font go into a PDF? | [`Font::embedding`], [`Font::embedding_flags`] (`OS/2.fsType`) |
+//! | line metrics, cap height | [`Font::metrics`] → [`FontMetrics`] and its `*_mm(size_pt)` helpers |
+//! | pick an instance of a variable font | [`Font::with_variations`] |
+//! | can the font draw this text? | [`Font::missing_chars`] |
+//! | text → positioned glyphs | [`shape`] → [`ShapedText`] |
+//! | real, selectable PDF text | [`ShapedText::to_glyph_item`] → [`ebc_scene::Item::Glyphs`] |
+//! | text as vector outlines (spines, any font) | [`ShapedText::to_outline`] → [`ebc_scene::Path`] |
+//! | largest size that fits a box | [`fit_size`] |
+//! | paragraphs | [`wrap`], [`wrap_ranges`] |
+//! | pixels (font identification, previews) | [`rasterize`], [`try_rasterize`] (feature `raster`, on by default) |
+//!
+//! Shaping is done by `rustybuzz` (a port of HarfBuzz) on top of `ttf-parser`: ligatures,
+//! kerning, mark positioning and localised forms are applied. Everything is computed in
+//! font units and scaled, without hinting, so results are deterministic and exactly
+//! proportional to the font size.
+//!
+//! ```
+//! # fn demo(font_bytes: Vec<u8>) -> Result<(), ebc_text::FontError> {
+//! use ebc_scene::{Color, Item, Point};
+//! use ebc_text::{Font, ShapeOptions, fit_size, shape};
+//!
+//! let font = Font::from_bytes(font_bytes, 0)?;
+//! let opts = ShapeOptions::default();
+//! // The largest size between 6 and 24 pt at which the title is at most 150 mm long
+//! // with capitals at most 6 mm tall.
+//! let size = fit_size(&font, "L'Étranger", 150.0, 6.0, 6.0, 24.0, &opts).unwrap_or(6.0);
+//! let run = shape(&font, "L'Étranger", size, &opts);
+//! let item = Item::fill(run.to_outline(&font, Point::new(20.0, 100.0)), Color::BLACK);
+//! # let _ = item; Ok(()) }
+//! ```
+//!
+//! # Untrusted fonts
+//!
+//! Font files are treated as hostile input. [`Font::from_bytes`] rejects what cannot be
+//! parsed; anything that turns out to be malformed later (a glyph, a kerning table)
+//! contributes nothing instead of failing. The underlying parsers do not panic on
+//! malformed fonts in release builds; in builds with debug assertions they may, and this
+//! crate then contains the panic and returns an error or an empty result — except where
+//! panics cannot be caught at all (`wasm32-unknown-unknown`, `panic = "abort"`).
+//!
+//! # Limits (by design)
+//!
+//! * One run has one font, one script and one direction: there is no font fallback, no
+//!   script itemisation and no bidirectional reordering. Horizontal layout only.
+//! * No hyphenation dictionary: [`wrap`] breaks at Unicode line-break opportunities and,
+//!   as a last resort, inside words.
+//! * Bitmap-only and colour glyphs (emoji) have no outline and draw nothing.
+//! * WOFF/WOFF2 are not decoded.
 
 #![forbid(unsafe_code)]
+
+mod error;
+mod fit;
+mod font;
+mod guard;
+#[cfg(feature = "raster")]
+mod raster;
+mod shape;
+mod wrap;
+
+pub use error::FontError;
+pub use fit::fit_size;
+pub use font::{
+    EmbeddingFlags, EmbeddingPermission, Font, FontMetrics, OutlineFormat, VariationAxis,
+};
+#[cfg(feature = "raster")]
+pub use raster::{MAX_MASK_PIXELS, MAX_MASK_SIDE, Mask, RasterizedText, rasterize, try_rasterize};
+pub use shape::{MAX_SIZE_PT, ShapeOptions, ShapedGlyph, ShapedText, outline_bounds, shape};
+pub use wrap::{wrap, wrap_ranges};

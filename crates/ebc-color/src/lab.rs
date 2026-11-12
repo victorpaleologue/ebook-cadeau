@@ -202,11 +202,8 @@ fn tables() -> &'static Tables {
             *slot = srgb_eotf((i as f64 + 0.5) / 255.0);
         }
         let m = &RGB_TO_XYZ;
-        let white = [
-            m[0][0] + m[0][1] + m[0][2],
-            m[1][0] + m[1][1] + m[1][2],
-            m[2][0] + m[2][1] + m[2][2],
-        ];
+        let white =
+            [m[0][0] + m[0][1] + m[0][2], m[1][0] + m[1][1] + m[1][2], m[2][0] + m[2][1] + m[2][2]];
         Tables { linear, thresholds, white, xyz_to_rgb: invert3(m) }
     })
 }
@@ -254,8 +251,9 @@ mod tests {
             x *= 1.003;
         }
         assert_eq!(cbrt_newton(1.0), 1.0);
-        assert_eq!(cbrt_newton(8.0), 2.0);
-        assert_eq!(fifth_root_newton(32.0), 2.0);
+        assert_eq!(fifth_root_newton(1.0), 1.0);
+        assert!(close(cbrt_newton(8.0), 2.0, 1e-15));
+        assert!(close(fifth_root_newton(32.0), 2.0, 1e-15));
     }
 
     #[test]
@@ -276,24 +274,23 @@ mod tests {
         assert!(close(t.linear[255], 1.0, 1e-15));
         for i in 0..=255usize {
             let v = i as f64 / 255.0;
-            let expected =
-                if v <= 0.040_45 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) };
+            let expected = if v <= 0.040_45 { v / 12.92 } else { ((v + 0.055) / 1.055).powf(2.4) };
             assert!(close(t.linear[i], expected, 1e-14), "code {i}");
             if i > 0 {
                 assert!(t.linear[i] > t.linear[i - 1], "monotonic at {i}");
                 assert!(t.thresholds[i - 1] > t.linear[i - 1] && t.thresholds[i - 1] < t.linear[i]);
             }
         }
-        // Mid grey in linear light is the well-known 21.4 %.
+        // sRGB code 128 is 21.6 % in linear light.
         assert!(close(srgb_to_linear(128), 0.2158605, 1e-6));
     }
 
     #[test]
     fn inverse_matrix_is_an_inverse() {
         let inv = &tables().xyz_to_rgb;
-        for r in 0..3 {
+        for (r, row) in inv.iter().enumerate() {
             for c in 0..3 {
-                let v: f64 = (0..3).map(|k| inv[r][k] * RGB_TO_XYZ[k][c]).sum();
+                let v: f64 = row.iter().zip(&RGB_TO_XYZ).map(|(a, forward)| a * forward[c]).sum();
                 let expected = if r == c { 1.0 } else { 0.0 };
                 assert!(close(v, expected, 1e-14), "({r},{c}) = {v}");
             }

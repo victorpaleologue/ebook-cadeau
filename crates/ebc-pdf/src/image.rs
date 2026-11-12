@@ -1,0 +1,427 @@
+//! Image XObjects: JPEG passthrough, Flate-compressed raw pixels, soft masks and ICC
+//! colour spaces.
+
+use std::borrow::Cow;
+
+use ebc_scene::{ImageData, ImageId, ImageResource, PdfStandard, PixelFormat};
+use pdf_writer::{Chunk, Filter, Finish, Ref};
+
+use crate::error::PdfError;
+use crate::writer::{RefAllocator, deflate, stream_len};
+use crate::{icc, jpeg};
+
+/// The sRGB profile used for RGB content without a profile of its own when the target
+/// standard is colour-managed. ICC version 2, so it is valid in every PDF version.
+pub(crate) static SRGB_PROFILE: &[u8] = include_bytes!("../../../assets/icc/sRGB-v2-micro.icc");
+
+/// `true` when the standard allows soft masks (live transparency).
+pub(crate) fn allows_transparency(standard: PdfStandard) -> bool {
+    matches!(standard, PdfStandard::X4 | PdfStandard::Plain)
+}
+
+/// Highest ICC major version that may be embedded for the target PDF version
+/// (PDF 1.3 predates ICC version 4).
+pub(crate) fn max_icc_version(standard: PdfStandard) -> u8 {
+    match standard {
+        PdfStandard::X1a2001 | PdfStandard::X3_2002 => 2,
+        PdfStandard::X4 | PdfStandard::Plain => 4,
+    }
+}
+
+/// The distinct ICC profiles of the document, each written once.
+#[derive(Default)]
+pub(crate) struct IccPool<'a> {
+    profiles: Vec<(&'a [u8], u8)>,
+}
+
+impl<'a> IccPool<'a> {
+    /// Registers a profile with `components` channels and returns its index.
+    pub(crate) fn intern(&mut self, profile: &'a [u8], components: u8) -> usize {
+        if let Some(index) = self
+            .profiles
+            .iter()
+            .position(|(p, n)| *n == components && (std::ptr::eq(*p, profile) || *p == profile))
+        {
+            return index;
+        }
+        self.profiles.push((profile, components));
+        self.profiles.len() - 1
+    }
+
+    /// Writes every profile as an ICC stream and returns their references, by index.
+    pub(crate) fn write(
+        &self,
+        chunk: &mut Chunk,
+        refs: &mut RefAllocator,
+        compress: bool,
+    ) -> Result<Vec<Ref>, PdfError> {
+        let mut out = Vec::with_capacity(self.profiles.len());
+        for (profile, components) in &self.profiles {
+            let id = refs.next()?;
+            let data: Cow<'_, [u8]> =
+                if compress { Cow::Owned(deflate(profile)) } else { Cow::Borrowed(profile) };
+            stream_len(data.len(), "an ICC profile")?;
+            let mut stream = chunk.icc_profile(id, &data);
+            // `n` only accepts 1, 3 or 4, which `icc::inspect` guarantees.
+            stream.n(i32::from(*components));
+            if compress {
+                stream.filter(Filter::FlateDecode);
+            }
+            stream.finish();
+            out.push(id);
+        }
+        Ok(out)
+    }
+}
+
+/// The colour space of an image XObject.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum ImageSpace {
+    DeviceGray,
+    DeviceRgb,
+    DeviceCmyk,
+    /// `ICCBased`, with the index of the profile in the [`IccPool`].
+    Icc(usize),
+}
+
+/// An image ready to be written.
+#[derive(Debug)]
+pub(crate) struct PreparedImage<'a> {
+    /// Name of the image in page resource dictionaries, e.g. `Im0`.
+    pub(crate) resource_name: Vec<u8>,
+    width: i32,
+    height: i32,
+    /// The stream data, already encoded with `filter`.
+    data: Cow<'a, [u8]>,
+    filter: Option<Filter>,
+    pub(crate) space: ImageSpace,
+    /// Adobe-style CMYK JPEG: samples are stored inverted.
+    pub(crate) inverted: bool,
+    /// 8-bit alpha channel (encoded with `mask_filter`) written as a soft mask.
+    mask: Option<Vec<u8>>,
+    mask_filter: Option<Filter>,
+}
+
+impl<'a> PreparedImage<'a> {
+    /// Validates `resource` against the target `standard` and encodes its pixels.
+    pub(crate) fn prepare(
+        resource: &'a ImageResource,
+        index: usize,
+        standard: PdfStandard,
+        compress: bool,
+        pool: &mut IccPool<'a>,
+    ) -> Result<Self, PdfError> {
+        let id = resource.id;
+        let invalid = |reason: String| PdfError::InvalidImage { image: id, reason };
+
+        let (width_px, height_px) = resource.data.dimensions_px();
+        let (Ok(width), Ok(height)) = (i32::try_from(width_px), i32::try_from(height_px)) else {
+            return Err(invalid("the dimensions are too large".into()));
+        };
+        if width == 0 || height == 0 {
+            return Err(invalid("the image has a zero dimension".into()));
+        }
+
+        let channels: u8;
+        let data: Cow<'a, [u8]>;
+        let filter;
+        let mut inverted = false;
+        let mut mask = None;
+
+        match &resource.data {
+            ImageData::Jpeg { bytes, components, .. } => {
+                let info = jpeg::sniff(bytes).map_err(|e| invalid(e.into()))?;
+                if (info.width, info.height) != (width_px, height_px) {
+                    return Err(invalid(format!(
+                        "the JPEG is {}x{} px but the resource says {width_px}x{height_px} px",
+                        info.width, info.height
+                    )));
+                }
+                if info.components != *components {
+                    return Err(invalid(format!(
+                        "the JPEG has {} components but the resource says {components}",
+                        info.components
+                    )));
+                }
+                if !matches!(components, 1 | 3 | 4) {
+                    return Err(invalid(format!(
+                        "JPEG images with {components} components are not supported"
+                    )));
+                }
+                channels = *components;
+                // Adobe applications store CMYK (and YCCK) samples inverted and flag the
+                // file with an APP14 marker; PDF consumers do not undo that by themselves.
+                inverted = channels == 4 && info.adobe_transform.is_some();
+                data = Cow::Borrowed(&bytes[..]);
+                filter = Some(Filter::DctDecode);
+            }
+            ImageData::Raw { pixels, format, .. } => {
+                let expected = usize::try_from(width_px)
+                    .ok()
+                    .and_then(|w| w.checked_mul(usize::try_from(height_px).ok()?))
+                    .and_then(|n| n.checked_mul(format.bytes_per_pixel()));
+                if expected != Some(pixels.len()) {
+                    return Err(invalid(format!(
+                        "{} bytes of pixel data do not match {width_px}x{height_px} px {format:?}",
+                        pixels.len()
+                    )));
+                }
+                let raw: Cow<'a, [u8]> = match format {
+                    PixelFormat::Gray8 => {
+                        channels = 1;
+                        Cow::Borrowed(&pixels[..])
+                    }
+                    PixelFormat::Rgb8 => {
+                        channels = 3;
+                        Cow::Borrowed(&pixels[..])
+                    }
+                    PixelFormat::Cmyk8 => {
+                        channels = 4;
+                        Cow::Borrowed(&pixels[..])
+                    }
+                    PixelFormat::Rgba8 => {
+                        channels = 3;
+                        let opaque = pixels.chunks_exact(4).all(|p| p[3] == 255);
+                        if !opaque && !allows_transparency(standard) {
+                            return Err(PdfError::TransparencyNotAllowed { standard, image: id });
+                        }
+                        let mut rgb = Vec::with_capacity(pixels.len() / 4 * 3);
+                        for p in pixels.chunks_exact(4) {
+                            rgb.extend_from_slice(&p[..3]);
+                        }
+                        if !opaque {
+                            let alpha: Vec<u8> = pixels.chunks_exact(4).map(|p| p[3]).collect();
+                            mask = Some(if compress { deflate(&alpha) } else { alpha });
+                        }
+                        Cow::Owned(rgb)
+                    }
+                };
+                if compress {
+                    data = Cow::Owned(deflate(&raw));
+                    filter = Some(Filter::FlateDecode);
+                } else {
+                    data = raw;
+                    filter = None;
+                }
+            }
+        }
+
+        if channels == 3 && standard == PdfStandard::X1a2001 {
+            return Err(PdfError::RgbNotAllowed { standard, location: format!("image {}", id.0) });
+        }
+        let space = match &resource.icc_profile {
+            Some(profile) => {
+                if standard == PdfStandard::X1a2001 {
+                    return Err(PdfError::IccNotAllowed { standard, image: id });
+                }
+                let context = || format!("image {}", id.0);
+                let info = icc::inspect(profile)
+                    .map_err(|reason| PdfError::InvalidIccProfile { context: context(), reason })?;
+                if info.components != channels {
+                    return Err(PdfError::InvalidIccProfile {
+                        context: context(),
+                        reason: "the profile's colour space does not match the image's channels",
+                    });
+                }
+                if info.version_major > max_icc_version(standard) {
+                    return Err(PdfError::InvalidIccProfile {
+                        context: context(),
+                        reason: "the ICC version is newer than the target PDF version supports",
+                    });
+                }
+                ImageSpace::Icc(pool.intern(profile, channels))
+            }
+            None => match (channels, standard) {
+                (1, _) => ImageSpace::DeviceGray,
+                (4, _) => ImageSpace::DeviceCmyk,
+                (_, PdfStandard::Plain) => ImageSpace::DeviceRgb,
+                // Untagged RGB is sRGB by contract; colour-managed standards need it said.
+                _ => ImageSpace::Icc(pool.intern(SRGB_PROFILE, 3)),
+            },
+        };
+
+        stream_len(data.len(), "an image")?;
+        Ok(Self {
+            resource_name: format!("Im{index}").into_bytes(),
+            width,
+            height,
+            data,
+            filter,
+            space,
+            inverted,
+            mask_filter: if compress && mask.is_some() { Some(Filter::FlateDecode) } else { None },
+            mask,
+        })
+    }
+
+    /// Writes the image XObject (and its soft mask) and returns the image's reference.
+    pub(crate) fn write(
+        &self,
+        chunk: &mut Chunk,
+        refs: &mut RefAllocator,
+        icc_refs: &[Ref],
+    ) -> Result<Ref, PdfError> {
+        let image_ref = refs.next()?;
+        let mask_ref = match &self.mask {
+            Some(alpha) => {
+                stream_len(alpha.len(), "an image mask")?;
+                let mask_ref = refs.next()?;
+                let mut mask = chunk.image_xobject(mask_ref, alpha);
+                mask.width(self.width).height(self.height).bits_per_component(8);
+                mask.color_space().device_gray();
+                if let Some(filter) = self.mask_filter {
+                    mask.filter(filter);
+                }
+                mask.finish();
+                Some(mask_ref)
+            }
+            None => None,
+        };
+
+        let mut image = chunk.image_xobject(image_ref, &self.data);
+        image.width(self.width).height(self.height).bits_per_component(8);
+        match self.space {
+            ImageSpace::DeviceGray => image.color_space().device_gray(),
+            ImageSpace::DeviceRgb => image.color_space().device_rgb(),
+            ImageSpace::DeviceCmyk => image.color_space().device_cmyk(),
+            ImageSpace::Icc(index) => match icc_refs.get(index) {
+                Some(profile_ref) => image.color_space().icc_based(*profile_ref),
+                None => {
+                    return Err(PdfError::InvalidImage {
+                        image: ImageId(u32::MAX),
+                        reason: "internal error: ICC profile was not written".into(),
+                    });
+                }
+            },
+        }
+        if self.inverted {
+            image.decode([1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0]);
+        }
+        if let Some(mask_ref) = mask_ref {
+            image.s_mask(mask_ref);
+        }
+        if let Some(filter) = self.filter {
+            image.filter(filter);
+        }
+        image.finish();
+        Ok(image_ref)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::sync::Arc;
+
+    use super::*;
+
+    fn raw(format: PixelFormat, width: u32, height: u32, pixels: Vec<u8>) -> ImageResource {
+        ImageResource {
+            id: ImageId(4),
+            data: ImageData::Raw {
+                pixels: Arc::from(pixels),
+                width_px: width,
+                height_px: height,
+                format,
+            },
+            icc_profile: None,
+        }
+    }
+
+    fn prepare(
+        resource: &ImageResource,
+        standard: PdfStandard,
+    ) -> Result<(ImageSpace, bool, usize), PdfError> {
+        let mut pool = IccPool::default();
+        let image = PreparedImage::prepare(resource, 0, standard, true, &mut pool)?;
+        Ok((image.space, image.mask.is_some(), pool.profiles.len()))
+    }
+
+    #[test]
+    fn colour_space_follows_the_standard() {
+        let rgb = raw(PixelFormat::Rgb8, 2, 1, vec![0; 6]);
+        assert_eq!(prepare(&rgb, PdfStandard::Plain), Ok((ImageSpace::DeviceRgb, false, 0)));
+        assert_eq!(prepare(&rgb, PdfStandard::X4), Ok((ImageSpace::Icc(0), false, 1)));
+        assert_eq!(prepare(&rgb, PdfStandard::X3_2002), Ok((ImageSpace::Icc(0), false, 1)));
+        assert!(matches!(
+            prepare(&rgb, PdfStandard::X1a2001),
+            Err(PdfError::RgbNotAllowed { standard: PdfStandard::X1a2001, .. })
+        ));
+
+        let gray = raw(PixelFormat::Gray8, 2, 1, vec![0; 2]);
+        let cmyk = raw(PixelFormat::Cmyk8, 2, 1, vec![0; 8]);
+        for standard in
+            [PdfStandard::Plain, PdfStandard::X1a2001, PdfStandard::X3_2002, PdfStandard::X4]
+        {
+            assert_eq!(prepare(&gray, standard), Ok((ImageSpace::DeviceGray, false, 0)));
+            assert_eq!(prepare(&cmyk, standard), Ok((ImageSpace::DeviceCmyk, false, 0)));
+        }
+    }
+
+    #[test]
+    fn alpha_becomes_a_mask_only_where_allowed() {
+        let translucent = raw(PixelFormat::Rgba8, 1, 2, vec![1, 2, 3, 255, 4, 5, 6, 128]);
+        assert_eq!(prepare(&translucent, PdfStandard::X4), Ok((ImageSpace::Icc(0), true, 1)));
+        assert_eq!(prepare(&translucent, PdfStandard::Plain), Ok((ImageSpace::DeviceRgb, true, 0)));
+        assert_eq!(
+            prepare(&translucent, PdfStandard::X3_2002),
+            Err(PdfError::TransparencyNotAllowed {
+                standard: PdfStandard::X3_2002,
+                image: ImageId(4)
+            })
+        );
+        // X-1a: the alpha channel is reported before the RGB data.
+        assert!(matches!(
+            prepare(&translucent, PdfStandard::X1a2001),
+            Err(PdfError::TransparencyNotAllowed { .. })
+        ));
+
+        // A fully opaque alpha channel is simply dropped.
+        let opaque = raw(PixelFormat::Rgba8, 1, 2, vec![1, 2, 3, 255, 4, 5, 6, 255]);
+        assert_eq!(prepare(&opaque, PdfStandard::X3_2002), Ok((ImageSpace::Icc(0), false, 1)));
+        assert_eq!(prepare(&opaque, PdfStandard::X4), Ok((ImageSpace::Icc(0), false, 1)));
+        assert!(matches!(
+            prepare(&opaque, PdfStandard::X1a2001),
+            Err(PdfError::RgbNotAllowed { .. })
+        ));
+    }
+
+    #[test]
+    fn pixel_buffers_must_match_the_dimensions() {
+        for (format, w, h, len) in [
+            (PixelFormat::Rgb8, 2, 2, 11),
+            (PixelFormat::Rgb8, 2, 2, 13),
+            (PixelFormat::Gray8, 3, 3, 0),
+            (PixelFormat::Cmyk8, 1, 1, 3),
+            (PixelFormat::Rgba8, 1, 1, 3),
+            (PixelFormat::Rgb8, 0, 5, 0),
+            (PixelFormat::Rgb8, 5, 0, 0),
+            (PixelFormat::Rgb8, u32::MAX, u32::MAX, 12),
+            (PixelFormat::Gray8, 70_000, 70_000, 4),
+        ] {
+            let image = raw(format, w, h, vec![0; len]);
+            assert!(
+                matches!(
+                    prepare(&image, PdfStandard::Plain),
+                    Err(PdfError::InvalidImage { image: ImageId(4), .. })
+                ),
+                "{format:?} {w}x{h} with {len} bytes"
+            );
+        }
+    }
+
+    #[test]
+    fn profiles_are_pooled_by_content() {
+        let a = SRGB_PROFILE.to_vec();
+        let b = SRGB_PROFILE.to_vec();
+        let mut other = SRGB_PROFILE.to_vec();
+        if let Some(last) = other.last_mut() {
+            *last ^= 1;
+        }
+        let mut pool = IccPool::default();
+        assert_eq!(pool.intern(&a, 3), 0);
+        assert_eq!(pool.intern(&b, 3), 0);
+        assert_eq!(pool.intern(&other, 3), 1);
+        assert_eq!(pool.intern(SRGB_PROFILE, 3), 0);
+        assert_eq!(pool.profiles.len(), 2);
+    }
+}

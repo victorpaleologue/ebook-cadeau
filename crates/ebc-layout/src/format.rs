@@ -13,6 +13,20 @@ pub enum Face {
     Inside,
 }
 
+impl Face {
+    /// Both faces, in page order.
+    pub const BOTH: [Self; 2] = [Self::Outside, Self::Inside];
+
+    /// `"outside"` or `"inside"` — the value used for [`ebc_scene::Page::label`].
+    #[must_use]
+    pub const fn label(self) -> &'static str {
+        match self {
+            Self::Outside => "outside",
+            Self::Inside => "inside",
+        }
+    }
+}
+
 /// The three panels of one face of the card, left to right, in page coordinates
 /// (millimetres, origin at the top-left corner of the trim box, y down).
 ///
@@ -54,7 +68,8 @@ impl Panels {
     /// The panels extended into the bleed on their **outer** edges only: the left panel
     /// grows to the left, top and bottom, the spine to the top and bottom, the right panel
     /// to the right, top and bottom. Shared edges (the creases) do not move, so the three
-    /// rectangles still tile, now covering the whole bleed box.
+    /// rectangles still tile (to within floating-point rounding of the grown left panel's
+    /// width), now covering the whole bleed box.
     ///
     /// This is the rectangle a full-bleed background or cover image must fill (and be
     /// clipped to). A negative or non-finite `bleed` is treated as zero.
@@ -148,7 +163,12 @@ impl CardFormat {
     /// The presets with their names, smallest sheet requirement first.
     #[must_use]
     pub const fn presets() -> [(&'static str, Self); 4] {
-        [("poche", Self::poche()), ("a6", Self::a6()), ("digest", Self::digest()), ("a5", Self::a5())]
+        [
+            ("poche", Self::poche()),
+            ("a6", Self::a6()),
+            ("digest", Self::digest()),
+            ("a5", Self::a5()),
+        ]
     }
 
     /// Looks a preset up by name (case-insensitive, surrounding whitespace ignored).
@@ -330,6 +350,7 @@ impl CardFormat {
 }
 
 #[cfg(test)]
+#[allow(clippy::unwrap_used)]
 mod tests {
     use super::*;
 
@@ -415,7 +436,10 @@ mod tests {
     #[test]
     fn errors_have_readable_messages() {
         let e = CardFormat::custom(Size::new(20.0, 178.0), 10.0).unwrap_err();
-        assert_eq!(e.to_string(), "cover width of 20 mm is outside the supported range 50..=300 mm");
+        assert_eq!(
+            e.to_string(),
+            "cover width of 20 mm is outside the supported range 50..=300 mm"
+        );
         let e = CardFormat::poche().with_spine(1.0).unwrap_err();
         assert_eq!(e.to_string(), "spine width of 1 mm is outside the supported range 3..=40 mm");
     }
@@ -438,6 +462,14 @@ mod tests {
         for b in [f64::NAN, f64::INFINITY, -5.0] {
             assert_eq!(f.outside().with_bleed(b), f.outside(), "bleed {b}");
         }
+    }
+
+    #[test]
+    fn faces() {
+        assert_eq!(Face::BOTH.map(Face::label), ["outside", "inside"]);
+        let f = CardFormat::digest();
+        assert_eq!(f.panels(Face::Outside), f.outside());
+        assert_eq!(f.panels(Face::Inside), f.inside());
     }
 
     #[test]

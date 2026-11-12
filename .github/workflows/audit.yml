@@ -1,0 +1,73 @@
+# Daily security audit: new RustSec advisories must surface even when nobody pushes code.
+# Explained in docs/ci.md ("Daily advisory audit").
+#
+# On failure an issue is opened (or the open one gets a comment); when the audit is green again
+# the issue is closed. The same check also runs in ci.yml (job `deny (advisories)`).
+name: audit
+
+on:
+  schedule:
+    # Every day at 05:17 UTC (off the hour: scheduled runs are delayed at busy times).
+    - cron: "17 5 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: audit
+  cancel-in-progress: false
+
+jobs:
+  advisories:
+    name: advisories
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      issues: write
+    env:
+      GH_TOKEN: ${{ github.token }}
+      GH_REPO: ${{ github.repository }}
+      ISSUE_TITLE: "Security audit failed: cargo deny check advisories"
+      RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      # Configuration: deny.toml ([advisories]).
+      - name: cargo deny check advisories
+        id: deny
+        uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          command: check advisories
+
+      - name: Open or update the issue
+        if: failure() && steps.deny.outcome == 'failure'
+        run: |
+          body="$(printf '%s\n' \
+            "The scheduled advisory audit failed." \
+            "" \
+            "- Run: ${RUN_URL}" \
+            "- Reproduce locally: \`cargo deny check advisories\`" \
+            "" \
+            "Fix by updating the affected crate (\`cargo update -p <crate>\`), replacing it, or — only with a written justification — adding the advisory to \`ignore\` in \`deny.toml\`. See docs/ci.md." \
+            "" \
+            "This issue is closed automatically when the audit passes again.")"
+          number="$(gh api --paginate "repos/${GH_REPO}/issues?state=open&per_page=100" \
+            --jq ".[] | select(.pull_request == null and .title == \"${ISSUE_TITLE}\") | .number" | head -n 1)"
+          if [ -n "$number" ]; then
+            gh issue comment "$number" --body "Still failing: ${RUN_URL}"
+          else
+            gh issue create --title "$ISSUE_TITLE" --body "$body"
+          fi
+
+      - name: Close the issue when the audit is green again
+        if: success()
+        run: |
+          number="$(gh api --paginate "repos/${GH_REPO}/issues?state=open&per_page=100" \
+            --jq ".[] | select(.pull_request == null and .title == \"${ISSUE_TITLE}\") | .number" | head -n 1)"
+          if [ -n "$number" ]; then
+            gh issue close "$number" --comment "The advisory audit passes again: ${RUN_URL}"
+          fi

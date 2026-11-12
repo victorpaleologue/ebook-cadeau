@@ -27,7 +27,8 @@ pub const ACROFORM: &str = "ACROFORM";
 pub const EMBEDDED_FILE: &str = "EMBEDDED_FILE";
 /// The document uses optional content (layers). Warning under PDF/X-1a and PDF/X-3, else info.
 pub const OPTIONAL_CONTENT: &str = "OPTIONAL_CONTENT";
-/// The document is too complex to analyse completely within the built-in limits. Warning.
+/// The document is too complex to analyse completely within the built-in limits, so the
+/// report is partial. Error (a warning when only the list of image placements was cut short).
 pub const LIMIT_EXCEEDED: &str = "LIMIT_EXCEEDED";
 
 // ---- page boxes ------------------------------------------------------------------------

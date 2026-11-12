@@ -1,0 +1,149 @@
+# Automated dependency updates. Explained in docs/ci.md ("Dependency updates").
+#
+# Flow: Dependabot opens a pull request -> ci.yml runs -> dependabot-auto-merge.yml turns on
+# auto-merge for patch/minor updates (and every GitHub Actions update) -> GitHub merges once the
+# required check `ci-ok` is green. Major updates wait for a human.
+#
+# Options reference:
+# https://docs.github.com/en/code-security/reference/supply-chain-security/dependabot-options-reference
+#
+# Labels: Dependabot ignores a label that does not exist in the repository. Create them once
+# (commands in docs/ci.md): dependencies, rust, github-actions.
+version: 2
+
+updates:
+  # Rust crates of the whole workspace (root Cargo.toml + Cargo.lock).
+  - package-ecosystem: cargo
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris
+    # A release must be a week old before it is proposed (security updates are not delayed).
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 5
+    groups:
+      # One pull request for all minor + patch bumps; each major bump gets its own.
+      cargo-minor-patch:
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: deps(cargo)
+    labels:
+      - dependencies
+      - rust
+
+  # Actions used by .github/workflows/*.yml.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
+    groups:
+      # Workflows pin actions by major tag (`@v7`), so every update is a major bump: one pull
+      # request for all of them.
+      github-actions:
+        patterns:
+          - "*"
+    commit-message:
+      prefix: deps(actions)
+    labels:
+      - dependencies
+      - github-actions
+
+  # The Rust toolchain pinned in rust-toolchain.toml (channel = "1.xx.y").
+  - package-ecosystem: rust-toolchain
+    directory: /
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 1
+    commit-message:
+      prefix: deps(toolchain)
+    labels:
+      - dependencies
+      - rust
+
+  # ---------------------------------------------------------------------------------------
+  # NOT ENABLED YET — Dependabot reports an error for a directory without a manifest.
+  # Uncomment a stanza when its manifest exists, and extend the "To double-check" list in
+  # docs/ci.md if the auto-merge rules must differ for it.
+  # ---------------------------------------------------------------------------------------
+
+  # Playwright end-to-end tests: enable when e2e/package.json exists.
+  # - package-ecosystem: npm
+  #   directory: /e2e
+  #   schedule:
+  #     interval: weekly
+  #     day: monday
+  #     time: "06:00"
+  #     timezone: Europe/Paris
+  #   cooldown:
+  #     default-days: 7
+  #   open-pull-requests-limit: 3
+  #   groups:
+  #     playwright-minor-patch:
+  #       update-types:
+  #         - minor
+  #         - patch
+  #   commit-message:
+  #     prefix: deps(e2e)
+  #   labels:
+  #     - dependencies
+  #     - javascript
+
+  # Static frontend: enable when web/package.json exists.
+  # - package-ecosystem: npm
+  #   directory: /web
+  #   schedule:
+  #     interval: weekly
+  #     day: monday
+  #     time: "06:00"
+  #     timezone: Europe/Paris
+  #   cooldown:
+  #     default-days: 7
+  #   open-pull-requests-limit: 3
+  #   groups:
+  #     web-minor-patch:
+  #       update-types:
+  #         - minor
+  #         - patch
+  #   commit-message:
+  #     prefix: deps(web)
+  #   labels:
+  #     - dependencies
+  #     - javascript
+
+  # Python tooling: enable when tools/requirements.txt or tools/pyproject.toml exists.
+  # - package-ecosystem: pip
+  #   directory: /tools
+  #   schedule:
+  #     interval: weekly
+  #     day: monday
+  #     time: "06:00"
+  #     timezone: Europe/Paris
+  #   cooldown:
+  #     default-days: 7
+  #   open-pull-requests-limit: 3
+  #   groups:
+  #     tools-minor-patch:
+  #       update-types:
+  #         - minor
+  #         - patch
+  #   commit-message:
+  #     prefix: deps(tools)
+  #   labels:
+  #     - dependencies
+  #     - python

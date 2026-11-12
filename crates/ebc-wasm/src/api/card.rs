@@ -350,13 +350,13 @@ fn prepare(
     request.profile = profile;
     request.created_unix = dto.created_unix;
     request.guides = dto.guides;
-    if let Some(icc) = icc.filter(|icc| !icc.is_empty()) {
-        if request.profile.standard != PdfStandard::Plain {
-            request.output_profile = Some(
-                OutputProfile::new(icc.to_vec(), "FOGRA39", "ISO Coated v2 300% (basICColor)")
-                    .map_err(|e| card_error(&e))?,
-            );
-        }
+    if let Some(icc) = icc.filter(|icc| !icc.is_empty())
+        && request.profile.standard != PdfStandard::Plain
+    {
+        request.output_profile = Some(
+            OutputProfile::new(icc.to_vec(), "FOGRA39", "ISO Coated v2 300% (basICColor)")
+                .map_err(|e| card_error(&e))?,
+        );
     }
     Ok(Prepared { request, fonts: fonts_for(dto.title_font.as_deref())? })
 }

@@ -198,8 +198,8 @@ fn the_rendered_outside_shows_the_cover_on_the_right_and_the_spine_colour_in_the
     }
 
     // With the own-made cover: its sun in the middle of the front panel, its dark frame
-    // near the panel's safe edge, white ground around it, and — with the cover-colour
-    // spine — the frame's colour on the spine and the back.
+    // near the panel's safe edge, and the frame's colour as the one ground around it, on
+    // the spine and on the back — a jacket in the cover's own colour.
     let mut req = with_cover(poche(profile.clone()), RightsBasis::RightsHolderDeclared);
     req.spine = SpineChoice::CoverColour;
     let pdf = write_pdf(&dir, "cover", &req);
@@ -209,8 +209,8 @@ fn the_rendered_outside_shows_the_cover_on_the_right_and_the_spine_colour_in_the
     assert!(sun[0] > 220 && sun[1] > 180 && sun[2] < 180, "the sun: {sun:?}");
     let frame = at(front.x + 7.0, 60.0);
     assert!(close(frame, [14, 22, 48], 12), "the cover's frame: {frame:?}");
-    let around = at(front.x + 3.5, 60.0);
-    assert!(close(around, [255, 255, 255], 3), "flat neutral ground: {around:?}");
+    let around = at(front.x + 1.5, 60.0);
+    assert!(close(around, [14, 22, 48], 3), "the ground is the frame's colour: {around:?}");
     let spine_colour = at(spine.center().x, 3.0);
     assert!(
         close(spine_colour, [14, 22, 48], 12),

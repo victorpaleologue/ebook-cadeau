@@ -32,6 +32,7 @@ impl Gray {
     /// Reads the rectangle `(x, y, w, h)` of `img` (clamped to the image) as grey.
     /// Transparent pixels are composited over white. Returns `None` if the clamped
     /// rectangle is empty.
+    #[cfg(test)]
     pub(crate) fn from_pixmap_rect(
         img: &Pixmap,
         x: u32,
@@ -43,7 +44,8 @@ impl Gray {
         Self::from_pixmap_rect_reduced(img, x, y, w, h, channel, 1)
     }
 
-    /// Like [`from_pixmap_rect`](Self::from_pixmap_rect), but every output pixel is the
+    /// Like reading the rectangle `(x, y, w, h)` of `img` (clamped to the image; pixels
+    /// composited over white; `None` if empty), but every output pixel is the
     /// average of a `k` x `k` block of source pixels (`k >= 1`; a trailing partial block
     /// is dropped unless it is the only one). This reads a huge image at a reduced size
     /// without any full-size intermediate buffer.
@@ -102,6 +104,7 @@ impl Gray {
     }
 
     /// The whole image as grey.
+    #[cfg(test)]
     pub(crate) fn from_pixmap(img: &Pixmap, channel: Channel) -> Option<Self> {
         Self::from_pixmap_rect(img, 0, 0, img.width(), img.height(), channel)
     }
@@ -117,23 +120,6 @@ impl Gray {
     /// `255 - v` for every pixel.
     pub(crate) fn inverted(&self) -> Self {
         Self { w: self.w, h: self.h, px: self.px.iter().map(|&v| 255 - v).collect() }
-    }
-
-    /// Copies the rectangle `(x, y, w, h)`, clamped to the image; `None` if empty.
-    pub(crate) fn crop(&self, x: usize, y: usize, w: usize, h: usize) -> Option<Self> {
-        if x >= self.w || y >= self.h {
-            return None;
-        }
-        let w = w.min(self.w - x);
-        let h = h.min(self.h - y);
-        if w == 0 || h == 0 {
-            return None;
-        }
-        let mut px = Vec::with_capacity(w * h);
-        for row in y..y + h {
-            px.extend_from_slice(&self.px[row * self.w + x..row * self.w + x + w]);
-        }
-        Some(Self { w, h, px })
     }
 
     /// Resamples to `nw` x `nh`: exact area averaging along an axis that shrinks,

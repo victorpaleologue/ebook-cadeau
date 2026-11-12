@@ -317,7 +317,7 @@ fn oversized_covers_are_refused_before_any_pixel_is_decoded() {
 }
 
 #[test]
-fn light_and_dark_covers_get_a_ground_they_stand_out_on() {
+fn the_ground_is_the_colour_of_the_cover_or_paper_white() {
     use ebc_scene::{Color, Item};
     let fonts = fonts();
     let ground_of = |light: bool| {
@@ -330,8 +330,11 @@ fn light_and_dark_covers_get_a_ground_they_stand_out_on() {
         };
         *color
     };
-    assert_eq!(ground_of(false), Color::Gray(1.0), "a dark cover on paper white");
-    assert_eq!(ground_of(true), Color::Gray(0.2), "a pale cover on dark grey");
+    // The dark cover's navy frame becomes the ground of the whole outside: the cover
+    // melts into a jacket of its own colour.
+    assert_eq!(ground_of(false), Color::rgb8(14, 22, 48), "a dark cover on its frame colour");
+    // The pale cover's frame is too faint a tint to print: paper white.
+    assert_eq!(ground_of(true), Color::Gray(1.0), "a pale cover on paper white");
     // The caller's ground wins.
     let mut req = poche(PrintProfile::upload_eu());
     req.cover = CoverInput::Pixels { pixmap: art::cover(620, 1004, true, true), rights: RIGHTS };

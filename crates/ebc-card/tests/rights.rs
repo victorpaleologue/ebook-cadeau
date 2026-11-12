@@ -477,6 +477,9 @@ fn a_flat_colour_computed_from_the_cover_needs_no_authorisation() {
     let fonts = fonts();
     let mut req = with_cover(poche(pro()), RightsBasis::PublicDomain);
     req.spine = SpineChoice::CoverColour;
+    // By default the ground already is the cover's colour; a white ground set by the
+    // caller shows the spine and back in their own colour.
+    req.ground = Some(ebc_color::Rgb8::WHITE);
     assert!(!req.spine.requires_authorisation());
     let (doc, warnings) = compose(&req, &fonts).unwrap();
     assert_eq!(doc.images.len(), 1, "still no pixels of the cover on the spine");

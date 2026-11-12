@@ -10,7 +10,8 @@
 #   3. wasm-opt -Os, when it is on PATH (optional: the profile already optimises for size)
 #   4. copies the FOGRA39 output-intent profile next to the package: the page fetches it
 #      only for the professional (PDF/X) profiles, so it is not inside the .wasm
-#   5. prints the size of the .wasm, raw and gzip'd, and fails above the budget below
+#   5. writes web/pkg/golden-native.sha256 (the native digests of the golden cards)
+#   6. prints the size of the .wasm, raw and gzip'd, and fails above the budget below
 #
 # Requirements: the wasm32-unknown-unknown target and a wasm-bindgen CLI of exactly the
 # version of the `wasm-bindgen` crate in Cargo.lock (the two must match).
@@ -73,6 +74,11 @@ fi
 # The output intent of the professional profiles, fetched on demand by the page.
 cp crates/ebc-card/assets/icc/ISOcoated_v2_300_bas.icc "${OUT_DIR}/fogra39.icc"
 cp crates/ebc-card/assets/icc/ISOcoated_v2_300_bas.LICENSE.txt "${OUT_DIR}/fogra39.LICENSE.txt"
+
+# The digests of the golden cards as the native library renders them: the Node smoke
+# test (web/tests/smoke.test.mjs) checks that the WebAssembly build writes the same bytes.
+echo "+ cargo run -p ebc-wasm --example golden-digests" >&2
+cargo run --quiet -p ebc-wasm --example golden-digests > "${OUT_DIR}/golden-native.sha256"
 
 raw_bytes=$(wc -c < "$wasm_out")
 gzip_bytes=$(gzip -9 -c "$wasm_out" | wc -c)

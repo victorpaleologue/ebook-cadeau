@@ -259,7 +259,7 @@ mod tests {
     #[cfg(not(feature = "fontid"))]
     #[test]
     fn without_the_feature_it_says_unavailable() {
-        assert!(!AVAILABLE);
+        const { assert!(!AVAILABLE) };
         assert_eq!(value(&fontid_identify(b"", "", "x", None).expect("ok"))["available"], false);
     }
 
@@ -316,7 +316,7 @@ mod tests {
     #[cfg(feature = "fontid")]
     #[test]
     fn hostile_input_is_refused_not_fatal() {
-        assert!(AVAILABLE);
+        const { assert!(AVAILABLE) };
         assert_eq!(fontid_identify(b"junk", "", "Title", None).expect_err("junk").code, "cover_decode");
         let blank = super::super::cover::tests::png(120, 180, |_, _| [255, 255, 255]);
         let v = value(&fontid_identify(&blank, "", "Title", None).expect("blank"));

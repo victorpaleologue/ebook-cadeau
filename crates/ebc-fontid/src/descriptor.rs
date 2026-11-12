@@ -74,8 +74,8 @@ pub(crate) fn hog_distance(a: &[u8], b: &[u8]) -> f32 {
 }
 
 /// Slant in degrees encoded by a slant feature byte (positive = leaning right).
-#[inline]
-pub(crate) fn slant_degrees(byte: u8) -> f32 {
+#[cfg(test)]
+fn slant_degrees(byte: u8) -> f32 {
     ((f32::from(byte) / 255.0) * 2.0 - 1.0) * SLANT_RANGE.to_degrees()
 }
 
@@ -203,8 +203,12 @@ fn gradients(img: &[f32]) -> (Vec<f32>, Vec<f32>) {
 
 /// Ratio of thin to thick strokes in `0..=1` (1 = monoline), from run lengths of the
 /// binarised glyph at its own resolution: every ink pixel gets the shorter of its
-/// horizontal and vertical run as local thickness; the result is the ratio of the 20th
-/// to the 85th percentile of that thickness.
+/// horizontal and vertical run as local thickness `t`; the result is the ratio of the
+/// 20th to the 85th percentile of that thickness.
+///
+/// Each pixel votes with weight `1 / t`, so the distribution is one of stroke *length*,
+/// not of ink area. Weighted by area, hairlines (a few per cent of the ink of a Didone)
+/// would never reach the 20th percentile and every face would look monoline.
 fn stroke_contrast(crop: &Gray) -> f32 {
     let (w, h) = (crop.w, crop.h);
     let ink = |x: usize, y: usize| crop.px[y * w + x] >= 128;
@@ -225,8 +229,8 @@ fn stroke_contrast(crop: &Gray) -> f32 {
         }
     }
     let limit = w.max(h).min(usize::from(u16::MAX));
-    let mut hist = vec![0u32; limit + 1];
-    let mut count = 0u32;
+    let mut hist = vec![0.0f32; limit + 1];
+    let mut count = 0.0f32;
     for x in 0..w {
         let mut y = 0;
         while y < h {
@@ -240,18 +244,20 @@ fn stroke_contrast(crop: &Gray) -> f32 {
             }
             let vlen = y - start;
             for yy in start..y {
-                let t = vlen.min(usize::from(hrun[yy * w + x])).min(limit);
-                hist[t] += 1;
-                count += 1;
+                // Runs are at least one pixel long, so `t >= 1`.
+                let t = vlen.min(usize::from(hrun[yy * w + x])).clamp(1, limit.max(1));
+                let weight = 1.0 / t as f32;
+                hist[t] += weight;
+                count += weight;
             }
         }
     }
-    if count == 0 {
+    if count <= 0.0 {
         return 1.0;
     }
     let percentile = |p: f32| -> f32 {
-        let target = (p * count as f32).ceil().max(1.0) as u32;
-        let mut acc = 0u32;
+        let target = p * count;
+        let mut acc = 0.0f32;
         for (t, &c) in hist.iter().enumerate() {
             acc += c;
             if acc >= target {

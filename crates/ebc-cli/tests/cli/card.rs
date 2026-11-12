@@ -312,3 +312,34 @@ fn bad_requests_are_explained() {
         .unwrap();
     assert_eq!(status(&unwritable), 1);
 }
+
+#[test]
+fn a_given_icc_profile_becomes_the_output_intent() {
+    // The CMYK profile ebc-card bundles, passed as if it were the printer's own.
+    let icc = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../ebc-card/assets/icc/ISOcoated_v2_300_bas.icc");
+    let dir = tempfile::tempdir().unwrap();
+    let pdf = dir.path().join("card.pdf");
+    let made = card(&pdf)
+        .args(["--profile", "pro", "--output-condition", "FOGRA39L-test", "--icc"])
+        .arg(&icc)
+        .output()
+        .unwrap();
+    assert_eq!(status(&made), 0, "{}", stderr(&made));
+
+    let checked = preflight(&pdf, "pro").arg("--json").output().unwrap();
+    assert_eq!(status(&checked), 0, "{}", stdout(&checked));
+    let report: serde_json::Value = serde_json::from_slice(&checked.stdout).unwrap();
+    let text = report.to_string();
+    assert!(text.contains("\"identifier\":\"FOGRA39L-test\""), "{text}");
+    assert!(text.contains("ISOcoated_v2_300_bas"), "{text}");
+
+    // On a home profile the plain PDF has no output intent: the profile is not used.
+    let home = card(&pdf)
+        .args(["--profile", "home-a4", "--output-condition", "FOGRA39", "--icc"])
+        .arg(&icc)
+        .output()
+        .unwrap();
+    assert_eq!(status(&home), 0, "{}", stderr(&home));
+    assert!(stderr(&home).contains("--icc is not used"), "{}", stderr(&home));
+}

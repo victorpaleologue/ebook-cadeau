@@ -17,6 +17,11 @@ fn count(haystack: &[u8], needle: &[u8]) -> usize {
     haystack.windows(needle.len()).filter(|window| *window == needle).count()
 }
 
+/// Image XObjects, whichever way the writer spaces the dictionary entry.
+fn images(pdf: &[u8]) -> usize {
+    count(pdf, b"/Subtype /Image") + count(pdf, b"/Subtype/Image")
+}
+
 #[test]
 fn golden_cards_render_deterministically() {
     let first = digests();
@@ -36,13 +41,13 @@ fn golden_cards_are_what_they_claim() {
     let typographic = render("typographic", false, false);
     assert!(typographic.pdf.starts_with(b"%PDF-1."));
     assert!(typographic.pdf.ends_with(b"%%EOF\n") || typographic.pdf.ends_with(b"%%EOF"));
-    assert_eq!(count(&typographic.pdf, b"/Subtype /Image"), 0);
+    assert_eq!(images(&typographic.pdf), 0);
     assert_eq!(count(&typographic.pdf, b"/OutputIntent"), 0);
     assert_eq!(typographic.warnings_json, "[]");
 
     // A declared cover: one image, and a credit line on file.
     let cover = render("cover", true, false);
-    assert!(count(&cover.pdf, b"/Subtype /Image") >= 1);
+    assert!(images(&cover.pdf) >= 1);
     assert!(!cover.warnings_json.contains("cover_without_rights"));
 
     // PDF/X-4 for an online printer: an output intent with the profile handed over.
@@ -51,3 +56,4 @@ fn golden_cards_are_what_they_claim() {
     assert!(count(&pdfx.pdf, b"GTS_PDFX") >= 1);
     assert!(!pdfx.warnings_json.contains("fallback_output_profile"));
 }
+

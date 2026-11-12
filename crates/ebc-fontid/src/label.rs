@@ -131,10 +131,6 @@ pub(crate) struct Labelling {
     pub(crate) line_texts: Vec<Option<String>>,
     /// Fraction of the letters of the text that lie on the matched lines.
     pub(crate) coverage: f32,
-    /// Every matched line has exactly as many glyphs as letters.
-    pub(crate) exact: bool,
-    /// Mean distance between the glyphs and the average shape of their letters.
-    pub(crate) plausibility: f32,
 }
 
 /// One letter-sized character of the text.
@@ -197,18 +193,34 @@ fn fold(ch: char) -> Ch {
     Ch { base, whole: false }
 }
 
-/// Splits the text into words that contain at least one letter; tokens of punctuation
-/// alone are attached to the previous word.
+/// Does a token without letters or digits stick to the word before it? Closing
+/// punctuation does — French sets a space before `! ? ; :` and inside `« »`, but a line
+/// never starts with them — while a token such as `&` or `§` can start a line.
+fn trails(token: &str) -> bool {
+    token.chars().all(|c| matches!(c, '!' | '?' | ';' | ':' | '.' | ',' | '…' | '»' | ')' | ']'))
+}
+
+/// Splits the text into words: tokens with a letter or digit, plus the trailing
+/// punctuation set apart by a space ("Où es-tu ?" → "Où", "es-tu ?"). Every
+/// letter-sized character counts, wherever it sits: `!`, `?` and `&` draw shapes the
+/// segmentation counts as letter-sized glyphs, so they must be counted here too. A
+/// token of non-trailing symbols that draws letter-sized shapes (`&`) is a word of its
+/// own; one that draws none (`—`, `-`, `«`) only adds to the text of its neighbour.
 fn words(text: &str) -> Vec<Word> {
     let mut out: Vec<Word> = Vec::new();
     for token in text.split_whitespace() {
         let chars: Vec<Ch> = token.chars().filter(|&c| is_tall(c)).map(fold).collect();
-        if chars.is_empty() {
+        let has_letter = token.chars().any(char::is_alphanumeric);
+        if !has_letter && (chars.is_empty() || trails(token)) {
             if let Some(last) = out.last_mut() {
                 last.text.push(' ');
                 last.text.push_str(token);
+                last.chars.extend(chars);
+                continue;
             }
-            continue;
+            if chars.is_empty() {
+                continue;
+            }
         }
         if out.len() >= MAX_WORDS {
             break;
@@ -545,8 +557,6 @@ pub(crate) fn label(obs: &Observed, text: &str, centroids: &FaceDescriptor) -> V
                 labels: structure.labels,
                 line_texts,
                 coverage: structure.covered as f32 / total.max(1) as f32,
-                exact: structure.exact,
-                plausibility: plaus,
             },
         ));
     }
@@ -584,7 +594,15 @@ mod tests {
             ]
         );
         assert_eq!(ws[1].text, "1984 !");
-        assert_eq!(ws[1].chars.len(), 4);
+        // The exclamation mark is letter-sized (stem + dot): the segmenter counts it.
+        assert_eq!(ws[1].chars.len(), 5);
+        assert_eq!(ws[1].chars[4], Ch { base: Some('!'), whole: true });
+        // "&" can start a line: a word of its own. "?" sticks to its word.
+        let ws = words("Pride & Prejudice");
+        assert_eq!(ws.iter().map(|w| w.chars.len()).collect::<Vec<_>>(), vec![5, 1, 9]);
+        let ws = words("Où es-tu ?");
+        assert_eq!(ws.iter().map(|w| w.text.as_str()).collect::<Vec<_>>(), vec!["Où", "es-tu ?"]);
+        assert_eq!(ws[1].chars.len(), 5);
         // Letters without a comparable base still count.
         assert_eq!(fold('ç'), Ch { base: None, whole: false });
         assert_eq!(fold('ï'), Ch { base: None, whole: false });

@@ -161,10 +161,10 @@ impl Library {
             return Err(ImportError::DamagedOnDevice { device: profile.id });
         }
         let mut notes = Vec::new();
-        if matches!(source, ImportSource::BrowserDownload { .. }) {
-            if let Some(note) = profile.quirks.download_note {
-                notes.push(note.to_owned());
-            }
+        if matches!(source, ImportSource::BrowserDownload { .. })
+            && let Some(note) = profile.quirks.download_note
+        {
+            notes.push(note.to_owned());
         }
         let mut entry = build_entry(file, format, &info, source, notes);
         entry.kepub = entry.kepub && profile.family == crate::profile::DeviceFamily::Kobo;

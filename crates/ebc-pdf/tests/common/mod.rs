@@ -2,6 +2,7 @@
 #![allow(dead_code)]
 
 pub(crate) mod card;
+pub(crate) mod reference;
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -65,7 +66,7 @@ pub(crate) fn base_doc(standard: PdfStandard) -> Document {
 /// Lays `text` out left to right with the font's own advances (no shaping, no kerning):
 /// enough to exercise the writer. Returns the glyphs, their texts and the run width (mm).
 pub(crate) fn layout(font_data: &[u8], text: &str, size_pt: f64) -> (Vec<Glyph>, Vec<String>, f64) {
-    let face = ttf_parser::Face::parse(font_data, 0).expect("test font parses");
+    let face = reference::Face::parse(font_data, 0).expect("test font parses");
     let scale = size_pt * MM_PER_PT / f64::from(face.units_per_em());
     let mut x = 0.0;
     let mut glyphs = Vec::new();

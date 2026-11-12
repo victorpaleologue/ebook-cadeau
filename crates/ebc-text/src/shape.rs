@@ -1,6 +1,8 @@
 //! Shaping: text → positioned glyphs in millimetres, glyph items and vector outlines.
 
 use ebc_scene::{Color, FontId, Glyph, Item, Path, PathSeg, Point, Rect};
+use harfrust::{Buffer, BufferFlags, Direction, Feature, Language, ShaperFont, Tag};
+use read_fonts::model::glyph::outline::PathSink;
 
 use crate::error::FontError;
 use crate::font::{Font, mm_per_unit};
@@ -81,8 +83,7 @@ pub struct ShapedText {
 #[must_use]
 pub fn shape(font: &Font, text: &str, size_pt: f64, opts: &ShapeOptions) -> ShapedText {
     let size_pt = sane_size(size_pt);
-    contain(|| Some(shape_units(&font.hb_face()?, text, opts).to_shaped(text, size_pt)))
-        .flatten()
+    contain(|| shape_units(&font.shaper(), text, opts).to_shaped(text, size_pt))
         .unwrap_or(ShapedText { glyphs: Vec::new(), width: 0.0, size_pt })
 }
 
@@ -146,8 +147,8 @@ impl ShapedText {
     fn outline(&self, font: &Font, origin: Point) -> (Path, Option<Refusal>) {
         contain(|| {
             let mut path = Path::new();
-            let Some(mut outliner) = font.outliner() else { return (path, None) };
-            let scale = mm_per_unit(outliner.face().units_per_em(), self.size_pt);
+            let mut outliner = font.outliner();
+            let scale = mm_per_unit(font.metrics().units_per_em, self.size_pt);
             let placed = self.glyphs.iter().map(|g| (g.id, origin.x + g.x, origin.y + g.y));
             append_outlines(&mut outliner, placed, scale, &mut path);
             (path, outliner.refusal())
@@ -344,29 +345,36 @@ fn shaping_char(c: char) -> char {
     if is_set_as_space(c) { ' ' } else { c }
 }
 
-fn features(opts: &ShapeOptions) -> Vec<rustybuzz::Feature> {
-    let mut features: Vec<rustybuzz::Feature> = Vec::with_capacity(opts.features.len() + 2);
+/// A feature tag of 1 to 4 printable ASCII characters, padded with spaces.
+fn feature_tag(name: &str) -> Option<Tag> {
+    let bytes = name.as_bytes();
+    if bytes.is_empty() || bytes.len() > 4 || !bytes.iter().all(|b| (0x20..0x7F).contains(b)) {
+        return None;
+    }
+    let mut padded = [b' '; 4];
+    for (slot, byte) in padded.iter_mut().zip(bytes) {
+        *slot = *byte;
+    }
+    Some(Tag::from_be_bytes(padded))
+}
+
+fn features(opts: &ShapeOptions) -> Vec<Feature> {
+    let mut features: Vec<Feature> = Vec::with_capacity(opts.features.len() + 2);
     if opts.letter_spacing_em != 0.0 && opts.letter_spacing_em.is_finite() {
         // Letter-spaced text must not fuse letters. User features come later and win.
         for tag in [b"liga", b"clig"] {
-            features.push(rustybuzz::Feature::new(ttf_parser::Tag::from_bytes(tag), 0, ..));
+            features.push(Feature::new(Tag::new(tag), 0, ..));
         }
     }
     for (name, value) in &opts.features {
-        let bytes = name.as_bytes();
-        if bytes.is_empty() || bytes.len() > 4 || !bytes.iter().all(|b| (0x20..0x7F).contains(b)) {
-            continue;
+        if let Some(tag) = feature_tag(name) {
+            features.push(Feature::new(tag, *value, ..));
         }
-        features.push(rustybuzz::Feature::new(
-            ttf_parser::Tag::from_bytes_lossy(bytes),
-            *value,
-            ..,
-        ));
     }
     features
 }
 
-fn language(opts: &ShapeOptions) -> Option<rustybuzz::Language> {
+fn language(opts: &ShapeOptions) -> Option<Language> {
     let tag = opts.language.as_deref()?.trim();
     let well_formed = !tag.is_empty()
         && tag.len() <= 35
@@ -378,31 +386,30 @@ fn language(opts: &ShapeOptions) -> Option<rustybuzz::Language> {
 }
 
 /// Shapes `text` once, in font units. All measuring functions go through this.
-pub(crate) fn shape_units(face: &rustybuzz::Face<'_>, text: &str, opts: &ShapeOptions) -> UnitRun {
-    let units_per_em = face.as_ref().units_per_em();
+pub(crate) fn shape_units(face: &ShaperFont<'_, '_>, text: &str, opts: &ShapeOptions) -> UnitRun {
+    let units_per_em = face.units_per_em();
     let mut run = UnitRun { glyphs: Vec::new(), width: 0.0, units_per_em };
     if text.is_empty() {
         return run;
     }
 
-    let mut buffer = rustybuzz::UnicodeBuffer::new();
+    let mut buffer = Buffer::new();
     for (offset, c) in text.char_indices() {
-        buffer.add(shaping_char(c), u32::try_from(offset).unwrap_or(u32::MAX));
+        buffer.push(u32::from(shaping_char(c)), u32::try_from(offset).unwrap_or(u32::MAX));
     }
-    buffer.set_direction(if opts.rtl {
-        rustybuzz::Direction::RightToLeft
-    } else {
-        rustybuzz::Direction::LeftToRight
-    });
-    if let Some(language) = language(opts) {
-        buffer.set_language(language);
-    }
-    buffer
-        .set_flags(rustybuzz::BufferFlags::BEGINNING_OF_TEXT | rustybuzz::BufferFlags::END_OF_TEXT);
+    buffer.set_direction(if opts.rtl { Direction::RightToLeft } else { Direction::LeftToRight });
+    buffer.set_language(language(opts));
+    buffer.set_flags(BufferFlags::BEGINNING_OF_TEXT | BufferFlags::END_OF_TEXT);
+    // The script is taken from the text; the direction set above is kept.
+    buffer.guess_segment_properties();
 
-    let shaped = rustybuzz::shape(face, &features(opts), buffer);
-    let infos = shaped.glyph_infos();
-    let positions = shaped.glyph_positions();
+    let features = features(opts);
+    let options = harfrust::ShapeOptions::new().features(&features);
+    if harfrust::shape(face, &mut buffer, options).is_err() {
+        return run;
+    }
+    let infos = buffer.glyph_infos();
+    let positions = buffer.glyph_positions();
 
     let spacing = if opts.letter_spacing_em.is_finite() {
         f64::from(opts.letter_spacing_em) * f64::from(units_per_em)
@@ -458,11 +465,11 @@ fn cluster_texts(text: &str, clusters: &[u32]) -> Vec<String> {
 }
 
 /// `true` if shaping `c` with this face draws something other than `.notdef`.
-pub(crate) fn is_drawable(face: &rustybuzz::Face<'_>, c: char) -> bool {
+pub(crate) fn is_drawable(face: &ShaperFont<'_, '_>, c: char) -> bool {
     if is_set_as_space(c) {
         return true; // never reported as missing
     }
-    if face.as_ref().glyph_index(c).is_some_and(|g| g.0 != 0) {
+    if face.nominal_glyph(u32::from(c)).is_some_and(|g| g.to_u32() != 0) {
         return true;
     }
     // Not mapped directly: let the shaper try its fallbacks (decomposition, space and
@@ -517,7 +524,7 @@ impl OutlineSink<'_> {
     }
 }
 
-impl ttf_parser::OutlineBuilder for OutlineSink<'_> {
+impl PathSink for OutlineSink<'_> {
     fn move_to(&mut self, x: f32, y: f32) {
         if self.has_room() {
             let (x, y) = self.map(x, y);
@@ -558,8 +565,6 @@ impl ttf_parser::OutlineBuilder for OutlineSink<'_> {
 
 #[cfg(test)]
 mod tests {
-    use ttf_parser::OutlineBuilder;
-
     use super::*;
 
     #[test]

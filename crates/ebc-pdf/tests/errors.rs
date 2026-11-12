@@ -546,7 +546,7 @@ fn malformed_fonts_and_glyph_ids_are_reported() {
     assert!(matches!(error(&doc), PdfError::InvalidFont { .. }));
 
     // Glyph ids beyond the font.
-    let count = ttf_parser::Face::parse(&good, 0).expect("parses").number_of_glyphs();
+    let count = reference::Face::parse(&good, 0).expect("parses").number_of_glyphs();
     for glyph in [count, u16::MAX] {
         let mut doc = doc_with(PdfStandard::X4, vec![]);
         let id = doc.add_font(good.clone(), 0);

@@ -275,17 +275,35 @@ pub(crate) fn score_from_distance(d: f32) -> f32 {
     (1.0 / (1.0 + r)).clamp(0.0, 1.0)
 }
 
+// TUNING-BEGIN
+pub(crate) fn knobs() -> &'static [f32; 8] {
+    static K: std::sync::OnceLock<[f32; 8]> = std::sync::OnceLock::new();
+    K.get_or_init(|| {
+        let mut k = [W_ASPECT, W_DENSITY, W_STROKE, W_CONTRAST, W_SLANT, W_GEOMETRY, KEEP, 128.0];
+        if let Ok(v) = std::env::var("EBC_W") {
+            for (slot, part) in k.iter_mut().zip(v.split(',')) {
+                if let Ok(x) = part.trim().parse::<f32>() {
+                    *slot = x;
+                }
+            }
+        }
+        k
+    })
+}
+// TUNING-END
+
 /// Distance between the features of a glyph and a reference record.
 #[inline]
 fn glyph_distance(f: &Features, record: &[u8]) -> f32 {
+    let k = knobs();
     let hog = hog_distance(f.hog(), &record[..HOG_LEN]);
     let (s, r) = (f.scalars(), &record[HOG_LEN..FEATURE_LEN]);
     let d = |k: usize| f32::from(s[k].abs_diff(r[k])) / 255.0;
-    hog + W_ASPECT * d(S_ASPECT)
-        + W_DENSITY * d(S_DENSITY)
-        + W_STROKE * d(S_STROKE)
-        + W_CONTRAST * d(S_CONTRAST)
-        + W_SLANT * d(S_SLANT)
+    hog + k[0] * d(S_ASPECT)
+        + k[1] * d(S_DENSITY)
+        + k[2] * d(S_STROKE)
+        + k[3] * d(S_CONTRAST)
+        + k[4] * d(S_SLANT)
 }
 
 /// Mean of the smallest `KEEP` share of the values (at least one).
@@ -294,7 +312,7 @@ fn trimmed_mean(values: &mut [f32]) -> f32 {
         return 0.0;
     }
     values.sort_by(f32::total_cmp);
-    let keep = ((values.len() as f32 * KEEP).ceil() as usize).clamp(1, values.len());
+    let keep = ((values.len() as f32 * knobs()[6]).ceil() as usize).clamp(1, values.len());
     values[..keep].iter().sum::<f32>() / keep as f32
 }
 
@@ -348,7 +366,7 @@ fn labelled_distance(obs: &Observed, labels: &[Label], face: &FaceDescriptor) ->
         weight += members.len() as f32;
     }
     let geometry_term = if weight > 0.0 { residual / weight } else { 0.0 };
-    Some(shape + W_GEOMETRY * geometry_term)
+    Some(shape + knobs()[5] * geometry_term)
 }
 
 /// For every glyph (a bounded sample), the three characters whose average shape over

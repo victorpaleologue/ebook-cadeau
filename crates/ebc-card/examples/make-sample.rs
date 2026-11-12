@@ -35,6 +35,9 @@ mod art;
 /// 2026-11-06 12:00:00 UTC: a fixed creation time, so that samples are reproducible.
 const CREATED_UNIX: i64 = 1_794_000_000;
 
+/// A request field set from an argument, applied once the request exists.
+type Setting = Box<dyn FnOnce(&mut CardRequest)>;
+
 fn run() -> Result<(), String> {
     let mut args = std::env::args().skip(1);
     let mut book = BookMeta::titled("Les Vagues du soir");
@@ -52,7 +55,7 @@ fn run() -> Result<(), String> {
     let mut rights: Option<RightsBasis> = None;
     let mut out: Option<PathBuf> = None;
     let mut svg_dir: Option<PathBuf> = None;
-    let mut later: Vec<Box<dyn FnOnce(&mut CardRequest)>> = Vec::new();
+    let mut later: Vec<Setting> = Vec::new();
 
     while let Some(arg) = args.next() {
         let mut value = |name: &str| args.next().ok_or_else(|| format!("{name} needs a value"));
@@ -65,7 +68,8 @@ fn run() -> Result<(), String> {
             }
             "--profile" => {
                 let name = value("--profile")?;
-                profile = PrintProfile::by_name(&name).ok_or(format!("unknown profile {name:?}"))?;
+                profile =
+                    PrintProfile::by_name(&name).ok_or(format!("unknown profile {name:?}"))?;
             }
             "--locale" => {
                 let tag = value("--locale")?;
@@ -116,7 +120,9 @@ fn run() -> Result<(), String> {
             "--adaptation-authorised" => later.push(Box::new(|r| r.adaptation_authorised = true)),
             "--guides" => later.push(Box::new(|r| r.guides = true)),
             "-h" | "--help" => {
-                return Err("see the documentation at the top of examples/make-sample.rs".to_owned());
+                return Err(
+                    "see the documentation at the top of examples/make-sample.rs".to_owned()
+                );
             }
             other => return Err(format!("unknown argument {other:?}")),
         }

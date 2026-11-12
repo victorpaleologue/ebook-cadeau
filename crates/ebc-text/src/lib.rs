@@ -17,8 +17,9 @@
 //! | paragraphs | [`wrap`], [`wrap_ranges`] |
 //! | pixels (font identification, previews) | [`rasterize`], [`try_rasterize`] (feature `raster`, on by default) |
 //!
-//! Shaping is done by `rustybuzz` (a port of HarfBuzz) on top of `ttf-parser`: ligatures,
-//! kerning, mark positioning and localised forms are applied. Everything is computed in
+//! Shaping is done by `harfrust` (the Rust port of HarfBuzz) on top of `read-fonts`, the
+//! font parser of the fontations project: ligatures, kerning, mark positioning and
+//! localised forms are applied. Everything is computed in
 //! font units and scaled, without hinting, so results are deterministic and exactly
 //! proportional to the font size.
 //!
@@ -48,19 +49,22 @@
 //!
 //! The **amount of work** a font can ask for is bounded as well. Two outline formats let
 //! a file of a kilobyte describe billions of operations — composite glyphs made of
-//! composite glyphs (`glyf`) and subroutines calling subroutines (`CFF `, `CFF2`) — and
-//! the parsers limit the nesting depth of both but not the fan-out. This crate therefore
+//! composite glyphs (`glyf`) and subroutines calling subroutines (`CFF `, `CFF2`). The
+//! font parser bounds the work of one glyph, but a long text multiplies that bound.
+//! This crate therefore
 //!
 //! * measures the expanded size of a TrueType glyph before drawing it (65 536 points
 //!   and component references at most);
-//! * flattens PostScript charstrings itself, under a budget of 262 144 operators and
-//!   operands, and only lets the parser see subroutine-free charstrings;
+//! * meters the charstring interpreter: the charstring of a PostScript glyph and every
+//!   subroutine it calls are charged to a budget of 262 144 bytes per glyph;
 //! * gives every [`ShapedText::to_outline`], [`rasterize`] and font load an overall
 //!   budget (about one million points: some 20 000 letters per call), so a huge text
 //!   cannot turn a merely expensive glyph into minutes of work or gigabytes of path;
-//! * shapes with a view of the font from which the tables that would make the *shaper*
-//!   run outlines or paint graphs are removed (`CFF `, `CFF2`, `COLR`; also `glyf` for
-//!   fonts that contain an oversized glyph — see [`Font::has_oversized_glyphs`]).
+//! * reads only the tables it needs — bitmap, colour (`COLR`, `SVG `, …) and variable
+//!   composite (`VARC`) tables are never looked at — and shapes with a view of the font
+//!   from which the tables that would make the *shaper* run glyph programs are removed
+//!   (`CFF `, `CFF2`; also `glyf` for fonts that contain an oversized glyph — see
+//!   [`Font::has_oversized_glyphs`]).
 //!
 //! A glyph beyond these limits draws nothing, like a malformed one;
 //! [`ShapedText::try_to_outline`] and [`try_rasterize`] report it as
@@ -86,6 +90,7 @@ mod guard;
 mod outline;
 #[cfg(feature = "raster")]
 mod raster;
+mod sfnt;
 mod shape;
 mod wrap;
 

@@ -53,7 +53,7 @@ pub fn fit_size(
     let max_pt = max_pt.min(MAX_SIZE_PT);
 
     // Shape once: glyph positions are proportional to the size.
-    let run = contain(|| Some(shape_units(&font.hb_face()?, text, opts))).flatten()?;
+    let run = contain(|| shape_units(&font.shaper(), text, opts))?;
     let metrics = font.metrics();
     let fits = |size: f64| {
         run.width_mm(size) <= max_width && metrics.cap_height_mm(size) <= max_cap_height

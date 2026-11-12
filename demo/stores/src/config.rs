@@ -93,12 +93,15 @@ impl StoreKind {
         self.slug()
     }
 
-    /// Default (demo) partner secret. Matches `demo/stores/partners.demo.toml`.
+    /// Default (development) partner secret. Matches the server's
+    /// `crates/ebc-server/partners.dev.toml`, so that `ebc-server` started with
+    /// `EBC_PARTNERS` pointing at that file and this store talk to each other without any
+    /// further configuration. Public, hence never to be used outside demos.
     #[must_use]
     pub const fn default_partner_secret(self) -> &'static str {
         match self {
-            Self::Septante => "demo-secret-septante",
-            Self::GrandeEnseigne => "demo-secret-grande-enseigne",
+            Self::Septante => "dev-secret-septante-0123456789",
+            Self::GrandeEnseigne => "dev-secret-grande-enseigne-0123456789",
         }
     }
 }
@@ -367,7 +370,7 @@ impl StoreConfig {
     /// | `DEMO_{STORE}_PUBLIC_URL` | `http://127.0.0.1:{port}` |
     /// | `EBC_URL` | `http://127.0.0.1:8080` (set it to an empty string to disable gifts) |
     /// | `DEMO_{STORE}_PARTNER_ID` | `septante` / `grande-enseigne` |
-    /// | `DEMO_{STORE}_PARTNER_SECRET` | `demo-secret-…` |
+    /// | `DEMO_{STORE}_PARTNER_SECRET` | `dev-secret-…` (see [`StoreKind::default_partner_secret`]) |
     /// | `DEMO_{STORE}_DELIVERY` | `hosted_file` (Septante) / `reseller_redirect` (Grande Enseigne) |
     /// | `EBC_PRINTER_URL` | unset: the "post" card choice is disabled |
     /// | `DEMO_TEST_HOOKS` | unset; `1` enables `/__test/state` |

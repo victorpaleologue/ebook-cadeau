@@ -22,7 +22,7 @@
 //! # async fn run() -> std::io::Result<()> {
 //! let config = StoreConfig::new(StoreKind::Septante)
 //!     .with_public_url("http://127.0.0.1:8101")
-//!     .with_partner("http://127.0.0.1:8080", "septante", "demo-secret-septante");
+//!     .with_partner("http://127.0.0.1:8080", "septante", "dev-secret-septante-0123456789");
 //! let listener = tokio::net::TcpListener::bind("127.0.0.1:8101").await?;
 //! axum::serve(listener, app(config)).await
 //! # }

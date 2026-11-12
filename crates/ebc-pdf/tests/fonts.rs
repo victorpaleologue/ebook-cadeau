@@ -1,4 +1,4 @@
-//! Font embedding, parsed back with `lopdf` and `ttf-parser`.
+//! Font embedding, parsed back with `lopdf` and `read-fonts` (see `common::reference`).
 
 mod common;
 
@@ -7,7 +7,7 @@ use std::collections::BTreeSet;
 use common::*;
 use ebc_pdf::{WriteOptions, write_pdf};
 use ebc_scene::{Color, Document, FontId, Glyph, Item, MM_PER_PT, Page, PdfStandard, Point, Size};
-use ttf_parser::{Face, GlyphId};
+use common::reference::{self, Face, GlyphId};
 
 const READABLE: WriteOptions = WriteOptions { compress: false, keep_layers: false };
 
@@ -17,7 +17,7 @@ fn one_page(doc: &mut Document) -> &mut Page {
 }
 
 /// Bounding box of a glyph outline, or `None` for an empty glyph.
-fn glyph_box(face: &Face<'_>, glyph: u16) -> Option<(i16, i16, i16, i16)> {
+fn glyph_box(face: &Face, glyph: u16) -> Option<(i16, i16, i16, i16)> {
     face.glyph_bounding_box(GlyphId(glyph)).map(|r| (r.x_min, r.y_min, r.x_max, r.y_max))
 }
 
@@ -190,7 +190,7 @@ fn cff_fonts_become_cidfonttype0_with_a_bare_cff_program() {
         // The program is a bare CFF table (not an OpenType wrapper), CID-keyed, with only
         // the glyphs we use.
         assert_eq!(&info.program[..2], &[1, 0], "CFF header major/minor version");
-        let cff = ttf_parser::cff::Table::parse(&info.program).expect("CFF parses");
+        let cff = reference::cff::Table::parse(&info.program).expect("CFF parses");
         let distinct: BTreeSet<char> = text.chars().collect();
         assert_eq!(usize::from(cff.number_of_glyphs()), distinct.len() + 1);
         assert!(info.program.len() < 8_000, "{} bytes", info.program.len());
@@ -201,7 +201,7 @@ fn cff_fonts_become_cidfonttype0_with_a_bare_cff_program() {
         let extracted: String = glyphs.iter().map(|g| info.to_unicode[&g.cid].as_str()).collect();
         assert_eq!(extracted, text);
         struct Sink;
-        impl ttf_parser::OutlineBuilder for Sink {
+        impl reference::OutlineBuilder for Sink {
             fn move_to(&mut self, _: f32, _: f32) {}
             fn line_to(&mut self, _: f32, _: f32) {}
             fn quad_to(&mut self, _: f32, _: f32, _: f32, _: f32) {}
@@ -287,7 +287,7 @@ fn fonts_that_forbid_subsetting_are_embedded_whole() {
     let info = font_info(&pdf, 1, "F0");
     assert_eq!(info.base_font, "SourceCodePro-Regular");
     let face = Face::parse(&whole_only, 0).expect("parses");
-    let cff = ttf_parser::cff::Table::parse(&info.program).expect("CFF parses");
+    let cff = reference::cff::Table::parse(&info.program).expect("CFF parses");
     assert_eq!(cff.number_of_glyphs(), face.number_of_glyphs());
     let content = get_stream_data(&pdf, page(&pdf, 1), "Contents");
     let glyphs = placed_glyphs(&content, &|_, cid| info.widths[&cid]);
@@ -341,7 +341,7 @@ fn glyphs_land_exactly_where_the_run_puts_them() {
     assert!(text.contains("1 0 0 -1 27 38.5 Tm"), "raised glyph starts a new line: {text}");
 }
 
-fn face_char(face: &Face<'_>, glyph: u16) -> String {
+fn face_char(face: &Face, glyph: u16) -> String {
     "AVA2xyzo"
         .chars()
         .find(|c| face.glyph_index(*c).map(|g| g.0) == Some(glyph))
@@ -503,7 +503,7 @@ fn very_long_runs_are_split_into_arrays_and_strings_old_readers_accept() {
         .map(|i| Glyph { id: if i % 2 == 0 { a } else { b }, x: f64::from(i) * 0.001, y: 0.0 })
         .collect();
     // 30 000 glyphs at their natural advance: far more than one string may hold.
-    let advance = f64::from(face.glyph_hor_advance(ttf_parser::GlyphId(a)).expect("advance"))
+    let advance = f64::from(face.glyph_hor_advance(GlyphId(a)).expect("advance"))
         * 2.0
         * MM_PER_PT
         / f64::from(face.units_per_em());

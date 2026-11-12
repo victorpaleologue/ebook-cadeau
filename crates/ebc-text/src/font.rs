@@ -4,11 +4,28 @@ use std::fmt;
 use std::sync::Arc;
 
 use ebc_scene::MM_PER_PT;
-use ttf_parser::{Tag, name_id};
+use read_fonts::model::Font as Face;
+use read_fonts::tables::mvar::Mvar;
+use read_fonts::types::Tag;
+use read_fonts::{FontData, FontRead};
 
 use crate::error::FontError;
 use crate::guard::contain;
 use crate::outline::{self, GlyfCosts, MAX_GLYPH_COST, Outliner};
+use crate::sfnt::{NameRecord, Tables};
+
+/// IDs of the `name` table records this crate reads.
+mod name_id {
+    pub(super) const FAMILY: u16 = 1;
+    pub(super) const SUBFAMILY: u16 = 2;
+    pub(super) const FULL_NAME: u16 = 4;
+    pub(super) const VERSION: u16 = 5;
+    pub(super) const POST_SCRIPT_NAME: u16 = 6;
+    pub(super) const LICENSE: u16 = 13;
+    pub(super) const LICENSE_URL: u16 = 14;
+    pub(super) const TYPOGRAPHIC_FAMILY: u16 = 16;
+    pub(super) const TYPOGRAPHIC_SUBFAMILY: u16 = 17;
+}
 
 /// Millimetres per font unit at `size_pt` points — the one conversion every measurement
 /// in this crate goes through, so that metrics, shaping and fitting agree to the last bit.
@@ -262,15 +279,21 @@ struct StaticInfo {
     max_glyph_cost: u32,
 }
 
-#[derive(Debug)]
 struct Inner {
     data: Arc<[u8]>,
     face_index: u32,
+    /// The tables of this face: what this crate and the font libraries read.
+    tables: Arc<Tables>,
     info: Arc<StaticInfo>,
     /// Axis settings that differ from the default instance, in user-space units,
     /// clamped to the axis range and sorted by tag.
     variations: Vec<(Tag, f32)>,
     metrics: FontMetrics,
+    /// This instance as the font libraries see it: for outlines, metrics and the
+    /// character map. (Reference counted; the libraries cache what they parse in it.)
+    face: Face,
+    /// This instance as the shaper sees it (see `Tables::shaping_face`).
+    shaping: Face,
 }
 
 /// A parsed font face. Cloning is cheap (reference counted); the type is `Send + Sync`.
@@ -330,31 +353,30 @@ impl Font {
     pub fn from_bytes(data: impl Into<Arc<[u8]>>, face_index: u32) -> Result<Self, FontError> {
         let data: Arc<[u8]> = data.into();
         check_collection_header(&data, face_index)?;
-        let (info, metrics) = contain(|| {
-            let face = ttf_parser::Face::parse(&data, face_index).map_err(|e| match e {
-                ttf_parser::FaceParsingError::FaceIndexOutOfBounds => FontError::FaceIndex {
-                    index: face_index,
-                    count: ttf_parser::fonts_in_collection(&data).unwrap_or(1),
-                },
-                other => FontError::Parse(other.to_string()),
-            })?;
-            let tables = outline::collect_tables(face.raw_face());
-            let info = static_info(&face, &tables);
+        let inner = contain(|| {
+            let tables = Arc::new(Tables::collect(&data, face_index)?);
+            let inconsistent = || FontError::Parse("the font tables are inconsistent".into());
+            let face = tables.face().ok_or_else(inconsistent)?;
             // Measuring "H" or "x" runs glyph outlines: only ever through the outliner.
-            let mut outliner = Outliner::new(tables, &[])
-                .ok_or_else(|| FontError::Parse("the font tables are inconsistent".into()))?;
-            Ok((info, metrics_of(&mut outliner)))
-        })
-        .unwrap_or_else(|| Err(FontError::Parse("the font parser gave up on this data".into())))?;
-        Ok(Self {
-            inner: Arc::new(Inner {
-                data,
+            let (info, metrics) = {
+                let mut outliner = Outliner::new(&face, &tables);
+                (static_info(&tables, &face, &outliner), metrics_of(&tables, &face, &mut outliner))
+            };
+            let hide_glyf = outline::glyf_must_be_hidden(&tables, info.max_glyph_cost);
+            let shaping = tables.shaping_face(hide_glyf).ok_or_else(inconsistent)?;
+            Ok(Inner {
+                data: Arc::clone(&data),
                 face_index,
+                tables,
                 info: Arc::new(info),
                 variations: Vec::new(),
                 metrics,
-            }),
+                face,
+                shaping,
+            })
         })
+        .unwrap_or_else(|| Err(FontError::Parse("the font parser gave up on this data".into())))?;
+        Ok(Self { inner: Arc::new(inner) })
     }
 
     /// The complete font file this face was loaded from.
@@ -417,7 +439,7 @@ impl Font {
     /// 9 = designer, …), preferring an English, Unicode-encoded record.
     #[must_use]
     pub fn name(&self, name_id: u16) -> Option<String> {
-        contain(|| best_name(&self.tt_face()?, name_id)).flatten()
+        contain(|| best_name(&self.inner.tables, name_id)).flatten()
     }
 
     /// The raw `OS/2.fsType` value, or `None` when the font has no `OS/2` table.
@@ -596,23 +618,31 @@ impl Font {
                 variations.push((tag, value));
             }
         }
-        variations.sort_by_key(|(tag, _)| tag.0);
+        variations.sort_by_key(|(tag, _)| tag.to_be_bytes());
         if variations == self.inner.variations {
             return self.clone();
         }
-        let metrics = contain(|| {
-            let mut outliner = Outliner::new(self.tables()?, &variations)?;
-            Some(metrics_of(&mut outliner))
-        })
-        .flatten()
-        .unwrap_or(self.inner.metrics);
+        // The libraries derive an instance from the default one: every setting that
+        // differs from the default is passed, the others stay at their default.
+        let instance = |face: &Face| face.instance_builder().variations(variations.iter()).build();
+        let tables = &self.inner.tables;
+        let built = contain(|| {
+            let face = instance(&self.inner.face);
+            let shaping = instance(&self.inner.shaping);
+            let metrics = metrics_of(tables, &face, &mut Outliner::new(&face, tables));
+            (face, shaping, metrics)
+        });
+        let Some((face, shaping, metrics)) = built else { return self.clone() };
         Self {
             inner: Arc::new(Inner {
                 data: Arc::clone(&self.inner.data),
                 face_index: self.inner.face_index,
+                tables: Arc::clone(tables),
                 info: Arc::clone(&self.inner.info),
                 variations,
                 metrics,
+                face,
+                shaping,
             }),
         }
     }
@@ -620,11 +650,7 @@ impl Font {
     /// The glyph the font maps `c` to, or `None` if the character is not covered.
     #[must_use]
     pub fn glyph_id(&self, c: char) -> Option<u16> {
-        contain(|| {
-            let face = self.tt_face()?;
-            face.glyph_index(c).map(|g| g.0).filter(|&g| g != 0)
-        })
-        .flatten()
+        contain(|| glyph_of(&self.inner.face, c)).flatten()
     }
 
     /// The characters of `text` that this font cannot draw, deduplicated, in order of
@@ -640,50 +666,36 @@ impl Font {
         let mut seen = std::collections::HashSet::new();
         let distinct: Vec<char> = text.chars().filter(|&c| seen.insert(c)).collect();
         contain(|| {
-            let face = self.hb_face()?;
-            Some(
-                distinct
-                    .iter()
-                    .copied()
-                    .filter(|&c| !crate::shape::is_drawable(&face, c))
-                    .collect::<Vec<char>>(),
-            )
+            let face = self.shaper();
+            distinct
+                .iter()
+                .copied()
+                .filter(|&c| !crate::shape::is_drawable(&face, c))
+                .collect::<Vec<char>>()
         })
-        .flatten()
         // A font the shaper cannot work with draws nothing at all.
         .unwrap_or_else(|| {
             distinct.into_iter().filter(|&c| !crate::shape::is_set_as_space(c)).collect()
         })
     }
 
-    /// Parses the face with the variation settings applied. Cheap (table directory only).
-    /// For names and character mapping; outlines go through [`Self::outliner`].
-    pub(crate) fn tt_face(&self) -> Option<ttf_parser::Face<'_>> {
-        parse_face(&self.inner.data, self.inner.face_index, &self.inner.variations)
-    }
-
-    /// The tables of this face, as every parser of this crate gets them.
-    fn tables(&self) -> Option<ttf_parser::RawFaceTables<'_>> {
-        let raw = ttf_parser::RawFace::parse(&self.inner.data, self.inner.face_index).ok()?;
-        Some(outline::collect_tables(&raw))
-    }
-
     /// A budgeted source of glyph outlines for the selected instance.
-    pub(crate) fn outliner(&self) -> Option<Outliner<'_>> {
-        Outliner::new(self.tables()?, &self.inner.variations)
+    pub(crate) fn outliner(&self) -> Outliner<'_> {
+        Outliner::new(&self.inner.face, &self.inner.tables)
     }
 
-    /// Parses the face for shaping, with the variation settings applied — without the
-    /// tables through which a hostile font could make the shaper do unbounded work
-    /// (see `outline::shaping_tables`).
-    pub(crate) fn hb_face(&self) -> Option<rustybuzz::Face<'_>> {
-        let tables = self.tables()?;
-        let hide_glyf = outline::glyf_must_be_hidden(&tables, self.inner.info.max_glyph_cost);
-        let tables = outline::shaping_tables(tables, hide_glyf);
-        // `from_face` takes the `ttf_parser::Face` of the crate version rustybuzz was
-        // built with; this line stops compiling if the two versions ever diverge.
-        Some(rustybuzz::Face::from_face(outline::face_from_tables(tables, &self.inner.variations)?))
+    /// The face for shaping, at the selected instance — without the tables through
+    /// which a hostile font could make the shaper do unbounded work (see
+    /// `Tables::shaping_face`). Cheap: the layout tables are prepared once per font.
+    pub(crate) fn shaper(&self) -> harfrust::ShaperFont<'_, 'static> {
+        harfrust::ShaperFont::new(&self.inner.shaping)
     }
+}
+
+/// The glyph the character map of `face` gives for `c` (never `.notdef`).
+fn glyph_of(face: &Face, c: char) -> Option<u16> {
+    let glyph = face.charmap().map_unicode(c)?;
+    u16::try_from(glyph.to_u32()).ok().filter(|&g| g != 0)
 }
 
 /// Rejects font collections whose header promises more faces than the file can hold,
@@ -706,39 +718,28 @@ fn check_collection_header(data: &[u8], face_index: u32) -> Result<(), FontError
     Ok(())
 }
 
-fn parse_face<'a>(
-    data: &'a [u8],
-    face_index: u32,
-    variations: &[(Tag, f32)],
-) -> Option<ttf_parser::Face<'a>> {
-    let mut face = ttf_parser::Face::parse(data, face_index).ok()?;
-    for &(tag, value) in variations {
-        let _ = face.set_variation(tag, value);
-    }
-    Some(face)
-}
-
 /// Parses a 1–4 character ASCII tag, padding short tags with spaces.
 fn parse_tag(tag: &str) -> Option<Tag> {
     let bytes = tag.as_bytes();
     if bytes.is_empty() || bytes.len() > 4 || !bytes.iter().all(|b| (0x20..0x7F).contains(b)) {
         return None;
     }
-    Some(Tag::from_bytes_lossy(bytes))
+    let mut padded = [b' '; 4];
+    for (slot, byte) in padded.iter_mut().zip(bytes) {
+        *slot = *byte;
+    }
+    Some(Tag::from_be_bytes(padded))
 }
 
 fn tag_to_string(tag: Tag) -> String {
-    tag.to_bytes()
+    tag.to_be_bytes()
         .iter()
         .map(|&b| if (0x20..0x7F).contains(&b) { b as char } else { '?' })
         .collect()
 }
 
-fn static_info(
-    face: &ttf_parser::Face<'_>,
-    font_tables: &ttf_parser::RawFaceTables<'_>,
-) -> StaticInfo {
-    let name = |id: u16| best_name(face, id);
+fn static_info(tables: &Tables, face: &Face, outliner: &Outliner<'_>) -> StaticInfo {
+    let name = |id: u16| best_name(tables, id);
     let legacy_family = name(name_id::FAMILY);
     let legacy_style = name(name_id::SUBFAMILY);
     let family =
@@ -755,50 +756,27 @@ fn static_info(
         }
     });
 
-    // Read fsType from the raw table so that a restriction is honoured even when the
-    // rest of the table is too short for its declared version. The directory is
-    // scanned linearly (it may be unsorted); like ttf-parser, the last record wins.
-    let raw = face.raw_face();
-    let os2 = raw
-        .table_records
-        .into_iter()
-        .filter(|record| record.tag == Tag::from_bytes(b"OS/2"))
-        .last()
-        .and_then(|record| {
-            let start = usize::try_from(record.offset).ok()?;
-            let end = start.checked_add(usize::try_from(record.length).ok()?)?;
-            let table = raw.data.get(start..end)?;
-            let version = u16::from_be_bytes([*table.first()?, *table.get(1)?]);
-            let fs_type = u16::from_be_bytes([*table.get(8)?, *table.get(9)?]);
-            Some((fs_type, version))
-        });
-
     let axes = face
-        .variation_axes()
-        .into_iter()
+        .axes()
+        .iter()
         .map(|a| {
+            let default = a.default_value();
             let axis = VariationAxis {
-                tag: tag_to_string(a.tag),
-                name: best_name(face, a.name_id),
-                min: a.min_value,
-                default: a.def_value,
-                max: a.max_value,
-                hidden: a.hidden,
+                tag: tag_to_string(a.tag()),
+                name: best_name(tables, a.name().to_u16()),
+                // A default outside the stated range widens the range.
+                min: a.min_value().min(default),
+                default,
+                max: a.max_value().max(default),
+                hidden: a.is_hidden(),
             };
-            (a.tag, axis)
+            (a.tag(), axis)
         })
         .collect();
 
-    let tables = face.tables();
-    let outlines = if tables.glyf.is_some() {
-        OutlineFormat::TrueType
-    } else if tables.cff.is_some() {
-        OutlineFormat::Cff
-    } else if tables.cff2.is_some() {
-        OutlineFormat::Cff2
-    } else {
-        OutlineFormat::None
-    };
+    let os2 = tables.os2();
+    let post = tables.post();
+    let glyph_count = tables.glyph_count();
 
     StaticInfo {
         family,
@@ -807,25 +785,29 @@ fn static_info(
         postscript: name(name_id::POST_SCRIPT_NAME),
         licence_description: name(name_id::LICENSE),
         licence_url: name(name_id::LICENSE_URL),
-        os2,
+        // Read from the raw table so that a restriction is honoured even when the rest
+        // of the table is too short for its declared version.
+        os2: tables.fs_type(),
         axes,
-        glyph_count: face.number_of_glyphs(),
-        weight: face.weight().to_number(),
-        italic: face.is_italic() || face.is_oblique(),
-        monospaced: face.is_monospaced(),
-        outlines,
+        glyph_count,
+        weight: os2.map_or(400, |t| t.weight()),
+        // Italic or oblique by its style bits, or simply slanted.
+        italic: os2.is_some_and(|t| t.is_italic() || t.is_oblique())
+            || post.is_some_and(|(angle, _)| angle != 0.0),
+        monospaced: post.is_some_and(|(_, fixed_pitch)| fixed_pitch),
+        outlines: outliner.format(),
         // One pass over the glyph headers; every glyph is looked at once.
-        max_glyph_cost: GlyfCosts::new(font_tables)
-            .zip(std::num::NonZeroU16::new(face.number_of_glyphs()))
+        max_glyph_cost: GlyfCosts::new(face)
+            .zip(std::num::NonZeroU16::new(glyph_count))
             .map_or(1, |(mut costs, glyphs)| costs.max_cost(glyphs)),
     }
 }
 
-/// The global metrics of the outliner's face. Measuring a letter when the font states no
-/// capital or x-height draws its outline — through the outliner, hence under its budget.
-fn metrics_of(outliner: &mut Outliner<'_>) -> FontMetrics {
-    let face = outliner.face().clone();
-    let units_per_em = face.units_per_em();
+/// The global metrics of a face (at its variation instance). Measuring a letter when the
+/// font states no capital or x-height draws its outline — through the outliner, hence
+/// under its budget.
+fn metrics_of(tables: &Tables, face: &Face, outliner: &mut Outliner<'_>) -> FontMetrics {
+    let units_per_em = tables.units_per_em();
     let em = f64::from(units_per_em);
     let fraction_of_em = |f: f64| -> i16 {
         // units_per_em <= 16384, so the product always fits an i16.
@@ -834,64 +816,116 @@ fn metrics_of(outliner: &mut Outliner<'_>) -> FontMetrics {
     let mut top_of = |chars: &[char]| -> Option<i16> {
         chars
             .iter()
-            .filter_map(|&c| face.glyph_index(c))
-            .filter_map(|g| outliner.bounding_box(g.0))
+            .filter_map(|&c| glyph_of(face, c))
+            .filter_map(|g| outliner.bounding_box(g))
             .map(|bbox| bbox.y_max)
             .find(|&top| top > 0)
     };
 
-    let mut ascender = face.ascender();
-    let mut descender = face.descender();
+    // At an instance of a variable font, `MVAR` moves the metrics of `OS/2`.
+    let coords = face.normalized_coords();
+    let mvar = (!coords.is_empty())
+        .then(|| tables.get(b"MVAR").and_then(|t| Mvar::read(FontData::new(t)).ok()))
+        .flatten();
+    let varied = |tag: &[u8; 4], value: i16| -> i16 {
+        let delta = mvar.as_ref().and_then(|t| t.metric_delta(Tag::from_be_bytes(*tag), coords));
+        let moved = delta.map_or(f32::from(value), |d| f32::from(value) + d.to_f32());
+        // Truncated; a value that leaves the 16-bit range is not moved at all.
+        if (f32::from(i16::MIN)..=f32::from(i16::MAX)).contains(&moved) {
+            moved as i16
+        } else {
+            value
+        }
+    };
+
+    // The line metrics, chosen as FreeType does: the typographic ones when the font asks
+    // for them, else `hhea`, else (if `hhea` has none) the typographic or Windows ones.
+    let os2 = tables.os2();
+    let (hhea_ascender, hhea_descender, hhea_line_gap) = tables.hhea_line();
+    let typo = os2.map(|t| t.typo_line());
+    let win = os2.map(|t| t.win_line());
+    let (mut ascender, mut descender, line_gap);
+    if let Some((typo_ascender, typo_descender, typo_line_gap)) =
+        typo.filter(|_| os2.is_some_and(|t| t.use_typo_metrics()))
+    {
+        ascender = varied(b"hasc", typo_ascender);
+        descender = varied(b"hdsc", typo_descender);
+        line_gap = varied(b"hlgp", typo_line_gap);
+    } else {
+        ascender = hhea_ascender;
+        descender = hhea_descender;
+        let mut gap = hhea_line_gap;
+        if let (
+            Some((typo_ascender, typo_descender, typo_line_gap)),
+            Some((win_ascender, win_descender)),
+        ) = (typo, win)
+        {
+            if ascender == 0 {
+                ascender = match typo_ascender {
+                    0 => varied(b"hcla", win_ascender),
+                    value => varied(b"hasc", value),
+                };
+            }
+            if descender == 0 {
+                descender = match typo_descender {
+                    0 => varied(b"hcld", win_descender),
+                    value => varied(b"hdsc", value),
+                };
+            }
+            // For the line gap, what counts is whether `hhea` has a line at all.
+            if hhea_ascender == 0 || hhea_descender == 0 {
+                gap = if typo_ascender != 0 || typo_descender != 0 {
+                    varied(b"hlgp", typo_line_gap)
+                } else {
+                    0
+                };
+            }
+        }
+        line_gap = gap;
+    }
     if ascender == 0 && descender == 0 {
         // No usable vertical metrics at all: use the font bounding box, else 0.8/-0.2 em.
-        let bbox = face.global_bounding_box();
-        if bbox.y_max > 0 && bbox.y_min <= 0 {
-            ascender = bbox.y_max;
-            descender = bbox.y_min;
+        let (y_min, y_max) = tables.vertical_bounds();
+        if y_max > 0 && y_min <= 0 {
+            ascender = y_max;
+            descender = y_min;
         } else {
             ascender = fraction_of_em(0.8);
             descender = -fraction_of_em(0.2);
         }
     }
 
-    let cap_height = face
-        .capital_height()
+    let cap_height = os2
+        .and_then(|t| t.cap_height())
+        .map(|v| varied(b"cpht", v))
         .filter(|&v| v > 0)
         .or_else(|| top_of(&['H', 'I', 'X', 'E']))
         .unwrap_or_else(|| fraction_of_em(0.7));
-    let x_height = face
-        .x_height()
+    let x_height = os2
+        .and_then(|t| t.x_height())
+        .map(|v| varied(b"xhgt", v))
         .filter(|&v| v > 0)
         .or_else(|| top_of(&['x', 'z', 'v']))
         .unwrap_or_else(|| fraction_of_em(0.5));
 
-    FontMetrics {
-        units_per_em,
-        ascender,
-        descender,
-        line_gap: face.line_gap(),
-        cap_height,
-        x_height,
-    }
+    FontMetrics { units_per_em, ascender, descender, line_gap, cap_height, x_height }
 }
 
 /// Picks the best record for `id` in the `name` table and decodes it.
 ///
 /// Preference: Windows/Unicode US English, any Unicode record in English, any Unicode
 /// record, Macintosh Roman English, any Macintosh Roman record.
-fn best_name(face: &ttf_parser::Face<'_>, id: u16) -> Option<String> {
-    use ttf_parser::PlatformId;
+fn best_name(tables: &Tables, id: u16) -> Option<String> {
     const WINDOWS_EN_US: u16 = 0x0409;
 
-    let names = face.names();
     let mut best: Option<(u8, String)> = None;
-    // Indexed access: the iterator of `Names` stops at the first malformed record.
-    for record in (0..names.len()).filter_map(|i| names.get(i)) {
+    // Records whose string lies outside the table are skipped, not fatal.
+    for record in tables.names() {
         if record.name_id != id {
             continue;
         }
         let rank = match record.platform_id {
-            PlatformId::Windows if record.is_unicode() => {
+            NameRecord::WINDOWS if record.is_unicode() => {
                 if record.language_id == WINDOWS_EN_US {
                     0
                 } else if record.language_id & 0x03FF == 0x0009 {
@@ -900,8 +934,8 @@ fn best_name(face: &ttf_parser::Face<'_>, id: u16) -> Option<String> {
                     3
                 }
             }
-            PlatformId::Unicode => 2,
-            PlatformId::Macintosh if record.encoding_id == 0 => {
+            NameRecord::UNICODE => 2,
+            NameRecord::MACINTOSH if record.encoding_id == 0 => {
                 if record.language_id == 0 {
                     4
                 } else {
@@ -914,9 +948,9 @@ fn best_name(face: &ttf_parser::Face<'_>, id: u16) -> Option<String> {
             continue;
         }
         let decoded = if rank >= 4 {
-            Some(decode_mac_roman(record.name))
+            Some(decode_mac_roman(record.bytes))
         } else {
-            decode_utf16_be(record.name)
+            decode_utf16_be(record.bytes)
         };
         if let Some(text) = decoded.map(|s| clean_name(&s)).filter(|s| !s.is_empty()) {
             best = Some((rank, text));
@@ -1042,13 +1076,13 @@ mod tests {
 
     #[test]
     fn tags() {
-        assert_eq!(parse_tag("wght"), Some(Tag::from_bytes(b"wght")));
-        assert_eq!(parse_tag("wd"), Some(Tag::from_bytes(b"wd  ")));
+        assert_eq!(parse_tag("wght"), Some(Tag::new(b"wght")));
+        assert_eq!(parse_tag("wd"), Some(Tag::new(b"wd  ")));
         assert_eq!(parse_tag(""), None);
         assert_eq!(parse_tag("weight"), None);
         assert_eq!(parse_tag("wgh\u{e9}"), None);
-        assert_eq!(tag_to_string(Tag::from_bytes(b"opsz")), "opsz");
-        assert_eq!(tag_to_string(Tag(0x0001_0203)), "????");
+        assert_eq!(tag_to_string(Tag::new(b"opsz")), "opsz");
+        assert_eq!(tag_to_string(Tag::from_u32(0x0001_0203)), "????");
     }
 
     #[test]

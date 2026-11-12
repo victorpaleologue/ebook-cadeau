@@ -116,14 +116,13 @@ fn rasterize_run(
     px_per_em: f32,
     opts: &ShapeOptions,
 ) -> Result<RasterizedText, FontError> {
-    let Some(face) = font.hb_face() else { return Ok(RasterizedText::default()) };
-    let run = shape_units(&face, text, opts);
+    let run = shape_units(&font.shaper(), text, opts);
     let scale = f64::from(px_per_em) / f64::from(run.units_per_em.max(1));
     let advance = (run.width * scale) as f32;
 
     // Outlines in pixel coordinates relative to the run origin, y down.
     let mut path = Path::new();
-    let Some(mut outliner) = font.outliner() else { return Ok(RasterizedText::default()) };
+    let mut outliner = font.outliner();
     let placed = run.glyphs.iter().map(|g| (g.id, (g.pen + g.dx) * scale, -g.dy * scale));
     append_outlines(&mut outliner, placed, scale, &mut path);
     if let Some(Refusal::GlyphTooComplex(glyph) | Refusal::BudgetExhausted(glyph)) =

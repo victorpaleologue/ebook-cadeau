@@ -19,7 +19,7 @@ use crate::checkout;
 use crate::config::StoreKind;
 use crate::crypto::{self, SignatureError};
 use crate::epub::{self, Watermark};
-use crate::gift::{self, CancelError};
+use crate::gift::{self, CancelError, ReissueError};
 use crate::state::{
     AccountError, Activation, AppState, CardState, OrderError, PendingActivation, SessionView,
     WebhookEvent,
@@ -47,6 +47,7 @@ pub(crate) fn router(state: Shared) -> Router {
         .route("/commande/{reference}", get(order_page))
         .route("/commande/{reference}/relancer", post(order_retry))
         .route("/commande/{reference}/annuler", post(order_cancel))
+        .route("/commande/{reference}/nouveau-code", post(order_reissue))
         .route("/commande/{reference}/{file}", get(card_pdf))
         .route("/bibliotheque", get(library))
         .route("/bibliotheque/{file}", get(library_download))
@@ -615,6 +616,51 @@ async fn order_cancel(
             };
             let order = state.order(&order.reference).unwrap_or(order);
             let notice = format!("Annulation impossible : {error}.");
+            html(status, views::order(&chrome(&state, &view), &order, Some(&notice)))
+        }
+    }
+}
+
+/// Which gift of the order a form is about (1-based, as in the `carte-{n}.pdf` links).
+#[derive(Deserialize, Default)]
+struct GiftChoice {
+    #[serde(default)]
+    gift: Option<String>,
+}
+
+/// `POST /commande/{reference}/nouveau-code`: replaces the code of a gift whose card was
+/// lost (`docs/api.md` §4.2, `reissue`).
+async fn order_reissue(
+    State(state): State<Shared>,
+    headers: HeaderMap,
+    Path(reference): Path<String>,
+    form: Result<axum::Form<GiftChoice>, axum::extract::rejection::FormRejection>,
+) -> Response {
+    let (_, view) = visitor(&state, &headers);
+    let order = match owned_order(&state, &view, &reference) {
+        Ok(order) => order,
+        Err(response) => return *response,
+    };
+    // A missing or unreadable form means "the first gift" (most orders have one).
+    let index = form
+        .ok()
+        .and_then(|axum::Form(choice)| choice.gift)
+        .map_or(Some(1), |n| n.trim().parse::<usize>().ok())
+        .and_then(|n| n.checked_sub(1));
+    let outcome = match index {
+        Some(index) => gift::reissue_code(&state, &order.reference, index).await,
+        None => Err(ReissueError::NotFound),
+    };
+    match outcome {
+        Ok(()) => see_other(&format!("/commande/{}", order.reference)),
+        Err(error) => {
+            let status = match error {
+                ReissueError::Remote(_) => StatusCode::BAD_GATEWAY,
+                ReissueError::NotFound => StatusCode::NOT_FOUND,
+                _ => StatusCode::CONFLICT,
+            };
+            let order = state.order(&order.reference).unwrap_or(order);
+            let notice = format!("Nouveau code impossible : {error}.");
             html(status, views::order(&chrome(&state, &view), &order, Some(&notice)))
         }
     }

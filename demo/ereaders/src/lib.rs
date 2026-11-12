@@ -15,6 +15,14 @@
 //! | [`SyncDevice`] | an ecosystem-account reader that pulls purchases from a store's device API |
 //! | [`SimulatedLcpReader`] | the *shape* of the Readium LCP flow — **no real cryptography** |
 //!
+//! The two other devices of the journeys are profiles too — [`DeviceProfile::phone`] (scans
+//! the QR code, asks for a pair code, activates a gift in a store account, sends to a Kindle)
+//! and [`DeviceProfile::computer`] (buys the gift) — driven by the same script-less browser.
+//!
+//! The simulators follow `docs/api.md` **v0.2**: 12-letter gift codes (`XXXX-XXXX-XXXX`),
+//! 6-letter pair codes typed into the field `p` of `/e`, and the explicit device chooser
+//! (`?device=`), which [`flow::redeem`] uses when the server guessed the device wrong.
+//!
 //! What each device family can and cannot do is encoded in [`DeviceProfile`]; every capability
 //! carries a [`profile::Claim`] citing `docs/research/notes/ereader-ux.*.md` or marking itself
 //! as an assumption. **No profile was validated on hardware.**
@@ -27,8 +35,8 @@
 //! # async fn demo() -> Result<(), ebc_demo_ereaders::Error> {
 //! let mut kobo = EinkBrowser::new(DeviceProfile::kobo_clara())?;
 //! kobo.open("http://127.0.0.1:8080/").await?;          // typed on the e-ink keyboard
-//! kobo.type_into("code-input", "abcde-12345")?;
-//! kobo.submit("code-form").await?;                      // -> /k/ABCDE12345
+//! kobo.type_into("code-input", "bcdf-ghjk-lmnp")?;   // letters only: no layer switch
+//! kobo.submit("code-form").await?;                      // -> /k/BCDFGHJKLMNP
 //! let outcome = kobo.click("download").await?;          // POST -> 303 -> the EPUB
 //! assert!(outcome.download().is_some());
 //! assert!(kobo.total_taps() < 60);

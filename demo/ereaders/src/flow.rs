@@ -1,12 +1,15 @@
 //! Walks the redemption flow of `docs/api.md` §2 the way a person holding the card would.
 //!
-//! [`redeem`] drives an [`EinkBrowser`] through the stable element ids of the contract:
-//! type the code into `code-input` (home page), or the pair number into `pair-input` (`/e`),
-//! then press `download` or `redeem`, or fill `device-email` and send. It stops at the first
-//! terminal event — a book in the library, a licence file, a "sent" confirmation, leaving for
-//! another site (the reseller's store), an error page — and reports every step with the taps
-//! it cost. It backs the `ebc-ereader open` command and gives integration tests a one-call
-//! "does this gift reach this device?".
+//! [`redeem`] drives an [`EinkBrowser`] through the stable element ids of the contract
+//! (v0.2): type the 12-letter gift code into `code-input` (home page), or the 6-letter pair
+//! code into `pair-input` (`/e`, form field `p`), then press `download` or `redeem`, or fill
+//! `device-email` and send. When the page offers a download the device refuses — the server
+//! guessed the device wrong from its `User-Agent` — the walk taps the device's own link in
+//! the `device-chooser` (`?device=…`), as a person would, and carries on. It stops at the
+//! first terminal event — a book in the library, a licence file, a "sent" confirmation,
+//! leaving for another site (the reseller's store), an error page — and reports every step
+//! with the taps it cost. It backs the `ebc-ereader open` command and gives integration tests
+//! a one-call "does this gift reach this device?".
 
 use url::Url;
 
@@ -22,10 +25,10 @@ const MAX_STEPS: usize = 12;
 /// What the person has at hand.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct RedeemInputs {
-    /// The code printed on the card (typed as given).
+    /// The gift code printed on the card, `XXXX-XXXX-XXXX` (typed as given).
     pub code: Option<String>,
-    /// The pair number shown on the phone.
-    pub pair_number: Option<String>,
+    /// The pair code shown on the phone, `XXX-XXX` (typed as given).
+    pub pair_code: Option<String>,
     /// The device's e-mail address for send-to-device.
     pub device_email: Option<String>,
 }
@@ -127,7 +130,9 @@ pub async fn redeem(
     let mut outcome = browser.open(url).await?;
     steps.push(step(browser, format!("open {url}"), outcome.is_page()));
 
-    let (mut code_used, mut pair_used, mut email_used) = (false, false, false);
+    let (mut code_used, mut pair_used, mut email_used, mut chooser_used) =
+        (false, false, false, false);
+    let chooser_link = browser.profile().family.chooser_link_id();
     let (mut download_refused, mut redeem_refused) = (None::<String>, None::<String>);
 
     let end = 'walk: {
@@ -162,18 +167,31 @@ pub async fn redeem(
                     browser.submit("code-form").await
                 };
                 (format!("type the code {code} and continue"), next)
-            } else if let (true, false, Some(number)) =
-                (has("pair-input"), pair_used, inputs.pair_number.as_deref())
+            } else if let (true, false, Some(pair_code)) =
+                (has("pair-input"), pair_used, inputs.pair_code.as_deref())
             {
                 pair_used = true;
                 let submit = has("pair-submit");
-                browser.type_into("pair-input", number)?;
+                browser.type_into("pair-input", pair_code)?;
                 let next = if submit {
                     browser.click("pair-submit").await
                 } else {
                     browser.submit("pair-form").await
                 };
-                (format!("type the pair number {number} and continue"), next)
+                (format!("type the pair code {pair_code} and continue"), next)
+            } else if let (Some(link), false, true) = (
+                chooser_link.filter(|id| has(id)),
+                chooser_used,
+                download_refused.is_some() || redeem_refused.is_some(),
+            ) {
+                // The page was laid out for another device class (user-agent sniffing is
+                // only a hint): say which device this is and start again from its page.
+                chooser_used = true;
+                (download_refused, redeem_refused) = (None, None);
+                (
+                    format!("choose this device in the device chooser ({link})"),
+                    browser.click(link).await,
+                )
             } else if has("download") && download_refused.is_none() {
                 ("press \"download\"".to_owned(), browser.click("download").await)
             } else if has("redeem") && redeem_refused.is_none() {

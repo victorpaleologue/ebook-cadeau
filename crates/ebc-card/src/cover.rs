@@ -91,6 +91,11 @@ impl DecodedCover {
                 "{format:?} images are not supported (JPEG, PNG and WebP are)"
             )));
         }
+        // The size the header announces is checked before a decoder sees the file …
+        if let Some((width, height)) = announced_size(bytes, format) {
+            check_size(width, height)?;
+        }
+        // … and again as the decoder reads it (the only check for WebP).
         let (width, height) = ImageReader::with_format(Cursor::new(bytes), format)
             .into_dimensions()
             .map_err(failed)?;
@@ -180,12 +185,8 @@ impl DecodedCover {
             let scale = RESAMPLE_PPI / ppi;
             let nw = ((f64::from(width) * scale).round() as u32).max(1);
             let nh = ((f64::from(height) * scale).round() as u32).max(1);
-            let resized = image::imageops::resize(
-                &self.rgb,
-                nw,
-                nh,
-                image::imageops::FilterType::CatmullRom,
-            );
+            let resized =
+                image::imageops::resize(&self.rgb, nw, nh, image::imageops::FilterType::CatmullRom);
             warnings.push(CardWarning::CoverDownsampled { from_ppi: ppi, to_ppi: RESAMPLE_PPI });
             return raw_rgb(resized);
         }
@@ -251,11 +252,38 @@ fn flatten(image: DynamicImage) -> RgbImage {
     RgbImage::from_raw(width, height, rgb).unwrap_or_else(|| RgbImage::new(width, height))
 }
 
-/// The number of components (1 or 3) of a JPEG file that PDF can embed untouched and
-/// that needs no colour change: baseline, extended-sequential or progressive Huffman
-/// coding, 8-bit samples, grey or three components. `None` for anything else (CMYK,
-/// lossless, arithmetic coding, 12-bit, a corrupt marker stream).
-fn embeddable_jpeg_components(data: &[u8]) -> Option<u8> {
+/// The pixel size a PNG or JPEG header announces, read without any decoder: the IHDR
+/// chunk of a PNG, the first frame header of a JPEG. `None` when it cannot be found
+/// (the decoder then decides) and for other formats.
+fn announced_size(data: &[u8], format: ImageFormat) -> Option<(u32, u32)> {
+    match format {
+        ImageFormat::Png => {
+            let ihdr = data.get(8..24)?;
+            if &ihdr[4..8] != b"IHDR" {
+                return None;
+            }
+            let be = |at: usize| {
+                u32::from_be_bytes([ihdr[at], ihdr[at + 1], ihdr[at + 2], ihdr[at + 3]])
+            };
+            Some((be(8), be(12)))
+        }
+        ImageFormat::Jpeg => jpeg_frame(data).map(|frame| (frame.width, frame.height)),
+        _ => None,
+    }
+}
+
+/// The first frame header of a JPEG file.
+struct JpegFrame {
+    /// The `SOFn` marker byte (0xC0 = baseline, 0xC2 = progressive, …).
+    marker: u8,
+    precision: u8,
+    width: u32,
+    height: u32,
+    components: u8,
+}
+
+/// Walks the marker segments of a JPEG file up to its first frame header.
+fn jpeg_frame(data: &[u8]) -> Option<JpegFrame> {
     if data.len() < 4 || data[0] != 0xFF || data[1] != 0xD8 {
         return None;
     }
@@ -280,15 +308,32 @@ fn embeddable_jpeg_components(data: &[u8]) -> Option<u8> {
         }
         let segment = data.get(pos + 2..pos + length)?;
         pos += length;
-        match marker {
-            0xC0..=0xC2 => {
-                let (precision, components) = (*segment.first()?, *segment.get(5)?);
-                return (precision == 8 && matches!(components, 1 | 3)).then_some(components);
-            }
-            0xC3 | 0xC5..=0xC7 | 0xC9..=0xCB | 0xCD..=0xCF => return None,
-            _ => {}
+        // SOF0–SOF15, except DHT (C4), JPG (C8) and DAC (CC), which are not frames.
+        if matches!(marker, 0xC0..=0xCF) && !matches!(marker, 0xC4 | 0xC8 | 0xCC) {
+            let be = |at: usize| {
+                Some(u32::from(u16::from_be_bytes([*segment.get(at)?, *segment.get(at + 1)?])))
+            };
+            return Some(JpegFrame {
+                marker,
+                precision: *segment.first()?,
+                height: be(1)?,
+                width: be(3)?,
+                components: *segment.get(5)?,
+            });
         }
     }
+}
+
+/// The number of components (1 or 3) of a JPEG file that PDF can embed untouched and
+/// that needs no colour change: baseline, extended-sequential or progressive Huffman
+/// coding, 8-bit samples, grey or three components. `None` for anything else (CMYK,
+/// lossless, arithmetic coding, 12-bit, a corrupt marker stream).
+fn embeddable_jpeg_components(data: &[u8]) -> Option<u8> {
+    let frame = jpeg_frame(data)?;
+    (matches!(frame.marker, 0xC0..=0xC2)
+        && frame.precision == 8
+        && matches!(frame.components, 1 | 3))
+    .then_some(frame.components)
 }
 
 #[cfg(test)]
@@ -328,6 +373,15 @@ mod tests {
         assert_eq!(embeddable_jpeg_components(&jpeg[..7]), None);
         assert_eq!(embeddable_jpeg_components(b"not a jpeg"), None);
         assert_eq!(embeddable_jpeg_components(&[]), None);
+        // The announced size is read from the same header: 4 × 4 px here.
+        assert_eq!(announced_size(&jpeg, ImageFormat::Jpeg), Some((4, 4)));
+        assert_eq!(announced_size(&lossless, ImageFormat::Jpeg), Some((4, 4)));
+        assert_eq!(announced_size(&jpeg[..7], ImageFormat::Jpeg), None);
+        let mut png = b"\x89PNG\r\n\x1a\n\0\0\0\x0dIHDR".to_vec();
+        png.extend_from_slice(&[0, 0, 0x75, 0x30, 0, 0, 0, 7]);
+        assert_eq!(announced_size(&png, ImageFormat::Png), Some((30_000, 7)));
+        assert_eq!(announced_size(&png[..20], ImageFormat::Png), None);
+        assert_eq!(announced_size(&png, ImageFormat::WebP), None);
     }
 
     #[test]
@@ -337,7 +391,8 @@ mod tests {
         let small = cover.analysis();
         assert_eq!((small.width(), small.height()), (171, 256));
         assert_eq!(small.get(5, 5), Some([200, 10, 10, 255]));
-        let tiny = DecodedCover::from_pixmap(&Pixmap::filled(8, 12, [0, 0, 0, 255])).expect("valid");
+        let tiny =
+            DecodedCover::from_pixmap(&Pixmap::filled(8, 12, [0, 0, 0, 255])).expect("valid");
         assert_eq!((tiny.analysis().width(), tiny.analysis().height()), (8, 12));
     }
 }

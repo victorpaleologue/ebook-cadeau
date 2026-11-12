@@ -1,11 +1,12 @@
 //! `ebc-ereader`: drive a simulated e-reader from the command line.
 //!
 //! ```text
-//! ebc-ereader --profile kobo open http://127.0.0.1:8080/ --code ABCDE-12345
-//! ebc-ereader --profile kindle open http://127.0.0.1:8080/k/ABCDE12345 --device-email me@kindle.com
+//! ebc-ereader --profile kobo open http://127.0.0.1:8080/ --code BCDF-GHJK-LMNP
+//! ebc-ereader --profile pocketbook open http://127.0.0.1:8080/e --pair BCD-FGH
+//! ebc-ereader --profile kindle open http://127.0.0.1:8080/k/BCDFGHJKLMNP --device-email me@kindle.com
 //! ebc-ereader profiles --claims
 //! ebc-ereader lint http://127.0.0.1:8080/
-//! ebc-ereader --profile pocketbook cost "abcde-12345"
+//! ebc-ereader --profile pocketbook cost "bcdf-ghjk-lmnp"
 //! ```
 //!
 //! Exit status: 0 when the gift reached the device (or the lint passed), 1 when the flow
@@ -30,7 +31,7 @@ use ebc_demo_ereaders::{BrowserConfig, DeviceProfile, EinkBrowser, LintConfig, O
     about = "Simulated e-readers for eBook Cadeau demos (no JavaScript, profile User-Agent, tap counting)"
 )]
 struct Cli {
-    /// Device profile: kobo, kindle, pocketbook, vivlio, tolino, generic, or any id listed by `profiles`.
+    /// Device profile: kobo, kindle, pocketbook, vivlio, tolino, generic, phone, computer, or any id listed by `profiles`.
     #[arg(long, short, global = true, default_value = "kobo")]
     profile: String,
     /// Seconds allowed per HTTP exchange.
@@ -49,10 +50,10 @@ enum Command {
     Open {
         /// The address typed on the device (claim URL, short URL or the service's home page).
         url: String,
-        /// The code printed on the card, typed into the home page's form.
+        /// The gift code printed on the card (XXXX-XXXX-XXXX), typed into the home page's form.
         #[arg(long)]
         code: Option<String>,
-        /// The pair number shown on the phone, typed on the /e page.
+        /// The pair code shown on the phone (XXX-XXX), typed on the /e page.
         #[arg(long)]
         pair: Option<String>,
         /// The device's e-mail address for the send-to-device form.
@@ -189,7 +190,7 @@ fn run(cli: &Cli, out: &mut impl Write) -> Result<ExitCode, String> {
                 .map_err(io)?;
             let inputs = RedeemInputs {
                 code: code.clone(),
-                pair_number: pair.clone(),
+                pair_code: pair.clone(),
                 device_email: device_email.clone(),
             };
             let report = runtime

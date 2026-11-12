@@ -473,7 +473,7 @@ fn strokes_fill_rules_and_registration_colour_render_correctly() {
 #[test]
 fn text_is_upright_and_sits_on_its_baseline() {
     let data = font("AtkinsonHyperlegible-Bold.ttf");
-    let face = ttf_parser::Face::parse(&data, 0).expect("parses");
+    let face = reference::Face::parse(&data, 0).expect("parses");
     // A capital I at 72 pt: a plain vertical bar from the baseline up to the cap height.
     let glyph = face.glyph_index('I').expect("glyph");
     let bbox = face.glyph_bounding_box(glyph).expect("outline");

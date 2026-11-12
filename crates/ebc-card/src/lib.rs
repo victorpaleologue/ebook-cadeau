@@ -37,8 +37,9 @@
 //!
 //! # Covers and rights
 //!
-//! A cover image only reaches the print file with a rights basis ([`RightsBasis`]) that
-//! opens the route of the profile ([`PrintRoute`]); see [`rights`] for the table. With
+//! A cover image only reaches the print file with a rights basis ([`RightsBasis`], the
+//! type of `ebc-covers`) that opens the route of the profile ([`PrintRoute`]); see
+//! [`rights`] for the table. With
 //! no image, or with basis `none`, the output is the **typographic card**: title,
 //! subtitle, author and publisher as text in the card's own fonts on a flat ground — no
 //! logo, no blurb, no barcode. Requests that break the rules are refused with a typed
@@ -99,7 +100,7 @@ mod text;
 use ebc_pdf::{WriteOptions, write_pdf};
 use ebc_scene::Document;
 
-pub use compose::NOTES_LAYER;
+pub use compose::{MARK_CLEARANCE_MM, NOTES_LAYER};
 pub use cover::{
     MAX_COVER_BYTES, MAX_COVER_PIXELS, MAX_COVER_SIDE_PX, MAX_EMBED_PPI, RESAMPLE_PPI,
 };

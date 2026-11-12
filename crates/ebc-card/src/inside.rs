@@ -71,9 +71,7 @@ pub fn qr_payload(url: &str, code: &ebc_model::GiftCode) -> Result<(String, bool
     // Our own scheme: nothing but a host (and port) before "/k/<code>".
     let base_len = url.len() - rest.len() + rest.find('/').unwrap_or(rest.len());
     let own = url.is_ascii()
-        && url.get(..base_len).is_some_and(|base| {
-            claim_url(base, code).eq_ignore_ascii_case(url)
-        });
+        && url.get(..base_len).is_some_and(|base| claim_url(base, code).eq_ignore_ascii_case(url));
     if own { Ok((url.to_ascii_uppercase(), true)) } else { Ok((url.to_owned(), false)) }
 }
 
@@ -143,7 +141,8 @@ impl Composer<'_> {
         // Foot: the book.
         let mut foot = area.bottom();
         let book = self.req.book.clone();
-        let author = book.author_line().map(|a| self.clean_line(&fonts.body, &a, TextField::Author));
+        let author =
+            book.author_line().map(|a| self.clean_line(&fonts.body, &a, TextField::Author));
         if let Some(author) = author.filter(|a| !a.is_empty()) {
             let (text, size, cut) = fit_line(&fonts.body, &author, area.w, 8.5, 7.0);
             if cut {
@@ -189,7 +188,8 @@ impl Composer<'_> {
             let name = self.clean_line(&fonts.body_bold, name, TextField::Recipient);
             if !name.is_empty() {
                 let text = tf(locale, Msg::CardTo, &[("name", &name)]);
-                let (text, size, cut) = fit_line(&fonts.body_bold, &text, area.w, 13.0 * scale, 9.0);
+                let (text, size, cut) =
+                    fit_line(&fonts.body_bold, &text, area.w, 13.0 * scale, 9.0);
                 if cut {
                     note_clamped(TextField::Recipient, &mut self.warnings);
                 }
@@ -209,35 +209,27 @@ impl Composer<'_> {
             }
         }
 
-        // "From …", right-aligned above the foot.
+        // "From …": measured now, set right-aligned under the message (or under the
+        // ruled space).
         let giver = self.req.giver.as_deref().map(str::trim).filter(|s| !s.is_empty());
+        let mut from: Option<(String, f64, f64)> = None;
         if let Some(name) = giver {
             let name = self.clean_line(&fonts.body_bold, name, TextField::Giver);
             if !name.is_empty() {
                 let text = tf(locale, Msg::CardFrom, &[("name", &name)]);
-                let (text, size, cut) = fit_line(&fonts.body_bold, &text, area.w, 12.0 * scale, 9.0);
+                let (text, size, cut) =
+                    fit_line(&fonts.body_bold, &text, area.w, 12.0 * scale, 9.0);
                 if cut {
                     note_clamped(TextField::Giver, &mut self.warnings);
                 }
-                let line = pt_to_mm(size * 1.3);
-                foot -= line;
-                items.extend(self.setter.aligned(
-                    &mut self.doc,
-                    &fonts.body_bold,
-                    &text,
-                    size,
-                    ink,
-                    area.x,
-                    area.w,
-                    foot + first_baseline(&fonts.body_bold, size, line),
-                    Align::Right,
-                )?);
-                foot -= 4.0 * scale;
+                from = Some((text, size, pt_to_mm(size * 1.3)));
             }
         }
+        let from_gap = 5.0 * scale;
+        let from_room = from.as_ref().map_or(0.0, |(_, _, line)| line + from_gap);
 
         // The message, or ruled space for one.
-        let room = foot - y;
+        let room = foot - y - from_room;
         let message = self.req.message.as_deref().map(str::trim).filter(|s| !s.is_empty());
         match message {
             Some(message) if room > 4.0 => {
@@ -257,20 +249,36 @@ impl Composer<'_> {
                     area.w,
                     Align::Left,
                 )?);
+                y += para.height() + from_gap;
             }
             Some(_) => note_clamped(TextField::Message, &mut self.warnings),
             None => {
                 // Lines to write on by hand, 9 mm apart, in a light black-only grey.
                 let mut rules = Path::new();
                 let mut line_y = y + 9.0;
-                while line_y <= foot - 1.0 {
+                while line_y <= foot - from_room - 1.0 {
                     rules.move_to(area.x, line_y).line_to(area.right(), line_y);
+                    y = line_y + from_gap;
                     line_y += 9.0;
                 }
                 if !rules.is_empty() {
                     items.push(Item::stroke(rules, Stroke::solid(self.paint.grey(0.6), 0.5)));
                 }
             }
+        }
+        if let Some((text, size, line)) = from {
+            let top = y.min(foot - line);
+            items.extend(self.setter.aligned(
+                &mut self.doc,
+                &fonts.body_bold,
+                &text,
+                size,
+                ink,
+                area.x,
+                area.w,
+                top + first_baseline(&fonts.body_bold, size, line),
+                Align::Right,
+            )?);
         }
         Ok(items)
     }
@@ -311,12 +319,20 @@ impl Composer<'_> {
             text.push(' ');
             text.push_str(&tf(locale, Msg::CardHelp, &[("url", &help)]));
         }
+        // The caller's own lines: at most eight, of at most 300 characters each.
         let extra = self.req.legal_lines.clone();
-        for line in extra.iter().take(12) {
+        if extra.len() > 8 {
+            note_clamped(TextField::Legal, &mut self.warnings);
+        }
+        for line in extra.iter().take(8) {
             let line = self.clean_line(&font, line, TextField::Legal);
+            if line.chars().count() > 300 {
+                note_clamped(TextField::Legal, &mut self.warnings);
+            }
+            let line: String = line.chars().take(300).collect();
             if !line.is_empty() {
                 text.push('\n');
-                text.push_str(&line);
+                text.push_str(line.trim_end());
             }
         }
         text
@@ -338,18 +354,35 @@ impl Composer<'_> {
         let s = step_pt / STEPS_PT;
         let indent = 6.5 * s;
         let gap = 4.0 * s;
-        let heading =
-            layout(&fonts.body_bold, heading, area.w, f64::INFINITY, &ParaSpec::fixed(11.0 * s.max(0.8), 1.3, 2));
+        let heading = layout(
+            &fonts.body_bold,
+            heading,
+            area.w,
+            f64::INFINITY,
+            &ParaSpec::fixed(11.0 * s.max(0.8), 1.3, 2),
+        );
         let steps: Vec<Para> = steps
             .iter()
             .map(|step| {
-                layout(&fonts.body, step, area.w - indent, f64::INFINITY, &ParaSpec::fixed(step_pt, 1.28, 8))
+                layout(
+                    &fonts.body,
+                    step,
+                    area.w - indent,
+                    f64::INFINITY,
+                    &ParaSpec::fixed(step_pt, 1.28, 8),
+                )
             })
             .collect();
         let no_phone_pt = (9.0 * s).max(7.0);
-        let no_phone =
-            layout(&fonts.body, no_phone, area.w, f64::INFINITY, &ParaSpec::fixed(no_phone_pt, 1.32, 8));
-        let legal = layout(&fonts.body, legal, area.w, f64::INFINITY, &ParaSpec::fixed(7.0, 1.3, 30));
+        let no_phone = layout(
+            &fonts.body,
+            no_phone,
+            area.w,
+            f64::INFINITY,
+            &ParaSpec::fixed(no_phone_pt, 1.32, 8),
+        );
+        let legal =
+            layout(&fonts.body, legal, area.w, f64::INFINITY, &ParaSpec::fixed(7.0, 1.3, 30));
         let fixed = heading.height()
             + 2.0 * s
             + steps.iter().map(Para::height).sum::<f64>()
@@ -426,7 +459,11 @@ impl Composer<'_> {
                 available_mm: column_w,
             });
         }
-        let (url_text, url_pt, url_cut) = fit_line(&fonts.body_bold, &display_url, column_w, 12.0, 7.0);
+        if code_pt < CODE_PT {
+            self.warnings.push(CardWarning::CodeReduced { size_pt: code_pt });
+        }
+        let (url_text, url_pt, url_cut) =
+            fit_line(&fonts.body_bold, &display_url, column_w, 12.0, 7.0);
         if url_cut {
             note_clamped(TextField::DisplayUrl, &mut self.warnings);
         }
@@ -460,7 +497,8 @@ impl Composer<'_> {
 
         let mut chosen = None;
         for step_pt in STEP_SIZES_PT {
-            let plan = self.measure_how_to(area, step_pt, &heading, &steps, &no_phone, &legal, qr_block);
+            let plan =
+                self.measure_how_to(area, step_pt, &heading, &steps, &no_phone, &legal, qr_block);
             let fits = plan.fixed + plan.legal.height() <= area.h + 1e-9;
             chosen = Some(plan);
             if fits {
@@ -474,6 +512,12 @@ impl Composer<'_> {
         };
         if plan.step_pt < STEPS_PT {
             self.warnings.push(CardWarning::StepsReduced { size_pt: plan.step_pt });
+        }
+        if plan.steps.iter().any(|step| step.clamped) {
+            note_clamped(TextField::Steps, &mut self.warnings);
+        }
+        if plan.no_phone.clamped {
+            note_clamped(TextField::NoPhone, &mut self.warnings);
         }
         if plan.fixed + plan.legal.height() > area.h + 1e-9 {
             // Still too high at the smallest size: cut the legal lines first, then the
@@ -659,10 +703,20 @@ mod tests {
     #[test]
     fn unusable_claim_urls_are_refused() {
         let code = GiftCode::from_payload(1).expect("valid payload");
-        for url in ["", "   ", "ebk.example/k/x", "ftp://ebk.example", "https://", "https:///k/x",
-            "https://ebk.example/a b", "https://ebk.example/\u{7}"]
-        {
-            assert!(matches!(qr_payload(url, &code), Err(CardError::InvalidClaimUrl(_))), "{url:?}");
+        for url in [
+            "",
+            "   ",
+            "ebk.example/k/x",
+            "ftp://ebk.example",
+            "https://",
+            "https:///k/x",
+            "https://ebk.example/a b",
+            "https://ebk.example/\u{7}",
+        ] {
+            assert!(
+                matches!(qr_payload(url, &code), Err(CardError::InvalidClaimUrl(_))),
+                "{url:?}"
+            );
         }
     }
 }

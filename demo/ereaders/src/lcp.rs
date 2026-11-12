@@ -469,21 +469,21 @@ impl SimulatedLcpReader {
             return Err(NetError::Status { url: head.url.to_string(), status: head.status }.into());
         }
         let bytes = self.http.read(&head, response, self.profile.max_download_bytes).await?;
-        if let Some(length) = link.length {
-            if length != bytes.len() as u64 {
-                return Err(Error::from(LcpError::PublicationMismatch(format!(
-                    "the licence announces {length} bytes, the download has {}",
-                    bytes.len()
-                ))));
-            }
+        if let Some(length) = link.length
+            && length != bytes.len() as u64
+        {
+            return Err(Error::from(LcpError::PublicationMismatch(format!(
+                "the licence announces {length} bytes, the download has {}",
+                bytes.len()
+            ))));
         }
-        if let Some(hash) = &link.hash {
-            if *hash != sha256_hex(&bytes) {
-                return Err(LcpError::PublicationMismatch(
-                    "SHA-256 differs from the licence's hash".to_owned(),
-                )
-                .into());
-            }
+        if let Some(hash) = &link.hash
+            && *hash != sha256_hex(&bytes)
+        {
+            return Err(LcpError::PublicationMismatch(
+                "SHA-256 differs from the licence's hash".to_owned(),
+            )
+            .into());
         }
         let file_name = net::response_file_name(&head);
         let declared = FileFormat::from_media_type(&link.media_type)

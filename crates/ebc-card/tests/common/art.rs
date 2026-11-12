@@ -31,7 +31,8 @@ pub fn cover(width: u32, height: u32, light: bool, frame: bool) -> Pixmap {
             // Four bands of waves, darker towards the foot.
             for band in 0..4 {
                 let b = f64::from(band);
-                let crest = 0.60 + 0.085 * b
+                let crest = 0.60
+                    + 0.085 * b
                     + 0.012 * ((u * (5.0 + 2.0 * b) + b * 1.7) * std::f64::consts::TAU).sin();
                 if v > crest {
                     let sea = if light {

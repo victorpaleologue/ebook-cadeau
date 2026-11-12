@@ -37,7 +37,9 @@ use crate::error::{CardError, CardWarning, TextField};
 use crate::request::SpineChoice;
 use crate::rights::{Placement, RightsBasis};
 use crate::strings;
-use crate::text::{Align, MIN_REVERSED_PT, MIN_TYPE_PT, Para, ParaSpec, fit_line, layout, note_clamped};
+use crate::text::{
+    Align, MIN_REVERSED_PT, MIN_TYPE_PT, Para, ParaSpec, fit_line, layout, note_clamped,
+};
 
 /// The smallest inset of a letterboxed cover from the trim and the crease, in
 /// millimetres, whatever the profile's safe margin.
@@ -261,7 +263,8 @@ impl Composer<'_> {
         };
         let design = design_with(&request, &options, &mut self.doc)?;
         if design.requires_authorisation
-            && !(self.req.adaptation_authorised && self.req.cover.rights().allows_adaptation())
+            && !(self.req.adaptation_authorised
+                && crate::rights::allows_adaptation(self.req.cover.rights()))
         {
             // Unreachable through `compose` (the request was gated before any work was
             // done); kept so that no spine with artwork can ever leave without it.
@@ -468,7 +471,14 @@ impl Composer<'_> {
             Ok(())
         };
         small(self, book.author_line(), &fonts.body_bold, 11.0 * scale, TextField::Author, &mut y)?;
-        small(self, book.publisher.clone(), &fonts.body, 9.0 * scale, TextField::Publisher, &mut y)?;
+        small(
+            self,
+            book.publisher.clone(),
+            &fonts.body,
+            9.0 * scale,
+            TextField::Publisher,
+            &mut y,
+        )?;
         Ok(items)
     }
 
@@ -514,7 +524,12 @@ impl Composer<'_> {
                 ParaSpec::fixed(small.max(7.5), 1.3, 2),
                 TextField::Imprint,
             ),
-            (&fonts.body_bold, display_url, ParaSpec::new(9.0, small, 1.5, 1), TextField::DisplayUrl),
+            (
+                &fonts.body_bold,
+                display_url,
+                ParaSpec::new(9.0, small, 1.5, 1),
+                TextField::DisplayUrl,
+            ),
             (&fonts.body, imprint, ParaSpec::fixed(small, 1.3, 2), TextField::Imprint),
             (&fonts.body, credit, ParaSpec::fixed(credit_pt, 1.3, 2), TextField::Credit),
         ];
@@ -583,11 +598,19 @@ impl Composer<'_> {
         Ok(items)
     }
 
-    /// The address printed in clear: cleaned, in lower case.
+    /// The address printed in clear: cleaned, in lower case. When the request gives none,
+    /// the host of the claim URL is printed.
     pub(crate) fn display_url(&mut self) -> String {
         let font = self.fonts.body_bold.clone();
         let url = self.req.display_url.to_lowercase();
-        self.clean_line(&font, &url, TextField::DisplayUrl)
+        let url = self.clean_line(&font, &url, TextField::DisplayUrl);
+        if !url.is_empty() {
+            return url;
+        }
+        let claim = self.req.claim_url.trim().to_lowercase();
+        let rest = claim.split_once("://").map_or(claim.as_str(), |(_, rest)| rest);
+        let host = rest.split(['/', '?', '#', ':']).next().unwrap_or_default().to_owned();
+        self.clean_line(&font, &host, TextField::DisplayUrl)
     }
 }
 

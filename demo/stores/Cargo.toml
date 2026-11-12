@@ -31,5 +31,10 @@ workspace = true
 [dev-dependencies]
 ebc-demo-printer.workspace = true
 ebc-isbn.workspace = true
+ebc-model.workspace = true
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider", "json", "multipart", "cookies"] }
 scraper = "0.29.0"
+
+[[test]]
+name = "it"
+path = "tests/it/main.rs"

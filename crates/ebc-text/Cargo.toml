@@ -10,9 +10,9 @@ authors.workspace = true
 
 [dependencies]
 ebc-scene.workspace = true
-rustybuzz = "0.20"
+harfrust = "0.15"
+read-fonts = "0.46"
 thiserror.workspace = true
-ttf-parser = "0.25"
 unicode-linebreak = "0.1"
 unicode-segmentation = "1"
 zeno = { version = "0.3", optional = true }
@@ -24,3 +24,7 @@ workspace = true
 default = ["raster"]
 # `rasterize()`: 8-bit coverage masks of shaped text (used by font identification and previews).
 raster = ["dep:zeno"]
+
+[dev-dependencies]
+harfrust = "0.15"
+read-fonts = "0.46"

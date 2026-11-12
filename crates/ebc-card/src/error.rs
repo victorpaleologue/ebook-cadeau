@@ -62,7 +62,7 @@ pub enum CardError {
         max_pixels: u64,
     },
     /// The cover's rights basis does not open the print route of the profile.
-    #[error("a cover with rights basis `{basis}` cannot be printed on {route}")]
+    #[error("a cover with rights basis `{basis}` cannot go into {route}")]
     RightsRouteRefused {
         /// The rights basis of the cover.
         basis: RightsBasis,
@@ -86,7 +86,9 @@ pub enum CardError {
     /// The profile's PDF standard cannot carry the cover: PDF/X-1a forbids RGB, and the
     /// composer has no colour-managed conversion to CMYK (it never converts a cover
     /// naively).
-    #[error("{standard:?} cannot carry an RGB cover image and no colour-managed CMYK conversion is available")]
+    #[error(
+        "{standard:?} cannot carry an RGB cover image and no colour-managed CMYK conversion is available"
+    )]
     CoverColourSpace {
         /// The standard of the profile.
         standard: PdfStandard,
@@ -115,9 +117,6 @@ pub enum CardError {
         /// Height available inside the safe area, in millimetres.
         available_mm: f64,
     },
-    /// An unknown rights-basis name was parsed.
-    #[error("unknown rights basis {0:?}")]
-    UnknownRightsBasis(String),
     /// A bug: something would have been painted over the cover. The composer checks its
     /// own output and refuses to return such a document.
     #[error("internal error: an item overlaps the cover image ({0})")]
@@ -224,7 +223,9 @@ pub enum CardWarning {
     },
     /// No credit was supplied for the cover and the book has no publisher: a generic
     /// credit line was printed. Record it (`credit_missing`).
-    #[error("no cover credit was supplied and the publisher is unknown: a generic credit is printed")]
+    #[error(
+        "no cover credit was supplied and the publisher is unknown: a generic credit is printed"
+    )]
     CoverCreditMissing,
     /// The cover is embedded as sRGB and left to the printer's colour management: no
     /// colour-managed conversion to the output intent is available in this build.
@@ -267,8 +268,17 @@ pub enum CardWarning {
         /// The size used, in points.
         size_pt: f64,
     },
+    /// The inside panel is narrow: the code is set smaller than the 16 pt it is designed
+    /// for (it is never cut).
+    #[error("the code is set at {size_pt:.1} pt, below the recommended 16 pt")]
+    CodeReduced {
+        /// The size used, in points.
+        size_pt: f64,
+    },
     /// The QR code's modules are smaller than the minimum for print.
-    #[error("QR modules are {module_mm:.2} mm wide, below the {minimum_mm:.2} mm minimum for print")]
+    #[error(
+        "QR modules are {module_mm:.2} mm wide, below the {minimum_mm:.2} mm minimum for print"
+    )]
     QrModuleBelowMinimum {
         /// Module size, in millimetres.
         module_mm: f64,

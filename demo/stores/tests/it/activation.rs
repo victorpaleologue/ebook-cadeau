@@ -1,14 +1,10 @@
 //! The recipient's side of a `reseller_redirect` gift (signed redirect §4.3, fulfilment
 //! confirmation §4.4), and the webhooks the stores receive from eBook Cadeau.
 
-#![allow(clippy::unwrap_used)]
-
-mod common;
-
-use axum::http::StatusCode;
-use common::{
+use crate::common::{
     GRANDE_SECRET, Store, T0, World, gift_home, plain_client, post_webhook, sign_request,
 };
+use axum::http::StatusCode;
 use ebc_demo_stores::StoreKind;
 use serde_json::{Value, json};
 
@@ -21,6 +17,7 @@ async fn store_with_gift(world: &World) -> (Store, String, String) {
         .buy("camille@example.org", &["candide"], &gift_home("Camille", "Sacha", "Bonne lecture"))
         .await;
     assert_eq!(order.attr("gift-status", "data-status").as_deref(), Some("created"));
+    assert_eq!(store.kind, StoreKind::GrandeEnseigne);
     (store, order.path.clone(), "g_0001".to_owned())
 }
 
@@ -116,7 +113,7 @@ async fn recipient_creates_an_account_and_finds_the_book_on_the_e_reader() {
         .send()
         .await
         .unwrap();
-    common::open_epub(&epub.bytes().await.unwrap());
+    crate::common::open_epub(&epub.bytes().await.unwrap());
 
     // The thank-you page is not a way to activate anything again.
     assert_eq!(recipient.post("/cadeau/activer", &[]).await.status, StatusCode::BAD_REQUEST);
@@ -165,7 +162,7 @@ async fn the_redirect_signature_is_verified() {
     let world = World::new().await;
     let (store, _, gift_id) = store_with_gift(&world).await;
     let good = world.ebc.redirect_url(&gift_id);
-    let problem = |page: &common::Page| page.attr("activation-error", "data-code");
+    let problem = |page: &crate::common::Page| page.attr("activation-error", "data-code");
     let visit = |url: String| {
         let browser = store.browser();
         async move { browser.get(&url).await }
@@ -189,7 +186,7 @@ async fn the_redirect_signature_is_verified() {
     // A signature made with another partner's secret is worthless here.
     let foreign = {
         let sig = ebc_demo_stores::crypto::redirect_signature(
-            common::SEPTANTE_SECRET,
+            crate::common::SEPTANTE_SECRET,
             &gift_id,
             "GE-2026-000001",
             T0,
@@ -478,7 +475,7 @@ async fn webhooks_with_a_bad_signature_are_rejected() {
     );
     // Wrong secret, wrong method, wrong path, wrong body.
     for forged in [
-        sign_request(common::SEPTANTE_SECRET, T0, "POST", "/webhooks/ebc", &body),
+        sign_request(crate::common::SEPTANTE_SECRET, T0, "POST", "/webhooks/ebc", &body),
         sign_request(GRANDE_SECRET, T0, "GET", "/webhooks/ebc", &body),
         sign_request(GRANDE_SECRET, T0, "POST", "/webhooks/other", &body),
         sign_request(GRANDE_SECRET, T0, "POST", "/webhooks/ebc", b"{}"),

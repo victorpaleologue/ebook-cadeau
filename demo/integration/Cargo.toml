@@ -1,0 +1,46 @@
+[package]
+name = "ebc-demo-integration"
+description = "Demo: the whole constellation in one process (ebc-server, two fictional stores, the fictional printer, simulated e-readers) for end-to-end tests and manual demos."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+
+[[bin]]
+name = "ebc-demo"
+path = "src/bin/ebc-demo.rs"
+# The binary only wires the library to fixed ports; it has no tests of its own.
+test = false
+doctest = false
+
+[[test]]
+name = "it"
+path = "tests/it/main.rs"
+
+[dependencies]
+axum = "0.8.9"
+# Internal crates that are not (yet) listed in the root `[workspace.dependencies]`: the
+# integration owner may not edit that table beyond its own line, so they are path
+# dependencies here.
+ebc-demo-ereaders = { path = "../ereaders", version = "0.1.0" }
+ebc-demo-printer.workspace = true
+ebc-demo-stores = { path = "../stores", version = "0.1.0" }
+ebc-server = { path = "../../crates/ebc-server", version = "0.1.0" }
+reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider"] }
+serde_json.workspace = true
+thiserror.workspace = true
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "time", "signal", "sync"] }
+
+[dev-dependencies]
+ebc-layout.workspace = true
+ebc-model.workspace = true
+ebc-pdf.workspace = true
+ebc-scene.workspace = true
+sha2 = "0.11.1"
+zip = { version = "9.5.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+
+[lints]
+workspace = true

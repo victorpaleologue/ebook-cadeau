@@ -1,9 +1,8 @@
-//! Test harness: a mock eBook Cadeau partner API that implements `docs/api.md` §4 strictly
-//! (signatures, timestamps, idempotency), the real demo printer in manual mode, the stores
+//! Test harness: a mock eBook Cadeau partner API that implements `docs/api.md` §4 (v0.2)
+//! strictly (signatures, timestamps, idempotency, 12-letter codes, reissue), the real demo
+//! printer in manual mode, the stores
 //! on ephemeral ports, and a tiny cookie-keeping "browser". Everything runs in-process on
 //! the loopback interface; nothing leaves the machine.
-
-#![allow(dead_code, clippy::unwrap_used)]
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicI64, Ordering};
@@ -22,9 +21,27 @@ use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
 /// The instant every test starts at: 2026-11-12T00:00:00Z.
-pub const T0: i64 = 1_794_441_600;
+pub(crate) const T0: i64 = 1_794_441_600;
 
-pub async fn serve(router: Router) -> String {
+/// The code the mock issues for its `n`-th code (1-based; reissues continue the count), as
+/// a real `GiftCode` of `docs/api.md` v0.2: 12 letters with a valid check letter.
+pub(crate) fn demo_code(n: usize) -> ebc_model::GiftCode {
+    // Any payload below the code space is a valid code; spread them so they look random.
+    let payload = (n as u64).wrapping_mul(7_368_787_000_001) % ebc_model::GiftCode::SPACE;
+    ebc_model::GiftCode::from_payload(payload).unwrap()
+}
+
+/// `XXXXXXXXXXXX`: the compact form of [`demo_code`], as in claim URLs.
+pub(crate) fn code(n: usize) -> String {
+    demo_code(n).compact()
+}
+
+/// `XXXX-XXXX-XXXX`: the printed form of [`demo_code`].
+pub(crate) fn code_display(n: usize) -> String {
+    demo_code(n).grouped()
+}
+
+pub(crate) async fn serve(router: Router) -> String {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let address = listener.local_addr().unwrap();
     tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
@@ -48,51 +65,53 @@ fn hmac_hex(secret: &str, message: &str) -> String {
 
 /// One request the mock received, after (or despite) authentication.
 #[derive(Debug, Clone)]
-pub struct Recorded {
-    pub method: String,
-    pub path: String,
-    pub query: Option<String>,
-    pub headers: HashMap<String, String>,
-    pub body: Vec<u8>,
+pub(crate) struct Recorded {
+    pub(crate) method: String,
+    pub(crate) path: String,
+    pub(crate) query: Option<String>,
+    pub(crate) headers: HashMap<String, String>,
+    pub(crate) body: Vec<u8>,
     /// Status the mock answered with.
-    pub status: u16,
+    pub(crate) status: u16,
 }
 
 impl Recorded {
-    pub fn json(&self) -> Value {
+    pub(crate) fn json(&self) -> Value {
         serde_json::from_slice(&self.body).unwrap()
     }
 
-    pub fn header(&self, name: &str) -> Option<&str> {
+    pub(crate) fn header(&self, name: &str) -> Option<&str> {
         self.headers.get(name).map(String::as_str)
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct MockGift {
-    pub id: String,
-    pub code: String,
-    pub order_ref: String,
-    pub partner: String,
-    pub request: Value,
-    pub status: String,
-    pub redeemed_at: Option<i64>,
-    pub downloads: u64,
-    pub cover: Option<Vec<u8>>,
-    pub fulfilled_by: Option<String>,
+pub(crate) struct MockGift {
+    pub(crate) id: String,
+    pub(crate) code: String,
+    pub(crate) order_ref: String,
+    pub(crate) partner: String,
+    pub(crate) request: Value,
+    pub(crate) status: String,
+    pub(crate) redeemed_at: Option<i64>,
+    pub(crate) downloads: u64,
+    pub(crate) cover: Option<Vec<u8>>,
+    pub(crate) fulfilled_by: Option<String>,
+    /// Codes voided by a reissue, oldest first.
+    pub(crate) voided: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
-pub struct MockUpload {
-    pub id: String,
-    pub bytes: Vec<u8>,
-    pub file_name: String,
-    pub media_type: String,
+pub(crate) struct MockUpload {
+    pub(crate) id: String,
+    pub(crate) bytes: Vec<u8>,
+    pub(crate) file_name: String,
+    pub(crate) media_type: String,
 }
 
 /// How the mock answers `card.pdf`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum CardMode {
+pub(crate) enum CardMode {
     /// A sample card for the printer product with this id.
     Sample(&'static str),
     /// `501 Not Implemented`.
@@ -116,6 +135,8 @@ struct EbcInner {
     partners: HashMap<String, String>,
     uploads: Vec<MockUpload>,
     gifts: Vec<MockGift>,
+    /// Codes issued so far (creations and reissues).
+    codes_issued: usize,
     idempotency: HashMap<(String, String), (String, u16, Value)>,
     log: Vec<Recorded>,
     card_mode: Option<CardMode>,
@@ -123,8 +144,8 @@ struct EbcInner {
 }
 
 #[derive(Clone)]
-pub struct MockEbc {
-    pub base: String,
+pub(crate) struct MockEbc {
+    pub(crate) base: String,
     inner: Arc<Mutex<EbcInner>>,
     clock: Arc<AtomicI64>,
 }
@@ -134,13 +155,18 @@ fn error(status: StatusCode, code: &str, message: &str) -> Response {
 }
 
 impl MockEbc {
-    pub async fn start(clock: Arc<AtomicI64>, partners: &[(&str, &str)]) -> Self {
+    pub(crate) async fn start(clock: Arc<AtomicI64>, partners: &[(&str, &str)]) -> Self {
         let inner = Arc::new(Mutex::new(EbcInner {
             partners: partners.iter().map(|(id, s)| ((*id).to_owned(), (*s).to_owned())).collect(),
             ..EbcInner::default()
         }));
-        let mut mock = Self { base: String::new(), inner, clock };
-        mock.base = serve(Router::new().fallback(handle).with_state(mock.clone())).await;
+        // Bind first: the handlers need the base URL to build claim URLs, so it must be
+        // known before the router (which holds a clone of the mock) is created.
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        let mock = Self { base, inner, clock };
+        let router = Router::new().fallback(handle).with_state(mock.clone());
+        tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
         mock
     }
 
@@ -148,12 +174,12 @@ impl MockEbc {
         self.clock.load(Ordering::SeqCst)
     }
 
-    pub fn set_card_mode(&self, mode: CardMode) {
+    pub(crate) fn set_card_mode(&self, mode: CardMode) {
         self.inner.lock().unwrap().card_mode = Some(mode);
     }
 
     /// Scripts failures: see [`FailRule`].
-    pub fn fail_next(
+    pub(crate) fn fail_next(
         &self,
         method: &str,
         suffix: &str,
@@ -170,32 +196,32 @@ impl MockEbc {
         });
     }
 
-    pub fn requests(&self) -> Vec<Recorded> {
+    pub(crate) fn requests(&self) -> Vec<Recorded> {
         self.inner.lock().unwrap().log.clone()
     }
 
     /// Requests whose method matches and whose path ends with `suffix`.
-    pub fn requests_to(&self, method: &str, suffix: &str) -> Vec<Recorded> {
+    pub(crate) fn requests_to(&self, method: &str, suffix: &str) -> Vec<Recorded> {
         self.requests()
             .into_iter()
             .filter(|r| r.method == method && r.path.ends_with(suffix))
             .collect()
     }
 
-    pub fn gifts(&self) -> Vec<MockGift> {
+    pub(crate) fn gifts(&self) -> Vec<MockGift> {
         self.inner.lock().unwrap().gifts.clone()
     }
 
-    pub fn gift(&self, id: &str) -> MockGift {
+    pub(crate) fn gift(&self, id: &str) -> MockGift {
         self.gifts().into_iter().find(|g| g.id == id).unwrap()
     }
 
-    pub fn uploads(&self) -> Vec<MockUpload> {
+    pub(crate) fn uploads(&self) -> Vec<MockUpload> {
         self.inner.lock().unwrap().uploads.clone()
     }
 
     /// Simulates what happens on the eBook Cadeau side when the recipient uses the card.
-    pub fn set_status(&self, gift_id: &str, status: &str, downloads: u64) {
+    pub(crate) fn set_status(&self, gift_id: &str, status: &str, downloads: u64) {
         let now = self.now();
         let mut inner = self.inner.lock().unwrap();
         let gift = inner.gifts.iter_mut().find(|g| g.id == gift_id).unwrap();
@@ -207,11 +233,11 @@ impl MockEbc {
     }
 
     /// The URL the recipient's browser is sent to when pressing "redeem" (§4.3).
-    pub fn redirect_url(&self, gift_id: &str) -> String {
+    pub(crate) fn redirect_url(&self, gift_id: &str) -> String {
         self.redirect_url_at(gift_id, self.now())
     }
 
-    pub fn redirect_url_at(&self, gift_id: &str, ts: i64) -> String {
+    pub(crate) fn redirect_url_at(&self, gift_id: &str, ts: i64) -> String {
         let gift = self.gift(gift_id);
         let secret = self.inner.lock().unwrap().partners[&gift.partner].clone();
         let url = gift.request["delivery"]["url"].as_str().unwrap().to_owned();
@@ -220,7 +246,7 @@ impl MockEbc {
     }
 
     /// Sends a signed webhook to a store (§4.4) and returns the store's answer.
-    pub async fn send_webhook(
+    pub(crate) async fn send_webhook(
         &self,
         store_base: &str,
         partner: &str,
@@ -235,7 +261,7 @@ impl MockEbc {
 }
 
 /// `X-EBC-Signature` per §4.1.
-pub fn sign_request(
+pub(crate) fn sign_request(
     secret: &str,
     ts: i64,
     method: &str,
@@ -246,7 +272,7 @@ pub fn sign_request(
     format!("v1={}", hmac_hex(secret, &message))
 }
 
-pub async fn post_webhook(
+pub(crate) async fn post_webhook(
     store_base: &str,
     timestamp: Option<&str>,
     signature: Option<&str>,
@@ -435,7 +461,9 @@ fn route(
             }
             let n = inner.gifts.len() + 1;
             let id = format!("g_{n:04}");
-            let code = format!("DEMO{n:05}X");
+            inner.codes_issued += 1;
+            let issued = demo_code(inner.codes_issued);
+            let code = issued.compact();
             inner.gifts.push(MockGift {
                 id: id.clone(),
                 code: code.clone(),
@@ -447,14 +475,16 @@ fn route(
                 downloads: 0,
                 cover: None,
                 fulfilled_by: None,
+                voided: Vec::new(),
             });
             let created = json!({
-                "id": id, "code": code, "code_display": format!("{}-{}", &code[..5], &code[5..]),
+                "id": id, "code": code, "code_display": issued.grouped(),
                 "claim_url": format!("{}/k/{code}", mock.base), "status": "created",
             });
             (StatusCode::CREATED, created, None)
         }
         (_, ["gifts", id, tail @ ..]) => {
+            let next_code = demo_code(inner.codes_issued + 1);
             let Some(gift) = inner.gifts.iter_mut().find(|g| g.id == *id && g.partner == partner)
             else {
                 return fail(StatusCode::NOT_FOUND, "unknown_gift");
@@ -491,12 +521,24 @@ fn route(
                         }
                     }
                 }
+                // Like the real server: cancelling is unconditional and idempotent; whether
+                // a used gift may still be refunded is the store's decision.
                 ("POST", ["cancel"]) => {
-                    if gift.status == "redeemed" || gift.status == "fulfilled" {
-                        return fail(StatusCode::CONFLICT, "already_redeemed");
-                    }
                     gift.status = "cancelled".to_owned();
                     (StatusCode::OK, json!({"id": gift.id, "status": "cancelled"}), None)
+                }
+                ("POST", ["reissue"]) => {
+                    if gift.status != "created" && gift.status != "redeemed" {
+                        return fail(StatusCode::CONFLICT, "not_reissuable");
+                    }
+                    let old = std::mem::replace(&mut gift.code, next_code.compact());
+                    gift.voided.push(old);
+                    let reissued = json!({
+                        "code": gift.code, "code_display": next_code.grouped(),
+                        "claim_url": format!("{}/k/{}", mock.base, gift.code),
+                    });
+                    inner.codes_issued += 1;
+                    (StatusCode::OK, reissued, None)
                 }
                 ("POST", ["fulfilled"]) => {
                     let account = serde_json::from_slice::<Value>(body)
@@ -528,27 +570,27 @@ fn route(
 
 // ----- the world: clock + mock + printer + stores -----------------------------------------
 
-pub const SEPTANTE_SECRET: &str = "secret-septante-for-tests";
-pub const GRANDE_SECRET: &str = "secret-grande-enseigne-for-tests";
+pub(crate) const SEPTANTE_SECRET: &str = "secret-septante-for-tests";
+pub(crate) const GRANDE_SECRET: &str = "secret-grande-enseigne-for-tests";
 
-pub struct World {
-    pub clock: Arc<AtomicI64>,
-    pub ebc: MockEbc,
+pub(crate) struct World {
+    pub(crate) clock: Arc<AtomicI64>,
+    pub(crate) ebc: MockEbc,
 }
 
-pub struct Printer {
-    pub base: String,
-    pub state: Arc<PrinterState>,
+pub(crate) struct Printer {
+    pub(crate) base: String,
+    pub(crate) state: Arc<PrinterState>,
 }
 
-pub struct Store {
-    pub base: String,
-    pub state: Arc<AppState>,
-    pub kind: StoreKind,
+pub(crate) struct Store {
+    pub(crate) base: String,
+    pub(crate) state: Arc<AppState>,
+    pub(crate) kind: StoreKind,
 }
 
 impl World {
-    pub async fn new() -> Self {
+    pub(crate) async fn new() -> Self {
         let clock = Arc::new(AtomicI64::new(T0));
         let ebc = MockEbc::start(
             clock.clone(),
@@ -558,30 +600,30 @@ impl World {
         Self { clock, ebc }
     }
 
-    pub fn advance(&self, seconds: i64) {
+    pub(crate) fn advance(&self, seconds: i64) {
         self.clock.fetch_add(seconds, Ordering::SeqCst);
     }
 
-    pub fn store_clock(&self) -> Clock {
+    pub(crate) fn store_clock(&self) -> Clock {
         let clock = self.clock.clone();
         Clock::from_fn(move || clock.load(Ordering::SeqCst))
     }
 
     /// The real demo printer, in manual mode.
-    pub async fn printer(&self) -> Printer {
+    pub(crate) async fn printer(&self) -> Printer {
         let state = PrinterState::new(PrinterConfig::manual());
         let base = serve(ebc_demo_printer::app_with_state(state.clone())).await;
         Printer { base, state }
     }
 
     /// A store wired to the mock partner API, with the default delivery of its kind.
-    pub async fn store(&self, kind: StoreKind) -> Store {
+    pub(crate) async fn store(&self, kind: StoreKind) -> Store {
         self.store_with(kind, |config| config).await
     }
 
     /// Like [`World::store`], with a chance to adjust the configuration (printer URL,
     /// delivery, partner…).
-    pub async fn store_with(
+    pub(crate) async fn store_with(
         &self,
         kind: StoreKind,
         adjust: impl FnOnce(StoreConfig) -> StoreConfig,
@@ -607,18 +649,18 @@ impl World {
 }
 
 impl Store {
-    pub fn browser(&self) -> Browser {
+    pub(crate) fn browser(&self) -> Browser {
         Browser::new(&self.base)
     }
 
-    pub fn snapshot(&self) -> Value {
+    pub(crate) fn snapshot(&self) -> Value {
         self.state.snapshot()
     }
 }
 
 // ----- a small browser --------------------------------------------------------------------
 
-pub fn plain_client() -> reqwest::Client {
+pub(crate) fn plain_client() -> reqwest::Client {
     reqwest::Client::builder()
         .no_proxy()
         .redirect(reqwest::redirect::Policy::none())
@@ -627,23 +669,23 @@ pub fn plain_client() -> reqwest::Client {
 }
 
 /// Keeps cookies, follows redirects by hand (recording each hop), posts forms.
-pub struct Browser {
+pub(crate) struct Browser {
     http: reqwest::Client,
     base: String,
 }
 
-pub struct Page {
-    pub status: StatusCode,
+pub(crate) struct Page {
+    pub(crate) status: StatusCode,
     /// Path and query of the final URL.
-    pub path: String,
-    pub headers: reqwest::header::HeaderMap,
-    pub body: Vec<u8>,
+    pub(crate) path: String,
+    pub(crate) headers: reqwest::header::HeaderMap,
+    pub(crate) body: Vec<u8>,
     /// `(status, Location)` of every redirect followed on the way.
-    pub hops: Vec<(StatusCode, String)>,
+    pub(crate) hops: Vec<(StatusCode, String)>,
 }
 
 impl Browser {
-    pub fn new(base: &str) -> Self {
+    pub(crate) fn new(base: &str) -> Self {
         let http = reqwest::Client::builder()
             .no_proxy()
             .cookie_store(true)
@@ -657,12 +699,12 @@ impl Browser {
         reqwest::Url::parse(&self.base).unwrap().join(path_or_url).unwrap()
     }
 
-    pub async fn get(&self, path_or_url: &str) -> Page {
+    pub(crate) async fn get(&self, path_or_url: &str) -> Page {
         let response = self.http.get(self.absolute(path_or_url)).send().await.unwrap();
         self.follow(response).await
     }
 
-    pub async fn post(&self, path: &str, form: &[(&str, &str)]) -> Page {
+    pub(crate) async fn post(&self, path: &str, form: &[(&str, &str)]) -> Page {
         let body = reqwest::Url::parse_with_params("http://x/", form)
             .unwrap()
             .query()
@@ -680,7 +722,7 @@ impl Browser {
     }
 
     /// One request, redirects not followed.
-    pub async fn get_once(&self, path_or_url: &str) -> Page {
+    pub(crate) async fn get_once(&self, path_or_url: &str) -> Page {
         let response = self.http.get(self.absolute(path_or_url)).send().await.unwrap();
         Self::page(response, Vec::new()).await
     }
@@ -715,23 +757,23 @@ impl Browser {
 
     // --- common journeys ---
 
-    pub async fn register(&self, email: &str, password: &str) -> Page {
+    pub(crate) async fn register(&self, email: &str, password: &str) -> Page {
         self.post("/compte/inscription", &[("email", email), ("password", password), ("next", "/")])
             .await
     }
 
-    pub async fn login(&self, email: &str, password: &str) -> Page {
+    pub(crate) async fn login(&self, email: &str, password: &str) -> Page {
         self.post("/compte/connexion", &[("email", email), ("password", password), ("next", "/")])
             .await
     }
 
-    pub async fn add_to_cart(&self, book: &str) -> Page {
+    pub(crate) async fn add_to_cart(&self, book: &str) -> Page {
         self.post("/panier/ajouter", &[("book", book)]).await
     }
 
     /// Registers, fills the cart with `books` and pays with the given checkout fields.
     /// Returns the page the browser lands on (the order confirmation when all goes well).
-    pub async fn buy(&self, email: &str, books: &[&str], fields: &[(&str, &str)]) -> Page {
+    pub(crate) async fn buy(&self, email: &str, books: &[&str], fields: &[(&str, &str)]) -> Page {
         let registered = self.register(email, "motdepasse").await;
         assert_eq!(registered.status, StatusCode::OK, "{}", registered.html());
         for book in books {
@@ -742,7 +784,7 @@ impl Browser {
 }
 
 /// Checkout fields of a gift printed at home.
-pub fn gift_home<'a>(
+pub(crate) fn gift_home<'a>(
     giver: &'a str,
     recipient: &'a str,
     message: &'a str,
@@ -757,7 +799,7 @@ pub fn gift_home<'a>(
 }
 
 /// Checkout fields of a gift whose card is printed and posted.
-pub fn gift_post<'a>(giver: &'a str, recipient: &'a str) -> Vec<(&'a str, &'a str)> {
+pub(crate) fn gift_post<'a>(giver: &'a str, recipient: &'a str) -> Vec<(&'a str, &'a str)> {
     vec![
         ("gift", "1"),
         ("giver-name", giver),
@@ -772,11 +814,11 @@ pub fn gift_post<'a>(giver: &'a str, recipient: &'a str) -> Vec<(&'a str, &'a st
 }
 
 impl Page {
-    pub fn html(&self) -> String {
+    pub(crate) fn html(&self) -> String {
         String::from_utf8_lossy(&self.body).into_owned()
     }
 
-    pub fn doc(&self) -> scraper::Html {
+    pub(crate) fn doc(&self) -> scraper::Html {
         scraper::Html::parse_document(&self.html())
     }
 
@@ -791,43 +833,45 @@ impl Page {
     }
 
     /// Whether an element with this id exists.
-    pub fn has(&self, id: &str) -> bool {
+    pub(crate) fn has(&self, id: &str) -> bool {
         self.select_one(&format!("[id=\"{id}\"]"), |_| ()).is_some()
     }
 
-    /// Text content of the element with this id, white space collapsed.
-    pub fn text(&self, id: &str) -> Option<String> {
+    /// Text content of the element with this id, with runs of ASCII white space collapsed
+    /// as a browser lays them out. No-break spaces (`12,34\u{a0}€`) are content, not
+    /// layout, and are kept.
+    pub(crate) fn text(&self, id: &str) -> Option<String> {
         self.select_one(&format!("[id=\"{id}\"]"), |e| {
-            e.text().collect::<String>().split_whitespace().collect::<Vec<_>>().join(" ")
+            e.text().collect::<String>().split_ascii_whitespace().collect::<Vec<_>>().join(" ")
         })
     }
 
     /// An attribute of the element with this id.
-    pub fn attr(&self, id: &str, attribute: &str) -> Option<String> {
+    pub(crate) fn attr(&self, id: &str, attribute: &str) -> Option<String> {
         self.select_one(&format!("[id=\"{id}\"]"), |e| e.value().attr(attribute).map(str::to_owned))
             .flatten()
     }
 
     /// Number of elements matching a CSS selector.
-    pub fn count(&self, selector: &str) -> usize {
+    pub(crate) fn count(&self, selector: &str) -> usize {
         let doc = self.doc();
         let selector = scraper::Selector::parse(selector).unwrap();
         doc.select(&selector).count()
     }
 
-    pub fn header(&self, name: &str) -> Option<&str> {
+    pub(crate) fn header(&self, name: &str) -> Option<&str> {
         self.headers.get(name).and_then(|v| v.to_str().ok())
     }
 
     /// The order reference shown on a confirmation page.
-    pub fn order_ref(&self) -> String {
+    pub(crate) fn order_ref(&self) -> String {
         self.text("order-ref").unwrap_or_else(|| panic!("not an order page:\n{}", self.html()))
     }
 }
 
 /// Opens an EPUB and returns `(names in archive order, contents by name)`, checking on the
 /// way that it is a well-formed OCF container.
-pub fn open_epub(bytes: &[u8]) -> (Vec<String>, HashMap<String, Vec<u8>>) {
+pub(crate) fn open_epub(bytes: &[u8]) -> (Vec<String>, HashMap<String, Vec<u8>>) {
     use std::io::Read;
     assert_eq!(&bytes[..4], b"PK\x03\x04", "not a zip");
     assert_eq!(
@@ -863,6 +907,6 @@ pub fn open_epub(bytes: &[u8]) -> (Vec<String>, HashMap<String, Vec<u8>>) {
     (names, files)
 }
 
-pub fn text_of(files: &HashMap<String, Vec<u8>>, name: &str) -> String {
+pub(crate) fn text_of(files: &HashMap<String, Vec<u8>>, name: &str) -> String {
     String::from_utf8(files.get(name).unwrap_or_else(|| panic!("{name} missing")).clone()).unwrap()
 }

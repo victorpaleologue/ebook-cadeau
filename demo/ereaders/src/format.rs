@@ -431,9 +431,8 @@ fn inspect_pdf(bytes: &[u8]) -> Result<BookInfo, ImportError> {
             "no %%EOF marker near the end (truncated download?)".to_owned(),
         ));
     }
-    let mut info = BookInfo::default();
     // Approximation: only an uncompressed Info dictionary with a literal-string /Title is read.
-    info.title = pdf_literal(bytes, b"/Title");
+    let mut info = BookInfo { title: pdf_literal(bytes, b"/Title"), ..BookInfo::default() };
     if let Some(author) = pdf_literal(bytes, b"/Author") {
         info.authors.push(author);
     }

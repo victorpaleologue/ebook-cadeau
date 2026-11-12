@@ -251,7 +251,8 @@ fn segment(gray: &Gray, polarity: Option<bool>) -> Option<Analysis> {
     let mask = if light_on_dark { light } else { dark };
     let soft = refine(&oriented, &mask, window)?;
 
-    let binary: Vec<u8> = soft.px.iter().map(|&v| u8::from(v >= 128)).collect();
+    let cut = crate::identify::knobs()[7] as u8; // TUNING
+    let binary: Vec<u8> = soft.px.iter().map(|&v| u8::from(v >= cut)).collect();
     let (labels, comps) = label_components(&binary, w, h);
     if comps.is_empty() || comps.len() > MAX_COMPONENTS {
         return None;

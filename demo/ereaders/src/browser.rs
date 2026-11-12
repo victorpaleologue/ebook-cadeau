@@ -11,8 +11,8 @@
 //!
 //! Client-side validation (`required`, `pattern`, input types) is **not** enforced, as on old
 //! WebKit (*assumption*: these engines predate reliable constraint validation); `maxlength`
-//! is, because every browser enforces it — which is how an 11-character `ABCDE-12345` typed
-//! into a `maxlength="10"` field silently loses its last digit.
+//! is, because every browser enforces it — which is how a 14-character `BCDF-GHJK-LMNP`
+//! typed into a `maxlength="12"` field silently loses its last two letters.
 
 use std::collections::HashMap;
 
@@ -674,10 +674,8 @@ impl EinkBrowser {
                 return Err(BrowserError::NonStandardPort { device: self.profile.id, port }.into());
             }
         }
-        if from_page {
-            if let Some(referer) = self.referer_for(&request.url) {
-                request.headers.push(("referer", referer));
-            }
+        if from_page && let Some(referer) = self.referer_for(&request.url) {
+            request.headers.push(("referer", referer));
         }
         request.headers.push(("accept", "text/html,application/xhtml+xml,*/*;q=0.8".to_owned()));
         if !self.config.accept_language.is_empty() {

@@ -79,11 +79,10 @@ fn lines_of(
         joint: if spacing.is_finite() { spacing * em } else { 0.0 },
     };
     contain(|| {
-        let face = font.hb_face()?;
+        let face = font.shaper();
         let measure = |s: &str| shape_units(&face, s, opts).width_mm(size_pt);
-        Some(break_lines(text, max_width, estimate, measure))
+        break_lines(text, max_width, estimate, measure)
     })
-    .flatten()
     // A font that cannot be measured: keep the text, break only where mandatory.
     .unwrap_or_else(|| break_lines(text, f64::INFINITY, estimate, |_| 0.0))
 }

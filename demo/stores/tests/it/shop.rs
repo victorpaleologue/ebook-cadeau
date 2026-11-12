@@ -1,12 +1,8 @@
 //! Storefront basics over real HTTP: catalogue, covers, accounts, a purchase without the
 //! gift option in each store, downloads, and the e-reader device API.
 
-#![allow(clippy::unwrap_used)]
-
-mod common;
-
+use crate::common::{Browser, World, open_epub, plain_client, text_of};
 use axum::http::StatusCode;
-use common::{Browser, World, open_epub, plain_client, text_of};
 use ebc_demo_stores::StoreKind;
 use ebc_demo_stores::catalogue;
 use serde_json::{Value, json};

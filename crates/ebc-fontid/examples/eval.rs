@@ -15,7 +15,8 @@
 //! * `--only-bundled-covers`: with a corpus, draw covers with the bundled fonts only
 //!   (the corpus fonts are distractors).
 //! * `--rerank-top K`: candidates passed to the render-and-compare stage (default 5).
-//! * `--only NAME`: run only the conditions whose name contains `NAME`.
+//! * `--only NAMES`: run only the conditions whose name contains one of the
+//!   comma-separated `NAMES`.
 //! * `--verbose`: one line per cover that went wrong somewhere (on standard error).
 //! * `--tables-only`: skip the hold-out and scaling measurements.
 
@@ -165,7 +166,7 @@ fn run() -> Result<(), String> {
     };
     let conditions: Vec<Condition> = standard_conditions()
         .into_iter()
-        .filter(|c| only.as_ref().is_none_or(|o| c.name.contains(o.as_str())))
+        .filter(|c| only.as_ref().is_none_or(|o| o.split(',').any(|part| c.name.contains(part))))
         .collect();
     let rows = evaluate(&cover_fonts, &index, &conditions, &opts);
     line(format_table(&rows))?;

@@ -373,9 +373,7 @@ pub async fn cancel_order(state: &AppState, order_ref: &str) -> Result<(), Cance
         return Err(CancelError::NotCancellable);
     }
     let gifts: Vec<_> = order.lines.iter().filter_map(|l| l.gift.as_ref()).collect();
-    if gifts.iter().any(|g| matches!(g.status, GiftStatus::Redeemed | GiftStatus::Fulfilled))
-        || gifts.iter().any(|g| g.activated_by.is_some())
-    {
+    if gifts.iter().any(|g| g.status.is_used()) || gifts.iter().any(|g| g.activated_by.is_some()) {
         return Err(CancelError::AlreadyUsed);
     }
     for gift in gifts {
@@ -394,5 +392,81 @@ pub async fn cancel_order(state: &AppState, order_ref: &str) -> Result<(), Cance
         });
     }
     state.mark_refunded(order_ref);
+    Ok(())
+}
+
+/// Why the code of a gift could not be replaced.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+#[non_exhaustive]
+pub enum ReissueError {
+    /// No such gift in this order, or it is not registered with eBook Cadeau yet.
+    #[error("ce cadeau est introuvable")]
+    NotFound,
+    /// The gift is cancelled, expired, exhausted or already in an account: a new code
+    /// would be of no use.
+    #[error("ce cadeau ne peut plus recevoir de nouveau code")]
+    NotReissuable,
+    /// eBook Cadeau refused or could not be reached.
+    #[error("{0}")]
+    Remote(String),
+}
+
+/// Replaces the code of the `index`-th gift (0-based) of an order: the lost-card path of
+/// `docs/api.md` §4.2 (`reissue`). The previous code stops working at once; the card PDF
+/// is fetched again so that it carries the new code. A card that was already printed and
+/// posted is **not** printed again.
+///
+/// The request is idempotent on the number of reissues already recorded for the gift, so
+/// a retry after a lost answer gets the same new code instead of burning another one.
+///
+/// # Errors
+/// See [`ReissueError`].
+pub async fn reissue_code(
+    state: &AppState,
+    order_ref: &str,
+    index: usize,
+) -> Result<(), ReissueError> {
+    refresh_order(state, order_ref).await;
+    let order = state.order(order_ref).ok_or(ReissueError::NotFound)?;
+    let details = order.gift.clone().ok_or(ReissueError::NotFound)?;
+    let gift = order
+        .lines
+        .iter()
+        .filter_map(|l| l.gift.as_ref())
+        .nth(index)
+        .ok_or(ReissueError::NotFound)?
+        .clone();
+    let (Some(partner), Some(gift_id)) = (state.partner.as_ref(), gift.gift_id.clone()) else {
+        return Err(ReissueError::NotFound);
+    };
+    if order.status != crate::state::OrderStatus::Paid
+        || !gift.status.is_claimable()
+        || gift.activated_by.is_some()
+    {
+        return Err(ReissueError::NotReissuable);
+    }
+    let key = format!("{}-reissue-{}", gift.line_ref, gift.reissues + 1);
+    let reissued = partner.reissue_gift(&gift_id, &key).await.map_err(|e| match e.api_code() {
+        Some("not_reissuable") => ReissueError::NotReissuable,
+        _ => ReissueError::Remote(e.user_message()),
+    })?;
+    state.update_gift(&gift.line_ref, |g| {
+        g.reissues += 1;
+        g.code_display = reissued.code_display.or(reissued.code);
+        g.claim_url = Some(reissued.claim_url);
+        // The card on file carries the voided code.
+        g.card = CardState::Pending;
+        g.last_error = None;
+    });
+    // Fetch the card again (best effort: "Réessayer" resumes a failed fetch).
+    match partner.card_pdf(&gift_id, CARD_FORMAT, details.card_delivery.card_profile()).await {
+        Ok(CardFetch::Ready(pdf)) => {
+            state.update_gift(&gift.line_ref, |g| g.card = CardState::Ready(Arc::new(pdf)));
+        }
+        Ok(CardFetch::NotImplemented) => {
+            state.update_gift(&gift.line_ref, |g| g.card = CardState::Unavailable);
+        }
+        Err(e) => fail(state, &gift.line_ref, e.user_message()),
+    }
     Ok(())
 }

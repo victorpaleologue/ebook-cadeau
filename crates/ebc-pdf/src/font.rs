@@ -19,10 +19,10 @@ use ebc_scene::FontResource;
 use pdf_writer::types::{CidFontType, FontFlags, SystemInfo, UnicodeCmap};
 use pdf_writer::{Chunk, Filter, Finish, Name, Rect, Ref, Str};
 use subsetter::GlyphRemapper;
-use ttf_parser::{Face, GlyphId, RawFace, Tag, name_id};
 
 use crate::error::{EmbeddingRestriction, PdfError};
 use crate::md5;
+use crate::sfnt::{self, Face, NameRecord};
 use crate::writer::{RefAllocator, deflate, stream_len};
 
 /// Longest text (in UTF-16 code units) a single glyph may map to in the `ToUnicode` CMap.
@@ -160,25 +160,25 @@ impl EmbeddedFont {
         let invalid = |reason: String| PdfError::InvalidFont { font: id, reason };
         let data: &[u8] = &resource.data;
 
-        let face = Face::parse(data, resource.face_index).map_err(|e| invalid(e.to_string()))?;
+        let face = Face::parse(data, resource.face_index).map_err(|e| invalid(e.to_owned()))?;
         let units_per_em = f64::from(face.units_per_em());
         if units_per_em <= 0.0 {
             return Err(invalid("units per em is zero".into()));
         }
-        let glyph_count = face.number_of_glyphs();
+        let glyph_count = face.glyph_count();
         if let Some(&glyph) = usage.glyphs.keys().find(|&&g| g >= glyph_count) {
             return Err(PdfError::InvalidGlyph { font: id, glyph, glyph_count });
         }
 
         let ps_name = postscript_name(&face);
-        let rights = EmbeddingRights::from_os2(face.raw_face().table(Tag::from_bytes(b"OS/2")));
+        let rights = EmbeddingRights::from_os2(face.table(b"OS/2"));
         if let Some(restriction) = rights.forbidden {
             return Err(PdfError::FontEmbeddingForbidden { font: id, name: ps_name, restriction });
         }
 
-        let outlines = if face.tables().glyf.is_some() {
+        let outlines = if face.has_glyf() {
             Outlines::Glyf
-        } else if face.tables().cff.is_some() {
+        } else if face.has_cff() {
             Outlines::Cff
         } else {
             return Err(invalid(
@@ -216,9 +216,7 @@ impl EmbeddedFont {
                 .map_err(|e| invalid(format!("subsetting failed: {e}")))?;
                 let program = match outlines {
                     Outlines::Glyf => subset,
-                    Outlines::Cff => RawFace::parse(&subset, 0)
-                        .ok()
-                        .and_then(|raw| raw.table(Tag::from_bytes(b"CFF ")))
+                    Outlines::Cff => sfnt::table_of(&subset, b"CFF ")
                         .map(<[u8]>::to_vec)
                         .ok_or_else(|| invalid("the subset font has no CFF table".into()))?,
                 };
@@ -235,7 +233,7 @@ impl EmbeddedFont {
                     .get(&glyph)
                     .ok_or_else(|| invalid("internal error: glyph missing from subset".into()))?,
             };
-            let advance = f64::from(face.glyph_hor_advance(GlyphId(glyph)).unwrap_or(0));
+            let advance = f64::from(face.advance(glyph).unwrap_or(0));
             widths.insert(cid, (advance * scale) as f32);
             if !text.is_empty() {
                 to_unicode.push((cid, text.clone()));
@@ -434,12 +432,16 @@ fn subset_tag(data: &[u8], face_index: u32, index: usize, usage: &FontUsage) -> 
 
 /// The font's PostScript name, reduced to characters that are safe in a PDF name.
 fn postscript_name(face: &Face<'_>) -> String {
+    const POST_SCRIPT_NAME: u16 = 6;
+    const FULL_NAME: u16 = 4;
+    const FAMILY: u16 = 1;
+
     let mut best: Option<(u8, String)> = None;
     for name in face.names() {
         let rank = match name.name_id {
-            name_id::POST_SCRIPT_NAME => 0,
-            name_id::FULL_NAME => 1,
-            name_id::FAMILY => 2,
+            POST_SCRIPT_NAME => 0,
+            FULL_NAME => 1,
+            FAMILY => 2,
             _ => continue,
         };
         if best.as_ref().is_some_and(|(r, _)| *r <= rank) {
@@ -447,8 +449,8 @@ fn postscript_name(face: &Face<'_>) -> String {
         }
         let text = name.to_string().or_else(|| {
             // Macintosh Roman names: accept the ASCII subset.
-            (name.platform_id == ttf_parser::PlatformId::Macintosh && name.name.is_ascii())
-                .then(|| String::from_utf8_lossy(name.name).into_owned())
+            (name.platform_id == NameRecord::MACINTOSH && name.bytes.is_ascii())
+                .then(|| String::from_utf8_lossy(name.bytes).into_owned())
         });
         if let Some(text) = text {
             let clean = sanitize_name(&text);
@@ -469,9 +471,9 @@ fn sanitize_name(text: &str) -> String {
 
 fn descriptor(face: &Face<'_>, scale: f64) -> Descriptor {
     let scaled = |v: i16| (f64::from(v) * scale) as f32;
-    let bbox = face.global_bounding_box();
+    let [x_min, y_min, x_max, y_max] = face.bounding_box();
     let ascent = scaled(face.ascender());
-    let cap_height = face.capital_height().filter(|h| *h > 0).map_or(ascent, scaled);
+    let cap_height = face.cap_height().filter(|h| *h > 0).map_or(ascent, scaled);
     let italic_angle = face.italic_angle();
     let italic_angle = if italic_angle.is_finite() { italic_angle } else { 0.0 };
 
@@ -485,12 +487,12 @@ fn descriptor(face: &Face<'_>, scale: f64) -> Descriptor {
 
     // The dominant vertical stem width is not stored in OpenType fonts; this is the
     // customary estimate from the weight class.
-    let weight = f32::from(face.weight().to_number().clamp(1, 1000));
+    let weight = f32::from(face.weight().clamp(1, 1000));
     let stem_v = (10.0 + 0.244 * (weight - 50.0)).max(10.0);
 
     Descriptor {
         flags: flags.bits(),
-        bbox: [scaled(bbox.x_min), scaled(bbox.y_min), scaled(bbox.x_max), scaled(bbox.y_max)],
+        bbox: [scaled(x_min), scaled(y_min), scaled(x_max), scaled(y_max)],
         italic_angle,
         ascent,
         descent: scaled(face.descender()),
@@ -506,6 +508,19 @@ mod tests {
     use ebc_scene::FontId;
 
     use super::*;
+
+    /// The character map of a test font, read by `read-fonts` (not by this crate).
+    struct TestCmap(read_fonts::model::Font);
+
+    impl TestCmap {
+        fn of(data: &[u8]) -> Self {
+            Self(read_fonts::model::Font::new(data.to_vec(), 0).expect("valid font"))
+        }
+
+        fn glyph(&self, c: char) -> Option<u16> {
+            self.0.charmap().map_unicode(c).and_then(|glyph| u16::try_from(glyph.to_u32()).ok())
+        }
+    }
 
     fn font_bytes(name: &str) -> Vec<u8> {
         let path = format!("{}/../../assets/fonts/{name}", env!("CARGO_MANIFEST_DIR"));
@@ -566,10 +581,11 @@ mod tests {
     fn subset_is_much_smaller_and_maps_glyphs_to_dense_cids() {
         let data = font_bytes("Spectral-Regular.ttf");
         let face = Face::parse(&data, 0).expect("valid font");
+        let cmap = TestCmap::of(&data);
         let mut usage = FontUsage::default();
         let mut glyphs = Vec::new();
         for c in "Étranger".chars() {
-            let glyph = face.glyph_index(c).expect("glyph").0;
+            let glyph = cmap.glyph(c).expect("glyph");
             usage.record(glyph, &c.to_string());
             glyphs.push(glyph);
         }
@@ -592,22 +608,22 @@ mod tests {
             assert_eq!(font.cid(*glyph), Some(u16::try_from(i + 1).expect("small")));
         }
         assert_eq!(font.cid(0), Some(0));
-        let unused = face.glyph_index('Z').expect("glyph").0;
+        let unused = cmap.glyph('Z').expect("glyph");
         assert_eq!(font.cid(unused), None);
 
         // Widths are the font's advances in thousandths of an em.
         let upm = f32::from(face.units_per_em());
         for glyph in &sorted {
             let cid = font.cid(*glyph).expect("mapped");
-            let advance = f32::from(face.glyph_hor_advance(GlyphId(*glyph)).expect("advance"));
+            let advance = f32::from(face.advance(*glyph).expect("advance"));
             assert!((font.width(cid) - f64::from(advance * 1000.0 / upm)).abs() < 1e-3);
         }
         assert_eq!(font.to_unicode.len(), sorted.len());
 
         // The subset is itself a parseable font with exactly the kept glyphs (+ .notdef).
         let subset = Face::parse(&font.program, 0).expect("subset parses");
-        assert!(usize::from(subset.number_of_glyphs()) > sorted.len());
-        assert!(usize::from(subset.number_of_glyphs()) <= sorted.len() + 8);
+        assert!(usize::from(subset.glyph_count()) > sorted.len());
+        assert!(usize::from(subset.glyph_count()) <= sorted.len() + 8);
     }
 
     #[test]
@@ -625,7 +641,7 @@ mod tests {
     #[test]
     fn invalid_glyph_ids_and_garbage_fonts_are_errors() {
         let data = font_bytes("CourierPrime-Bold.ttf");
-        let count = Face::parse(&data, 0).expect("valid").number_of_glyphs();
+        let count = Face::parse(&data, 0).expect("valid").glyph_count();
         let resource = FontResource { id: FontId(1), data: Arc::from(data), face_index: 0 };
         let mut usage = FontUsage::default();
         usage.record(count, "x");

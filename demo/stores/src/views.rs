@@ -483,6 +483,7 @@ pub const fn gift_status_label(status: GiftStatus) -> &'static str {
         GiftStatus::Pending => "En préparation",
         GiftStatus::Created => "Prêt à offrir — pas encore utilisé",
         GiftStatus::Redeemed => "Utilisé par son destinataire",
+        GiftStatus::Exhausted => "Utilisé — limite de téléchargements atteinte",
         GiftStatus::Fulfilled => "Ajouté à la bibliothèque de son destinataire",
         GiftStatus::Cancelled => "Annulé et remboursé",
         GiftStatus::Expired => "Expiré",
@@ -557,6 +558,21 @@ fn gift_block(order: &Order, index: usize, book: Option<&Book>, gift: &GiftRecor
             }
             @if let Some(code) = &gift.code_display {
                 p { "Code : " span.code id=(id("claim-code")) { (code) } }
+            }
+            @if gift.reissues > 0 {
+                p.notice id=(id("code-reissued")) {
+                    "Ce code remplace le précédent, qui ne fonctionne plus. "
+                    "Une carte déjà imprimée doit être réimprimée."
+                }
+            }
+            @if order.status == OrderStatus::Paid && gift.gift_id.is_some()
+                && gift.status.is_claimable() && gift.activated_by.is_none()
+            {
+                form id=(id("reissue-form")) method="post" action=(format!("/commande/{}/nouveau-code", order.reference)) {
+                    input type="hidden" name="gift" value=(index + 1);
+                    p.muted { "Carte perdue ? Un nouveau code annule l'ancien ; le livre reste offert." }
+                    button.link id=(id("reissue-gift")) type="submit" { "Obtenir un nouveau code" }
+                }
             }
             @if let Some(print) = &gift.print {
                 (print_block(print, &id))

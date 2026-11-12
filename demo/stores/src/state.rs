@@ -41,6 +41,9 @@ pub enum GiftStatus {
     Created,
     /// The recipient used the code.
     Redeemed,
+    /// The recipient used the code and the limit of download sessions of a hosted file is
+    /// reached (`docs/api.md` §2, "Claim semantics").
+    Exhausted,
     /// The book is in the recipient's account (`reseller_redirect`).
     Fulfilled,
     /// Voided (refund).
@@ -56,6 +59,7 @@ impl GiftStatus {
         Some(match name {
             "created" => Self::Created,
             "redeemed" => Self::Redeemed,
+            "exhausted" => Self::Exhausted,
             "fulfilled" => Self::Fulfilled,
             "cancelled" => Self::Cancelled,
             "expired" => Self::Expired,
@@ -70,6 +74,7 @@ impl GiftStatus {
             Self::Pending => "pending",
             Self::Created => "created",
             Self::Redeemed => "redeemed",
+            Self::Exhausted => "exhausted",
             Self::Fulfilled => "fulfilled",
             Self::Cancelled => "cancelled",
             Self::Expired => "expired",
@@ -82,13 +87,26 @@ impl GiftStatus {
         matches!(self, Self::Cancelled | Self::Expired)
     }
 
+    /// Whether the recipient has started using the gift: it can no longer be refunded.
+    #[must_use]
+    pub const fn is_used(self) -> bool {
+        matches!(self, Self::Redeemed | Self::Exhausted | Self::Fulfilled)
+    }
+
+    /// Whether the card still works for its holder, so that a lost card can be replaced
+    /// by a new code (`docs/api.md` §2, "Reissue").
+    #[must_use]
+    pub const fn is_claimable(self) -> bool {
+        matches!(self, Self::Created | Self::Redeemed)
+    }
+
     /// Progress rank used to ignore out-of-order webhooks.
     const fn rank(self) -> u8 {
         match self {
             Self::Pending => 0,
             Self::Created => 1,
             Self::Redeemed => 2,
-            Self::Fulfilled => 3,
+            Self::Exhausted | Self::Fulfilled => 3,
             Self::Cancelled | Self::Expired => 4,
         }
     }
@@ -214,6 +232,9 @@ pub struct GiftRecord {
     pub downloads: Option<u64>,
     /// When the recipient first used the code.
     pub redeemed_at: Option<i64>,
+    /// How many times the code was replaced (lost card). Also numbers the
+    /// `Idempotency-Key` of the next reissue request.
+    pub reissues: u32,
 }
 
 impl GiftRecord {
@@ -234,6 +255,7 @@ impl GiftRecord {
             fulfilment_confirmed: false,
             downloads: None,
             redeemed_at: None,
+            reissues: 0,
         }
     }
 }

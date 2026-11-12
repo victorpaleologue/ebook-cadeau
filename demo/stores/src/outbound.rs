@@ -255,14 +255,28 @@ pub struct CreatedGift {
     /// Compact redemption code.
     #[serde(default)]
     pub code: Option<String>,
-    /// Redemption code as printed (`XXXXX-XXXXX`).
+    /// Redemption code as printed (`XXXX-XXXX-XXXX`, 12 letters).
     #[serde(default)]
     pub code_display: Option<String>,
-    /// URL encoded in the QR code.
+    /// URL printed on the card (the QR code carries it upper-cased).
     pub claim_url: String,
     /// Initial status (`created`).
     #[serde(default)]
     pub status: Option<String>,
+}
+
+/// Answer to a reissue (`POST /api/partner/v1/gifts/{id}/reissue`): the new code. The
+/// previous one answers `410` from now on.
+#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+pub struct ReissuedGift {
+    /// Compact redemption code.
+    #[serde(default)]
+    pub code: Option<String>,
+    /// Redemption code as printed (`XXXX-XXXX-XXXX`).
+    #[serde(default)]
+    pub code_display: Option<String>,
+    /// The new claim URL.
+    pub claim_url: String,
 }
 
 /// Answer to an upload.
@@ -278,7 +292,7 @@ pub struct UploadReceipt {
 /// Answer to `GET /api/partner/v1/gifts/{id}`.
 #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
 pub struct RemoteGiftStatus {
-    /// `created`, `redeemed`, `fulfilled`, `cancelled` or `expired`.
+    /// `created`, `redeemed`, `exhausted`, `fulfilled`, `cancelled` or `expired`.
     pub status: String,
     /// When the gift was first claimed.
     #[serde(default)]
@@ -513,6 +527,38 @@ impl PartnerClient {
         let path = format!("/api/partner/v1/gifts/{}/cancel", segment(gift_id));
         let response = self.send(Method::POST, &path, None, Vec::new(), &[]).await?;
         if response.status().is_success() { Ok(()) } else { Err(api_error(EBC, response).await) }
+    }
+
+    /// `POST /api/partner/v1/gifts/{id}/reissue` — voids the code of a gift and gets a new
+    /// one for the same gift (lost card). Send the same `idempotency_key` when retrying
+    /// the same reissue, so that a lost answer does not burn a second code.
+    ///
+    /// # Errors
+    /// See [`OutboundError`]. A gift that can no longer be claimed is refused with
+    /// `409 not_reissuable`.
+    pub async fn reissue_gift(
+        &self,
+        gift_id: &str,
+        idempotency_key: &str,
+    ) -> Result<ReissuedGift, OutboundError> {
+        let path = format!("/api/partner/v1/gifts/{}/reissue", segment(gift_id));
+        let response = self
+            .send(Method::POST, &path, None, Vec::new(), &[("Idempotency-Key", idempotency_key)])
+            .await?;
+        if !response.status().is_success() {
+            return Err(api_error(EBC, response).await);
+        }
+        let reissued: ReissuedGift =
+            decode_json(EBC, &read_capped(EBC, response, MAX_JSON_BYTES).await?)?;
+        if reissued.claim_url.is_empty()
+            || (reissued.code.is_none() && reissued.code_display.is_none())
+        {
+            return Err(OutboundError::Decode {
+                service: EBC,
+                detail: "reissue without a code or claim_url".to_owned(),
+            });
+        }
+        Ok(reissued)
     }
 
     /// `POST /api/partner/v1/gifts/{id}/fulfilled` — tells eBook Cadeau the book is now in

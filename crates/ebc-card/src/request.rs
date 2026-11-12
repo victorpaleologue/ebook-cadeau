@@ -369,7 +369,7 @@ pub struct CardRequest {
     /// Size of the card.
     pub format: CardFormat,
     /// How it is printed. Sheet-based profiles are the home-print route, all others the
-    /// professional route (see [`crate::PrintRoute`]).
+    /// professional route (see [`crate::rights::route_of`]).
     pub profile: PrintProfile,
     /// Creation time written to the PDF, as seconds since the Unix epoch. Required by
     /// PDF/X profiles; the composer never reads the clock.
@@ -457,8 +457,12 @@ mod tests {
     fn a_cover_without_rights_is_not_printable() {
         let px = Pixmap::filled(2, 2, [0, 0, 0, 255]);
         assert!(!CoverInput::None.is_printable());
-        assert!(!CoverInput::Pixels { pixmap: px.clone(), rights: RightsBasis::None }.is_printable());
-        assert!(CoverInput::Pixels { pixmap: px, rights: RightsBasis::PublicDomain }.is_printable());
+        assert!(
+            !CoverInput::Pixels { pixmap: px.clone(), rights: RightsBasis::None }.is_printable()
+        );
+        assert!(
+            CoverInput::Pixels { pixmap: px, rights: RightsBasis::PublicDomain }.is_printable()
+        );
         assert_eq!(CoverInput::default().rights(), RightsBasis::None);
     }
 

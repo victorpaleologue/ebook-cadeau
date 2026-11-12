@@ -1,6 +1,6 @@
 //! Containment of panics raised inside the font libraries.
 //!
-//! `ttf-parser` and `rustybuzz` are written not to panic on malformed fonts — in
+//! `read-fonts` and `harfrust` are written not to panic on malformed fonts — in
 //! **release** builds. In builds with debug assertions and arithmetic overflow checks
 //! (the `dev` and `test` profiles), a hostile font can still trip one of their internal
 //! `debug_assert!`s or an overflow check (for instance a table that declares 2^32 − 1

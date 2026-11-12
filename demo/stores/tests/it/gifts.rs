@@ -1,12 +1,10 @@
 //! Checkout with the gift option, against a mock eBook Cadeau partner API that verifies
 //! every signature (§4.1) and against the real demo printer.
 
-#![allow(clippy::unwrap_used)]
-
-mod common;
-
+use crate::common::{
+    CardMode, World, code, code_display, gift_home, gift_post, open_epub, plain_client, text_of,
+};
 use axum::http::StatusCode;
-use common::{CardMode, World, gift_home, gift_post, open_epub, plain_client, text_of};
 use ebc_demo_stores::{GiftDelivery, StoreKind};
 use serde_json::{Value, json};
 
@@ -31,8 +29,8 @@ async fn septante_gift_printed_at_home_uses_a_hosted_file() {
     assert_eq!(order.text("gift-giver").as_deref(), Some("Camille"));
     assert_eq!(order.text("gift-message-text").as_deref(), Some("Joyeux anniversaire !"));
     assert_eq!(order.text("order-total").as_deref(), Some("2,99\u{a0}€"), "the home card is free");
-    assert_eq!(order.text("claim-code").as_deref(), Some("DEMO0-0001X"));
-    assert_eq!(order.text("claim-url"), Some(format!("{}/k/DEMO00001X", world.ebc.base)));
+    assert_eq!(order.text("claim-code").as_deref(), Some(code_display(1).as_str()));
+    assert_eq!(order.text("claim-url"), Some(format!("{}/k/{}", world.ebc.base, code(1))));
     assert!(!order.has("print-status") && !order.has("retry") && !order.has("gift-error"));
     assert!(order.has("cancel-gift"));
 
@@ -458,7 +456,7 @@ async fn a_lost_answer_is_recovered_through_the_idempotency_key() {
 
     let retried = browser.post(&format!("/commande/{reference}/relancer"), &[]).await;
     assert_eq!(retried.attr("gift-status", "data-status").as_deref(), Some("created"));
-    assert_eq!(retried.text("claim-code").as_deref(), Some("DEMO0-0001X"));
+    assert_eq!(retried.text("claim-code").as_deref(), Some(code_display(1).as_str()));
     assert_eq!(world.ebc.gifts().len(), 1, "replayed, not duplicated");
     assert_eq!(store.snapshot()["gifts"][0]["gift_id"], "g_0001");
 
@@ -530,7 +528,7 @@ async fn requests_with_a_skewed_clock_or_wrong_secret_are_refused_by_the_api() {
     // An unknown partner id.
     let unknown = world
         .store_with(StoreKind::Septante, |c| {
-            c.with_partner(&world.ebc.base, "inconnu", common::SEPTANTE_SECRET)
+            c.with_partner(&world.ebc.base, "inconnu", crate::common::SEPTANTE_SECRET)
         })
         .await;
     let order =
@@ -553,8 +551,8 @@ async fn without_a_server_side_card_the_claim_link_and_code_are_shown() {
     assert_eq!(order.attr("gift-status", "data-status").as_deref(), Some("created"));
     assert!(!order.has("card-pdf"));
     assert!(order.text("card-unavailable").unwrap().contains("n'est pas disponible"));
-    assert_eq!(order.attr("claim-url", "href"), Some(format!("{}/k/DEMO00001X", world.ebc.base)));
-    assert_eq!(order.text("claim-code").as_deref(), Some("DEMO0-0001X"));
+    assert_eq!(order.attr("claim-url", "href"), Some(format!("{}/k/{}", world.ebc.base, code(1))));
+    assert_eq!(order.text("claim-code").as_deref(), Some(code_display(1).as_str()));
     assert!(!order.has("retry"), "a 501 is an answer, not a failure");
     assert_eq!(
         browser.get(&format!("/commande/{}/carte-1.pdf", order.order_ref())).await.status,
@@ -586,8 +584,8 @@ async fn several_books_make_several_gifts() {
 
     assert_eq!(order.attr("gift-status", "data-status").as_deref(), Some("created"));
     assert_eq!(order.attr("gift-status-2", "data-status").as_deref(), Some("created"));
-    assert_eq!(order.text("claim-code").as_deref(), Some("DEMO0-0001X"));
-    assert_eq!(order.text("claim-code-2").as_deref(), Some("DEMO0-0002X"));
+    assert_eq!(order.text("claim-code").as_deref(), Some(code_display(1).as_str()));
+    assert_eq!(order.text("claim-code-2").as_deref(), Some(code_display(2).as_str()));
     let first = browser.get(&order.attr("card-pdf", "href").unwrap()).await;
     let second = browser.get(&order.attr("card-pdf-2", "href").unwrap()).await;
     assert!(first.body.starts_with(b"%PDF-") && second.body.starts_with(b"%PDF-"));
@@ -608,7 +606,14 @@ async fn several_books_make_several_gifts() {
         .map(|r| r.header("idempotency-key").unwrap().to_owned())
         .collect();
     assert_eq!(keys, [format!("{reference}-1"), format!("{reference}-2")]);
-    assert_eq!(world.ebc.uploads().len(), 2);
+    let uploads = world.ebc.uploads();
+    assert_eq!(uploads.len(), 2);
+    // The file name travels percent-encoded in `X-File-Name` and the media type in
+    // `Content-Type` (§3 upload rules).
+    let named: Vec<(&str, &str)> =
+        uploads.iter().map(|u| (u.file_name.as_str(), u.media_type.as_str())).collect();
+    assert!(named.contains(&("candide.epub", "application/epub+zip")), "{named:?}");
+    assert!(named.iter().all(|(name, _)| name.ends_with(".epub")), "{named:?}");
 }
 
 #[tokio::test]
@@ -805,4 +810,79 @@ async fn septante_can_be_configured_for_the_reseller_redirect() {
         buyer.get(&order.path).await.attr("gift-status", "data-status").as_deref(),
         Some("fulfilled")
     );
+}
+
+#[tokio::test]
+async fn a_lost_card_gets_a_new_code_and_the_old_one_is_voided() {
+    let world = World::new().await;
+    let store = world.store(StoreKind::Septante).await;
+    let browser = store.browser();
+    let order =
+        browser.buy("camille@example.org", &["candide"], &gift_home("Camille", "Sacha", "")).await;
+    let reference = order.order_ref();
+    let reissue_path = format!("/commande/{reference}/nouveau-code");
+    assert!(order.has("reissue-gift") && !order.has("code-reissued"));
+    assert_eq!(order.text("claim-code").as_deref(), Some(code_display(1).as_str()));
+    let first_card = store.snapshot()["gifts"][0]["card"]["sha256"].clone();
+
+    // The answer of the first attempt is lost on the way back: the buyer is told, nothing
+    // changes on the page — and the retry gets the *same* new code (one Idempotency-Key
+    // per reissue), so no second code is burnt.
+    world.ebc.fail_next("POST", "/reissue", 503, 1, true);
+    let failed = browser.post(&reissue_path, &[("gift", "1")]).await;
+    assert_eq!(failed.status, StatusCode::BAD_GATEWAY);
+    assert!(failed.text("order-notice").unwrap().contains("Nouveau code impossible"));
+    assert_eq!(failed.text("claim-code").as_deref(), Some(code_display(1).as_str()));
+
+    let reissued = browser.post(&reissue_path, &[("gift", "1")]).await;
+    assert_eq!(reissued.status, StatusCode::OK, "{}", reissued.html());
+    assert_eq!(reissued.text("claim-code").as_deref(), Some(code_display(2).as_str()));
+    assert_eq!(
+        reissued.attr("claim-url", "href"),
+        Some(format!("{}/k/{}", world.ebc.base, code(2)))
+    );
+    assert!(reissued.text("code-reissued").unwrap().contains("ne fonctionne plus"));
+    let gift = world.ebc.gift("g_0001");
+    assert_eq!((gift.code.as_str(), gift.voided.as_slice()), (code(2).as_str(), &[code(1)][..]));
+    let calls = world.ebc.requests_to("POST", "/g_0001/reissue");
+    assert_eq!(calls.len(), 2);
+    let key = format!("{reference}-reissue-1");
+    assert!(calls.iter().all(|c| c.header("idempotency-key") == Some(key.as_str())), "{calls:?}");
+    // The card is fetched again: it must carry the new code.
+    assert_eq!(world.ebc.requests_to("GET", "/g_0001/card.pdf").len(), 2);
+    assert!(reissued.has("card-pdf"));
+    assert_eq!(store.snapshot()["gifts"][0]["card"]["sha256"], first_card, "mock cards are equal");
+    assert_eq!(store.snapshot()["gifts"][0]["reissues"], 1);
+
+    // A second lost card: a new key, a third code. An empty form means the first gift.
+    let again = browser.post(&reissue_path, &[]).await;
+    assert_eq!(again.text("claim-code").as_deref(), Some(code_display(3).as_str()));
+    let calls = world.ebc.requests_to("POST", "/g_0001/reissue");
+    assert_eq!(calls[2].header("idempotency-key"), Some(format!("{reference}-reissue-2").as_str()));
+
+    // No such gift in the order.
+    for bad in ["2", "0", "x"] {
+        let page = browser.post(&reissue_path, &[("gift", bad)]).await;
+        assert_eq!(page.status, StatusCode::NOT_FOUND, "{bad}");
+    }
+
+    // Once the download limit is reached (v0.2 status `exhausted`) the gift counts as
+    // used: no new code, no refund.
+    world.ebc.set_status("g_0001", "exhausted", 10);
+    let page = browser.get(&format!("/commande/{reference}")).await;
+    assert_eq!(page.attr("gift-status", "data-status").as_deref(), Some("exhausted"));
+    assert!(!page.has("reissue-gift") && !page.has("cancel-gift"));
+    let refused = browser.post(&reissue_path, &[]).await;
+    assert_eq!(refused.status, StatusCode::CONFLICT);
+    assert!(refused.text("order-notice").unwrap().contains("ne peut plus recevoir"));
+    let refused = browser.post(&format!("/commande/{reference}/annuler"), &[]).await;
+    assert_eq!(refused.status, StatusCode::CONFLICT);
+    assert_eq!(world.ebc.requests_to("POST", "/g_0001/reissue").len(), 3);
+
+    // Someone else's order is not found, and nothing is reissued without signing in.
+    let stranger = store.browser();
+    stranger.register("mallory@example.org", "motdepasse").await;
+    assert_eq!(stranger.post(&reissue_path, &[]).await.status, StatusCode::NOT_FOUND);
+    let anonymous = store.browser().post(&reissue_path, &[]).await;
+    assert_eq!(anonymous.path, format!("/compte/connexion?next=%2Fcommande%2F{reference}"));
 }

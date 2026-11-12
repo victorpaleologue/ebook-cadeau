@@ -79,6 +79,7 @@ pub mod icc;
 mod image;
 mod jpeg;
 mod md5;
+mod sfnt;
 mod writer;
 mod xmp;
 

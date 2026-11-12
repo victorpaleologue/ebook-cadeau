@@ -222,7 +222,16 @@ fn parse_opds1(text: &str, base: &Url, max_entries: usize) -> Result<Feed, OpdsE
     let child_text = |node: roxmltree::Node<'_, '_>, name: &str| {
         node.children()
             .find(|c| c.is_element() && c.tag_name().name() == name)
-            .map(|c| clean(&c.descendants().filter_map(|d| d.text()).collect::<String>()))
+            // Text nodes only: an element's own `text()` is its first text child, which
+            // would be counted twice.
+            .map(|c| {
+                clean(
+                    &c.descendants()
+                        .filter(|d| d.is_text())
+                        .filter_map(|d| d.text())
+                        .collect::<String>(),
+                )
+            })
             .filter(|t| !t.is_empty())
     };
     let mut feed = Feed {
@@ -555,10 +564,10 @@ impl OpdsClient {
     fn request(&self, url: Url, accept: &str) -> Request {
         let mut request = Request { method: Method::GET, url, headers: Vec::new(), body: None }
             .header("accept", accept);
-        if let Some((user, password, origin)) = &self.basic_auth {
-            if net::same_origin(origin, &request.url) {
-                request = request.header("authorization", basic(user, password));
-            }
+        if let Some((user, password, origin)) = &self.basic_auth
+            && net::same_origin(origin, &request.url)
+        {
+            request = request.header("authorization", basic(user, password));
         }
         request
     }

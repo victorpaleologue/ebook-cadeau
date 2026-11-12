@@ -294,7 +294,8 @@ fn data_uri(data: &ImageData) -> Option<String> {
         ImageData::Jpeg { bytes, .. } => Some(format!("data:image/jpeg;base64,{}", base64(bytes))),
         ImageData::Raw { pixels, width_px, height_px, format } => {
             let (w, h) = (*width_px, *height_px);
-            let expected = (w as usize).checked_mul(h as usize)?.checked_mul(format.bytes_per_pixel())?;
+            let expected =
+                (w as usize).checked_mul(h as usize)?.checked_mul(format.bytes_per_pixel())?;
             if w == 0 || h == 0 || pixels.len() != expected {
                 return None;
             }
@@ -330,8 +331,7 @@ fn data_uri(data: &ImageData) -> Option<String> {
 
 /// Standard base64 with padding.
 fn base64(data: &[u8]) -> String {
-    const ALPHABET: &[u8; 64] =
-        b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    const ALPHABET: &[u8; 64] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
     let mut out = String::with_capacity(data.len().div_ceil(3) * 4);
     for chunk in data.chunks(3) {
         let b = [chunk[0], chunk.get(1).copied().unwrap_or(0), chunk.get(2).copied().unwrap_or(0)];
@@ -390,7 +390,10 @@ mod tests {
         );
         let mut page = Page::new(Size::new(100.0, 50.0), 3.0, 5.0);
         page.label = Some("out<side>".to_owned());
-        page.items.push(Item::filled_rect(Rect::new(-3.0, -3.0, 106.0, 56.0), Color::cmyk(1.0, 0.0, 0.0, 0.0)));
+        page.items.push(Item::filled_rect(
+            Rect::new(-3.0, -3.0, 106.0, 56.0),
+            Color::cmyk(1.0, 0.0, 0.0, 0.0),
+        ));
         let mut triangle = Path::new();
         triangle.move_to(0.0, 0.0).line_to(10.0, 0.0).quad_to(10.0, 10.0, 0.0, 10.0).close();
         page.items.push(Item::Path {

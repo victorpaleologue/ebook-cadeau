@@ -3,7 +3,9 @@
 //! The composer uses this to verify its own output (nothing may be painted over the
 //! cover), and tests and tools can use it to check that text stays inside safe areas.
 
-use ebc_scene::{Document, FontId, Item, Path, PathSeg, Point, Rect, Transform, pt_to_mm};
+use ebc_scene::{
+    Document, FontId, Item, Path, PathSeg, Point, Rect, Stroke, StrokeCap, Transform, pt_to_mm,
+};
 use ebc_text::{Font, ShapedGlyph, ShapedText, outline_bounds};
 
 /// Computes the bounding boxes of the items of one document, parsing each font at most
@@ -36,21 +38,28 @@ impl<'a> Inspector<'a> {
     /// The bounding box of what `item` paints, in the coordinates the item is placed in
     /// (page millimetres for a top-level item); `None` when it paints nothing.
     ///
-    /// * Paths: the exact box of the outline, grown by half the stroke width when stroked.
+    /// * Paths: the exact box of the outline. A stroked path is grown by half the stroke
+    ///   width — across the line only for a straight horizontal or vertical segment with
+    ///   butt caps (a rule, a crop mark), all round otherwise.
     /// * Images: the destination rectangle.
     /// * Glyph runs: the exact box of the ink of the glyphs (not the advance box).
     /// * Groups: the union of the children, cut to the clip path's box if there is one,
     ///   then mapped through the group's transform.
     pub fn bounds(&mut self, item: &Item) -> Option<Rect> {
         match item {
-            Item::Path { path, fill, stroke } => {
-                let bounds = outline_bounds(path).or_else(|| path.control_bounds())?;
-                match stroke {
-                    Some(s) => Some(bounds.inflate(pt_to_mm(s.width_pt.max(0.0)) / 2.0)),
-                    None if fill.is_some() => Some(bounds),
-                    None => None,
+            Item::Path { path, fill, stroke } => match stroke {
+                Some(stroke) => {
+                    let mut bounds: Option<Rect> = None;
+                    for sub in subpaths(path) {
+                        if let Some(b) = stroked_bounds(&sub, stroke) {
+                            bounds = Some(bounds.map_or(b, |acc| acc.union(&b)));
+                        }
+                    }
+                    bounds
                 }
-            }
+                None if fill.is_some() => outline_bounds(path).or_else(|| path.control_bounds()),
+                None => None,
+            },
             Item::Image { rect, .. } => Some(*rect),
             Item::Glyphs { font, size_pt, origin, glyphs, .. } => {
                 let font = self.font(*font)?;
@@ -141,17 +150,16 @@ impl<'a> Inspector<'a> {
         // the letters of an outlined word) is one leaf per sub-path: the box around all
         // of them would cover what lies between them.
         let pieces: Vec<Rect> = match item {
-            Item::Path { path, fill, stroke } if path.segs.len() > 1 => {
-                let grow = stroke.as_ref().map(|s| pt_to_mm(s.width_pt.max(0.0)) / 2.0);
-                if grow.is_none() && fill.is_none() {
-                    return;
+            Item::Path { path, fill, stroke } if path.segs.len() > 1 => match stroke {
+                Some(stroke) => {
+                    subpaths(path).iter().filter_map(|sub| stroked_bounds(sub, stroke)).collect()
                 }
-                subpaths(path)
+                None if fill.is_some() => subpaths(path)
                     .iter()
                     .filter_map(|sub| outline_bounds(sub).or_else(|| sub.control_bounds()))
-                    .map(|b| b.inflate(grow.unwrap_or(0.0)))
-                    .collect()
-            }
+                    .collect(),
+                None => return,
+            },
             _ => self.bounds(item).into_iter().collect(),
         };
         for bounds in pieces {
@@ -196,6 +204,25 @@ pub fn item_bounds(doc: &Document, item: &Item) -> Option<Rect> {
     Inspector::new(doc).bounds(item)
 }
 
+/// The box a stroked sub-path covers. A single horizontal or vertical segment with butt
+/// caps is a rectangle exactly as long as the segment; anything else is the outline's
+/// box grown by half the stroke width all round (a safe over-estimate).
+fn stroked_bounds(sub: &Path, stroke: &Stroke) -> Option<Rect> {
+    let half = pt_to_mm(stroke.width_pt.max(0.0)) / 2.0;
+    if stroke.cap == StrokeCap::Butt
+        && let [PathSeg::MoveTo(a), PathSeg::LineTo(b)] = sub.segs.as_slice()
+    {
+        let r = Rect::from_corners(*a, *b);
+        if a.y == b.y {
+            return Some(r.inflate_xy(0.0, half));
+        }
+        if a.x == b.x {
+            return Some(r.inflate_xy(half, 0.0));
+        }
+    }
+    Some(outline_bounds(sub).or_else(|| sub.control_bounds())?.inflate(half))
+}
+
 /// The sub-paths of a path: a new one starts at every `MoveTo`.
 fn subpaths(path: &Path) -> Vec<Path> {
     let mut out: Vec<Path> = Vec::new();
@@ -232,7 +259,7 @@ fn transform_rect(t: &Transform, r: Rect) -> Rect {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ebc_scene::{Color, Stroke};
+    use ebc_scene::Color;
 
     #[test]
     fn paths_images_and_groups() {
@@ -242,6 +269,16 @@ mod tests {
         assert_eq!(inspector.bounds(&Item::filled_rect(rect, Color::BLACK)), Some(rect));
         let stroked = Item::stroke(Path::rect(rect), Stroke::solid(Color::BLACK, 72.0 / 25.4));
         assert_eq!(inspector.bounds(&stroked), Some(rect.inflate(0.5)));
+        // A straight rule with butt caps is exactly as long as its path.
+        let rule = Item::stroke(
+            Path::line(Point::new(10.0, 20.0), Point::new(40.0, 20.0)),
+            Stroke::solid(Color::BLACK, 72.0 / 25.4),
+        );
+        assert_eq!(inspector.bounds(&rule), Some(Rect::new(10.0, 19.5, 30.0, 1.0)));
+        let mut round = Stroke::solid(Color::BLACK, 72.0 / 25.4);
+        round.cap = StrokeCap::Round;
+        let rule = Item::stroke(Path::line(Point::new(10.0, 20.0), Point::new(40.0, 20.0)), round);
+        assert_eq!(inspector.bounds(&rule), Some(Rect::new(9.5, 19.5, 31.0, 1.0)));
         // A path that is neither filled nor stroked paints nothing.
         let nothing = Item::Path { path: Path::rect(rect), fill: None, stroke: None };
         assert_eq!(inspector.bounds(&nothing), None);

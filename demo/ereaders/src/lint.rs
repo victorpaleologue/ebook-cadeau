@@ -183,7 +183,7 @@ impl Page {
         self.lint_resources(&mut report);
         self.lint_document(config, &mut report);
         self.lint_style(config, &mut report);
-        report.findings.sort_by(|a, b| b.severity.cmp(&a.severity));
+        report.findings.sort_by_key(|finding| std::cmp::Reverse(finding.severity));
         report
     }
 
@@ -341,14 +341,14 @@ impl Page {
                     );
                 }
                 Some(a) => {
-                    if let Ok(target) = self.base_url().join(a) {
-                        if !matches!(target.scheme(), "http" | "https") {
-                            report.error(
-                                "form-action",
-                                format!("the form's action uses the {}: scheme", target.scheme()),
-                                Some(&what),
-                            );
-                        }
+                    if let Ok(target) = self.base_url().join(a)
+                        && !matches!(target.scheme(), "http" | "https")
+                    {
+                        report.error(
+                            "form-action",
+                            format!("the form's action uses the {}: scheme", target.scheme()),
+                            Some(&what),
+                        );
                     }
                 }
             }

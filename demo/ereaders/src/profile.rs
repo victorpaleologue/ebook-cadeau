@@ -33,6 +33,45 @@ pub enum DeviceFamily {
     GenericEink,
     /// A reading application on a phone or computer (used for the OPDS / LCP flows).
     ReadingApp,
+    /// A smartphone's web browser: the device that scans the card's QR code, asks for a
+    /// pair code, uses the store's activation page or sends the book to a Kindle.
+    Phone,
+    /// A computer's web browser: where gifts are bought, and one of the device classes of
+    /// the gift page.
+    Computer,
+}
+
+impl DeviceFamily {
+    /// The `?device=` value that selects this family on a gift page (`docs/api.md` §2,
+    /// "Device classes"): `kobo`, `kindle`, `pocketbook`, `tolino`, `phone`, `computer`.
+    /// `None` for families the chooser does not list.
+    pub const fn device_choice(self) -> Option<&'static str> {
+        match self {
+            Self::Kobo => Some("kobo"),
+            Self::Kindle => Some("kindle"),
+            Self::PocketBook | Self::Vivlio => Some("pocketbook"),
+            Self::Tolino => Some("tolino"),
+            Self::Phone => Some("phone"),
+            Self::Computer => Some("computer"),
+            Self::GenericEink | Self::ReadingApp => None,
+        }
+    }
+
+    /// The id of this family's link in the gift page's device chooser (`device-kobo`,
+    /// `device-kindle`, `device-pocketbook`, `device-tolino`, `device-phone`,
+    /// `device-computer`), i.e. what a person taps when the page guessed their device
+    /// wrong.
+    pub const fn chooser_link_id(self) -> Option<&'static str> {
+        match self {
+            Self::Kobo => Some("device-kobo"),
+            Self::Kindle => Some("device-kindle"),
+            Self::PocketBook | Self::Vivlio => Some("device-pocketbook"),
+            Self::Tolino => Some("device-tolino"),
+            Self::Phone => Some("device-phone"),
+            Self::Computer => Some("device-computer"),
+            Self::GenericEink | Self::ReadingApp => None,
+        }
+    }
 }
 
 /// DRM schemes a reading system may or may not open.
@@ -954,6 +993,111 @@ impl DeviceProfile {
         }
     }
 
+    /// A smartphone's web browser (the phone that scans the QR code of the card).
+    ///
+    /// Not an e-reader: it is the *other* device of the pairing, Send-to-Kindle and
+    /// store-activation journeys. The simulator still never runs JavaScript, so driving a
+    /// page with this profile also proves the page needs none.
+    pub fn phone() -> Self {
+        use Capability as C;
+        const WHY: &str = "a current smartphone browser; modelled, not measured";
+        const CLAIMS: &[Claim] = &[
+            assumption(
+                C::UserAgent,
+                "an iPhone Safari UA (contains `iPhone` and `Mobile`)",
+                UA_WHY,
+            ),
+            assumption(C::Cookies, "cookies are kept", WHY),
+            assumption(C::PageWeight, "pages up to 8 MiB", "bound only to stop hostile input"),
+            assumption(C::JavaScript, "modern engine (never executed by the simulator)", WHY),
+            assumption(
+                C::BrowserDownloads,
+                "saves EPUB and PDF to the Files app, from where the share sheet reaches reading apps",
+                WHY,
+            ),
+            assumption(C::ReadingFormats, "EPUB and PDF in the built-in books app", WHY),
+            assumption(C::Drm, "none in the browser itself", WHY),
+            assumption(C::MailService, "none", "a phone has no device address"),
+            assumption(C::Opds, "none in the browser (reading apps have their own client)", WHY),
+            assumption(C::Screen, "6-inch class", WHY),
+            assumption(
+                C::Keyboard,
+                "three-layer on-screen keyboard; one tap to open the browser, one to confirm a download",
+                KEYBOARD_WHY,
+            ),
+            assumption(C::Quirks, "none; honours Referrer-Policy", WHY),
+        ];
+        Self {
+            id: "phone",
+            name: "Smartphone (web browser)",
+            family: DeviceFamily::Phone,
+            user_agent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.1 Mobile/15E148 Safari/604.1",
+            cookies: true,
+            max_page_bytes: 8 * 1024 * 1024,
+            max_download_bytes: 500 * 1024 * 1024,
+            browser_downloads: &[FileFormat::Epub, FileFormat::Pdf],
+            reading_formats: &[FileFormat::Epub, FileFormat::Pdf],
+            drm: &[],
+            mail_service: None,
+            native_opds: false,
+            screen: ScreenClass::Small,
+            keyboard: Keyboard::three_layer(),
+            browser_launch_taps: 1,
+            download_confirm_taps: 1,
+            quirks: Quirks::default(),
+            claims: CLAIMS,
+        }
+    }
+
+    /// A computer's web browser: the buyer in a store, or the "computer" device class of a
+    /// gift page. Like [`phone`](Self::phone), it is not an e-reader and runs no JavaScript.
+    pub fn computer() -> Self {
+        use Capability as C;
+        const WHY: &str = "a current desktop browser; modelled, not measured";
+        const CLAIMS: &[Claim] = &[
+            assumption(C::UserAgent, "a Firefox-on-Linux UA", UA_WHY),
+            assumption(C::Cookies, "cookies are kept", WHY),
+            assumption(C::PageWeight, "pages up to 8 MiB", "bound only to stop hostile input"),
+            assumption(C::JavaScript, "modern engine (never executed by the simulator)", WHY),
+            assumption(C::BrowserDownloads, "saves any file to the downloads folder", WHY),
+            assumption(
+                C::ReadingFormats,
+                "EPUB and PDF (with a reading application installed)",
+                WHY,
+            ),
+            assumption(C::Drm, "none in the browser itself", WHY),
+            assumption(C::MailService, "none", "a computer has no device address"),
+            assumption(C::Opds, "none in the browser", WHY),
+            assumption(C::Screen, "large", "a computer window"),
+            assumption(
+                C::Keyboard,
+                "a physical keyboard approximated by a number-row layout; no launch taps",
+                "taps are not meaningful on a computer",
+            ),
+            assumption(C::Quirks, "none; honours Referrer-Policy", WHY),
+        ];
+        Self {
+            id: "computer",
+            name: "Computer (web browser)",
+            family: DeviceFamily::Computer,
+            user_agent: "Mozilla/5.0 (X11; Linux x86_64; rv:132.0) Gecko/20100101 Firefox/132.0",
+            cookies: true,
+            max_page_bytes: 8 * 1024 * 1024,
+            max_download_bytes: 500 * 1024 * 1024,
+            browser_downloads: &[FileFormat::Epub, FileFormat::Pdf],
+            reading_formats: &[FileFormat::Epub, FileFormat::Pdf],
+            drm: &[],
+            mail_service: None,
+            native_opds: false,
+            screen: ScreenClass::Large,
+            keyboard: Keyboard::with_number_row(),
+            browser_launch_taps: 0,
+            download_confirm_taps: 0,
+            quirks: Quirks::default(),
+            claims: CLAIMS,
+        }
+    }
+
     /// Every built-in profile.
     pub fn all() -> Vec<Self> {
         vec![
@@ -967,11 +1111,14 @@ impl DeviceProfile {
             Self::tolino_legacy_android(),
             Self::generic_eink(),
             Self::thorium_desktop(),
+            Self::phone(),
+            Self::computer(),
         ]
     }
 
     /// Looks a profile up by id, or by a family shorthand (`kobo`, `kindle`, `pocketbook`,
-    /// `vivlio`, `tolino`, `generic`, `eink`, `thorium`). Case-insensitive.
+    /// `vivlio`, `tolino`, `generic`, `eink`, `thorium`, `mobile`, `desktop`).
+    /// Case-insensitive.
     pub fn by_name(name: &str) -> Option<Self> {
         let wanted = name.trim().to_ascii_lowercase();
         let alias = match wanted.as_str() {
@@ -979,6 +1126,8 @@ impl DeviceProfile {
             "kindle" => "kindle-paperwhite",
             "generic" | "eink" | "e-ink" => "generic-eink",
             "thorium" => "thorium-desktop",
+            "mobile" | "smartphone" => "phone",
+            "desktop" => "computer",
             other => other,
         };
         Self::all().into_iter().find(|p| p.id == alias)
@@ -1075,6 +1224,37 @@ mod tests {
         assert!(!DeviceProfile::kindle_2024().user_agent.contains("Kindle"));
         assert!(DeviceProfile::tolino().user_agent.contains("eReader"));
         assert!(DeviceProfile::pocketbook().user_agent.contains("PocketBook/"));
+    }
+
+    #[test]
+    fn families_map_onto_the_device_chooser_of_the_gift_page() {
+        // docs/api.md §2: `?device=kobo|kindle|pocketbook|tolino|phone|computer` and the
+        // links `device-kobo` … `device-computer`.
+        let expected = [
+            ("kobo-clara", Some("kobo")),
+            ("kobo-ereader-ua", Some("kobo")),
+            ("kindle-paperwhite", Some("kindle")),
+            ("kindle-2024", Some("kindle")),
+            ("pocketbook", Some("pocketbook")),
+            ("vivlio", Some("pocketbook")),
+            ("tolino", Some("tolino")),
+            ("generic-eink", None),
+            ("thorium-desktop", None),
+            ("phone", Some("phone")),
+            ("computer", Some("computer")),
+        ];
+        for (id, choice) in expected {
+            let profile = DeviceProfile::by_name(id).unwrap();
+            assert_eq!(profile.family.device_choice(), choice, "{id}");
+            assert_eq!(
+                profile.family.chooser_link_id().map(str::to_owned),
+                choice.map(|c| format!("device-{c}")),
+                "{id}"
+            );
+        }
+        assert!(DeviceProfile::phone().user_agent.contains("iPhone"));
+        assert_eq!(DeviceProfile::by_name("Mobile").unwrap().id, "phone");
+        assert_eq!(DeviceProfile::by_name("desktop").unwrap().id, "computer");
     }
 
     #[test]

@@ -301,6 +301,23 @@ mod tests {
     }
 
     #[test]
+    fn a_v02_gift_code_needs_no_layer_switch_and_a_pair_code_is_half_the_work() {
+        // docs/api.md v0.2: 12 consonants printed XXXX-XXXX-XXXX; input ignores case and
+        // separators, so the cheapest way to type it is 12 plain letter keys.
+        let compact = TypingCost::of("bcdfghjklmnp", &kb(), InputMode::Text);
+        assert_eq!((compact.taps, compact.layer_switches, compact.shift_taps), (12, 0, 0));
+        // Typed exactly as printed, the hyphens (digits layer) and capitals cost extra.
+        let as_printed = TypingCost::of("BCDF-GHJK-LMNP", &kb(), InputMode::Text);
+        assert!(as_printed.layer_switches >= 4, "{as_printed:?}");
+        assert!(as_printed.taps > compact.taps + 4);
+        // The pair code (XXX-XXX) is six letter keys.
+        let pair = TypingCost::of("bcdfgh", &kb(), InputMode::Text);
+        assert_eq!((pair.taps, pair.layer_switches), (6, 0));
+        // The v0.1 code (5 letters + 5 digits) always paid at least one layer switch.
+        assert_eq!(TypingCost::of("abcde12345", &kb(), InputMode::Text).layer_switches, 1);
+    }
+
+    #[test]
     fn a_printed_code_is_cheaper_in_lower_case_and_cheapest_without_hyphen() {
         let as_printed = TypingCost::of("ABCDE-12345", &kb(), InputMode::Text);
         // caps lock (2) + 5 letters + switch (1) + hyphen + 5 digits

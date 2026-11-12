@@ -892,10 +892,10 @@ impl Builder {
             fg = c;
             styled = true;
         }
-        if matches!(tag.as_str(), "table" | "img" | "td" | "th" | "div" | "iframe") {
-            if let Some(px) = attr("width").and_then(css::px).filter(|px| *px > 320) {
-                push_fact(&mut self.facts.fixed_widths, (description.clone(), px));
-            }
+        if matches!(tag.as_str(), "table" | "img" | "td" | "th" | "div" | "iframe")
+            && let Some(px) = attr("width").and_then(css::px).filter(|px| *px > 320)
+        {
+            push_fact(&mut self.facts.fixed_widths, (description.clone(), px));
         }
 
         // The content of <select> and <textarea> is captured as control state, not page text.
@@ -1047,10 +1047,11 @@ impl Builder {
                         (description.clone(), input_type.clone()),
                     );
                 }
-                if tag == "input" && input_type == "image" {
-                    if let Some(src) = attr("src") {
-                        push_fact(&mut self.facts.resources, (description.clone(), src.to_owned()));
-                    }
+                if tag == "input"
+                    && input_type == "image"
+                    && let Some(src) = attr("src")
+                {
+                    push_fact(&mut self.facts.resources, (description.clone(), src.to_owned()));
                 }
                 if attr("form").is_some() {
                     push_fact(&mut self.facts.form_attr_controls, description.clone());
@@ -1117,19 +1118,18 @@ impl Builder {
                 }
             }
             "option" => {
-                if let Some((form, index)) = self.cur_select {
-                    if self.cur_option.is_none()
-                        && self.forms[form].fields[index].options.len() < 1000
-                    {
-                        self.raw_text.clear();
-                        self.cur_option = Some(attr("value").map(str::to_owned));
-                        self.forms[form].fields[index].options.push(SelectOption {
-                            value: String::new(),
-                            text: String::new(),
-                            selected: attr("selected").is_some(),
-                        });
-                        closes = Closes::Option;
-                    }
+                if let Some((form, index)) = self.cur_select
+                    && self.cur_option.is_none()
+                    && self.forms[form].fields[index].options.len() < 1000
+                {
+                    self.raw_text.clear();
+                    self.cur_option = Some(attr("value").map(str::to_owned));
+                    self.forms[form].fields[index].options.push(SelectOption {
+                        value: String::new(),
+                        text: String::new(),
+                        selected: attr("selected").is_some(),
+                    });
+                    closes = Closes::Option;
                 }
             }
             _ => {

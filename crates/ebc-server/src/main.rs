@@ -1,11 +1,10 @@
 //! `ebc-server`: reads the configuration from the environment (`docs/api.md` §6), opens
 //! the data directory and serves the eBook Cadeau web service.
 
-use std::net::SocketAddr;
 use std::process::ExitCode;
 use std::sync::Arc;
 
-use ebc_server::{AppState, Config, FileStore, ServerError, app};
+use ebc_server::{AppState, Config, FileStore, ServerError, serve};
 
 #[tokio::main]
 async fn main() -> ExitCode {
@@ -33,13 +32,14 @@ async fn run() -> Result<(), ServerError> {
 
     let listener = tokio::net::TcpListener::bind(&bind).await?;
     tracing::info!(%bind, %public_url, "ebc-server is listening");
-    axum::serve(listener, app(state).into_make_service_with_connect_info::<SocketAddr>())
-        .with_graceful_shutdown(async {
-            // Without a signal handler the server simply runs until it is killed.
-            if tokio::signal::ctrl_c().await.is_err() {
-                std::future::pending::<()>().await;
-            }
-        })
-        .await?;
+    // Header, request and body time-outs and the connection cap come from the
+    // configuration (`ebc_server::serve`).
+    serve(listener, state, async {
+        // Without a signal handler the server simply runs until it is killed.
+        if tokio::signal::ctrl_c().await.is_err() {
+            std::future::pending::<()>().await;
+        }
+    })
+    .await?;
     Ok(())
 }

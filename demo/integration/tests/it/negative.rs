@@ -200,6 +200,10 @@ async fn a_reissued_code_voids_the_lost_card_and_the_new_one_works() {
     assert_eq!(outcome.download().expect("the EPUB").sha256, expected);
 
     // A second reissue voids the second code as well; three codes, one gift.
+    // The world clock is frozen: without advancing it, the second signed reissue would be
+    // byte-identical to the first (same timestamp, same signature) and the server would
+    // rightly answer it as a replay of the first (docs/api.md §4.1).
+    world.advance(1);
     assert!(buyer.click("reissue-gift").await.unwrap().is_page());
     let third = printed_code(&shop::read_order_page(buyer.page().unwrap()).unwrap());
     let ua = DeviceProfile::kobo_clara().user_agent;

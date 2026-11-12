@@ -7,7 +7,7 @@ use crate::common::{CONTAINER_XML, Harness, Receiver, T0, assert_page, epub, epu
 use axum::body::Body;
 use axum::http::{Method, StatusCode};
 use ebc_model::GiftCode;
-use ebc_server::FileStore;
+use ebc_server::{FileStore, MemoryStore, Store};
 use serde_json::json;
 
 const UPLOADS: &str = "/api/v1/uploads";
@@ -535,4 +535,156 @@ async fn the_static_web_app_is_served_under_app_with_its_own_policy() {
 
     // Not configured: no /app/.
     assert_eq!(Harness::new().get("/app/").await.status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn request_bodies_share_an_in_flight_budget_and_stalled_bodies_time_out() {
+    use tokio::io::AsyncWriteExt;
+    let h = Harness::with(|c| {
+        c.max_upload_bytes = 100_000;
+        c.max_cover_bytes = 1_000;
+        c.max_card_pdf_bytes = 1_000;
+        c.max_inflight_body_bytes = 0; // the floor: one largest body (100 000 bytes)
+        c.body_idle_timeout_secs = 1;
+    });
+    // A client that sends 80 000 bytes, then stalls.
+    let (mut tx, rx) = tokio::io::duplex(128 * 1024);
+    tx.write_all(&vec![b'x'; 80_000]).await.unwrap();
+    let stalled = axum::http::Request::builder()
+        .method(Method::POST)
+        .uri(UPLOADS)
+        .header("x-rights-basis", "own_work")
+        .header("x-forwarded-for", "192.0.2.1")
+        .body(Body::from_stream(tokio_util::io::ReaderStream::new(rx)))
+        .unwrap();
+    let app = h.app.clone();
+    let first = tokio::spawn(async move {
+        use tower::ServiceExt;
+        app.oneshot(stalled).await.unwrap()
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(300)).await;
+    // Its bytes are held: another body that does not fit is refused at once.
+    let busy = h
+        .call(
+            Method::POST,
+            UPLOADS,
+            &[("x-rights-basis", "own_work"), ("x-forwarded-for", "192.0.2.2")],
+            vec![b'y'; 30_000],
+        )
+        .await;
+    assert_eq!(
+        (busy.status, error_code(&busy).as_str()),
+        (StatusCode::SERVICE_UNAVAILABLE, "server_busy")
+    );
+    assert!(busy.has_header("retry-after"));
+    // The stalled body is cut off after the idle time-out, which frees the budget.
+    let first = first.await.unwrap();
+    assert_eq!(first.status(), StatusCode::REQUEST_TIMEOUT);
+    drop(tx);
+    let ok = h
+        .call(
+            Method::POST,
+            UPLOADS,
+            &[("x-rights-basis", "own_work"), ("x-forwarded-for", "192.0.2.3")],
+            epub(),
+        )
+        .await;
+    assert_eq!(ok.status, StatusCode::CREATED, "{}", ok.text());
+}
+
+#[tokio::test]
+async fn anonymous_uploads_have_a_storage_quota_and_a_short_life() {
+    let size = epub().len() as u64;
+    let h = Harness::with(|c| {
+        c.anonymous_storage_quota_bytes = size * 2;
+        c.anonymous_upload_orphan_ttl_secs = 3_600;
+    });
+    let up = |client: &'static str| {
+        let h = &h;
+        async move {
+            h.call(
+                Method::POST,
+                UPLOADS,
+                &[("x-rights-basis", "own_work"), ("x-forwarded-for", client)],
+                epub(),
+            )
+            .await
+        }
+    };
+    let first = up("192.0.2.1").await;
+    assert_eq!(first.status, StatusCode::CREATED);
+    assert_eq!(up("192.0.2.2").await.status, StatusCode::CREATED);
+    let full = up("192.0.2.3").await;
+    assert_eq!(
+        (full.status, error_code(&full).as_str()),
+        (StatusCode::INSUFFICIENT_STORAGE, "storage_quota_exceeded")
+    );
+    // Unattached anonymous uploads are dropped after an hour (partner ones after a day),
+    // which frees the quota.
+    h.clock.advance(3_601);
+    assert_eq!(up("192.0.2.3").await.status, StatusCode::CREATED);
+    let upload_id = first.json()["upload_id"].as_str().unwrap().to_owned();
+    let late = json!({ "book": { "title": "x" }, "delivery": { "type": "hosted_file", "upload_id": upload_id } });
+    let reply = h.call(Method::POST, "/api/v1/gifts", &[], late.to_string()).await;
+    assert_eq!(error_code(&reply), "unknown_upload");
+}
+
+#[tokio::test]
+async fn the_open_creation_api_has_a_global_budget() {
+    let h = Harness::with(|c| {
+        c.rate_create_per_10min = 100;
+        c.rate_create_global_per_10min = 3;
+    });
+    let create = |client: &'static str| {
+        let h = &h;
+        async move { h.call(Method::POST, "/api/v1/gifts", &[("x-forwarded-for", client)], "{}").await }
+    };
+    for client in ["192.0.2.1", "192.0.2.2", "192.0.2.3"] {
+        assert_ne!(create(client).await.status, StatusCode::TOO_MANY_REQUESTS);
+    }
+    let refused = create("198.51.100.1").await;
+    assert_eq!(
+        (refused.status, error_code(&refused).as_str()),
+        (StatusCode::TOO_MANY_REQUESTS, "rate_limited")
+    );
+    h.clock.advance(600);
+    assert_ne!(create("198.51.100.1").await.status, StatusCode::TOO_MANY_REQUESTS);
+}
+
+#[tokio::test]
+async fn expired_gifts_are_anonymised_and_their_files_deleted_after_the_retention_period() {
+    let store = Arc::new(MemoryStore::new());
+    let h = Harness::with_store(store.clone(), |c| c.retention_secs = 30 * 86_400);
+    let book = epub_with(&[("OEBPS/only-this-gift.xhtml", b"<html/>")]);
+    let sha256 = ebc_server::codes::sha256_hex(&book);
+    let upload_id = h.upload(book, "a.epub").await;
+    let body = json!({
+        "book": { "title": "Le Horla" }, "giver_name": "Camille", "recipient_name": "Sacha",
+        "message": "Pour toi", "expires_at": T0 + 3_600,
+        "delivery": { "type": "hosted_file", "upload_id": upload_id },
+    });
+    let created = h.call(Method::POST, "/api/v1/gifts", &[], body.to_string()).await;
+    assert_eq!(created.status, StatusCode::CREATED, "{}", created.text());
+    let (id, code) = (
+        created.json()["id"].as_str().unwrap().to_owned(),
+        created.json()["code"].as_str().unwrap().to_owned(),
+    );
+    let gift = |h: &Harness| h.state.db.view(|db| db.gifts.get(&id).cloned()).unwrap();
+    // Expired, within the retention period: kept as it is.
+    h.clock.advance(3_601);
+    assert_eq!(h.get(&format!("/k/{code}")).await.status, StatusCode::GONE);
+    let _ = h.hosted_gift(json!({})).await;
+    assert_eq!(gift(&h).giver_name.as_deref(), Some("Camille"));
+    assert!(store.open_blob(&sha256).unwrap().is_some());
+    // 30 days after the expiry: anonymised, file and upload record gone, the code still 410.
+    h.clock.advance(30 * 86_400);
+    let _ = h.hosted_gift(json!({})).await;
+    let record = gift(&h);
+    assert!(record.anonymised_at.is_some());
+    assert!(
+        record.giver_name.is_none() && record.recipient_name.is_none() && record.message.is_none()
+    );
+    assert!(store.open_blob(&sha256).unwrap().is_none(), "the file of the expired gift is deleted");
+    assert!(h.state.db.view(|db| !db.uploads.contains_key(&upload_id)));
+    assert_eq!(h.get(&format!("/k/{code}")).await.status, StatusCode::GONE);
 }

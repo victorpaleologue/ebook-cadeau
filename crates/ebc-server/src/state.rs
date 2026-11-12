@@ -138,7 +138,11 @@ impl AppStateBuilder {
 /// Permits of the in-flight body budget: the configured bytes, but never less than the
 /// largest single body the service accepts (so that one such request always fits).
 fn body_budget(config: &Config) -> usize {
-    let largest = config.max_upload_bytes.max(config.max_cover_bytes).max(config.max_card_pdf_bytes);
+    let largest = config
+        .max_upload_bytes
+        .max(config.max_cover_bytes)
+        .max(config.max_card_pdf_bytes)
+        .max(crate::routes::MAX_JSON_BYTES);
     config.max_inflight_body_bytes.max(largest).min(tokio::sync::Semaphore::MAX_PERMITS)
 }
 

@@ -240,7 +240,9 @@ async fn idempotency_keys_replay_the_first_answer_and_refuse_a_different_body() 
     let later = h.partner_signed(Method::POST, path, body, &[], T0 + 101, PARTNER_SECRET).await;
     assert_ne!(later.json()["id"], once.json()["id"]);
 
-    // A failed request is not remembered: it can be retried once the cause is fixed.
+    // A failed request is not remembered under its key: signed anew, it can be retried
+    // once the cause is fixed. Its *signature* is spent, though: the very same request
+    // again (a replay) gets the first answer, whatever headers it adds.
     let retry_key = [("idempotency-key", "retry")];
     let mut bad = gift_body("ORD-D");
     bad["delivery"] = json!({ "type": "hosted_file", "upload_id": "u_missing" });
@@ -249,7 +251,12 @@ async fn idempotency_keys_replay_the_first_answer_and_refuse_a_different_body() 
         (failed.status, error_code(&failed).as_str()),
         (StatusCode::UNPROCESSABLE_ENTITY, "unknown_upload")
     );
+    let replayed = h.partner_json(Method::POST, path, &bad, &[("idempotency-key", "other")]).await;
+    assert_eq!(replayed.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(replayed.header("idempotent-replayed"), "true");
+    h.clock.advance(1);
     let again = h.partner_json(Method::POST, path, &bad, &retry_key).await;
+    assert_eq!(again.status, StatusCode::UNPROCESSABLE_ENTITY);
     assert!(!again.has_header("idempotent-replayed"));
 
     // Neither the database nor the remembered answers hold a clear code.
@@ -647,6 +654,14 @@ async fn uploads_cover_and_card_rendering_through_the_renderer_seam() {
     );
     let junk = h.partner(Method::POST, uploads, &b"MZ\x90\x00 not a book"[..], &basis).await;
     assert_eq!(junk.status, StatusCode::UNSUPPORTED_MEDIA_TYPE);
+    // The first attempt's signature is spent (X-Rights-Basis is not covered by it): the
+    // corrected upload is signed anew, a second later.
+    let replay = h.partner(Method::POST, uploads, epub(), &basis).await;
+    assert_eq!(
+        (replay.status, replay.header("idempotent-replayed")),
+        (StatusCode::BAD_REQUEST, "true")
+    );
+    h.clock.advance(1);
     let ok = h.partner(Method::POST, uploads, epub(), &basis).await;
     assert_eq!(ok.status, StatusCode::CREATED);
     assert_eq!(ok.json()["media_type"], "application/epub+zip");
@@ -963,4 +978,145 @@ async fn card_pdf_answers_501_without_a_renderer() {
     let missing =
         h.partner(Method::GET, "/api/partner/v1/gifts/g_nope/card.pdf", Bytes::new(), &[]).await;
     assert_eq!(missing.status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn failed_authentications_are_budgeted_per_network_before_anything_is_read() {
+    let h = Harness::with(|c| c.rate_partner_fail_per_10min = 3);
+    let ts = T0.to_string();
+    let wrong_mac = format!("v1={}", "ab".repeat(32));
+    let forged = |client: &'static str| {
+        let (ts, wrong_mac) = (ts.clone(), wrong_mac.clone());
+        let h = &h;
+        async move {
+            let headers = [
+                ("x-ebc-partner", PARTNER_ID),
+                ("x-ebc-timestamp", ts.as_str()),
+                ("x-ebc-signature", wrong_mac.as_str()),
+                ("x-rights-basis", "licensed_distributor"),
+                ("x-forwarded-for", client),
+            ];
+            h.call(Method::POST, "/api/partner/v1/uploads", &headers, epub()).await
+        }
+    };
+    // A well-formed but wrong signature: the body is hashed, the MAC compared, 401.
+    for _ in 0..3 {
+        let reply = forged("198.51.100.7").await;
+        assert_eq!(
+            (reply.status, error_code(&reply).as_str()),
+            (StatusCode::UNAUTHORIZED, "bad_signature")
+        );
+    }
+    // The network's budget is spent: 429 before anything is looked at.
+    let blocked = forged("198.51.100.8").await;
+    assert_eq!(
+        (blocked.status, error_code(&blocked).as_str()),
+        (StatusCode::TOO_MANY_REQUESTS, "rate_limited")
+    );
+    assert!(blocked.has_header("retry-after"));
+    // Other networks — the genuine partner — are not affected.
+    assert_eq!(forged("203.0.113.9").await.status, StatusCode::UNAUTHORIZED);
+    let genuine = h
+        .partner(
+            Method::GET,
+            "/api/partner/v1/gifts/g_00000000000000000000000000000000",
+            Bytes::new(),
+            &[],
+        )
+        .await;
+    assert_eq!(genuine.status, StatusCode::NOT_FOUND);
+    // And the window slides.
+    h.clock.advance(600);
+    let later = h
+        .partner_signed(
+            Method::GET,
+            "/api/partner/v1/gifts/g_1",
+            Bytes::new(),
+            &[("x-forwarded-for", "198.51.100.7")],
+            T0 + 600,
+            PARTNER_SECRET,
+        )
+        .await;
+    assert_eq!(later.status, StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
+async fn a_signature_is_a_nonce_for_every_state_changing_request() {
+    let h = redirect_harness();
+    let gift = h.partner_gift(redirect_delivery(), json!({})).await;
+    let id = gift["id"].as_str().unwrap().to_owned();
+    let cancel = format!("/api/partner/v1/gifts/{id}/cancel");
+    let signature = request_signature(PARTNER_SECRET, T0, "POST", &cancel, b"");
+    let ts = T0.to_string();
+    let send = |key: Option<&'static str>, signature: String| {
+        let (ts, cancel) = (ts.clone(), cancel.clone());
+        let h = &h;
+        async move {
+            let mut headers = vec![
+                ("x-ebc-partner", PARTNER_ID),
+                ("x-ebc-timestamp", ts.as_str()),
+                ("x-ebc-signature", signature.as_str()),
+            ];
+            if let Some(key) = key {
+                headers.push(("idempotency-key", key));
+            }
+            h.call(Method::POST, &cancel, &headers, Body::empty()).await
+        }
+    };
+    let first = send(Some("k-1"), signature.clone()).await;
+    assert_eq!(first.status, StatusCode::OK, "{}", first.text());
+    assert!(!first.has_header("idempotent-replayed"));
+    // Whatever unsigned header or hex case the copy carries, it is the same signature.
+    for (key, signature) in [
+        (None, signature.clone()),
+        (Some("k-2"), signature.clone()),
+        (Some("k-1"), format!("v1={}", signature[3..].to_ascii_uppercase())),
+    ] {
+        let replay = send(key, signature).await;
+        assert_eq!(replay.status, StatusCode::OK);
+        assert_eq!(replay.header("idempotent-replayed"), "true");
+        assert_eq!(replay.json(), first.json());
+    }
+    // Nonces are kept only while the timestamp could still pass the window check.
+    let nonces = |h: &Harness| {
+        h.state.db.view(|db| db.idempotency.keys().filter(|k| k.contains("\nsig:")).count())
+    };
+    assert_eq!(nonces(&h), 2, "the creation and the cancellation");
+    h.clock.advance(601);
+    let _ = h.partner_gift(redirect_delivery(), json!({ "order_ref": "ORD-2" })).await;
+    let _ = h.hosted_gift(json!({})).await; // a write that purges
+    assert_eq!(nonces(&h), 1, "only the newest signature is still remembered");
+}
+
+#[tokio::test]
+async fn deliberate_repeats_within_one_second_are_told_apart_by_a_signed_nonce_parameter() {
+    let h = redirect_harness();
+    let gift = h.partner_gift(redirect_delivery(), json!({})).await;
+    let id = gift["id"].as_str().unwrap().to_owned();
+    // Two reissues in the same second: the same signature unless the signed query differs.
+    let first = h
+        .partner(
+            Method::POST,
+            &format!("/api/partner/v1/gifts/{id}/reissue?nonce=1"),
+            Bytes::new(),
+            &[],
+        )
+        .await;
+    let second = h
+        .partner(
+            Method::POST,
+            &format!("/api/partner/v1/gifts/{id}/reissue?nonce=2"),
+            Bytes::new(),
+            &[],
+        )
+        .await;
+    assert_eq!((first.status, second.status), (StatusCode::OK, StatusCode::OK));
+    assert!(!second.has_header("idempotent-replayed"));
+    let (old, new) = (
+        first.json()["code"].as_str().unwrap().to_owned(),
+        second.json()["code"].as_str().unwrap().to_owned(),
+    );
+    assert_ne!(old, new);
+    assert_eq!(h.get(&format!("/k/{old}")).await.status, StatusCode::GONE);
+    assert_eq!(h.get(&format!("/k/{new}")).await.status, StatusCode::OK);
 }

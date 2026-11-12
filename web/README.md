@@ -67,8 +67,10 @@ strings come from the package (`i18n_catalog`).
 | `print_orders` | offer "Order a printed card" (needs a gift created on this server) |
 | `catalog` | passed to `catalog_lookup_requests`: `base_urls` `{provider: url}`, `enable`, `disable`, `contact_email` |
 
-A query parameter `?catalog.<provider>=<url>` overrides one provider's base URL (tests
-against a fixture server, a relay of the deployment).
+Catalogue base URLs are taken from `config.json` only: a relay of the deployment or a
+fixture server in tests is configured there. (Query parameters are deliberately not
+honoured: a crafted link could otherwise send the look-ups, and what they return onto the
+card, to any host.)
 
 ## Files
 

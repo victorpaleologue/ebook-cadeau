@@ -44,7 +44,7 @@ weight < 30 kB excluding the optional cover thumbnail).
 | `GET /d/{session}/{file-name}` | The file. `Content-Type` per format (`application/epub+zip`), `Content-Disposition: attachment` with ASCII fallback + `filename*`, `Content-Length`, `Accept-Ranges`. `HEAD` supported | — |
 | `POST /k/{code}/pair` | From a phone: creates a pair code and shows it with the e-reader instructions and its expiry time | `pair-code`, `pair-url`, `pair-expires` |
 | `GET /e` | On the e-reader: form asking for the pair code | `pair-form`, `pair-input` (name `p`), `pair-submit` |
-| `POST /e` | Validates the pair code and 303-redirects to `/d/{session}/{file-name}`. Wrong codes count against a per-client **and a global** failure budget (`429` + `Retry-After`) | — |
+| `POST /e` | Validates the pair code and 303-redirects to `/d/{session}/{file-name}`. Wrong codes count against a per-client **and a global** failure budget (`429` + `Retry-After`); while the global budget is spent no pair code is looked up (`429` for everybody) | — |
 | `POST /k/{code}/send` | Sends the file to a device address (`device_email`), e.g. Send-to-Kindle; allowed domains are configured | form id `send-form`, input id `device-email`, result id `send-result` |
 | `POST /k/{code}/redeem` | `reseller_redirect`: 303 to the partner URL with signed parameters (§4.3). `reseller_licence`: 303 to a download session serving the licence file | button id `redeem` |
 | `GET /o/{session}/catalog.xml` | OPDS 1.2 acquisition feed containing the one publication | — |
@@ -139,8 +139,32 @@ Idempotency-Key: <opaque, optional but recommended on POST>
 ```
 
 Requests older or newer than 300 s are rejected (`401 stale_timestamp`); a wrong signature
-is `401 bad_signature`. Replaying an `Idempotency-Key` with the same body returns the
-original response; with a different body, `409 idempotency_conflict`.
+is `401 bad_signature`. The signature must be `v1=` followed by exactly 64 hexadecimal
+digits: anything else, an unknown partner or a stale timestamp is refused **before the
+body is read**. Failed authentications are counted per client network: beyond
+`EBC_RATE_PARTNER_FAIL_PER_10MIN` (default 30 per 10 minutes) the API answers `429` with
+`Retry-After` without looking at the request. Request bodies are hashed as they arrive and
+count against a server-wide in-flight budget (`503 server_busy` + `Retry-After` when it is
+spent).
+
+**Each signature is single-use (nonce).** The server keeps every verified signature of a
+`POST` or `PUT` — as the decoded MAC, so the case of the hex digits does not matter — until
+its timestamp has left the 300 s window. The same signature again (an exact retry, or a
+replay by whoever captured the request) is answered with the response the first request
+got, success or error, with the header `Idempotent-Replayed: true`, and never acts twice;
+headers outside the signature (`Idempotency-Key`, `X-Rights-Basis`, `X-File-Name`) change
+nothing. Consequences for partners:
+
+- to retry a request **after a failure**, or after correcting an unsigned header, sign it
+  again with a new timestamp (the next second);
+- two *deliberately* identical requests within one second (e.g. two reissues of the same
+  gift) carry the same signature and count as one: wait a second, or add a signed query
+  parameter `nonce=<anything>` (the server ignores it; it only makes the signatures differ);
+- `GET` requests only read and may be repeated.
+
+`Idempotency-Key` is an additional key for retries signed anew: the same key with the same
+body returns the original *successful* response (failed requests are not remembered under
+the key); with a different body, `409 idempotency_conflict`. Keys are remembered 24 h.
 
 ### 4.2 Gifts
 
@@ -215,6 +239,16 @@ Deliveries are retried with backoff; receivers must be idempotent.
 | `EBC_SEND_DOMAINS` | `kindle.com,pbsync.com` | allowed device e-mail domains |
 | `EBC_PRINTER_URL` | — | print provider base URL |
 | `EBC_RATE_UNKNOWN_PER_10MIN` | `10` | unknown-code attempts per client before `429` |
-| `EBC_RATE_UNKNOWN_GLOBAL_PER_10MIN` | `500` | unknown gift or pair codes from all clients together before every further wrong guess gets `429` (codes are bearer secrets not tied to an account, so a guess is a guess against all live codes) |
+| `EBC_RATE_UNKNOWN_GLOBAL_PER_10MIN` | `500` | unknown gift or pair codes from all clients together before every further wrong guess gets `429` (codes are bearer secrets not tied to an account, so a guess is a guess against all live codes). While it is spent, **pair codes are not looked up at all** (`429` for everybody); gift codes stay budgeted per client network |
+| `EBC_RATE_CREATE_PER_10MIN` / `EBC_RATE_CREATE_GLOBAL_PER_10MIN` | `120` / `2000` | uploads + gift creations on the open creator API, per client network / from all clients together (0 = off) |
+| `EBC_RATE_PARTNER_FAIL_PER_10MIN` | `30` | failed partner authentications per client network before `/api/partner/*` answers `429` (0 = off) |
+| `EBC_ANON_STORAGE_QUOTA_MB` | `10240` | bytes all creator-API uploads may occupy together; beyond, `507 storage_quota_exceeded` (0 = no quota) |
+| `EBC_ANON_UPLOAD_TTL_MIN` | `60` | a creator-API upload not attached to a gift is deleted after this (partner uploads: 24 h) |
+| `EBC_RETENTION_DAYS` | `30` | a cancelled gift loses names and message at once; a cancelled or expired gift is anonymised (names, message, files, upload record removed; id, status, dates and the code hash kept so the code still answers `410`) this many days after cancellation or expiry |
+| `EBC_MAX_INFLIGHT_BODY_MB` | `256` | request-body bytes held by all requests together (never less than one largest body, 64 MiB); beyond, `503 server_busy` |
+| `EBC_HEADER_TIMEOUT_SECS` | `30` | time to send the request line and headers (also closes idle keep-alive connections) |
+| `EBC_REQUEST_TIMEOUT_SECS` | `300` | time until the response starts, body upload included (`408`) |
+| `EBC_BODY_IDLE_TIMEOUT_SECS` | `30` | longest pause inside a request body (`408`) |
+| `EBC_MAX_CONNECTIONS` | `1024` | connections served at once; more wait in the listen backlog |
 | `EBC_WEB_DIR` | — | directory of the static web app, served at `/app/` (`.wasm` as `application/wasm`) |
 | `EBC_TRUST_PROXY` | `0` | honour `X-Forwarded-For` for client identification (only behind a trusted reverse proxy) |

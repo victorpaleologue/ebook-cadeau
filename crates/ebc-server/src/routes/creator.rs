@@ -46,7 +46,8 @@ pub(crate) fn upload_receipt(upload: &crate::store::UploadRecord) -> serde_json:
     })
 }
 
-/// Counts one request against the client's creation budget.
+/// Counts one request against the client's and the global creation budgets
+/// (`EBC_RATE_CREATE_PER_10MIN`, `EBC_RATE_CREATE_GLOBAL_PER_10MIN`).
 fn throttle(state: &AppState, visitor: &Visitor) -> Result<(), ApiError> {
     let now = state.now();
     if let Verdict::Blocked { retry_after_secs, .. } =
@@ -54,6 +55,12 @@ fn throttle(state: &AppState, visitor: &Visitor) -> Result<(), ApiError> {
     {
         return Err(ApiError::too_many(
             "too many uploads or gifts from this client",
+            retry_after_secs,
+        ));
+    }
+    if let Some(retry_after_secs) = state.create_limiter.global_exhausted(now) {
+        return Err(ApiError::too_many(
+            "too many uploads or gifts right now; try again later",
             retry_after_secs,
         ));
     }
@@ -92,9 +99,9 @@ pub(crate) async fn upload(
     let (parts, body) = request.into_parts();
     let basis = rights_basis(&parts.headers)?;
     throttle(&state, &visitor)?;
-    let bytes = read_body(&parts.headers, body, state.config.max_upload_bytes).await?;
-    let record =
-        state.store_upload(bytes, header_text(&parts.headers, "x-file-name"), basis, None).await?;
+    let body = read_body(&state, &parts.headers, body, state.config.max_upload_bytes).await?;
+    let file_name = header_text(&parts.headers, "x-file-name");
+    let record = state.store_upload(body.bytes.clone(), file_name, basis, None).await?;
     Ok(json(StatusCode::CREATED, &upload_receipt(&record)))
 }
 
@@ -106,8 +113,8 @@ pub(crate) async fn create(
 ) -> Result<Response, ApiError> {
     let (parts, body) = request.into_parts();
     throttle(&state, &visitor)?;
-    let body = read_body(&parts.headers, body, MAX_JSON_BYTES).await?;
-    let request = GiftRequest::parse(&body)?;
+    let body = read_body(&state, &parts.headers, body, MAX_JSON_BYTES).await?;
+    let request = GiftRequest::parse(&body.bytes)?;
     let created = state.create_gift(request, None)?;
     let mut members = code_members(&state, &created.code);
     members.insert("id".to_owned(), created.record.id.clone().into());
@@ -159,7 +166,8 @@ pub(crate) async fn put_card_pdf(
     if gift.status_at(state.now()).is_gone() {
         return Err(ApiError::conflict("gift_gone", "the gift is cancelled or expired"));
     }
-    let bytes = read_body(&parts.headers, body, state.config.max_card_pdf_bytes).await?;
+    let body = read_body(&state, &parts.headers, body, state.config.max_card_pdf_bytes).await?;
+    let bytes = body.bytes.clone();
     if !bytes.starts_with(b"%PDF-") {
         return Err(ApiError::new(
             StatusCode::UNSUPPORTED_MEDIA_TYPE,
@@ -168,7 +176,7 @@ pub(crate) async fn put_card_pdf(
         ));
     }
     let blob = BlobRef {
-        sha256: codes::sha256_hex(&bytes),
+        sha256: body.sha256_hex(),
         size_bytes: bytes.len() as u64,
         media_type: "application/pdf".to_owned(),
     };
@@ -196,8 +204,8 @@ pub(crate) async fn print_order(
 ) -> Result<Response, ApiError> {
     let (parts, body) = request.into_parts();
     let gift = authorise(&state, &parts.headers, &id)?;
-    let body = read_body(&parts.headers, body, MAX_JSON_BYTES).await?;
-    let order: PrintOrderRequest = parse_json(&body)?;
+    let body = read_body(&state, &parts.headers, body, MAX_JSON_BYTES).await?;
+    let order: PrintOrderRequest = parse_json(&body.bytes)?;
     let product_ok = (1..=64).contains(&order.product.len())
         && order
             .product

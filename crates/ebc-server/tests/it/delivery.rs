@@ -262,6 +262,17 @@ async fn send_to_device_is_off_without_smtp_and_fails_cleanly_when_the_server_is
     assert_page(&failed, StatusCode::BAD_GATEWAY, "fr", &["send-result"]);
     assert!(failed.text_of("send-result").contains("échoué"));
     assert!(h.get(&format!("/k/{code}")).await.text_of("claim-count").contains("pas encore"));
+    // Failed sendings hand their reservation back: they do not use up the daily limit.
+    for _ in 0..3 {
+        let again =
+            h.post_form(&format!("/k/{code}/send"), &[("device_email", "a@kindle.com")]).await;
+        assert_eq!(again.status, StatusCode::BAD_GATEWAY);
+    }
+    let counted = h
+        .state
+        .db
+        .view(|db| db.gifts.values().map(|g| (g.claims, g.sends.len())).collect::<Vec<_>>());
+    assert_eq!(counted, [(0, 0)]);
 }
 
 #[tokio::test]

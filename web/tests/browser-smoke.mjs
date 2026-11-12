@@ -42,7 +42,8 @@ const CSP = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src
   "base-uri 'self'; frame-ancestors 'none'";
 
 // Recorded Open Library answers (crates/ebc-catalog/tests/fixtures), served under
-// /fixture/ol/ so that the lookup can be pointed here with ?catalog.openlibrary=….
+// /fixture/ol/. The page under /lookup/ gets a config.json pointing the lookup here
+// (base URLs come from config.json only, never from the query string).
 const OPEN_LIBRARY = join(web, '..', 'crates', 'ebc-catalog', 'tests', 'fixtures', 'openlibrary');
 function fixture(path) {
   const rest = path.slice('/fixture/ol/'.length);
@@ -52,7 +53,14 @@ function fixture(path) {
 }
 
 const server = createServer((request, response) => {
-  const path = decodeURIComponent(new URL(request.url, 'http://127.0.0.1').pathname);
+  let path = decodeURIComponent(new URL(request.url, 'http://127.0.0.1').pathname);
+  if (path === '/lookup/config.json') {
+    const here = `http://${request.headers.host}`;
+    response.writeHead(200, { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' })
+      .end(JSON.stringify({ catalog: { base_urls: { openlibrary: `${here}/fixture/ol` } } }));
+    return;
+  }
+  if (path.startsWith('/lookup/')) path = path.slice('/lookup'.length);
   if (path.startsWith('/fixture/ol/')) {
     const file = fixture(path);
     try {
@@ -90,7 +98,7 @@ const check = (condition, message) => {
 };
 
 /** Opens the app in a fresh context and reports console errors and foreign requests. */
-async function open(browser, contextOptions, query = '') {
+async function open(browser, contextOptions, query = '', base = '') {
   const context = await browser.newContext({ deviceScaleFactor: 1, acceptDownloads: true, ...contextOptions });
   const page = await context.newPage();
   const problems = [];
@@ -104,7 +112,7 @@ async function open(browser, contextOptions, query = '') {
     problems.push(`external request: ${url}`);
     return route.abort();
   });
-  await page.goto(`${origin}/index.html${query}`);
+  await page.goto(`${origin}${base}/index.html${query}`);
   await page.waitForSelector('#main:not([hidden])', { timeout: 60_000 });
   return { context, page, problems };
 }
@@ -214,8 +222,9 @@ try {
   await desktop.context.close();
 
   // ---- ISBN lookup against recorded catalogue answers --------------------------------
+  // A query override is ignored: the lookup must not go to the host it names.
   const lookup = await open(browser, { viewport: { width: 1280, height: 900 } },
-    `?catalog.openlibrary=${encodeURIComponent(`${origin}/fixture/ol`)}`);
+    `?catalog.openlibrary=${encodeURIComponent('https://attacker.invalid/ol')}`, '/lookup');
   await lookup.page.fill('#isbn', '978-2-07-036002-4');
   await lookup.page.click('#lookup');
   await lookup.page.waitForSelector('#isbn-status.is-ok, #isbn-status.is-error', { timeout: 30_000 });

@@ -3,6 +3,9 @@
 
 use std::convert::Infallible;
 use std::net::{IpAddr, SocketAddr};
+use std::pin::Pin;
+use std::sync::Arc;
+use std::time::Duration;
 
 use axum::Router;
 use axum::body::{Body, Bytes};
@@ -85,8 +88,17 @@ pub fn app(state: AppState) -> Router {
     if let Some(dir) = &state.config.web_dir {
         router = router.nest_service("/app", tower_http::services::ServeDir::new(dir));
     }
+    let request_timeout = Duration::from_secs(state.config.request_timeout_secs.max(1));
+    let body_idle_timeout = Duration::from_secs(state.config.body_idle_timeout_secs.max(1));
     router
         .fallback(fallback)
+        // A request body that stalls, or a request that takes too long as a whole (body
+        // upload included), is cut off: slow clients cannot hold a task for ever.
+        .layer(tower_http::timeout::RequestBodyTimeoutLayer::new(body_idle_timeout))
+        .layer(tower_http::timeout::TimeoutLayer::with_status_code(
+            StatusCode::REQUEST_TIMEOUT,
+            request_timeout,
+        ))
         .layer(axum::middleware::from_fn(security_headers))
         .layer(tower_http::trace::TraceLayer::new_for_http().make_span_with(
             |request: &axum::http::Request<Body>| {
@@ -300,18 +312,54 @@ pub(crate) fn json(status: StatusCode, value: &serde_json::Value) -> Response {
     response
 }
 
-/// Reads a request body of at most `limit` bytes (`413 payload_too_large` beyond).
+/// A request body read into memory.
+pub(crate) struct ReadBody {
+    /// The bytes.
+    pub(crate) bytes: Bytes,
+    /// Their SHA-256, computed while they arrived.
+    pub(crate) sha256: [u8; 32],
+    /// The share of the in-flight body budget the bytes hold until this is dropped.
+    _budget: Option<tokio::sync::OwnedSemaphorePermit>,
+}
+
+impl ReadBody {
+    /// The SHA-256 as lower-case hexadecimal.
+    pub(crate) fn sha256_hex(&self) -> String {
+        crate::codes::hex(&self.sha256)
+    }
+}
+
+/// Reads a request body of at most `limit` bytes (`413 payload_too_large` beyond),
+/// hashing it on the way.
+///
+/// Every byte held counts against the in-flight body budget shared by all requests
+/// (`EBC_MAX_INFLIGHT_BODY_MB`): when it is spent the request is answered `503
+/// server_busy` at once instead of being buffered. A body that stalls longer than
+/// `EBC_BODY_IDLE_TIMEOUT_SECS` is answered `408`.
 pub(crate) async fn read_body(
+    state: &AppState,
     headers: &HeaderMap,
-    body: Body,
+    mut body: Body,
     limit: usize,
-) -> Result<Bytes, ApiError> {
+) -> Result<ReadBody, ApiError> {
+    use axum::body::HttpBody as _;
+    use sha2::Digest as _;
+
     let too_large = || {
         ApiError::new(
             StatusCode::PAYLOAD_TOO_LARGE,
             "payload_too_large",
             format!("the body may not exceed {limit} bytes"),
         )
+    };
+    let busy = || {
+        let mut error = ApiError::new(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "server_busy",
+            "too many request bodies are being received; try again shortly",
+        );
+        error.retry_after = Some(5);
+        error
     };
     let declared = headers
         .get(header::CONTENT_LENGTH)
@@ -320,7 +368,50 @@ pub(crate) async fn read_body(
     if declared.is_some_and(|length| length > limit as u64) {
         return Err(too_large());
     }
-    axum::body::to_bytes(body, limit).await.map_err(|_| too_large())
+    let mut budget: Option<tokio::sync::OwnedSemaphorePermit> = None;
+    let mut reserved = 0usize;
+    let mut reserve = |total: usize| -> Result<(), ApiError> {
+        let Some(needed) = total.checked_sub(reserved).filter(|n| *n > 0) else {
+            return Ok(());
+        };
+        let permits = u32::try_from(needed).map_err(|_| too_large())?;
+        let permit =
+            Arc::clone(&state.body_budget).try_acquire_many_owned(permits).map_err(|_| busy())?;
+        match &mut budget {
+            Some(held) => held.merge(permit),
+            None => budget = Some(permit),
+        }
+        reserved = total;
+        Ok(())
+    };
+    // Room for the announced length is taken before anything is read.
+    let announced = declared.and_then(|n| usize::try_from(n).ok()).unwrap_or(0);
+    reserve(announced)?;
+    let mut buffer = Vec::with_capacity(announced);
+    let mut hasher = sha2::Sha256::new();
+    while let Some(frame) = std::future::poll_fn(|cx| Pin::new(&mut body).poll_frame(cx)).await {
+        let frame = frame.map_err(|error| {
+            let timed_out = error.into_inner().is::<tower_http::timeout::TimeoutError>();
+            if timed_out {
+                ApiError::new(
+                    StatusCode::REQUEST_TIMEOUT,
+                    "request_timeout",
+                    "the request body stalled",
+                )
+            } else {
+                ApiError::bad_request("body_unreadable", "the request body could not be read")
+            }
+        })?;
+        let Ok(data) = frame.into_data() else { continue };
+        let total = buffer.len().saturating_add(data.len());
+        if total > limit {
+            return Err(too_large());
+        }
+        reserve(total)?;
+        hasher.update(&data);
+        buffer.extend_from_slice(&data);
+    }
+    Ok(ReadBody { bytes: Bytes::from(buffer), sha256: hasher.finalize().into(), _budget: budget })
 }
 
 /// Parses a JSON body: `400 invalid_json` for text that is not JSON, `422

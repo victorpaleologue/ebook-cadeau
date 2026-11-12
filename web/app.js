@@ -128,12 +128,10 @@ async function loadConfig() {
   } catch {
     // no config file (or file://): the defaults below apply
   }
-  const params = new URLSearchParams(location.search);
+  // Catalogue base URLs come from config.json only (same origin, written by whoever
+  // deploys the page). A query parameter used to override them, which let any crafted
+  // link send the ISBN look-ups — and put what they return on the card — to any host.
   const catalog = { base_urls: {}, enable: [], disable: [], ...(loaded.catalog || {}) };
-  for (const [key, value] of params) {
-    // ?catalog.<provider>=<base URL>: point a provider elsewhere (tests, a relay).
-    if (key.startsWith('catalog.') && /^https?:\/\//.test(value)) catalog.base_urls[key.slice(8)] = value;
-  }
   return { ...loaded, catalog };
 }
 

@@ -169,6 +169,34 @@ pub fn request_signature(
     format!("v1={}", hex(&hmac_sha256(secret.as_bytes(), message.as_bytes())))
 }
 
+/// The MAC carried by an `X-EBC-Signature` header value (`v1=<64 hex digits>`, either
+/// case), decoded: its canonical form. `None` for anything else, so that a request whose
+/// signature cannot possibly be right is refused before its body is read.
+///
+/// Replay protection keys on these bytes, never on the header text: `v1=AB…` and
+/// `v1=ab…` are the same signature.
+#[must_use]
+pub fn parse_request_signature(header_value: &str) -> Option<[u8; 32]> {
+    let bytes = header_value.trim().strip_prefix("v1=").and_then(unhex)?;
+    <[u8; 32]>::try_from(bytes.as_slice()).ok()
+}
+
+/// Verifies a decoded request MAC (see [`parse_request_signature`]) in constant time,
+/// given the hexadecimal SHA-256 of the body (computed while the body was read).
+#[must_use]
+pub fn verify_request_mac(
+    secret: &str,
+    timestamp: i64,
+    method: &str,
+    path_and_query: &str,
+    body_sha256_hex: &str,
+    mac: &[u8; 32],
+) -> bool {
+    let message =
+        format!("{timestamp}.{}.{path_and_query}.{body_sha256_hex}", method.to_ascii_uppercase());
+    ct_eq(&hmac_sha256(secret.as_bytes(), message.as_bytes()), mac)
+}
+
 /// Verifies an `X-EBC-Signature` header value in constant time.
 #[must_use]
 pub fn verify_request_signature(
@@ -179,11 +207,10 @@ pub fn verify_request_signature(
     body: &[u8],
     header_value: &str,
 ) -> bool {
-    let Some(provided) = header_value.trim().strip_prefix("v1=").and_then(unhex) else {
+    let Some(provided) = parse_request_signature(header_value) else {
         return false;
     };
-    let message = request_signing_string(timestamp, method, path_and_query, body);
-    ct_eq(&hmac_sha256(secret.as_bytes(), message.as_bytes()), &provided)
+    verify_request_mac(secret, timestamp, method, path_and_query, &sha256_hex(body), &provided)
 }
 
 /// The `ebc_sig` parameter of a redemption redirect (§4.3): hex HMAC-SHA-256 of
@@ -357,6 +384,34 @@ mod tests {
                 "{malformed:?}"
             );
         }
+    }
+
+    #[test]
+    fn request_macs_have_one_canonical_form() {
+        let header = request_signature("s3cret", 1_800_000_000, "POST", "/x", b"");
+        let lower = parse_request_signature(&header).unwrap();
+        let upper = parse_request_signature(&format!("v1={}", header[3..].to_uppercase()));
+        assert_eq!(Some(lower), upper);
+        assert_eq!(parse_request_signature(&format!(" {header} ")), Some(lower));
+        for bad in ["v1=00", "v1=", "", "v2=00", &header[3..], &format!("{header}00")] {
+            assert_eq!(parse_request_signature(bad), None, "{bad:?}");
+        }
+        assert!(verify_request_mac(
+            "s3cret",
+            1_800_000_000,
+            "POST",
+            "/x",
+            &sha256_hex(b""),
+            &lower
+        ));
+        assert!(!verify_request_mac(
+            "s3cret",
+            1_800_000_000,
+            "POST",
+            "/y",
+            &sha256_hex(b""),
+            &lower
+        ));
     }
 
     #[test]

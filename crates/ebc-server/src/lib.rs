@@ -25,7 +25,7 @@
 //!   `ebc-card` with the cargo feature `card` (default); `501` without it.
 //! * [`clock`] — injected time and randomness.
 //! * [`names`] — download file names and `Content-Disposition`.
-//! * [`app`] — the router.
+//! * [`app`] — the router; [`serve`] — serving it with time-outs and a connection cap.
 //!
 //! # Security model in one paragraph
 //!
@@ -50,6 +50,7 @@ pub mod names;
 mod pages;
 pub mod rate;
 mod routes;
+mod serve;
 mod service;
 mod state;
 pub mod store;
@@ -68,5 +69,6 @@ pub use config::{Config, Partner, PartnersFile, WebhookPolicy};
 pub use device::DeviceClass;
 pub use error::{ApiError, ServerError};
 pub use routes::app;
+pub use serve::serve;
 pub use state::{AppState, AppStateBuilder, Inner};
 pub use store::{Database, FileStore, MemoryStore, Store, StoreError};

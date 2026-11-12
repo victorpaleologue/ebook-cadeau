@@ -9,6 +9,8 @@ It is a library plus a thin binary. Tests and demos mount it in-process:
 ```rust
 let state = ebc_server::AppState::for_tests();   // in memory, public dev secret
 let router: axum::Router = ebc_server::app(state);
+// Or serve it as the binary does, with time-outs and a connection cap:
+// ebc_server::serve(listener, state, shutdown_future).await?;
 ```
 
 ## Run it
@@ -49,11 +51,37 @@ curl -s -X POST http://127.0.0.1:8080/api/v1/gifts -H 'Content-Type: application
 | `EBC_RATE_UNKNOWN_PER_10MIN` | `10` | Unknown gift or pair codes per client before `429` (0 = off) |
 | `EBC_RATE_UNKNOWN_GLOBAL_PER_10MIN` | `500` | Unknown codes from all clients together before every further wrong guess gets `429` (0 = off) |
 | `EBC_RATE_CREATE_PER_10MIN` | `120` | *Addition to the contract.* Uploads + gift creations per client on the open creator API (0 = off) |
+| `EBC_RATE_CREATE_GLOBAL_PER_10MIN` | `2000` | The same from all clients together; beyond, every creation gets `429` (0 = off) |
+| `EBC_RATE_PARTNER_FAIL_PER_10MIN` | `30` | Failed partner authentications (bad or stale signature, unknown partner) per client network; beyond, `/api/partner/*` answers `429` before reading anything (0 = off) |
+| `EBC_ANON_STORAGE_QUOTA_MB` | `10240` | Bytes all anonymous (creator API) uploads may occupy together, attached or not; beyond, `507 storage_quota_exceeded` (0 = no quota) |
+| `EBC_ANON_UPLOAD_TTL_MIN` | `60` | An anonymous upload not attached to a gift is deleted after this many minutes (partner uploads: 24 h) |
+| `EBC_RETENTION_DAYS` | `30` | Retention of cancelled and expired gifts, see below |
+| `EBC_MAX_INFLIGHT_BODY_MB` | `256` | Request-body bytes held in memory by all requests together (at least one largest body, 64 MiB); beyond, `503 server_busy` + `Retry-After` |
+| `EBC_HEADER_TIMEOUT_SECS` | `30` | Time a client has to send the request line and headers; also closes idle keep-alive connections |
+| `EBC_REQUEST_TIMEOUT_SECS` | `300` | Time a request may take until its response starts, body upload included (`408`) |
+| `EBC_BODY_IDLE_TIMEOUT_SECS` | `30` | Longest pause between two pieces of a request body (`408`) |
+| `EBC_MAX_CONNECTIONS` | `1024` | Connections served at once; further ones wait in the listen backlog |
 | `EBC_WEB_DIR` | — | Directory of the static web app, served at `/app/` |
 | `EBC_TRUST_PROXY` | `0` | `1`: identify clients by the **last** `X-Forwarded-For` entry (the one your reverse proxy appends). Only behind a proxy you control |
 
 Outbound HTTP (webhooks, licences, print provider) honours the usual `HTTPS_PROXY` /
 `NO_PROXY` variables and never follows redirects.
+
+### Retention of personal data
+
+A gift holds the giver's and recipient's names and the message. They are kept while the
+gift can be claimed (by default a gift never expires: the card stays usable). Then:
+
+- **cancelled** (giver `DELETE`, partner `cancel`): names and message are blanked at once,
+  the hosted file, cover and card PDF deleted;
+- **cancelled or expired, `EBC_RETENTION_DAYS` (30) days later**: the record is anonymised —
+  names, message, the times of sendings, files and the upload record are removed; the id,
+  status, dates, order reference and the code hash stay, so that the printed code keeps
+  answering `410` (not `404`, which would count as a guess) and the partner can still read
+  the status.
+
+The purge runs with the next write (an upload, a claim). Device e-mail addresses are never
+stored; partners' `account_ref` only as a hash.
 
 ### Partners file (development example)
 
@@ -136,6 +164,26 @@ the reduced-size layout of home-printed cards.
 - Unknown codes are budgeted per client network (IPv4 /24, IPv6 /56) and globally; typos
   (wrong check letter, wrong length, digits) are answered `400` without a look-up and
   never counted. Rate-limit state is in memory: a restart forgets it.
+- **When the global budget is spent** (500 unknown codes in 10 minutes from everywhere)
+  every further wrong guess gets `429`, and the two kinds of code are treated differently:
+  - *pair codes* are not looked up at all, for anybody: they are 6 letters (20⁶ ≈ 2²⁶),
+    an attacker who controls many networks (one IPv6 /48 is 256 /56 "clients") could
+    otherwise search that space with one free guess per fresh network. Refusing costs
+    little: a pair code lives 15 minutes and the e-reader can take the gift code instead;
+  - *gift codes* stay budgeted per network: a network that has not failed yet is still
+    looked up. They have 47.5 bits, so even a fresh guess from each of 2²⁴ networks
+    finds a live code with negligible probability, whereas refusing them all would let
+    anybody lock every recipient out of their gift with 500 requests. This is the
+    deliberate trade-off between guessing resistance and denial of service.
+- Partner requests: the signature format is checked, and the partner and timestamp looked
+  up, before the body is read; the body is hashed as it streams in, under a server-wide
+  in-flight budget (`EBC_MAX_INFLIGHT_BODY_MB`), and failed authentications are budgeted
+  per network. Every verified `POST`/`PUT` signature is a single-use nonce for its 300 s
+  window (keyed on the decoded MAC): replays, with whatever unsigned headers, get the
+  first answer and never act twice (`docs/api.md` §4.1).
+- Send-to-device: the sending is counted (and the daily limit of three checked) in one
+  transaction before the mail is sent, and handed back if the mail cannot be delivered,
+  so concurrent requests cannot exceed the limit.
 - Request logs never contain a code or a token (paths are redacted before logging).
 - `reseller_redirect` / `reseller_licence` targets come from the stored gift and are
   checked against the partner's `redirect_hosts` at creation **and** at redemption.
@@ -143,8 +191,12 @@ the reduced-size layout of home-printed cards.
   gift and day, and the address is neither stored nor logged.
 - Uploads are sniffed (never trusted from headers), EPUBs with DRM are refused, at most
   1 MiB of archive metadata is read and nothing is decompressed.
-- Terminate TLS and set request time-outs in a reverse proxy; the binary speaks plain
-  HTTP/1.1.
+- The binary (`ebc_server::serve`) applies header, request and body time-outs and a
+  connection cap (see the configuration). It speaks plain HTTP/1.1: terminate TLS in a
+  reverse proxy, which should also bound slow *readers* of responses (hyper has no write
+  time-out).
+- Errors of outbound requests are logged without their URL (licence URLs carry a valid
+  store signature).
 
 ## Known limits
 
@@ -154,7 +206,11 @@ the reduced-size layout of home-printed cards.
 - Cards are composed with the composer's bundled fonts and FOGRA39 output intent; a
   partner cannot choose the printing condition, the spine style or the ground colour yet.
 - Storage is one JSON snapshot rewritten on every change, with a single writer process.
-- Uploads (≤ 50 MB) are buffered in memory while they are checked.
+- Uploads (≤ 50 MB) are buffered in memory while they are checked; all request bodies
+  together are bounded by `EBC_MAX_INFLIGHT_BODY_MB`. A partner who knows a partner id can
+  still make the server hash (not keep) a body up to the size limit with a well-formed
+  but wrong signature, a few times per network and 10 minutes: the MAC covers the body,
+  so it cannot be checked earlier.
 - Page strings specific to the server (`src/text.rs`) are not reviewed by native speakers.
 - The gift page shows no cover thumbnail (the server has no image scaler).
 

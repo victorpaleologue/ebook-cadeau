@@ -747,10 +747,7 @@ mod tests {
         assert_eq!(config.anonymous_upload_orphan_ttl_secs, 900);
         assert_eq!(config.anonymous_storage_quota_bytes, 100 * 1024 * 1024);
         assert_eq!(config.max_inflight_body_bytes, 64 * 1024 * 1024);
-        assert_eq!(
-            (config.header_read_timeout_secs, config.request_timeout_secs),
-            (10, 60)
-        );
+        assert_eq!((config.header_read_timeout_secs, config.request_timeout_secs), (10, 60));
         assert_eq!((config.body_idle_timeout_secs, config.max_connections), (5, 64));
         assert_eq!(
             (config.rate_create_global_per_10min, config.rate_partner_fail_per_10min),

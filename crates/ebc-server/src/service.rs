@@ -284,7 +284,12 @@ impl AppState {
             )
         };
         if self.db.view(over_quota) {
-            return Err(storage_full());
+            // Maybe only stale records hold the space: purge them, then decide.
+            let stale = self.db.update(|db| db.purge(self.now(), &self.config.purge_policy()))?;
+            self.db.delete_unused_blobs(&stale);
+            if self.db.view(over_quota) {
+                return Err(storage_full());
+            }
         }
         self.put_blob(&sha256, bytes.clone()).await?;
         let record = UploadRecord {

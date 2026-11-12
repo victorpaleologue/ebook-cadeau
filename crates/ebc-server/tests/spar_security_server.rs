@@ -12,7 +12,7 @@ use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 
-use axum::body::{Body, Bytes};
+use axum::body::Body;
 use axum::http::{Method, Request, StatusCode};
 use common::{Harness, PARTNER_ID, PARTNER_SECRET, SmtpSink, T0, partner};
 use serde_json::json;
@@ -63,7 +63,8 @@ async fn spar_captured_reissue_cannot_be_replayed_with_another_idempotency_key()
     assert_eq!(replay.json()["code"].as_str().unwrap(), issued);
 
     // Same captured signature, plus an Idempotency-Key header (not covered by the MAC).
-    let with_key = h.send(send(vec![("idempotency-key", "attacker-1".to_owned())], sig.clone())).await;
+    let with_key =
+        h.send(send(vec![("idempotency-key", "attacker-1".to_owned())], sig.clone())).await;
     // Same captured signature, hex upper-cased (unhex accepts both cases).
     let upper = format!("v1={}", sig.trim_start_matches("v1=").to_ascii_uppercase());
     let upper_case = h.send(send(vec![], upper)).await;
@@ -124,7 +125,9 @@ async fn spar_concurrent_sends_respect_the_daily_limit() {
     }
     let mails = sink.messages().len();
     let claims = h.state.db.view(|db| db.gifts.values().next().map(|g| (g.claims, g.sends.len())));
-    eprintln!("200 answers: {ok}; mails accepted by SMTP: {mails}; (claims, sends) stored: {claims:?}");
+    eprintln!(
+        "200 answers: {ok}; mails accepted by SMTP: {mails}; (claims, sends) stored: {claims:?}"
+    );
     assert!(mails <= 3, "{mails} e-mails sent although MAX_SENDS_PER_DAY is 3");
 }
 
@@ -175,7 +178,8 @@ async fn spar_licence_fetch_failure_does_not_log_the_signed_url() {
     let reply = h.post_form(&format!("/k/{code}/redeem"), &[]).await;
     assert_eq!(reply.status, StatusCode::BAD_GATEWAY);
     let text = String::from_utf8(logs.0.lock().unwrap().clone()).unwrap();
-    let signature = ebc_server::codes::redirect_signature(PARTNER_SECRET, &id, "ORD-2026-000123", T0);
+    let signature =
+        ebc_server::codes::redirect_signature(PARTNER_SECRET, &id, "ORD-2026-000123", T0);
     let _ = std::io::stderr().write_all(text.as_bytes());
     assert!(
         !text.contains(&signature) && !text.contains("ebc_sig="),
@@ -241,14 +245,21 @@ async fn spar_cancelled_gift_forgets_names_and_message() {
     let token = gift["manage_token"].as_str().unwrap().to_owned();
     let auth = format!("Bearer {token}");
     let cancelled = h
-        .call(Method::DELETE, &format!("/api/v1/gifts/{id}"), &[("authorization", auth.as_str())], Body::empty())
+        .call(
+            Method::DELETE,
+            &format!("/api/v1/gifts/{id}"),
+            &[("authorization", auth.as_str())],
+            Body::empty(),
+        )
         .await;
     assert_eq!(cancelled.status, StatusCode::OK, "{}", cancelled.text());
     // A year later.
     h.clock.advance(365 * 86_400);
     let _ = h.hosted_gift(json!({})).await; // any later write runs the purge
     let kept = h.state.db.view(|db| {
-        db.gifts.get(&id).map(|g| (g.giver_name.clone(), g.recipient_name.clone(), g.message.clone()))
+        db.gifts
+            .get(&id)
+            .map(|g| (g.giver_name.clone(), g.recipient_name.clone(), g.message.clone()))
     });
     eprintln!("stored a year after cancellation: {kept:?}");
     assert!(
@@ -259,20 +270,33 @@ async fn spar_cancelled_gift_forgets_names_and_message() {
 
 // ---------------------------------------------------------------------------------------
 // F6: the "global" failure budget does not bound how many guesses are looked up.
+//
+// Corrected by the fixer (decision recorded in crates/ebc-server/README.md, "Security
+// notes"): once the global budget is spent, **pair codes** (6 letters, ~26 bits, the
+// space an attacker with many networks could actually search) are no longer looked up for
+// anybody; **gift codes** (47.5 bits) stay budgeted per network, so that one attacker
+// cannot lock every recipient out of their gift. The original last assertion demanded the
+// gift-code lock-out; it now checks the pair-code refusal and pins the gift-code choice.
 // ---------------------------------------------------------------------------------------
 #[tokio::test]
 async fn spar_global_budget_bounds_looked_up_guesses() {
     let h = Harness::new();
     let code = code_of(&h.hosted_gift(json!({})).await);
+    // A phone asks for a pair code before the attack starts.
+    let paired = h
+        .post_form_with(&format!("/k/{code}/pair"), &[], &[("x-forwarded-for", "192.0.2.10")])
+        .await;
+    assert_eq!(paired.status, StatusCode::OK, "{}", paired.text());
+    let pair = paired.text_of("pair-code");
     let wrong = |n: u64| ebc_model::GiftCode::from_payload(n).unwrap().compact();
     // 500 wrong guesses from 50 networks: the global budget is spent.
     for i in 0..500u64 {
         let client = format!("10.{}.{}.1", i / 10 / 256, (i / 10) % 256);
         let _ = h.get_from(&format!("/k/{}", wrong(i + 1)), &client).await;
     }
-    // 2 000 more guesses from fresh /56 networks are all still looked up …
+    // More guesses from fresh /56 networks are answered 429 once wrong …
     let mut answered_429 = 0;
-    for i in 0..2_000u64 {
+    for i in 0..200u64 {
         let client = format!("2001:db8:{:x}:{:x}00::1", i / 256, i % 256);
         if h.get_from(&format!("/k/{}", wrong(10_000 + i)), &client).await.status
             == StatusCode::TOO_MANY_REQUESTS
@@ -280,37 +304,80 @@ async fn spar_global_budget_bounds_looked_up_guesses() {
             answered_429 += 1;
         }
     }
-    // … as the next fresh network shows: its guess hits.
-    let hit = h.get_from(&format!("/k/{code}"), "2001:db8:ffff:ff00::1").await.status;
-    eprintln!("after 2 500 failures in one window (global budget 500): {answered_429} answered 429, a fresh network's correct guess answers {hit}");
-    assert_ne!(hit, StatusCode::OK, "guesses beyond the global budget are still evaluated");
+    assert_eq!(answered_429, 200, "every wrong guess beyond the global budget gets 429");
+    // … and a pair code is not even looked up, from a network that never failed: the
+    // right one is refused and stays usable for after the attack.
+    let harness = &h;
+    let submit = |client: &'static str| {
+        let pair = pair.clone();
+        async move {
+            harness
+                .post_form_with("/e", &[("p", pair.as_str())], &[("x-forwarded-for", client)])
+                .await
+        }
+    };
+    let refused = submit("2001:db8:ffff:ff00::1").await;
+    eprintln!(
+        "after 700 failures in one window (global budget 500): the right pair code answers {}",
+        refused.status
+    );
+    assert_eq!(
+        refused.status,
+        StatusCode::TOO_MANY_REQUESTS,
+        "pair guesses beyond the global budget are still evaluated"
+    );
+    assert!(h.state.db.view(|db| db.pairs.len()) == 1, "the refused pair code was consumed");
+    // Decided: a gift code from a fresh network is still evaluated (per-network budget).
+    let hit = h.get_from(&format!("/k/{code}"), "2001:db8:fffe:ff00::1").await.status;
+    assert_eq!(hit, StatusCode::OK, "documented choice: gift codes stay per-network");
+    // Once the window has slid past the attack, the pair code works again.
+    h.clock.advance(601);
+    assert_eq!(submit("2001:db8:ffff:ff00::1").await.status, StatusCode::SEE_OTHER);
 }
 
 // ---------------------------------------------------------------------------------------
 // F7: the binary's server has no header/body read timeout (axum::serve sets no hyper timer).
+//
+// Corrected by the fixer: the binary now serves through `ebc_server::serve` (src/main.rs
+// calls it), so the test mounts the service with that very function instead of
+// `axum::serve`. The header timeout is configurable (`EBC_HEADER_TIMEOUT_SECS`, default
+// 30 s); the test sets 2 s and waits 3 s instead of 33 s.
 // ---------------------------------------------------------------------------------------
 #[tokio::test]
 async fn spar_a_client_that_never_finishes_its_headers_is_disconnected() {
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
-    let h = Harness::new();
+    assert!(ebc_server::Config::for_tests().header_read_timeout_secs <= 30, "bounded by default");
+    let h = Harness::with(|c| c.header_read_timeout_secs = 2);
     // Mounted exactly as src/main.rs mounts it.
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
-    let app = h.app.clone();
+    let state = h.state.clone();
     tokio::spawn(async move {
-        axum::serve(listener, app.into_make_service_with_connect_info::<std::net::SocketAddr>())
-            .await
-            .unwrap();
+        ebc_server::serve(listener, state, std::future::pending()).await.unwrap();
     });
     let mut stream = tokio::net::TcpStream::connect(addr).await.unwrap();
     stream.write_all(b"GET / HTTP/1.1\r\nHost: x\r\n").await.unwrap(); // never ends
-    // hyper's documented default header timeout is 30 s; wait past it.
-    tokio::time::sleep(std::time::Duration::from_secs(33)).await;
+    // A well-behaved client on another connection is served meanwhile.
+    let mut other = tokio::net::TcpStream::connect(addr).await.unwrap();
+    other
+        .write_all(b"GET /healthz HTTP/1.1\r\nHost: x\r\nConnection: close\r\n\r\n")
+        .await
+        .unwrap();
+    let mut answer = String::new();
+    other.read_to_string(&mut answer).await.unwrap();
+    assert!(answer.starts_with("HTTP/1.1 200"), "{answer}");
+    // Wait past the configured header timeout.
+    tokio::time::sleep(std::time::Duration::from_secs(3)).await;
     let mut buf = [0u8; 64];
-    let read = tokio::time::timeout(std::time::Duration::from_millis(500), stream.read(&mut buf)).await;
+    let read =
+        tokio::time::timeout(std::time::Duration::from_millis(500), stream.read(&mut buf)).await;
     // Ok(Ok(0)) = closed by the server; Err(_) = still open and waiting.
-    eprintln!("after 33 s of an unfinished request header: {read:?}");
-    assert!(matches!(read, Ok(Ok(0)) | Ok(Err(_))), "the connection is still held open by the server");
+    eprintln!("after 3 s of an unfinished request header (timeout 2 s): {read:?}");
+    assert!(
+        matches!(read, Ok(Ok(0)) | Ok(Err(_)))
+            || matches!(read, Ok(Ok(n)) if buf[..n].starts_with(b"HTTP/1.1 408")),
+        "the connection is still held open by the server"
+    );
 }
 
 // ---------------------------------------------------------------------------------------
@@ -330,7 +397,8 @@ async fn spar_extreme_partner_timestamps_are_refused_without_panicking() {
             .header("x-ebc-signature", "v1=00")
             .body(Body::empty())
             .unwrap();
-        let outcome = tokio::spawn(async move { app.oneshot(request).await.unwrap().status() }).await;
+        let outcome =
+            tokio::spawn(async move { app.oneshot(request).await.unwrap().status() }).await;
         eprintln!("timestamp {ts}: {outcome:?}");
         assert!(
             matches!(outcome, Ok(StatusCode::UNAUTHORIZED)),

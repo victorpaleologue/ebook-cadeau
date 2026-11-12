@@ -787,8 +787,8 @@ mod tests {
         assert_eq!((GiftCode::LEN, GiftCode::DATA_SYMBOLS, PairCode::LEN), (12, 11, 6));
         assert_eq!(GiftCode::SPACE, 204_800_000_000_000);
         assert_eq!(PairCode::SPACE, 64_000_000);
-        // About 47.5 bits.
-        assert!(GiftCode::SPACE > 1 << 47 && GiftCode::SPACE < 1 << 48);
+        // About 47.5 bits (checked at compile time: both sides are constants).
+        const { assert!(GiftCode::SPACE > 1 << 47 && GiftCode::SPACE < 1 << 48) };
     }
 
     #[test]

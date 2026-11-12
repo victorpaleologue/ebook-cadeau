@@ -1,45 +1,55 @@
-//! Spanish (es-ES). Register: *tú*, the neutral register of retail in Spain.
+//! Spanish (es-ES). The printed steps use the infinitive; where a pronoun is unavoidable
+//! (screens, the "already paid" line) the register is *tú*, the neutral register of
+//! retail in Spain.
 
 use crate::Msg;
 
 pub(super) fn text(msg: Msg) -> &'static str {
     match msg {
-        Msg::ProductName => "eBook regalo",
+        Msg::ProductName => "eBook Regalo",
         Msg::ProductTagline => "Un eBook para regalar, como un libro de verdad.",
         Msg::CheckoutOption => "Regalar este eBook",
         Msg::CheckoutOptionHelp => {
-            "Preparamos una tarjeta con el aspecto del libro. Su código QR permite recibir el eBook en un eReader, una tableta o un móvil."
+            "Una tarjeta con forma de libro, para imprimir en casa o recibir por correo. Quien la recibe escanea el código y lee el libro en eReader, tableta o móvil."
         }
-        Msg::CheckoutPrintAtHome => "Tarjeta para imprimir en casa",
+        Msg::CheckoutPrintAtHome => "Tarjeta para imprimir en casa (gratis)",
         Msg::CheckoutPrintedByPost => "Tarjeta impresa y enviada por correo",
 
         Msg::CardHeadline => "Este libro es un regalo",
         Msg::CardFrom => "De parte de {name}",
         Msg::CardTo => "Para {name}",
         Msg::CardHowTo => "Cómo leerlo",
-        Msg::CardStep1 => "Escanea el código QR con tu móvil.",
-        Msg::CardStep2 => "Elige dónde leer: eReader, tableta o móvil.",
-        Msg::CardStep3 => "Recoge tu libro. ¡Feliz lectura!",
-        Msg::CardStep2Reseller => "Inicia sesión en tu cuenta de {store} o crea una.",
+        Msg::CardStep1 => "Escanear este código con la cámara de un móvil.",
+        Msg::CardStep2 => "Elegir dónde leer: eReader, tableta o móvil.",
+        Msg::CardStep3 => "El libro llega. ¡Feliz lectura!",
+        Msg::CardStep2Reseller => "Iniciar sesión en la cuenta de {store}, o crear una.",
         Msg::CardStep3Reseller => {
-            "Encuentra el libro en tu biblioteca, en el eReader y en la aplicación."
+            "El libro aparece en la biblioteca, en el eReader y en la aplicación."
         }
         Msg::CardNoPhone => {
-            "¿Sin móvil? En tu eReader o en un ordenador, abre {url} e introduce el código."
+            "¿Sin móvil? En el eReader o en un ordenador, abrir el navegador, ir a {url} e introducir el código de esta tarjeta."
         }
         Msg::CodeLabel => "Código",
-        Msg::CardAlreadyPaid => "Este eBook ya está pagado: solo queda leerlo.",
-        Msg::CardValidUntil => "Disponible hasta el {date}.",
+        Msg::CardAlreadyPaid => "Este eBook ya está pagado. Léelo en tu eReader, tableta o móvil.",
+        Msg::CardValidUntil => "Recoger antes del {date}.",
         Msg::CardNoExpiry => "Sin fecha límite.",
-        Msg::CardHelp => "¿Necesitas ayuda? {url}",
+        Msg::CardHelp => "¿Ayuda? {url}",
         Msg::CardBackDefault => {
-            "Este libro es digital. Abre esta tarjeta para recibirlo en tu eReader, tableta o móvil."
+            "Este libro es digital. Abrir esta tarjeta para recibirlo en eReader, tableta o móvil."
         }
+        Msg::CardLegalLine => {
+            "{title}, {author}. Un ejemplar digital, ya pagado: no hay nada que pagar."
+        }
+        Msg::CardLegalLineNoAuthor => {
+            "{title}. Un ejemplar digital, ya pagado: no hay nada que pagar."
+        }
+        Msg::CardSingleUse => "Un solo uso.",
         Msg::FoldHere => "Doblar aquí",
         Msg::CutHere => "Cortar aquí",
         Msg::PrintedWith => "Tarjeta creada con eBook Cadeau",
         Msg::EbookWord => "eBook",
         Msg::EreaderWord => "eReader",
+        Msg::QrWord => "código QR",
 
         Msg::RedeemTitle => "Recibe tu libro",
         Msg::RedeemIntro => "Introduce el código impreso en el interior de tu tarjeta.",
@@ -67,7 +77,7 @@ pub(super) fn text(msg: Msg) -> &'static str {
         Msg::ErrorCodeTypo => {
             "Este código contiene un error de escritura. Compruébalo e inténtalo de nuevo."
         }
-        Msg::ErrorCodeFormat => "El código tiene {count} caracteres: letras y cifras.",
+        Msg::ErrorCodeFormat => "El código tiene {count} letras, sin cifras ni vocales.",
         Msg::ErrorCodeUnknown => "No reconocemos este código. Compruébalo en tu tarjeta.",
         Msg::ErrorGiftExpired => "Este regalo ya no está disponible: ha vencido su fecha límite.",
         Msg::ErrorGiftRevoked => {
@@ -79,7 +89,7 @@ pub(super) fn text(msg: Msg) -> &'static str {
         Msg::ErrorTooManyAttempts => "Demasiados intentos. Inténtalo de nuevo en unos minutos.",
         Msg::ErrorGeneric => "Se ha producido un error. Inténtalo de nuevo más tarde.",
 
-        Msg::CreateTitle => "Crear un eBook regalo",
+        Msg::CreateTitle => "Crear un eBook Regalo",
         Msg::FieldIsbn => "ISBN del libro",
         Msg::FieldTitle => "Título",
         Msg::FieldAuthor => "Autor",

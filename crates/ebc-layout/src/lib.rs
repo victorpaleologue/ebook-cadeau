@@ -53,6 +53,28 @@
 //! # Ok::<(), ebc_layout::LayoutError>(())
 //! ```
 //!
+//! # Placing the cover
+//!
+//! * **Default — the whole cover, uncropped.** Letterbox it in the safe area of its panel
+//!   (5 mm inside the trim and the crease) on a flat ground that fills the bleed:
+//!   `place_image(px, safe_rect(format.front(), &profile), Fit::Contain)`. Nothing of the
+//!   cover is cut off and nothing of it lies in the bleed, which is what
+//!   `docs/research/03-print-requirements.md` (implication 14) asks for unless cropping
+//!   the cover has been authorised.
+//! * **Full bleed, centred — only when the cover may be cropped.** Use
+//!   [`place_image_bleed`] and clip to the panel grown into the bleed on its outer edges
+//!   ([`Panels::with_bleed`]). The crop is then symmetric about the panel: a frame or a
+//!   centred title stays centred on the finished card. Do **not** pass the `with_bleed`
+//!   rectangle to [`place_image`]: that rectangle is not centred on the panel (it grows on
+//!   three sides only), so the cover would end up half a bleed off-centre, losing next to
+//!   nothing at the fold and the whole bleed at the fore-edge.
+//! * **Full bleed, nothing lost at the fold.** If the cover's spine-side edge has to lie
+//!   exactly on the crease (the reading of implication 14 for an authorised crop), say so
+//!   explicitly: `place_image_aligned(px, clip, Fit::Cover, 0.0, 0.5)` for the front
+//!   cover (`1.0` for the back), `clip` being the `with_bleed` rectangle. The price is the
+//!   one above — the artwork then sits about half a bleed towards the fore-edge, which
+//!   shows on a cover with a frame — but here it is a decision, not an accident.
+//!
 //! # Profiles
 //!
 //! * [`PrintProfile::upload_eu`] — page = trim + 3 mm bleed, no marks: what web-to-print
@@ -98,6 +120,6 @@ pub use marks::{
 };
 pub use page::{DuplexFlip, PageGeometry, SheetPlacement, new_page, new_page_for, page_geometry};
 pub use profile::{
-    GUIDE_GRAY_LEVEL, MAX_MARGIN_MM, MAX_MARK_WEIGHT_PT, MAX_SHEET_MM, MarkStyle, Marks,
-    PrintProfile, Resolution, Sheet,
+    GUIDE_GRAY_LEVEL, HOME_PRINTABLE_MARGIN_MM, MAX_MARGIN_MM, MAX_MARK_WEIGHT_PT, MAX_SHEET_MM,
+    MarkStyle, Marks, PrintProfile, Resolution, Sheet,
 };

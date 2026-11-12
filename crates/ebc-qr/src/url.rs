@@ -2,16 +2,19 @@
 
 use crate::QrError;
 
-/// Rewrites a URL into the equivalent form that encodes most compactly in a QR code.
+/// Rewrites an `http(s)` URL into the equivalent form that encodes most compactly in a QR
+/// code; every other URL is returned unchanged.
 ///
 /// # The rule
 ///
 /// QR alphanumeric mode (5½ bits per character instead of 8) only has **upper-case**
 /// letters. RFC 3986 makes exactly two parts of a URL case-insensitive — the scheme
-/// (§3.1) and the host (§3.2.2) — so exactly those two are converted to upper case:
+/// (§3.1) and the host (§3.2.2) — so for `http` and `https` URLs exactly those two are
+/// converted to upper case:
 ///
 /// ```text
 /// https://ebk.example/k/7K3M9QX2RD   →   HTTPS://EBK.EXAMPLE/k/7K3M9QX2RD
+/// https://ebk.example/K/BCDFGHJKLMNP →   HTTPS://EBK.EXAMPLE/K/BCDFGHJKLMNP   (all alphanumeric)
 /// ```
 ///
 /// Everything else is copied **byte for byte**:
@@ -27,27 +30,54 @@ use crate::QrError;
 ///   case-sensitive;
 /// * only ASCII letters are changed; internationalised host names keep their non-ASCII
 ///   characters (IDNA lower-cases the result anyway);
-/// * URLs without an authority (`mailto:`, `urn:` …) only have their scheme upper-cased.
+/// * **URLs of any other scheme are not touched at all** — neither `mailto:`/`urn:`/`tel:`
+///   nor custom or deep-link schemes such as `opds://authorize/…` or `myapp://Open/Item`.
+///   RFC 3986 calls scheme and host case-insensitive, but the software that consumes
+///   such links does not agree: the WHATWG URL parser keeps the host of a non-special
+///   scheme verbatim (an "opaque host"), apps compare the "host" of their own scheme as a
+///   literal keyword, and Android matches intent-filter schemes and hosts
+///   case-sensitively (the last point is from memory of the Android documentation, not
+///   re-verified). They are still validated (see Errors).
 ///
-/// Phone cameras resolve `HTTPS://EBK.EXAMPLE/…` exactly like the lower-case form.
+/// # Backslashes
+///
+/// Browsers — the WHATWG URL parser, which is what opens the link once the code has been
+/// scanned — read `\` as `/` in `http(s)` URLs, whereas RFC 3986 does not allow it at
+/// all. In `https://shop.example\@files.example/Abc` a browser sees the host
+/// `shop.example` and the path `/@files.example/Abc`; an RFC parser sees the user
+/// information `shop.example\` and the host `files.example`. No rewriting is safe under
+/// both readings, so an `http(s)` URL with a backslash **before its first `/`, `?` or `#`**
+/// is rejected. A backslash further on is in a part that is copied verbatim anyway.
+///
+/// # What is not verified
+///
+/// That phone cameras open `HTTPS://EBK.EXAMPLE/…` exactly like the lower-case form is
+/// what RFC 3986 and the common scanner libraries (ZXing) lead one to expect, and browsers
+/// lower-case scheme and host when they parse the link — but it has **not yet been tested
+/// on stock iOS and Android camera apps** (the research notes carry the same caveat). One
+/// known difference: an upper-case host does not match an Android App Link filter, so the
+/// link opens in the browser rather than in an app registered for it.
 ///
 /// # Errors
 ///
 /// * [`QrError::Empty`] for an empty string;
 /// * [`QrError::InvalidUrl`] if the text contains whitespace or control characters, has no
 ///   valid scheme (`scheme:` — a bare `example.com/x` is rejected, since phones would not
-///   treat it as a link reliably), or is an `http(s)` URL without a host.
+///   treat it as a link reliably), is an `http(s)` URL without a host, or is an `http(s)`
+///   URL with a backslash before its path (see above).
 ///
 /// ```
 /// use ebc_qr::normalize_url;
 /// assert_eq!(
-///     normalize_url("https://ebk.example/K/7K3M9QX2RD").as_deref(),
-///     Ok("HTTPS://EBK.EXAMPLE/K/7K3M9QX2RD")
+///     normalize_url("https://ebk.example/K/BCDFGHJKLMNP").as_deref(),
+///     Ok("HTTPS://EBK.EXAMPLE/K/BCDFGHJKLMNP")
 /// );
 /// assert_eq!(
 ///     normalize_url("https://Shop.example/gift?c=aBc#top").as_deref(),
 ///     Ok("HTTPS://SHOP.EXAMPLE/gift?c=aBc#top")
 /// );
+/// assert_eq!(normalize_url("opds://Authorize/x").as_deref(), Ok("opds://Authorize/x"));
+/// assert!(normalize_url("https://ebk.example\\k\\abc").is_err());
 /// ```
 pub fn normalize_url(url: &str) -> Result<String, QrError> {
     if url.is_empty() {
@@ -67,29 +97,33 @@ pub fn normalize_url(url: &str) -> Result<String, QrError> {
         return Err(QrError::InvalidUrl("it has no valid scheme (such as \"https:\")"));
     }
     let is_http = scheme.eq_ignore_ascii_case("http") || scheme.eq_ignore_ascii_case("https");
-
-    let mut out = String::with_capacity(url.len());
-    out.push_str(&scheme.to_ascii_uppercase());
-    out.push(':');
+    if !is_http {
+        // Not ours to rewrite: see "any other scheme" in the documentation.
+        return Ok(url.to_owned());
+    }
 
     let Some(after_slashes) = rest.strip_prefix("//") else {
-        if is_http {
-            return Err(QrError::InvalidUrl("an http(s) URL needs \"//\" and a host"));
-        }
-        out.push_str(rest);
-        return Ok(out);
+        return Err(QrError::InvalidUrl("an http(s) URL needs \"//\" and a host"));
     };
     let authority_end = after_slashes.find(['/', '?', '#']).unwrap_or(after_slashes.len());
     let (authority, tail) = after_slashes.split_at(authority_end);
+    if authority.contains('\\') {
+        return Err(QrError::InvalidUrl(
+            "it has a backslash before the path, which browsers read as \"/\": \
+             where the host ends is ambiguous",
+        ));
+    }
     let (userinfo, host_port) = match authority.rfind('@') {
         Some(at) => authority.split_at(at + 1),
         None => ("", authority),
     };
-    if is_http && (host_port.is_empty() || host_port.starts_with(':')) {
+    if host_port.is_empty() || host_port.starts_with(':') {
         return Err(QrError::InvalidUrl("an http(s) URL needs a host"));
     }
 
-    out.push_str("//");
+    let mut out = String::with_capacity(url.len());
+    out.push_str(&scheme.to_ascii_uppercase());
+    out.push_str("://");
     out.push_str(userinfo);
     if host_port.starts_with('[') {
         out.push_str(host_port);
@@ -131,16 +165,158 @@ mod tests {
             // IP literals are left alone (zone identifiers can be case-sensitive).
             ("http://[fe80::1%25eth0]:8080/x", "HTTP://[fe80::1%25eth0]:8080/x"),
             ("http://192.168.0.1/admin", "HTTP://192.168.0.1/admin"),
-            // No authority: only the scheme changes.
-            ("mailto:Zoe@Example.com", "MAILTO:Zoe@Example.com"),
-            ("urn:isbn:9782070360024", "URN:isbn:9782070360024"),
-            ("tel:+33123456789", "TEL:+33123456789"),
-            ("file:///home/a/b.epub", "FILE:///home/a/b.epub"),
-            ("ebk+app://Open/Item", "EBK+APP://OPEN/Item"),
+            // A backslash after the authority is in the part copied verbatim.
+            ("https://ebk.example/k\\aBc?x=\\y#\\z", "HTTPS://EBK.EXAMPLE/k\\aBc?x=\\y#\\z"),
+            ("https://ebk.example?q=a\\b", "HTTPS://EBK.EXAMPLE?q=a\\b"),
         ];
         for (input, expected) in cases {
             assert_eq!(normalize_url(input).as_deref(), Ok(expected), "{input}");
         }
+    }
+
+    /// Audit finding 1: only http and https are rewritten. (This replaces the earlier
+    /// expectations `"ebk+app://Open/Item" -> "EBK+APP://OPEN/Item"`, `mailto:` ->
+    /// `MAILTO:` and so on, which pinned the defect.)
+    #[test]
+    fn other_schemes_are_returned_byte_for_byte() {
+        let untouched = [
+            "mailto:Zoe@Example.com",
+            "urn:isbn:9782070360024",
+            "tel:+33123456789",
+            "file:///home/a/b.epub",
+            "ebk+app://Open/Item",
+            "kobo://Library/open?id=Abc",
+            "opds://authorize/",
+            "opds://example.com/user/shelf",
+            "intent://Scan/#Intent;scheme=zxing;package=com.example;end",
+            "ftp://u:p@files.example/dir/File.TXT",
+            "ws://Sock.example/x",
+            "httpx://Host.example/x",
+            "https+foo://Host.example/x",
+            "xhttp://Host.example/x",
+            // Backslashes are not special outside http(s) either.
+            "myapp://Open\\Item",
+            "a:",
+            "x://@",
+        ];
+        for input in untouched {
+            assert_eq!(normalize_url(input).as_deref(), Ok(input), "{input}");
+        }
+        // Whatever the case of the scheme, "http" and "https" are recognised…
+        for input in ["hTTp://a.example/x", "HTTPS://a.example/x", "Https://a.example/x"] {
+            let out = normalize_url(input).expect("valid");
+            assert!(
+                out.starts_with("HTTP://A.EXAMPLE/x") || out.starts_with("HTTPS://A.EXAMPLE/x")
+            );
+        }
+        // …and other schemes are still validated.
+        for invalid in ["mailto:a b@example.org", "opds://authorize/\n", "1x:y", "+x:y"] {
+            assert!(matches!(normalize_url(invalid), Err(QrError::InvalidUrl(_))), "{invalid:?}");
+        }
+    }
+
+    /// Audit finding 2: a backslash must not let the path be taken for the host.
+    #[test]
+    fn backslash_before_the_path_of_an_http_url_is_rejected() {
+        let ambiguous = [
+            "https://ebk.example\\k\\abc",
+            "https://ebk.example\\k\\7k3m9qx2rd",
+            "http://ebk.example\\Gift\\aBcDeF?x=y",
+            "https://ebk.example\\@evil.example/Path",
+            "https://shop.example\\@files.example/Abc",
+            "https://shop.example\\x@files.example",
+            "https://user\\name@host.example/",
+            "https://ebk.example\\",
+            "https://ebk.example:443\\k",
+            "https://\\ebk.example/k",
+            "HTTP://[::1]\\x",
+            // WHATWG also accepts backslashes in place of the "//".
+            "https:\\\\ebk.example\\k",
+            "https:/\\ebk.example/k",
+            "https:\\/ebk.example/k",
+        ];
+        for input in ambiguous {
+            assert!(
+                matches!(normalize_url(input), Err(QrError::InvalidUrl(_))),
+                "{input:?} -> {:?}",
+                normalize_url(input)
+            );
+        }
+    }
+
+    /// The property the module promises, on generated input: for an accepted http(s) URL
+    /// only ASCII case changes, and nothing changes from the first `/`, `\`, `?` or `#`
+    /// after the `//` — the earliest point at which any parser (RFC 3986 or WHATWG) can
+    /// see the path begin.
+    #[test]
+    fn generated_http_urls_never_have_their_path_query_or_fragment_altered() {
+        let pieces = [
+            "ebk.example",
+            "Shop.Example",
+            "user",
+            "pA:ss",
+            "@",
+            "@",
+            ":",
+            "8443",
+            "[::1]",
+            "/",
+            "/",
+            "\\",
+            "\\",
+            "?",
+            "#",
+            "k",
+            "K",
+            "aBc",
+            "7k3m9qx2rd",
+            "%2f",
+            "%5C",
+            ".",
+            "-",
+            "=",
+            "&",
+            "é",
+            "~",
+        ];
+        let mut state = 0x9E37_79B9_7F4A_7C15_u64;
+        let mut next = |bound: usize| {
+            state ^= state >> 12;
+            state ^= state << 25;
+            state ^= state >> 27;
+            (state.wrapping_mul(0x2545_F491_4F6C_DD1D) % bound as u64) as usize
+        };
+        let (mut accepted, mut rejected_backslash) = (0, 0);
+        for round in 0..30_000 {
+            let mut url = String::from(["https://", "http://", "HTTPS://", "hTtP://"][round % 4]);
+            for _ in 0..1 + next(8) {
+                url.push_str(pieces[next(pieces.len())]);
+            }
+            let after = &url[url.find("//").expect("prefix") + 2..];
+            let cut = after.find(['/', '\\', '?', '#']).unwrap_or(after.len());
+            let tail = &after[cut..];
+            match normalize_url(&url) {
+                Ok(out) => {
+                    accepted += 1;
+                    assert!(!tail.starts_with('\\'), "{url:?} accepted as {out:?}");
+                    assert!(out.ends_with(tail), "{url:?} -> {out:?}");
+                    assert_eq!(out.len(), url.len());
+                    assert!(out.eq_ignore_ascii_case(&url));
+                    assert_eq!(normalize_url(&out).as_deref(), Ok(out.as_str()));
+                    // User information is untouched as well.
+                    if let Some(at) = after[..cut].rfind('@') {
+                        assert!(out.contains(&after[..=at]), "{url:?} -> {out:?}");
+                    }
+                }
+                Err(QrError::InvalidUrl(_)) => {
+                    if tail.starts_with('\\') {
+                        rejected_backslash += 1;
+                    }
+                }
+                Err(other) => panic!("{url:?}: {other:?}"),
+            }
+        }
+        assert!(accepted > 10_000 && rejected_backslash > 1_000, "{accepted} {rejected_backslash}");
     }
 
     #[test]
@@ -148,7 +324,7 @@ mod tests {
         let inputs = [
             "https://ebk.example/k/aBcDeF?x=Y#z",
             "https://a.b.c.example:444/",
-            "ftp://u:p@files.example/dir/File.TXT",
+            "http://u:p@files.example/dir/File.TXT",
             "https://bücher.example/straße",
         ];
         for input in inputs {
@@ -205,7 +381,7 @@ mod tests {
         {
             let _ = normalize_url(weird);
         }
-        assert_eq!(normalize_url("a:").as_deref(), Ok("A:"));
-        assert_eq!(normalize_url("x://@").as_deref(), Ok("X://@"));
+        assert_eq!(normalize_url("a:").as_deref(), Ok("a:"));
+        assert_eq!(normalize_url("x://@").as_deref(), Ok("x://@"));
     }
 }

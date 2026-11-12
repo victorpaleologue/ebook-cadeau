@@ -758,6 +758,8 @@ dependencies = [
 name = "ebc-preflight"
 version = "0.1.0"
 dependencies = [
+ "ebc-pdf",
+ "ebc-scene",
  "flate2",
  "lopdf",
  "serde",

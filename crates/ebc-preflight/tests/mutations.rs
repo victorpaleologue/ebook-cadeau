@@ -309,16 +309,26 @@ fn image_at_50_ppi() {
 
 #[test]
 fn resolution_threshold_is_exact_enough() {
-    // 113 mm wide: 667 px is 149.9 ppi (accepted, within half a percent), 660 px is 148.4 ppi.
+    // 113 × 184 mm: 667 × 1086 px is 149.9 ppi (accepted, within half a percent),
+    // 660 × 1075 px is 148.4 ppi. Both keep the proportions of the placement.
     let mut f = Fixture::reference();
     f.dict(f.cover_image).set("Width", 667);
-    assert!(f.check().findings.is_empty());
+    f.dict(f.cover_image).set("Height", 1086);
+    let report = f.check();
+    assert!(report.findings.is_empty(), "{:#?}", report.findings);
     f.dict(f.cover_image).set("Width", 660);
+    f.dict(f.cover_image).set("Height", 1075);
     assert_only(&f.check(), c::IMAGE_LOW_RES, Severity::Error);
-    // Only one axis is too coarse: still an error.
+    // Only one axis is too coarse: still an error — and such an image is necessarily
+    // stretched, which is reported as well.
     let mut f = Fixture::reference();
     f.dict(f.cover_image).set("Height", 500);
-    assert_only(&f.check(), c::IMAGE_LOW_RES, Severity::Error);
+    let report = f.check();
+    assert_eq!(codes(&report), set(&[c::IMAGE_DISTORTED, c::IMAGE_LOW_RES]));
+    assert_eq!(finding(&report, c::IMAGE_LOW_RES).severity, Severity::Error);
+    assert!(finding(&report, c::IMAGE_LOW_RES).message.contains("69 ppi"), "{report:?}");
+    assert_eq!(finding(&report, c::IMAGE_DISTORTED).severity, Severity::Warning);
+    assert!(!report.passed());
 }
 
 #[test]
@@ -1080,17 +1090,27 @@ fn content_that_contradicts_the_claimed_pdfx_level() {
 
 #[test]
 fn hairline_strokes() {
-    // 0.1 pt, zero width, and 1 pt scaled down to 0.05 pt by the CTM.
-    for (content, expected) in [
-        ("q 0 0 0 1 K 0.1 w 100 100 m 200 100 l S Q", "only 0.10 pt wide"),
-        ("q 0 0 0 1 K 0 w 100 100 m 200 100 l S Q", "zero width"),
-        ("q 0 0 0 1 K 0.05 0 0 0.05 0 0 cm 1 w 2000 2000 m 4000 2000 l S Q", "only 0.05 pt wide"),
-        ("q 0 0 0 1 k 0 0 0 1 K 0.1 w 100 100 50 50 re B Q", "only 0.10 pt wide"),
+    // 0.1 pt, zero width, and 1 pt scaled down to 0.05 pt by the CTM. Thin lines are
+    // warnings; a zero-width line ("as thin as the device can draw", ISO 32000-1, 8.4.3.2)
+    // is one device pixel on a platesetter, i.e. gone, and is an error.
+    for (content, expected, severity) in [
+        ("q 0 0 0 1 K 0.1 w 100 100 m 200 100 l S Q", "only 0.10 pt wide", Severity::Warning),
+        ("q 0 0 0 1 K 0 w 100 100 m 200 100 l S Q", "zero width", Severity::Error),
+        (
+            "q 0 0 0 1 K 0.05 0 0 0.05 0 0 cm 1 w 2000 2000 m 4000 2000 l S Q",
+            "only 0.05 pt wide",
+            Severity::Warning,
+        ),
+        (
+            "q 0 0 0 1 k 0 0 0 1 K 0.1 w 100 100 50 50 re B Q",
+            "only 0.10 pt wide",
+            Severity::Warning,
+        ),
     ] {
         let mut f = Fixture::reference();
         f.append_content(f.content1, content);
         let report = f.check();
-        assert_only(&report, c::STROKE_HAIRLINE, Severity::Warning);
+        assert_only(&report, c::STROKE_HAIRLINE, severity);
         assert!(
             finding(&report, c::STROKE_HAIRLINE).message.contains(expected),
             "{}",
@@ -1305,4 +1325,151 @@ fn qr_drawn_one_module_at_a_time_or_as_closed_paths_is_still_recognised() {
         assert_eq!(candidates[0].modules, 25);
         assert!((candidates[0].module_mm - 0.45).abs() < 0.002, "{candidates:?}");
     }
+}
+
+// ---- checks added after the first round of mutations -----------------------------------------
+
+/// The XMP packet of the reference card without its date properties.
+fn xmp_without_dates() -> Vec<u8> {
+    let packet = String::from_utf8(xmp("PDF/X-4")).unwrap();
+    let kept: Vec<&str> = packet.lines().filter(|line| !line.contains("Date>")).collect();
+    assert_eq!(kept.len() + 3, packet.lines().count(), "the fixture has three XMP dates");
+    kept.join("\n").into_bytes()
+}
+
+#[test]
+fn document_dates() {
+    // Each date may live in the Info dictionary or in the XMP packet: one place is enough.
+    let mut f = Fixture::reference();
+    f.dict(f.info).remove(b"CreationDate");
+    f.dict(f.info).remove(b"ModDate");
+    assert!(f.check().findings.is_empty());
+    let mut f = Fixture::reference();
+    f.set_content(f.metadata, xmp_without_dates());
+    assert!(f.check().findings.is_empty());
+
+    // Neither place: an error under PDF/X, whichever of the two dates is missing.
+    for missing in [&[&b"CreationDate"[..], b"ModDate"][..], &[b"CreationDate"], &[b"ModDate"]] {
+        let mut f = Fixture::reference();
+        f.set_content(f.metadata, xmp_without_dates());
+        for key in missing {
+            f.dict(f.info).remove(key);
+        }
+        let report = f.check();
+        assert_only(&report, c::NO_DOCUMENT_DATES, Severity::Error);
+        assert_eq!(finding(&report, c::NO_DOCUMENT_DATES).page, None);
+    }
+    // An empty date is no date.
+    let mut f = Fixture::reference();
+    f.set_content(f.metadata, xmp_without_dates());
+    f.set_info("ModDate", " ");
+    assert_only(&f.check(), c::NO_DOCUMENT_DATES, Severity::Error);
+
+    // A file that does not claim PDF/X owes nobody a date.
+    let mut f = Fixture::reference();
+    f.dict(f.info).remove(b"GTS_PDFXVersion");
+    f.dict(f.catalog).remove(b"Metadata");
+    f.dict(f.info).remove(b"CreationDate");
+    f.dict(f.info).remove(b"ModDate");
+    assert_only(&f.check(), c::PDFX_NOT_CLAIMED, Severity::Warning);
+}
+
+#[test]
+fn incremental_updates_are_reported() {
+    // Append a second revision that replaces the Info dictionary (as an editor fixing the
+    // title would): the first revision, with the old title, is still in the file.
+    let mut f = Fixture::reference();
+    let original = f.bytes();
+    let loaded = lopdf::Document::load_mem(&original).unwrap();
+    let mut update = lopdf::IncrementalDocument::create_from(original.clone(), loaded);
+    update.opt_clone_object_to_new_document(f.info).unwrap();
+    match update.new_document.objects.get_mut(&f.info).unwrap() {
+        Object::Dictionary(info) => info.set("Title", string("Le Petit Prince (corrected)")),
+        other => panic!("Info is not a dictionary: {other:?}"),
+    }
+    let mut bytes = Vec::new();
+    update.save_to(&mut bytes).unwrap();
+    assert!(bytes.len() > original.len() && bytes.starts_with(&original));
+
+    let report = check(&bytes, &card_expectations()).unwrap();
+    assert_only(&report, c::INCREMENTAL_UPDATE, Severity::Warning);
+    assert!(finding(&report, c::INCREMENTAL_UPDATE).message.contains("2 revisions"));
+    // The newest revision is the one that is checked.
+    assert_eq!(report.document.title.as_deref(), Some("Le Petit Prince (corrected)"));
+    assert_eq!(report.pages.len(), 2);
+}
+
+#[test]
+fn artwork_stopping_at_the_trim_line() {
+    let mm = common::MM;
+    let trim_only = format!(
+        "q 0.10 0.05 0.30 0 k {x:.4} {y:.4} {w:.4} {h:.4} re f Q\n",
+        x = BLEED * mm,
+        y = BLEED * mm,
+        w = TRIM_W * mm,
+        h = COVER_H * mm,
+    );
+    // The background covers the finished card exactly and nothing reaches into the bleed.
+    let mut f = Fixture::reference();
+    f.set_content(f.content1, trim_only.clone());
+    let report = f.check();
+    assert_only(&report, c::BLEED_NOT_PAINTED, Severity::Warning);
+    let found = finding(&report, c::BLEED_NOT_PAINTED);
+    assert_eq!(found.page, Some(1));
+    for side in ["left", "right", "top", "bottom"] {
+        assert!(found.message.contains(side), "{}", found.message);
+    }
+
+    // Crop marks in the slug are not artwork: they must not hide the problem.
+    let mut f = with_slug_and_registration();
+    let marks = format!(
+        "q /Reg CS 1 SCN 0.25 w {x0:.3} {y:.3} m {x1:.3} {y:.3} l S Q\n\
+         q /Reg CS 1 SCN 0.25 w {x2:.3} {y2:.3} m {x3:.3} {y2:.3} l S Q\n",
+        x0 = -8.0 * mm,
+        x1 = -0.2 * mm,
+        y = 3.0 * mm,
+        x2 = 236.2 * mm,
+        x3 = 244.0 * mm,
+        y2 = 181.0 * mm,
+    );
+    f.set_content(f.content1, format!("{trim_only}{marks}"));
+    assert_only(&f.check(), c::BLEED_NOT_PAINTED, Severity::Warning);
+
+    // Artwork with a white margin all round, and artwork that bleeds on one side only
+    // where it touches the edge, are both fine.
+    let mut f = Fixture::reference();
+    f.set_content(f.content1, "q 0 0 0 1 k 100 100 200 200 re f Q\n");
+    assert!(f.check().findings.is_empty());
+    let mut f = Fixture::reference();
+    f.set_content(
+        f.content1,
+        format!("q 0 0 0 1 k 0 100 {w:.4} 200 re f Q\n", w = (BLEED + 50.0) * mm),
+    );
+    assert!(f.check().findings.is_empty());
+    // A caller that expects no bleed does not get the warning.
+    let mut f = Fixture::reference();
+    f.set_content(f.content1, trim_only);
+    let report = f.check_with(&Expectations { bleed_mm: 0.0, ..card_expectations() });
+    assert!(report.findings.is_empty(), "{:#?}", report.findings);
+}
+
+#[test]
+fn malformed_font_resources() {
+    // A font resource that is not a dictionary, and one without a Subtype.
+    let mut f = Fixture::reference();
+    f.add_resource(f.page1, "Font", "F8", 42);
+    let report = f.check();
+    assert_only(&report, c::FONT_INVALID, Severity::Error);
+    assert!(finding(&report, c::FONT_INVALID).message.contains("/F8 is not a dictionary"));
+    assert_eq!(finding(&report, c::FONT_INVALID).page, Some(1));
+
+    let mut f = Fixture::reference();
+    let broken = f.doc.add_object(dictionary! { "Type" => "Font", "BaseFont" => "Mystery" });
+    f.add_resource(f.page2, "Font", "F9", broken);
+    let report = f.check();
+    assert_only(&report, c::FONT_INVALID, Severity::Error);
+    assert!(finding(&report, c::FONT_INVALID).message.contains("no Subtype"));
+    assert_eq!(finding(&report, c::FONT_INVALID).page, Some(2));
+    // The good font of the page is still listed.
+    assert_eq!(report.pages[1].fonts.len(), 1);
 }

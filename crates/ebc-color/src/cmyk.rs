@@ -3,6 +3,7 @@
 use ebc_scene::Color;
 
 use crate::Rgb8;
+use crate::lab::Lab;
 
 /// Converts an sRGB colour to device CMYK with **full grey-component replacement**.
 ///
@@ -19,8 +20,19 @@ use crate::Rgb8;
 ///
 /// * black is K 100 only ([`Color::BLACK`]) and every neutral grey is a K-only tint, so text
 ///   and rules never depend on plate registration;
-/// * at least one of C, M, Y is always 0, so total ink never exceeds 300 %
-///   (see [`limit_total_ink`] for stricter limits).
+/// * at least one of C, M, Y is always 0, so total ink never exceeds 300 %. **It gets
+///   very close, though**: the maximum over all 16.7 million colours is 299.6 %, at
+///   `#000001` (C 100 M 100 K 99.6) — see below. Pass the result through
+///   [`limit_total_ink`] with the print profile's limit (260–280 % is common on uncoated
+///   stock), or use [`to_cmyk_ink_safe`], which does that for you.
+///
+/// **Near-black colours become heavy three-plate builds.** The division by `1 − k`
+/// amplifies tiny channel differences as `k` approaches 1: `#0a0000`, which no eye tells
+/// from black (L\* ≈ 0.6), converts to M 100 Y 100 K 96 — 296 % on three plates — while
+/// `#000000` is K 100 alone. Colours taken from a dark cover's palette hit this routinely,
+/// and it defeats the "text in K only" rule printers ask for. The formula is kept because
+/// it is the exact inverse of [`Color::to_srgb_approx`]; [`to_cmyk_ink_safe`] is the
+/// conversion to use for text, rules and QR codes.
 ///
 /// **This is not a colour-managed conversion.** No ICC profile, dot gain or ink behaviour
 /// is modelled; the printed colour of chromatic values will differ from the screen colour
@@ -56,6 +68,37 @@ pub fn to_cmyk_gcr(c: Rgb8, gcr: f32) -> Color {
     }
     let rest = 1.0 - k;
     Color::cmyk((c0 - k) / rest, (m0 - k) / rest, (y0 - k) / rest, k)
+}
+
+/// CIELAB lightness below which [`to_cmyk_ink_safe`] prints a colour as plain black.
+///
+/// L\* 5 is darker than `#111111`; next to real black ink on paper such colours are not
+/// told apart, whereas their naive CMYK builds reach 250–300 % ink on three plates.
+pub const NEAR_BLACK_LSTAR: f64 = 5.0;
+
+/// [`to_cmyk_naive`] made safe for small print elements (text, rules, marks):
+///
+/// * a colour darker than [`NEAR_BLACK_LSTAR`] becomes [`Color::BLACK`] (K 100 only), so
+///   "almost black" never turns into a three-plate build that needs perfect registration;
+/// * every other colour is converted with [`to_cmyk_naive`] and then capped with
+///   [`limit_total_ink`] at `max_ink_percent` (a NaN limit means "no cap").
+///
+/// The result is therefore no longer an exact inverse of [`Color::to_srgb_approx`] for the
+/// colours it changes. Equally uncalibrated (no ICC profile).
+///
+/// ```
+/// use ebc_color::{Rgb8, to_cmyk_ink_safe};
+/// use ebc_scene::Color;
+/// assert_eq!(to_cmyk_ink_safe(Rgb8::new(10, 0, 0), 300.0), Color::BLACK);
+/// let navy = to_cmyk_ink_safe(Rgb8::new(0, 0, 60), 240.0);
+/// assert!(navy.total_ink_percent().is_some_and(|ink| ink <= 240.001));
+/// ```
+#[must_use]
+pub fn to_cmyk_ink_safe(c: Rgb8, max_ink_percent: f32) -> Color {
+    if Lab::from_rgb8(c).l < NEAR_BLACK_LSTAR {
+        return Color::BLACK;
+    }
+    limit_total_ink(to_cmyk_naive(c), max_ink_percent)
 }
 
 /// The colour as an sRGB [`Color::Rgb`], left to the printer's colour management.
@@ -153,6 +196,76 @@ mod tests {
                 }
             }
         }
+    }
+
+    /// Audit finding: the implementer's report said "can reach 280 %"; the true maximum
+    /// is 299.6 %, and it is reached next to black. All colours with any channel ≤ 1 are
+    /// scanned (the maximum needs k = 254/255 or one empty channel pair), plus a lattice.
+    #[test]
+    fn documented_ink_maximum_and_near_black_behaviour() {
+        let ink = |rgb: Rgb8| to_cmyk_naive(rgb).total_ink_percent().expect("CMYK");
+        let mut worst = (0.0_f32, Rgb8::BLACK);
+        let mut visit = |rgb: Rgb8| {
+            let v = ink(rgb);
+            if v > worst.0 {
+                worst = (v, rgb);
+            }
+        };
+        for a in 0..=255u8 {
+            for b in 0..=255u8 {
+                for low in 0..=1u8 {
+                    visit(Rgb8::new(low, a, b));
+                    visit(Rgb8::new(a, low, b));
+                    visit(Rgb8::new(a, b, low));
+                }
+            }
+        }
+        for r in (0..=255u16).step_by(5) {
+            for g in (0..=255u16).step_by(5) {
+                for b in (0..=255u16).step_by(5) {
+                    visit(Rgb8::new(r as u8, g as u8, b as u8));
+                }
+            }
+        }
+        assert!((worst.0 - 299.608).abs() < 0.01, "maximum {} at {}", worst.0, worst.1);
+        // The documented examples.
+        assert!((ink(Rgb8::new(0, 0, 1)) - 299.608).abs() < 0.01);
+        let (c, m, y, k) = parts(to_cmyk_naive(Rgb8::new(10, 0, 0)));
+        assert_eq!((c, m, y), (0.0, 1.0, 1.0));
+        assert!((k - 245.0 / 255.0).abs() < 1e-6);
+        assert!(Rgb8::new(10, 0, 0).to_lab().l < 1.0, "visually black");
+    }
+
+    #[test]
+    fn ink_safe_conversion_snaps_near_blacks_and_caps_ink() {
+        // Near-black tints print on the black plate alone.
+        for rgb in [Rgb8::BLACK, Rgb8::new(0, 0, 1), Rgb8::new(10, 0, 0), Rgb8::new(12, 12, 16)] {
+            assert_eq!(to_cmyk_ink_safe(rgb, 300.0), Color::BLACK, "{rgb}");
+        }
+        // Everything else is the naive conversion under the cap, for every limit.
+        for limit in [200.0_f32, 240.0, 260.0, 300.0, f32::NAN] {
+            for r in (0..=255u16).step_by(17) {
+                for g in (0..=255u16).step_by(17) {
+                    for b in (0..=255u16).step_by(17) {
+                        let rgb = Rgb8::new(r as u8, g as u8, b as u8);
+                        let safe = to_cmyk_ink_safe(rgb, limit);
+                        let ink = safe.total_ink_percent().expect("CMYK");
+                        if !limit.is_nan() {
+                            assert!(ink <= limit + 1e-3, "{rgb}: {ink} > {limit}");
+                        }
+                        if rgb.to_lab().l >= NEAR_BLACK_LSTAR {
+                            assert_eq!(safe, limit_total_ink(to_cmyk_naive(rgb), limit));
+                        } else {
+                            assert_eq!(safe, Color::BLACK);
+                        }
+                    }
+                }
+            }
+        }
+        // Colours that are clearly not black are left alone under a generous limit.
+        let red = Rgb8::new(200, 30, 30);
+        assert_eq!(to_cmyk_ink_safe(red, 300.0), to_cmyk_naive(red));
+        assert_eq!(to_cmyk_ink_safe(Rgb8::WHITE, 0.0), Color::WHITE);
     }
 
     #[test]

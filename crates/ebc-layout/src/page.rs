@@ -202,34 +202,43 @@ pub fn page_geometry(
 ///   `slug` from the profile, hence `TrimBox` = spread, `BleedBox` = spread + bleed,
 ///   `MediaBox` = spread + bleed + slug on every side.
 /// * **Sheet-based (home) profiles**: `trim` = the spread and `bleed` from the profile
-///   again, and the slug is chosen so that the media box is the **largest box centred on
-///   the spread that fits the sheet**, the sheet being used in the orientation of the
-///   spread (see [`page_geometry`]).
+///   again, hence `TrimBox` = the spread and `BleedBox` = spread + bleed, centred on the
+///   sheet, which is used in the orientation of the spread (see [`page_geometry`]). The
+///   media box is the sheet whenever [`ebc_scene::Page`] can say so, and otherwise the
+///   closest page it can describe — see below.
 ///
 /// # Known deviation: the media box is not always the whole sheet
 ///
-/// `docs/architecture.md` wants `MediaBox` = the sheet for home profiles. This function
-/// **cannot deliver that** with today's [`ebc_scene::Page`], which describes the media box
-/// with a single `slug` applied to all four sides: it can only express a sheet whose
-/// left/right margin around the spread equals its top/bottom margin. A 230 × 178 mm poche
-/// spread centred on A4 landscape has 33.5 mm left and right but 16 mm above and below.
-/// The returned page therefore has a media box that equals the sheet in the tighter
-/// direction and is narrower than it in the other — 262 × 210 mm instead of 297 × 210 mm
-/// for poche on A4, 267.9 × 215.9 mm instead of 279.4 × 215.9 mm on US Letter. Only when
-/// both margins are equal is it exactly the sheet ([`SheetPlacement::media_is_sheet`]).
+/// `docs/architecture.md` wants `MediaBox` = the sheet for home profiles (A4 landscape
+/// for the default card). That **cannot be expressed** with today's [`ebc_scene::Page`]:
+/// its media box is `trim` grown by `bleed + slug` on all four sides alike, so with
+/// `trim` = the spread (which the `TrimBox` must be) the media box can only equal a sheet
+/// whose left/right margin around the spread equals its top/bottom margin, i.e. when
+/// `sheet.w − spread.w == sheet.h − spread.h`. A 230 × 178 mm poche spread centred on A4
+/// landscape has 33.5 mm left and right but 16 mm above and below; no preset on any named
+/// sheet has equal margins.
+///
+/// What is returned instead is the best page a single slug allows: the **largest box
+/// centred on the spread that lies inside the sheet**. It has the sheet's full size in
+/// the tighter direction, is narrower than the sheet in the other, and its centre is the
+/// sheet's centre — 262 × 210 mm instead of 297 × 210 mm for poche on A4, 267.9 × 215.9 mm
+/// instead of 279.4 × 215.9 mm on US Letter. [`SheetPlacement::media_is_sheet`] tells
+/// whether the page is exactly the sheet; [`SheetPlacement::sheet`] is always the true
+/// sheet rectangle. Marks are kept inside both the page and the printable area of the
+/// real sheet. (The alternative, a page *larger* than the sheet in one direction, was
+/// rejected: print dialogs shrink oversized pages, which would change the scale.)
 ///
 /// What this costs: the two sides only register if the spread is centred on the physical
 /// paper. With an off-size page that is left to the PDF viewer and the printer driver. A
-/// viewer that centres a smaller page on the paper at "actual size" gives the intended
-/// result; one that anchors it to a corner shifts each side by half the missing width
-/// (17.5 mm for poche on A4) in opposite directions once the sheet is turned, 35 mm
-/// between the two sides. This has not been tested on real viewers or printers. Marks are kept inside the printable area
-/// of the real sheet either way.
+/// viewer that centres a smaller page on the paper at "actual size" gives exactly the
+/// intended result; one that anchors it to a corner shifts each side by half the missing
+/// width (17.5 mm for poche on A4), in opposite directions once the sheet is turned:
+/// 35 mm between the two sides. **This has not been tested on real viewers or printers.**
 ///
-/// The fix is outside this crate: [`ebc_scene::Page`] needs an explicit media box (or a
-/// slug per side) and `ebc-pdf` has to write it; `new_page` then only has to pass on
-/// [`SheetPlacement::sheet`], which [`page_geometry`] already reports. Until then a host
-/// that can set the `MediaBox` itself should use that rectangle.
+/// The fix is outside this crate: [`ebc_scene::Page`] needs a slug per axis (or an
+/// explicit media box) and `ebc-pdf` has to write it; this function then only has to pass
+/// on [`SheetPlacement::sheet`], which [`page_geometry`] already computes. Until then a
+/// host that can set the `MediaBox` itself should use that rectangle.
 ///
 /// # Errors
 /// As [`page_geometry`]; notably [`LayoutError::DoesNotFit`] when the spread plus bleed

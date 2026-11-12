@@ -1,20 +1,5 @@
-//! Fitting a raster image into a rectangle.
-//!
-//! # Placing the cover
-//!
-//! * **Default — the whole cover, uncropped.** Letterbox it in the safe area of its panel
-//!   (5 mm inside the trim and the crease) on a flat ground that fills the bleed:
-//!   `place_image(px, safe_rect(format.front(), &profile), Fit::Contain)`. Nothing of the
-//!   cover is cut off and nothing of it lies in the bleed, which is what
-//!   `docs/research/03-print-requirements.md` (implication 14) asks for unless cropping
-//!   the cover has been authorised.
-//! * **Full bleed — only when the cover may be cropped.** Use [`place_image_bleed`] and
-//!   clip to the panel grown into the bleed on its outer edges
-//!   ([`Panels::with_bleed`](crate::Panels::with_bleed)). The crop is then symmetric about
-//!   the panel. Do **not** pass the `with_bleed` rectangle to [`place_image`]: that
-//!   rectangle is not centred on the panel (it grows on three sides only), so the cover
-//!   would end up half a bleed off-centre, losing next to nothing at the fold and the
-//!   whole bleed at the fore-edge.
+//! Fitting a raster image into a rectangle. The three ways of placing a cover are
+//! compared in the crate documentation ("Placing the cover").
 
 use ebc_scene::{MM_PER_INCH, Rect};
 
@@ -105,8 +90,9 @@ pub fn place_image_aligned(
 /// a centred title on the cover stays centred on the finished card.
 ///
 /// Every edge of the cover loses at least `bleed` (slightly more after scaling), so this
-/// crops the artwork: use it only when that is allowed, and see the
-/// [module documentation](self) for the uncropped default.
+/// crops the artwork: use it only when that is allowed. The crate documentation
+/// ("Placing the cover") has the uncropped default and the variant that keeps the cover's
+/// spine-side edge on the crease.
 ///
 /// A negative or non-finite `bleed` counts as zero. Degenerate input is handled as by
 /// [`place_image`].
@@ -264,6 +250,22 @@ mod tests {
         }
         // Degenerate input comes back unchanged, as with `place_image`.
         assert_eq!(place_image_bleed((0, 0), panel, 3.0), panel.inflate(3.0));
+    }
+
+    #[test]
+    fn crease_aligned_full_bleed_keeps_the_spine_side_edge_on_the_crease() {
+        // The documented alternative to `place_image_bleed`, on the poche card.
+        let (front, front_clip) =
+            (Rect::new(120.0, 0.0, 110.0, 178.0), Rect::new(120.0, -3.0, 113.0, 184.0));
+        let r = place_image_aligned((1100, 1780), front_clip, Fit::Cover, 0.0, 0.5);
+        assert_eq!(r.x, front.x, "inner edge exactly on the crease");
+        assert!(r.contains_rect(&front_clip, 1e-9));
+        // The back cover mirrors it: its inner edge is its right edge.
+        let (back, back_clip) =
+            (Rect::new(0.0, 0.0, 110.0, 178.0), Rect::new(-3.0, -3.0, 113.0, 184.0));
+        let r = place_image_aligned((1100, 1780), back_clip, Fit::Cover, 1.0, 0.5);
+        assert!(close(r.right(), back.right()), "{r:?}");
+        assert!(r.contains_rect(&back_clip, 1e-9));
     }
 
     #[test]

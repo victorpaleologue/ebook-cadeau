@@ -112,8 +112,12 @@ pub(crate) fn xmp(pdfx_version: &str) -> Vec<u8> {
          <x:xmpmeta xmlns:x=\"adobe:ns:meta/\">\n\
          <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\
          <rdf:Description rdf:about=\"\" xmlns:pdfxid=\"http://www.npes.org/pdfx/ns/id/\" \
-         xmlns:dc=\"http://purl.org/dc/elements/1.1/\">\n\
+         xmlns:dc=\"http://purl.org/dc/elements/1.1/\" \
+         xmlns:xmp=\"http://ns.adobe.com/xap/1.0/\">\n\
          <pdfxid:GTS_PDFXVersion>{pdfx_version}</pdfxid:GTS_PDFXVersion>\n\
+         <xmp:CreateDate>2026-11-12T08:30:00Z</xmp:CreateDate>\n\
+         <xmp:ModifyDate>2026-11-12T08:30:00Z</xmp:ModifyDate>\n\
+         <xmp:MetadataDate>2026-11-12T08:30:00Z</xmp:MetadataDate>\n\
          <dc:title><rdf:Alt><rdf:li xml:lang=\"x-default\">Le Petit Prince</rdf:li></rdf:Alt></dc:title>\n\
          </rdf:Description>\n</rdf:RDF>\n</x:xmpmeta>\n<?xpacket end=\"w\"?>"
     )
@@ -333,6 +337,9 @@ impl Fixture {
         let info = doc.add_object(dictionary! {
             "Title" => string("Le Petit Prince — carte cadeau"),
             "Producer" => string("ebc-preflight test fixture"),
+            // PDF/X requires both dates; a fixed instant keeps the fixture deterministic.
+            "CreationDate" => string("D:20261112083000Z"),
+            "ModDate" => string("D:20261112083000Z"),
             "Trapped" => "False",
             "GTS_PDFXVersion" => string("PDF/X-4"),
             "EBC.SpineWidthMm" => string("10"),

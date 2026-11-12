@@ -13,7 +13,7 @@
 //! ```
 //! use ebc_i18n::{Locale, Msg, SpineDirection, spine_direction_for_language, t, tf};
 //!
-//! assert_eq!(t(Locale::Fr, Msg::ProductName), "eBook cadeau");
+//! assert_eq!(t(Locale::Fr, Msg::ProductName), "eBook Cadeau");
 //! assert_eq!(tf(Locale::En, Msg::CardFrom, &[("name", "Alice")]), "From Alice");
 //! assert_eq!(tf(Locale::Fr, Msg::CardFrom, &[("name", "Alice")]), "De la part d’Alice");
 //! assert_eq!(spine_direction_for_language("fr-CA"), SpineDirection::BottomToTop);
@@ -21,26 +21,42 @@
 //!
 //! # Wording rules
 //!
-//! The strings follow the terminology research (`docs/research/notes/terminology.*.md`
-//! at the time of writing; `docs/research/06-terminology.md` once published):
+//! The strings follow `docs/research/06-terminology.md` (§5.1 for the canonical set, §5.2
+//! for the other card lines) and, for the text printed inside the card, §12 of
+//! `docs/research/notes/ereader-ux.ux.md`. Strings those documents do not give were
+//! drafted to the same rules.
 //!
 //! * The gift is **one prepaid book**, never a balance. No string uses a stored-value
 //!   word ("carte cadeau", "Gutschein", "cadeaubon", "tarjeta regalo", "buono regalo",
 //!   "gift card", "voucher", …): those words carry legal expectations (validity periods,
-//!   refunds) that do not apply. A test enforces this.
-//! * What the recipient types is always called a **code**.
-//! * **Register**: French addresses the reader with *vous*; German uses the pronoun-free
-//!   infinitive of instructions ("QR-Code scannen."); Dutch uses *je*, Spanish *tú* and
-//!   Italian *tu* — the neutral register of retail in those languages; Portuguese
-//!   (pt-PT) uses the formal third person. Buttons are in the first person ("Récupérer
-//!   mon livre"), which is register-neutral.
+//!   refunds) that do not apply. For the same reason an expiry date is worded "to be
+//!   collected before", never "valid until". A test enforces the word list.
+//! * **The printed card** carries three steps ([`Msg::CardStep1`]–[`Msg::CardStep3`], with
+//!   a variant of steps 2 and 3 for gifts fulfilled by a store) and one fallback line for
+//!   people without a phone ([`Msg::CardNoPhone`]). It never says "QR": the steps say
+//!   "this code".
+//! * What the recipient types is always called a **code**. It is twelve consonants (six
+//!   for a pairing code): no message mentions digits as part of it.
+//! * **Register**: the card uses the infinitive of instructions in French, German,
+//!   Spanish, Italian and Portuguese, so that it chooses no form of address on behalf of
+//!   the giver; Dutch and English use the imperative. Where a pronoun is unavoidable
+//!   (screens, mostly): French *vous*, Dutch *je*, Spanish *tú*, Italian *tu*, Portuguese
+//!   (pt-PT) the formal third person, German none. Buttons are in the first person
+//!   ("Récupérer mon livre"), which is register-neutral.
+//! * **Nouns**: the trade spelling "eBook" (German and Romance languages), "e-book" in
+//!   Dutch; French running text says « livre numérique » and only the checkout option
+//!   says « ebook ». The device is « liseuse », "e-reader" (English, Dutch) or "eReader".
 //! * Typography: French strings put a no-break space (U+00A0) before `? ! : ;`;
 //!   apostrophes are typographic (U+2019). Only characters found in ordinary Latin text
 //!   fonts are used.
 //!
-//! The strings were written by a fluent but non-native author for most languages and
-//! have **not** been reviewed by native speakers; see [`t_with`] for overriding any of
-//! them per reseller.
+//! **Not verified.** The research itself is unverified at source, and no string has been
+//! reviewed by a native speaker; Portuguese is the least reliable. See [`t_with`] for
+//! overriding any message per reseller. Not implemented here, although the research asks
+//! for them: per-tenant noun style and register, regional deltas (fr-CA, pt-BR, es-419),
+//! and a catalogue kept in data files — `locales/*.toml` is an unfinished draft of the
+//! latter (three languages, not read by any code): the tables in `src/strings/` are what
+//! ships.
 //!
 //! # Templates
 //!
@@ -124,24 +140,28 @@ messages! {
     CardTo => "card_to", ["name"];
     /// Heading above the three steps.
     CardHowTo => "card_how_to", [];
-    /// Step 1: scan the QR code.
+    /// Step 1: scan the code with a phone camera. The card never says "QR": the printed
+    /// steps say "this code" (see [`Msg::QrWord`] for screens).
     CardStep1 => "card_step1", [];
     /// Step 2 (open file): choose where to read.
     CardStep2 => "card_step2", [];
-    /// Step 3 (open file): get the book.
+    /// Step 3 (open file): the book arrives.
     CardStep3 => "card_step3", [];
     /// Step 2 when a store fulfils the gift: sign in. Placeholder: `store`.
     CardStep2Reseller => "card_step2_reseller", ["store"];
-    /// Step 3 when a store fulfils the gift: the book is in the library.
+    /// Step 3 when a store fulfils the gift: the book appears in the library.
     CardStep3Reseller => "card_step3_reseller", [];
-    /// Fallback line for recipients without a camera phone. Placeholder: `url` (the
-    /// short address to type).
+    /// Fallback line for recipients without a camera phone: open the browser of the
+    /// e-reader or of a computer, go to the address, type the code. Placeholder: `url`
+    /// (the short address to type, normally a bare host).
     CardNoPhone => "card_no_phone", ["url"];
     /// Label printed before the code.
     CodeLabel => "code_label", [];
-    /// Reassurance line: nothing to pay.
+    /// Reassurance line: the book is already paid for.
     CardAlreadyPaid => "card_already_paid", [];
-    /// Expiry line, when the gift has one. Placeholder: `date` (see [`format_date`]).
+    /// Collect-before line, when the gift has an expiry date. Worded "to be collected
+    /// before", never "valid until", which belongs to stored-value cards. Placeholder:
+    /// `date` (see [`format_date`]).
     CardValidUntil => "card_valid_until", ["date"];
     /// Line saying the gift has no time limit.
     CardNoExpiry => "card_no_expiry", [];
@@ -149,16 +169,28 @@ messages! {
     CardHelp => "card_help", ["url"];
     /// Default text of the back panel when the book has no blurb.
     CardBackDefault => "card_back_default", [];
+    /// Legal line: what the card gives — one digital copy of a named book, already paid.
+    /// Placeholders: `title`, `author`. Followed on the card by [`Msg::CardSingleUse`] and
+    /// [`Msg::CardNoExpiry`] or [`Msg::CardValidUntil`].
+    CardLegalLine => "card_legal_line", ["title", "author"];
+    /// [`Msg::CardLegalLine`] for a book without a known author. Placeholder: `title`.
+    CardLegalLineNoAuthor => "card_legal_line_no_author", ["title"];
+    /// Legal mention: the code works once.
+    CardSingleUse => "card_single_use", [];
     /// Guide printed next to a fold line (home printing).
     FoldHere => "fold_here", [];
     /// Guide printed next to a cut line (home printing).
     CutHere => "cut_here", [];
     /// Small credit line.
     PrintedWith => "printed_with", [];
-    /// The word for an eBook.
+    /// The word for an eBook, as a stand-alone label. Never interpolated into a sentence:
+    /// sentences that name the book are stored whole.
     EbookWord => "ebook_word", [];
     /// The word for a dedicated reading device.
     EreaderWord => "ereader_word", [];
+    /// The words for a QR code, for screens, alternative text and help pages — not for
+    /// the printed card.
+    QrWord => "qr_word", [];
 
     // ---- Redemption pages ------------------------------------------------------------
 
@@ -206,8 +238,9 @@ messages! {
     EnjoyReading => "enjoy_reading", [];
     /// Error: the check character does not match (`CodeError::Check`).
     ErrorCodeTypo => "error_code_typo", [];
-    /// Error: wrong length or character. Placeholder: `count` (number of characters of a
-    /// code).
+    /// Error: wrong length or character (`CodeError::Length`, `CodeError::InvalidChar`).
+    /// Placeholder: `count`, the number of letters of the code that was expected
+    /// (`GiftCode::LEN` or `PairCode::LEN`). Codes are consonants only.
     ErrorCodeFormat => "error_code_format", ["count"];
     /// Error: well-formed code that was never issued.
     ErrorCodeUnknown => "error_code_unknown", [];

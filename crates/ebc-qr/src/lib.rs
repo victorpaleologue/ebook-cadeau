@@ -7,8 +7,10 @@
 //!   modules and easier scanning. [`QrCode::encode`] picks the smallest version that holds
 //!   the text, splitting it into the cheapest mix of numeric, alphanumeric and byte
 //!   segments, and [`QrCode::encode_url`] additionally upper-cases the case-insensitive
-//!   parts of a URL so that they fit the compact alphanumeric mode (see
-//!   [`normalize_url`] for the exact rule).
+//!   parts (scheme and host) of an `http(s)` URL so that they fit the compact alphanumeric
+//!   mode (see [`normalize_url`] for the exact rule). The card's claim URL,
+//!   `HTTPS://EBK.EXAMPLE/K/BCDFGHJKLMNP`, is alphanumeric from end to end and fits a
+//!   version 2 symbol at level M; the path, query and fragment of a URL are never altered.
 //! * **Clean vector output.** [`QrCode::rects`] merges the dark modules into a small set of
 //!   non-overlapping rectangles and [`QrCode::to_path`] turns them into one
 //!   [`ebc_scene::Path`], to be filled with K-only black ([`ebc_scene::Color::BLACK`]).
@@ -218,12 +220,18 @@ impl QrCode {
     }
 
     /// Encodes a URL after rewriting it into its most compact equivalent form with
-    /// [`normalize_url`]: the scheme and the host are upper-cased so that they (and an
-    /// already upper-case path) use alphanumeric mode; a path, query or fragment
-    /// containing lower-case letters is never changed and is stored in byte mode.
+    /// [`normalize_url`]: the scheme and the host of an `http(s)` URL are upper-cased so
+    /// that they (and an already upper-case path) use alphanumeric mode; a path, query or
+    /// fragment is never changed, and whatever lower-case letters it contains are stored
+    /// in byte mode. URLs of other schemes are encoded exactly as given.
     ///
-    /// The symbol decodes to the normalised URL, e.g. `HTTPS://EBK.EXAMPLE/K/7K3M9QX2RD` —
-    /// compare a scanned code with [`normalize_url`]`(url)`, not with `url` itself.
+    /// A claim URL written in QR alphanumeric characters only, such as
+    /// `https://ebk.example/K/BCDFGHJKLMNP`, therefore becomes one alphanumeric segment
+    /// (`HTTPS://EBK.EXAMPLE/K/BCDFGHJKLMNP`: 200 bits, version 2 at level M) where byte
+    /// mode would need version 3.
+    ///
+    /// The symbol decodes to the normalised URL — compare a scanned code with
+    /// [`normalize_url`]`(url)`, not with `url` itself.
     ///
     /// # Errors
     ///
@@ -360,15 +368,22 @@ impl QrCode {
     /// Every coordinate is computed as `top_left + n × module_mm` for an integer `n`, so
     /// rectangles that touch share exactly the same coordinate values.
     ///
-    /// A `module_mm` that is not a finite positive number, or a non-finite `top_left`,
-    /// yields an empty path rather than a panic or garbage geometry.
+    /// A `module_mm` that is not a finite positive number, a non-finite `top_left`, or a
+    /// combination of the two whose far corner (`top_left + size × module_mm`) overflows
+    /// to infinity yields an empty path rather than a panic or garbage geometry: every
+    /// coordinate of a non-empty path is finite.
     #[must_use]
     pub fn to_path(&self, top_left: Point, module_mm: f64) -> Path {
         let mut path = Path::new();
+        // Every coordinate lies between `top_left` and the far corner, so checking those
+        // two covers them all (finite inputs can still overflow in the product or sum).
+        let extent = f64::from(self.size) * module_mm;
         let usable = module_mm.is_finite()
             && module_mm > 0.0
             && top_left.x.is_finite()
-            && top_left.y.is_finite();
+            && top_left.y.is_finite()
+            && (top_left.x + extent).is_finite()
+            && (top_left.y + extent).is_finite();
         if !usable {
             return path;
         }

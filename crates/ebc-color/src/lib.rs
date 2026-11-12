@@ -30,6 +30,8 @@
 //! Inputs are assumed to be sRGB. [`to_cmyk_naive`] is **not** a colour-managed conversion:
 //! it is the textbook device formula with grey-component replacement, good for text, rules
 //! and flat tints where a predictable, K-only black matters more than a colorimetric match.
+//! It can reach 299.6 % total ink and turns near-black tints into three-plate builds; for
+//! text and marks use [`to_cmyk_ink_safe`], which snaps near-blacks to K and caps the ink.
 //! Cover photographs must stay RGB (or be converted with an ICC profile elsewhere).
 //!
 //! # Example
@@ -57,7 +59,10 @@ mod lab;
 mod palette;
 mod rgb;
 
-pub use cmyk::{from_scene_color, limit_total_ink, to_cmyk_gcr, to_cmyk_naive, to_scene_rgb};
+pub use cmyk::{
+    NEAR_BLACK_LSTAR, from_scene_color, limit_total_ink, to_cmyk_gcr, to_cmyk_ink_safe,
+    to_cmyk_naive, to_scene_rgb,
+};
 pub use contrast::{
     black_or_white, contrast_ratio, ensure_contrast, pick_text_color, relative_luminance,
 };

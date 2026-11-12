@@ -41,6 +41,11 @@ fn output_profile() -> Vec<u8> {
 /// Side of the sample image, in pixels.
 const IMAGE_PX: u32 = 60;
 
+/// The fixed creation and modification date of every sample card, as a PDF date string…
+const FIXTURE_DATE_PDF: &str = "D:20260101120000Z";
+/// …and as an XMP (ISO 8601) date.
+const FIXTURE_DATE_XMP: &str = "2026-01-01T12:00:00Z";
+
 /// Description of a sample card PDF. Start from [`SampleCard::for_product`] (a file the
 /// printer accepts) and change one field to get a file it refuses.
 #[derive(Debug, Clone, PartialEq)]
@@ -188,7 +193,12 @@ impl SampleCard {
         w.object(catalog, &format!("<< {catalog_entries} >>"));
 
         let info = w.alloc();
-        let mut info_entries = String::from("/Producer (ebc-demo-printer testkit) /Trapped /False");
+        // PDF/X requires a creation and a modification date. A fixed instant keeps the
+        // output deterministic (the fixture never reads the clock).
+        let mut info_entries = format!(
+            "/Producer (ebc-demo-printer testkit) /Trapped /False \
+             /CreationDate ({FIXTURE_DATE_PDF}) /ModDate ({FIXTURE_DATE_PDF})"
+        );
         if let Some(title) = &self.title {
             let _ = write!(info_entries, " /Title {}", text_string(title));
         }
@@ -286,8 +296,12 @@ impl SampleCard {
              <x:xmpmeta xmlns:x=\"adobe:ns:meta/\">\n\
              <rdf:RDF xmlns:rdf=\"http://www.w3.org/1999/02/22-rdf-syntax-ns#\">\n\
              <rdf:Description rdf:about=\"\" xmlns:pdfxid=\"http://www.npes.org/pdfx/ns/id/\" \
-             xmlns:dc=\"http://purl.org/dc/elements/1.1/\">\n\
+             xmlns:dc=\"http://purl.org/dc/elements/1.1/\" \
+             xmlns:xmp=\"http://ns.adobe.com/xap/1.0/\">\n\
              <pdfxid:GTS_PDFXVersion>PDF/X-4</pdfxid:GTS_PDFXVersion>\n\
+             <xmp:CreateDate>{FIXTURE_DATE_XMP}</xmp:CreateDate>\n\
+             <xmp:ModifyDate>{FIXTURE_DATE_XMP}</xmp:ModifyDate>\n\
+             <xmp:MetadataDate>{FIXTURE_DATE_XMP}</xmp:MetadataDate>\n\
              <dc:title><rdf:Alt><rdf:li xml:lang=\"x-default\">{title}</rdf:li></rdf:Alt></dc:title>\n\
              </rdf:Description>\n</rdf:RDF>\n</x:xmpmeta>\n<?xpacket end=\"w\"?>"
         )

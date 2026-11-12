@@ -5,10 +5,11 @@
 
 use ebc_layout::{
     CardFormat, FOLD_GUIDE_MAX_MM, FURNITURE_BAND_MAX_MM, Face, Fit, LayoutError,
-    MIN_MARK_LENGTH_MM, MarkStyle, PageGeometry, PrintProfile, Sheet, caption_areas, color_bar,
-    crop_marks, effective_ppi, fold_marks, guides, info_entries, marks, new_page, page_geometry,
-    place_image, place_image_aligned, registration_target_centers, registration_targets,
-    safe_panels, safe_rect, scale_ruler, spine_safe_rect,
+    MIN_MARK_LENGTH_MM, MarkStyle, PageGeometry, PrintProfile, Resolution, Sheet, caption_areas,
+    check_marks_fit, color_bar, crop_marks, effective_ppi, fold_marks, guides, info_entries, marks,
+    new_page, page_geometry, place_image, place_image_aligned, place_image_bleed,
+    registration_target_centers, registration_targets, safe_panels, safe_rect, scale_ruler,
+    spine_safe_rect,
 };
 use ebc_scene::{Color, Item, Path, PathSeg, Point, Rect, Size, Stroke, Transform, pt_to_mm};
 
@@ -85,7 +86,11 @@ impl Rng {
         p.marks.offset = self.range(0.0, 9.0);
         p.marks.length = self.range(0.0, 12.0);
         p.marks.weight_pt = self.range(0.05, 2.0);
-        p.marks.style = if self.flip() { MarkStyle::Press } else { MarkStyle::Guide };
+        p.marks.style = match self.below(4) {
+            0 | 1 => MarkStyle::Press,
+            2 => MarkStyle::Guide,
+            _ => MarkStyle::Black,
+        };
         p.marks.crop = self.flip();
         p.marks.fold = self.flip();
         p.marks.registration = self.flip();
@@ -308,12 +313,20 @@ fn check_page(format: &CardFormat, profile: &PrintProfile, g: &PageGeometry, ctx
             assert!(rect_close(&s.printable, &s.sheet.inflate(-profile.printable_margin)));
             assert!(s.printable.contains_rect(&g.bleed, 1e-6), "{ctx}");
             assert!(s.printable.contains_rect(&g.mark_area, 1e-6), "{ctx}");
-            // Landscape is preferred whenever it works.
-            if !s.landscape {
-                let l = sheet.landscape();
-                let need = 2.0 * (profile.bleed + profile.printable_margin);
-                assert!(spread.w + need > l.w || spread.h + need > l.h, "{ctx}");
-            }
+            // The sheet takes the orientation of the spread (a square spread counts as
+            // landscape), so page, sheet and spread are all the same way round...
+            assert_eq!(s.landscape, spread.w >= spread.h, "{ctx}");
+            assert_eq!(s.landscape, g.media.w >= g.media.h, "{ctx}");
+            assert_eq!(s.duplex_flip(), g.duplex_flip(), "{ctx}");
+            // ...and that is the orientation with the most room on its tighter side: the
+            // other one never offers a wider band for marks.
+            let other = if s.landscape { sheet.portrait() } else { sheet.landscape() };
+            let tight = |size: Size| ((size.w - spread.w) / 2.0).min((size.h - spread.h) / 2.0);
+            assert!(tight(size) >= tight(other) - EPS, "{ctx}: the other orientation is roomier");
+            assert!(
+                close(g.mark_reach_mm, (tight(size) - profile.printable_margin).max(profile.bleed)),
+                "{ctx}"
+            );
         }
         other => panic!("{ctx}: sheet mismatch {other:?}"),
     }
@@ -378,14 +391,27 @@ fn check_fold_marks(format: &CardFormat, profile: &PrintProfile, g: &PageGeometr
         assert!(items.is_empty(), "{ctx}: fold marks drawn without room");
         return;
     }
-    let guide = profile.marks.style == MarkStyle::Guide;
-    assert!(items.len() == 1 || (guide && items.len() == 2), "{ctx}: {} items", items.len());
+    // A fold mark is as long as a crop mark, except in the guide style, where it runs on
+    // to the limit of the mark area or for 20 mm, whichever comes first.
+    let expected_len = match profile.marks.style {
+        MarkStyle::Press | MarkStyle::Black => expected_len,
+        MarkStyle::Guide => (g.mark_reach_mm - start).min(FOLD_GUIDE_MAX_MM).max(expected_len),
+    };
+    assert_eq!(items.len(), 1, "{ctx}: one item, no solid part");
     let [f0, f1] = format.fold_x();
     let h = format.spread().h;
-    for (i, d) in drawn(&items).iter().enumerate() {
+    for d in &drawn(&items) {
         let stroke = d.stroke.expect("fold marks are stroked");
         assert_eq!(stroke.color, profile.marks.color());
-        assert_eq!(stroke.dash_mm.is_empty(), i == 0, "{ctx}: ticks solid, guide dashed");
+        assert_eq!(stroke.width_pt, profile.marks.weight_pt);
+        // Dashed in every style — a crease must never read as a cut — with the nominal
+        // 1 mm on / 1 mm off pattern, or a finer one on a mark too short for three dashes.
+        let [on, off] = stroke.dash_mm[..] else {
+            panic!("{ctx}: fold marks are dashed on/off, got {:?}", stroke.dash_mm)
+        };
+        assert!(on > 0.0 && on <= 1.0 + EPS && close(on, off), "{ctx}: dash {on}/{off}");
+        assert!(3.0 * on + 2.0 * off <= expected_len + EPS, "{ctx}: fewer than three dashes");
+        assert!(close(on, 1.0) || close(5.0 * on, expected_len), "{ctx}: dash {on}/{off}");
         let sps = subpaths(d.path);
         assert_eq!(sps.len(), 4, "{ctx}: above and below, at both creases");
         let mut seen = [[false; 2]; 2];
@@ -411,14 +437,10 @@ fn check_fold_marks(format: &CardFormat, profile: &PrintProfile, g: &PageGeometr
             };
             assert!(near >= profile.bleed - EPS, "{ctx}: fold mark inside the bleed");
             assert!(far <= g.mark_reach_mm + EPS, "{ctx}: fold mark beyond the mark area");
-            if i == 0 {
-                assert!(close(near, start) && close(far - near, expected_len), "{ctx}");
-            } else {
-                // The dashed guide continues the tick outwards, up to the limit of the
-                // mark area or for 20 mm, whichever comes first.
-                assert!(near > start + expected_len, "{ctx}");
-                assert!(close(far, g.mark_reach_mm.min(near + FOLD_GUIDE_MAX_MM)), "{ctx}");
-            }
+            assert!(close(near, start) && close(far - near, expected_len), "{ctx}");
+            // Drawn outwards, so that the dash pattern starts at the end nearest the card.
+            let (from, to) = if above { (-a.y, -b.y) } else { (a.y - h, b.y - h) };
+            assert!(from < to, "{ctx}: fold mark drawn towards the card");
             assert!(!seen[fold][usize::from(below)], "{ctx}: duplicate fold mark");
             seen[fold][usize::from(below)] = true;
         }
@@ -488,6 +510,8 @@ fn check_colors(layer_items: &[Item], profile: &PrintProfile, ctx: &str) {
             assert_eq!(stroke.color, profile.marks.color(), "{ctx}");
             match (profile.marks.style, stroke.color) {
                 (MarkStyle::Press, Color::Registration) => {}
+                // Digital jobs: black only.
+                (MarkStyle::Black, c) => assert_eq!(c, Color::BLACK, "{ctx}"),
                 // Home guides: light grey on the black plate only.
                 (MarkStyle::Guide, Color::Gray(v)) => assert!((0.3..0.9).contains(&v), "{ctx}"),
                 other => panic!("{ctx}: wrong mark colour {other:?}"),
@@ -510,7 +534,8 @@ fn check_combination(format: &CardFormat, profile: &PrintProfile, ctx: &str) -> 
         Ok(g) => g,
         Err(e) => {
             // Formats and profiles reaching this function are valid, so the only possible
-            // refusal is a sheet that is too small — in BOTH orientations.
+            // refusal is a sheet that is too small — in BOTH orientations. The error
+            // reports the sheet the way round it was tried: that of the spread.
             let LayoutError::DoesNotFit { needed, sheet: reported } = &e else {
                 panic!("{ctx}: {e}")
             };
@@ -518,7 +543,9 @@ fn check_combination(format: &CardFormat, profile: &PrintProfile, ctx: &str) -> 
             let margin = 2.0 * (profile.bleed + profile.printable_margin);
             let spread = format.spread();
             assert!(close(needed.w, spread.w + margin) && close(needed.h, spread.h + margin));
-            assert_eq!(*reported, sheet.landscape(), "{ctx}");
+            let tried = if spread.w >= spread.h { sheet.landscape() } else { sheet.portrait() };
+            assert_eq!(*reported, tried, "{ctx}");
+            assert_eq!(check_marks_fit(format, profile), Err(e.clone()), "{ctx}");
             for s in [sheet.landscape(), sheet.portrait()] {
                 assert!(needed.w > s.w || needed.h > s.h, "{ctx}: {needed:?} fits {s:?}");
             }
@@ -555,6 +582,19 @@ fn check_combination(format: &CardFormat, profile: &PrintProfile, ctx: &str) -> 
     check_colors(&all, profile, ctx);
     check_crop_marks(format, profile, &g, ctx);
     check_fold_marks(format, profile, &g, ctx);
+    // `check_marks_fit` is an error exactly when wanted cut or fold marks are left out.
+    let wanted = profile.marks.crop || profile.marks.fold;
+    let left_out = crop_marks(format, profile).is_empty();
+    assert_eq!(left_out, fold_marks(format, profile).is_empty(), "{ctx}");
+    match check_marks_fit(format, profile) {
+        Ok(()) => assert!(!(wanted && left_out), "{ctx}: marks left out unnoticed"),
+        Err(LayoutError::MarksDoNotFit { available_mm, needed_mm }) => {
+            assert!(wanted && left_out, "{ctx}: marks reported missing but drawn or unwanted");
+            assert!(available_mm >= 0.0 && available_mm < needed_mm, "{ctx}");
+            assert_eq!(needed_mm, MIN_MARK_LENGTH_MM, "{ctx}");
+        }
+        Err(other) => panic!("{ctx}: {other}"),
+    }
     check_marks_do_not_collide(format, profile, ctx);
     check_marks_are_symmetric(format, profile, ctx);
 
@@ -766,24 +806,41 @@ fn the_default_professional_card_has_all_its_marks() {
     // Guard against the invariants passing vacuously: on the reference card nothing is
     // shortened or dropped.
     let (f, mut p) = (CardFormat::poche(), PrintProfile::professional_eu());
+    // By default: solid crop marks and dashed fold marks, nothing else.
+    let layer = marks(&f, &p);
+    let sub: Vec<usize> =
+        drawn(layer_items(&layer, "marks")).iter().map(|d| subpaths(d.path).len()).collect();
+    assert_eq!(sub, vec![8, 4]);
+    assert_eq!(check_marks_fit(&f, &p), Ok(()));
+    // With everything switched on.
+    p.marks.registration = true;
     p.marks.color_bar = true;
     p.marks.scale_ruler = true;
     let layer = marks(&f, &p);
     let items = layer_items(&layer, "marks");
     let sub: Vec<usize> = drawn(items).iter().map(|d| subpaths(d.path).len()).collect();
     // crop (8 strokes), fold (4), targets (4 x (circle + 2 strokes)), 11 patches, ruler
-    // (base line + 6 ticks: 50 mm, because 100 mm + label does not fit a 110 mm panel).
+    // (base line + 11 ticks: 100 mm, its label stacked above the ticks because a 110 mm
+    // panel has no room for it beside the ruler).
     let mut want = vec![8, 4, 12];
     want.extend([1; 11]);
-    want.push(7);
+    want.push(12);
     assert_eq!(sub, want);
     assert_eq!(registration_target_centers(&f, &p).len(), 4);
-    // And the home card on A4: crop, fold ticks, dashed fold guides, 50 mm ruler.
-    let h = PrintProfile::home(Sheet::A4);
-    let layer = marks(&f, &h);
-    let sub: Vec<usize> =
-        drawn(layer_items(&layer, "marks")).iter().map(|d| subpaths(d.path).len()).collect();
-    assert_eq!(sub, vec![8, 4, 4, 7]);
+    assert_eq!(scale_ruler(&f, &p).map(|r| r.length_mm), Some(100.0));
+    // And the home card on A4 and on Letter: solid cut marks, dashed fold guides (one
+    // item: no solid part that could be taken for a cut), the 100 mm ruler.
+    for sheet in [Sheet::A4, Sheet::Letter] {
+        let h = PrintProfile::home(sheet);
+        let layer = marks(&f, &h);
+        let sub: Vec<usize> =
+            drawn(layer_items(&layer, "marks")).iter().map(|d| subpaths(d.path).len()).collect();
+        assert_eq!(sub, vec![8, 4, 12], "{sheet:?}");
+        assert_eq!(check_marks_fit(&f, &h), Ok(()), "{sheet:?}");
+        // Nothing is shortened: full 5 mm cut marks inside the printable area.
+        let g = page_geometry(&f, &h).unwrap();
+        assert!(g.mark_band_mm() >= h.marks.length, "{sheet:?}: {}", g.mark_band_mm());
+    }
 }
 
 #[test]
@@ -894,17 +951,29 @@ fn place_image_preserves_aspect_and_covers_or_fits() {
 fn cover_image_on_each_preset_fills_the_front_panel_with_bleed() {
     for (name, f) in CardFormat::presets() {
         for profile in [PrintProfile::professional_eu(), PrintProfile::home(Sheet::A3)] {
-            let front = f.outside().with_bleed(profile.bleed).right;
+            let panel = f.front();
+            let clip = f.outside().with_bleed(profile.bleed).right;
             // The front panel plus bleed on its three outer edges, flush with the crease.
-            assert_eq!(front.x, f.fold_x()[1], "{name}");
-            assert!(close(front.right(), f.spread().w + profile.bleed));
-            assert!(close(front.y, -profile.bleed));
-            // A 2:3 cover scan at exactly the pixels the profile asks for.
-            let (pw, ph) = profile.target_px(front.size());
-            let placed = place_image((pw, ph), front, Fit::Cover);
-            assert!(placed.contains_rect(&front, EPS), "{name}");
+            assert_eq!(clip.x, f.fold_x()[1], "{name}");
+            assert!(close(clip.right(), f.spread().w + profile.bleed));
+            assert!(close(clip.y, -profile.bleed));
+            // A cover scan with exactly the pixels the profile asks for over the area it
+            // has to cover: the panel plus bleed all round.
+            let (pw, ph) = profile.target_px(panel.inflate(profile.bleed).size());
+            let placed = place_image_bleed((pw, ph), panel, profile.bleed);
+            assert!(placed.contains_rect(&clip, EPS), "{name}");
+            // Centred on the panel: the fold hides what the trim removes.
+            assert!(close(placed.center().x, panel.center().x), "{name}");
+            assert!(close(placed.center().y, panel.center().y), "{name}");
+            // The pixels asked for are enough, with no slack: the image keeps its aspect
+            // ratio, so both axes have the resolution of the one that decides the scale,
+            // and that one has at least the pixels `target_px` computed for it.
             let ppi = effective_ppi((pw, ph), placed);
-            assert!(ppi >= profile.target_ppi - 1.0, "{name}: {ppi}");
+            assert_eq!(profile.judge_ppi(ppi), Resolution::Good, "{name}: {ppi}");
+            assert!(ppi >= profile.target_ppi * (1.0 - 1e-9), "{name}: {ppi}");
+            // Filling the target exactly (no aspect mismatch): exactly on target.
+            let exact = effective_ppi((pw, ph), panel.inflate(profile.bleed));
+            assert_eq!(profile.judge_ppi(exact), Resolution::Good, "{name}: {exact}");
         }
     }
 }

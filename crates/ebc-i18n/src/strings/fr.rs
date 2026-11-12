@@ -1,45 +1,58 @@
-//! French (fr-FR). Register: *vous*. No-break space (U+00A0) before `? ! : ;`.
+//! French (fr-FR). The printed card uses the infinitive, so that it chooses neither *tu*
+//! nor *vous* on behalf of the giver; screens address the reader with *vous*. Running text
+//! says « livre numérique », the checkout option says « ebook » (the trade form).
+//! No-break space (U+00A0) before `? ! : ;`.
 
 use crate::Msg;
 
 pub(super) fn text(msg: Msg) -> &'static str {
     match msg {
-        Msg::ProductName => "eBook cadeau",
+        Msg::ProductName => "eBook Cadeau",
         Msg::ProductTagline => "Un livre numérique à offrir, comme un vrai livre.",
-        Msg::CheckoutOption => "Offrir cet eBook",
+        Msg::CheckoutOption => "Offrir cet ebook",
         Msg::CheckoutOptionHelp => {
-            "Nous préparons une carte à l’image du livre. Son QR code permet de recevoir l’eBook sur une liseuse, une tablette ou un téléphone."
+            "Une carte en forme de livre, à imprimer chez soi ou envoyée par la poste. La personne qui la reçoit scanne le code et lit le livre sur liseuse, tablette ou téléphone."
         }
-        Msg::CheckoutPrintAtHome => "Carte à imprimer chez moi",
+        Msg::CheckoutPrintAtHome => "Carte à imprimer chez moi (gratuit)",
         Msg::CheckoutPrintedByPost => "Carte imprimée et envoyée par la poste",
 
         Msg::CardHeadline => "Ce livre est un cadeau",
         Msg::CardFrom => "De la part {de:name}",
         Msg::CardTo => "Pour {name}",
         Msg::CardHowTo => "Pour le lire",
-        Msg::CardStep1 => "Scannez le QR code avec votre téléphone.",
-        Msg::CardStep2 => "Choisissez où lire\u{a0}: liseuse, tablette ou téléphone.",
-        Msg::CardStep3 => "Récupérez votre livre. Bonne lecture\u{a0}!",
-        Msg::CardStep2Reseller => "Connectez-vous à votre compte {store}, ou créez-en un.",
+        Msg::CardStep1 => "Scanner ce code avec l’appareil photo d’un téléphone.",
+        Msg::CardStep2 => "Choisir où lire\u{a0}: liseuse, tablette ou téléphone.",
+        Msg::CardStep3 => "Le livre arrive. Bonne lecture\u{a0}!",
+        Msg::CardStep2Reseller => "Se connecter à son compte {store}, ou en créer un.",
         Msg::CardStep3Reseller => {
-            "Retrouvez le livre dans votre bibliothèque, sur la liseuse et dans l’application."
+            "Le livre apparaît dans la bibliothèque, sur la liseuse et l’application."
         }
         Msg::CardNoPhone => {
-            "Sans téléphone\u{a0}? Sur votre liseuse ou un ordinateur, ouvrez {url} et saisissez le code."
+            "Sans téléphone\u{a0}? Sur la liseuse ou un ordinateur, ouvrir le navigateur, aller sur {url} et saisir le code de cette carte."
         }
         Msg::CodeLabel => "Code",
-        Msg::CardAlreadyPaid => "Ce livre numérique est déjà payé\u{a0}: il ne reste qu’à le lire.",
-        Msg::CardValidUntil => "Disponible jusqu’au {date}.",
-        Msg::CardNoExpiry => "Sans date limite.",
-        Msg::CardHelp => "Besoin d’aide\u{a0}? {url}",
-        Msg::CardBackDefault => {
-            "Ce livre est numérique. Ouvrez cette carte pour le recevoir sur votre liseuse, votre tablette ou votre téléphone."
+        Msg::CardAlreadyPaid => {
+            "Ce livre numérique est déjà payé\u{a0}: il ne reste qu’à le lire, sur liseuse, tablette ou téléphone."
         }
+        Msg::CardValidUntil => "À récupérer avant le {date}.",
+        Msg::CardNoExpiry => "Sans date limite.",
+        Msg::CardHelp => "Une aide\u{a0}? {url}",
+        Msg::CardBackDefault => {
+            "Ce livre est numérique. Ouvrir cette carte pour le recevoir sur liseuse, tablette ou téléphone."
+        }
+        Msg::CardLegalLine => {
+            "{title}, {author}. Un exemplaire numérique, déjà payé\u{a0}: rien à régler."
+        }
+        Msg::CardLegalLineNoAuthor => {
+            "{title}. Un exemplaire numérique, déjà payé\u{a0}: rien à régler."
+        }
+        Msg::CardSingleUse => "Usage unique.",
         Msg::FoldHere => "Plier ici",
-        Msg::CutHere => "Découper ici",
+        Msg::CutHere => "Couper ici",
         Msg::PrintedWith => "Carte créée avec eBook Cadeau",
-        Msg::EbookWord => "eBook",
+        Msg::EbookWord => "livre numérique",
         Msg::EreaderWord => "liseuse",
+        Msg::QrWord => "QR code",
 
         Msg::RedeemTitle => "Recevoir votre livre",
         Msg::RedeemIntro => "Saisissez le code imprimé à l’intérieur de votre carte.",
@@ -69,9 +82,7 @@ pub(super) fn text(msg: Msg) -> &'static str {
         }
         Msg::EnjoyReading => "Bonne lecture\u{a0}!",
         Msg::ErrorCodeTypo => "Ce code contient une faute de frappe. Vérifiez-le et réessayez.",
-        Msg::ErrorCodeFormat => {
-            "Le code comporte {count} caractères\u{a0}: des lettres et des chiffres."
-        }
+        Msg::ErrorCodeFormat => "Le code comporte {count} lettres, sans chiffre ni voyelle.",
         Msg::ErrorCodeUnknown => "Ce code est inconnu. Vérifiez-le sur votre carte.",
         Msg::ErrorGiftExpired => {
             "Ce cadeau n’est plus disponible\u{a0}: sa date limite est dépassée."
@@ -85,7 +96,7 @@ pub(super) fn text(msg: Msg) -> &'static str {
         Msg::ErrorTooManyAttempts => "Trop de tentatives. Réessayez dans quelques minutes.",
         Msg::ErrorGeneric => "Une erreur est survenue. Réessayez plus tard.",
 
-        Msg::CreateTitle => "Créer un eBook cadeau",
+        Msg::CreateTitle => "Créer un eBook Cadeau",
         Msg::FieldIsbn => "ISBN du livre",
         Msg::FieldTitle => "Titre",
         Msg::FieldAuthor => "Auteur",
@@ -113,7 +124,7 @@ pub(super) fn text(msg: Msg) -> &'static str {
             "Je confirme avoir le droit de distribuer ce fichier et d’utiliser cette image de couverture."
         }
         Msg::UploadPurchasedNotice => {
-            "Un eBook acheté en boutique est une licence personnelle\u{a0}: il ne peut pas être transmis ici. Pour l’offrir, utilisez l’option cadeau de la boutique."
+            "Un livre numérique acheté en boutique est une licence personnelle\u{a0}: il ne peut pas être transmis ici. Pour l’offrir, utilisez la fonction cadeau de la boutique."
         }
         Msg::CoverNotFound => {
             "Aucune couverture trouvée. Importez une image ou utilisez la couverture typographique."

@@ -24,7 +24,7 @@ impl Rng {
         (self.next() % bound as u64) as usize
     }
 
-    fn pick<'a>(&mut self, set: &'a [char]) -> char {
+    fn pick(&mut self, set: &[char]) -> char {
         set[self.below(set.len())]
     }
 }
@@ -189,7 +189,7 @@ fn version_is_the_smallest_possible_for_random_mixed_texts() {
 /// that wastes even a few bits shows up as a version bump one character too early.
 #[test]
 fn version_boundaries_are_crossed_exactly_when_the_reference_crosses_them() {
-    let mut rng = Rng(0xB0_07DA_47);
+    let mut rng = Rng(0xB007_DA47);
     for round in 0..12 {
         let full = random_mixed_text(&mut rng, 30, 9);
         let chars: Vec<char> = full.chars().take(160).collect();

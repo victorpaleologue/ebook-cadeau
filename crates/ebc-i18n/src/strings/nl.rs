@@ -1,44 +1,57 @@
-//! Dutch (nl-NL). Register: *je*, the norm in Dutch retail. "e-book" and "e-reader" are
-//! hyphenated and lower case.
+//! Dutch (nl-NL). Register: *je*, the norm in Dutch retail (Dutch instructions use the
+//! imperative). "e-book" and "e-reader" are hyphenated and lower case; the product name
+//! "eBook Cadeau" keeps its own spelling.
 
 use crate::Msg;
 
 pub(super) fn text(msg: Msg) -> &'static str {
     match msg {
-        Msg::ProductName => "e-book cadeau",
+        Msg::ProductName => "eBook Cadeau",
         Msg::ProductTagline => "Een e-book om cadeau te doen, net als een echt boek.",
-        Msg::CheckoutOption => "Dit e-book cadeau doen",
+        Msg::CheckoutOption => "Cadeau doen",
         Msg::CheckoutOptionHelp => {
-            "We maken een kaart die eruitziet als het boek. Met de QR-code komt het e-book op een e-reader, tablet of telefoon."
+            "Een kaart in boekvorm, om zelf te printen of per post te laten bezorgen. De ontvanger scant de code en leest het boek op e-reader, tablet of telefoon."
         }
-        Msg::CheckoutPrintAtHome => "Kaart om zelf te printen",
+        Msg::CheckoutPrintAtHome => "Kaart zelf printen (gratis)",
         Msg::CheckoutPrintedByPost => "Gedrukte kaart per post",
 
         Msg::CardHeadline => "Dit boek is een cadeau",
         Msg::CardFrom => "Van {name}",
         Msg::CardTo => "Voor {name}",
         Msg::CardHowTo => "Zo lees je het",
-        Msg::CardStep1 => "Scan de QR-code met je telefoon.",
+        Msg::CardStep1 => "Scan deze code met de camera van een telefoon.",
         Msg::CardStep2 => "Kies waar je wilt lezen: e-reader, tablet of telefoon.",
-        Msg::CardStep3 => "Haal je boek op. Veel leesplezier!",
-        Msg::CardStep2Reseller => "Log in op je account bij {store} of maak er een aan.",
-        Msg::CardStep3Reseller => "Open het boek in je bibliotheek, op je e-reader en in de app.",
+        Msg::CardStep3 => "Het boek staat klaar. Veel leesplezier!",
+        Msg::CardStep2Reseller => "Log in op een {store}-account, of maak er een aan.",
+        Msg::CardStep3Reseller => {
+            "Het boek verschijnt in de bibliotheek, op de e-reader en in de app."
+        }
         Msg::CardNoPhone => {
-            "Geen telefoon? Open {url} op je e-reader of een computer en vul de code in."
+            "Geen telefoon? Open op de e-reader of een computer de browser, ga naar {url} en vul de code van deze kaart in."
         }
         Msg::CodeLabel => "Code",
-        Msg::CardAlreadyPaid => "Dit e-book is al betaald: je hoeft het alleen nog te lezen.",
-        Msg::CardValidUntil => "Beschikbaar tot en met {date}.",
-        Msg::CardNoExpiry => "Zonder einddatum.",
+        Msg::CardAlreadyPaid => {
+            "Dit e-book is al betaald. Lees het op je e-reader, tablet of telefoon."
+        }
+        Msg::CardValidUntil => "Ophalen vóór {date}.",
+        Msg::CardNoExpiry => "Geen einddatum.",
         Msg::CardHelp => "Hulp nodig? {url}",
         Msg::CardBackDefault => {
-            "Dit boek is digitaal. Open deze kaart en lees het op je e-reader, tablet of telefoon."
+            "Dit boek is digitaal. Open deze kaart en lees het op e-reader, tablet of telefoon."
         }
+        Msg::CardLegalLine => {
+            "{title}, {author}. Eén digitaal exemplaar, al betaald: er valt niets meer te betalen."
+        }
+        Msg::CardLegalLineNoAuthor => {
+            "{title}. Eén digitaal exemplaar, al betaald: er valt niets meer te betalen."
+        }
+        Msg::CardSingleUse => "Eenmalig te gebruiken.",
         Msg::FoldHere => "Hier vouwen",
         Msg::CutHere => "Hier knippen",
         Msg::PrintedWith => "Kaart gemaakt met eBook Cadeau",
         Msg::EbookWord => "e-book",
         Msg::EreaderWord => "e-reader",
+        Msg::QrWord => "QR-code",
 
         Msg::RedeemTitle => "Haal je boek op",
         Msg::RedeemIntro => "Vul de code in die aan de binnenkant van je kaart staat.",
@@ -66,7 +79,7 @@ pub(super) fn text(msg: Msg) -> &'static str {
         Msg::ErrorCodeTypo => {
             "Deze code bevat een typefout. Controleer de code en probeer het opnieuw."
         }
-        Msg::ErrorCodeFormat => "De code bestaat uit {count} tekens: letters en cijfers.",
+        Msg::ErrorCodeFormat => "De code bestaat uit {count} letters, zonder cijfers of klinkers.",
         Msg::ErrorCodeUnknown => "Deze code is onbekend. Controleer de code op je kaart.",
         Msg::ErrorGiftExpired => "Dit cadeau is niet meer beschikbaar: de termijn is verstreken.",
         Msg::ErrorGiftRevoked => {
@@ -78,7 +91,7 @@ pub(super) fn text(msg: Msg) -> &'static str {
         Msg::ErrorTooManyAttempts => "Te veel pogingen. Probeer het over een paar minuten opnieuw.",
         Msg::ErrorGeneric => "Er is iets misgegaan. Probeer het later opnieuw.",
 
-        Msg::CreateTitle => "Een e-book cadeau maken",
+        Msg::CreateTitle => "Een eBook Cadeau maken",
         Msg::FieldIsbn => "ISBN van het boek",
         Msg::FieldTitle => "Titel",
         Msg::FieldAuthor => "Auteur",

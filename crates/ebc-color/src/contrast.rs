@@ -67,10 +67,16 @@ pub fn pick_text_color(background: Rgb8, candidates: &[Rgb8], min_ratio: f64) ->
 /// the closest lighter or darker version of it that does.
 ///
 /// The colour keeps its CIELAB a\*/b\* (its hue, as far as the sRGB gamut allows) while
-/// L\* moves in steps of 1 towards black or white — whichever of the two contrasts more
-/// with the background. If even the extreme does not reach `min_ratio`, the result is
-/// [`black_or_white`]. Use it to keep a cover's accent colour on the spine while
-/// guaranteeing legibility.
+/// L\* moves away from the original in steps of 1, **in both directions at once**: the
+/// first step at which either the lighter or the darker variant reaches `min_ratio` wins,
+/// so a dark colour that only needs to get a little darker is not flipped to a pale one.
+/// When both variants qualify at the same step, the one towards the better extreme
+/// ([`black_or_white`] of the background) is returned. If no variant reaches `min_ratio`
+/// (including a NaN or unreachable `min_ratio`), the result is [`black_or_white`]. Use it
+/// to keep a cover's accent colour on the spine while guaranteeing legibility.
+///
+/// "Closest" is measured on L\* alone, before gamut clipping; the result can differ from
+/// the nominal colour by the rounding to 8-bit sRGB.
 #[must_use]
 pub fn ensure_contrast(foreground: Rgb8, background: Rgb8, min_ratio: f64) -> Rgb8 {
     if contrast_ratio(foreground, background) >= min_ratio {
@@ -78,16 +84,23 @@ pub fn ensure_contrast(foreground: Rgb8, background: Rgb8, min_ratio: f64) -> Rg
     }
     let extreme = black_or_white(background);
     let lab = Lab::from_rgb8(foreground);
-    let towards_white = extreme == Rgb8::WHITE;
-    let mut l = lab.l.clamp(0.0, 100.0);
-    for _ in 0..100 {
-        l = if towards_white { (l + 1.0).min(100.0) } else { (l - 1.0).max(0.0) };
-        let candidate = Lab::new(l, lab.a, lab.b).to_rgb8();
-        if contrast_ratio(candidate, background) >= min_ratio {
-            return candidate;
-        }
-        if l <= 0.0 || l >= 100.0 {
-            break;
+    let start = lab.l.clamp(0.0, 100.0);
+    let preferred_sign = if extreme == Rgb8::WHITE { 1.0 } else { -1.0 };
+    // L* spans 100 units, so 100 steps of 1 reach both ends from anywhere.
+    for step in 1..=100u32 {
+        let distance = f64::from(step);
+        for sign in [preferred_sign, -preferred_sign] {
+            // Stop walking a direction once the previous step has reached its end.
+            let previous = start + sign * (distance - 1.0);
+            let exhausted = if sign > 0.0 { previous >= 100.0 } else { previous <= 0.0 };
+            if exhausted {
+                continue;
+            }
+            let l = (start + sign * distance).clamp(0.0, 100.0);
+            let candidate = Lab::new(l, lab.a, lab.b).to_rgb8();
+            if contrast_ratio(candidate, background) >= min_ratio {
+                return candidate;
+            }
         }
     }
     extreme
@@ -253,5 +266,55 @@ mod tests {
         let out = ensure_contrast(hex("#808080"), hex("#777777"), 15.0);
         assert_eq!(out, black_or_white(hex("#777777")));
         assert_eq!(ensure_contrast(hex("#808080"), hex("#777777"), f64::NAN), Rgb8::BLACK);
+    }
+
+    /// Audit finding: the search used to walk only towards the better extreme, turning a
+    /// dark grey that needed 2 L* less into a pale one 64 L* away.
+    #[test]
+    fn ensure_contrast_returns_the_closest_variant_in_either_direction() {
+        let bg = hex("#707070");
+        let fg = hex("#2b2b2b");
+        assert!(contrast_ratio(fg, bg) < 3.0);
+        assert_eq!(black_or_white(bg), Rgb8::WHITE, "the better extreme is the far one");
+        let out = ensure_contrast(fg, bg, 3.0);
+        assert!(contrast_ratio(out, bg) >= 3.0);
+        assert!(out.to_lab().l < fg.to_lab().l, "{out} must be darker than {fg}");
+        assert!((out.to_lab().l - fg.to_lab().l).abs() < 3.0, "{fg} -> {out}");
+
+        // A coloured case from the same audit: 6 L* darker suffices.
+        let (fg, bg) = (hex("#40304a"), hex("#70708c"));
+        let out = ensure_contrast(fg, bg, 3.0);
+        assert!(contrast_ratio(out, bg) >= 3.0);
+        assert!((out.to_lab().l - fg.to_lab().l).abs() < 8.0, "{fg} -> {out}");
+        assert!(out.to_lab().l < fg.to_lab().l);
+
+        // No variant in the other direction is closer than the one returned.
+        let mut state = 4242u64;
+        for _ in 0..2_000 {
+            state = state.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1_442_695);
+            let fg = Rgb8::from_key((state >> 40) as u32);
+            let bg = Rgb8::from_key((state >> 16) as u32);
+            let out = ensure_contrast(fg, bg, 3.0);
+            if contrast_ratio(fg, bg) >= 3.0 || out == black_or_white(bg) {
+                continue;
+            }
+            let from = Lab::from_rgb8(fg);
+            let moved = (out.to_lab().l - from.l).abs();
+            let mut steps = 1.0;
+            // 1.5: slack for the 8-bit rounding of `out`.
+            while steps < moved - 1.5 {
+                for l in [from.l - steps, from.l + steps] {
+                    if (0.0..=100.0).contains(&l) {
+                        let closer = Lab::new(l, from.a, from.b).to_rgb8();
+                        assert!(
+                            contrast_ratio(closer, bg) < 3.0,
+                            "{fg} on {bg}: returned {out} ({moved:.1} L* away) but {closer} \
+                             is only {steps} away"
+                        );
+                    }
+                }
+                steps += 1.0;
+            }
+        }
     }
 }

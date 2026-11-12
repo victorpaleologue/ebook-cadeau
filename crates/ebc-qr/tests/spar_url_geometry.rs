@@ -38,16 +38,27 @@ fn claim_code() -> QrCode {
 
 /// What RFC 3986 §3 says the normalised form must be, written independently: only the
 /// scheme and a non-bracketed host[:port] change, and only in ASCII case.
+///
+/// Corrected after the review: this model originally upper-cased the scheme and host of
+/// *every* scheme, which is the behaviour audit finding 1
+/// (`docs/status/review-findings/color-qr.audit.json`) reports as a defect — WHATWG
+/// parsers keep the host of a non-special scheme verbatim (`new URL("ebk+app://Open/Item")
+/// .host == "Open"`), and deep-link handlers (`opds://authorize/`, Android intent filters)
+/// compare scheme and host literally. Only `http` and `https` may be rewritten; any other
+/// accepted URL must come back byte for byte, which is the stricter expectation.
 fn rfc3986_expected(url: &str) -> Option<String> {
     let colon = url.find(':')?;
     let (scheme, rest) = (&url[..colon], &url[colon + 1..]);
+    if !scheme.eq_ignore_ascii_case("http") && !scheme.eq_ignore_ascii_case("https") {
+        return Some(url.to_owned());
+    }
     let mut out = scheme.to_ascii_uppercase();
     out.push(':');
     let Some(after) = rest.strip_prefix("//") else {
         out.push_str(rest);
         return Some(out);
     };
-    let end = after.find(|c| matches!(c, '/' | '?' | '#')).unwrap_or(after.len());
+    let end = after.find(['/', '?', '#']).unwrap_or(after.len());
     let authority = &after[..end];
     let split = authority.rfind('@').map_or(0, |at| at + 1);
     let (userinfo, host) = authority.split_at(split);

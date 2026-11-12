@@ -56,7 +56,14 @@ fn nested_transforms_accumulate_and_q_restores_them() {
          72 0 0 144 0 0 cm /Im Do\n",
     );
     let report = f.check_with(&lenient_ppi());
-    assert!(report.findings.is_empty(), "{:#?}", report.findings);
+    // Placements 2 and 3 squeeze the 300 × 600 px image into a square on purpose (so that a
+    // mix-up of the two axes would show): that is reported as a stretched image, once, since
+    // both placements give the same message. Nothing else is wrong with the page.
+    assert_eq!(codes(&report), set(&[c::IMAGE_DISTORTED]), "{:#?}", report.findings);
+    assert_eq!(report.findings.len(), 1, "{:#?}", report.findings);
+    assert_eq!(report.findings[0].severity, Severity::Warning);
+    assert!(report.findings[0].message.contains("300 × 600 ppi"), "{}", report.findings[0]);
+    assert!(report.passed());
     let got: Vec<(f64, f64, f64, f64)> =
         images(&report).iter().map(|i| (i.width_mm, i.height_mm, i.ppi_x, i.ppi_y)).collect();
     // 1: 50×100 units under two nested scales of 2 → 100×200 pt.
@@ -160,7 +167,7 @@ fn forms_without_resources_use_the_callers() {
 fn forms_inherit_and_do_not_leak_graphics_state() {
     // The form paints with the caller's fill colour (RGB), then sets a CMYK colour and a
     // scale that must not survive the Do.
-    let mut f = page_with("1 0 0 rg /Fm Do 72 0 0 72 0 0 cm /Im Do 0 0 10 10 re f");
+    let mut f = page_with("1 0 0 rg /Fm Do 72 0 0 144 0 0 cm /Im Do 0 0 10 10 re f");
     let form = f.doc.add_object(Stream::new(
         dictionary! { "Type" => "XObject", "Subtype" => "Form", "BBox" => vec![0.into(), 0.into(), 72.into(), 72.into()] },
         b"0 0 20 20 re f 0 0 0 1 k 10 0 0 10 0 0 cm q q q".to_vec(),
@@ -186,7 +193,7 @@ fn forms_inherit_and_do_not_leak_graphics_state() {
 
 #[test]
 fn stray_q_inside_a_form_cannot_pop_the_callers_state() {
-    let mut f = page_with("q 72 0 0 72 0 0 cm /Fm Do /Im Do Q");
+    let mut f = page_with("q 72 0 0 144 0 0 cm /Fm Do /Im Do Q");
     let form = f.doc.add_object(Stream::new(
         dictionary! { "Type" => "XObject", "Subtype" => "Form", "BBox" => vec![0.into(), 0.into(), 1.into(), 1.into()] },
         b"Q Q Q Q".to_vec(),
@@ -555,4 +562,42 @@ fn image_placement_list_is_capped() {
     assert_eq!(report.findings.len(), 1);
     assert_eq!(report.findings[0].severity, Severity::Warning);
     assert!(report.passed());
+}
+
+#[test]
+fn stretched_images_are_warnings() {
+    // 300 × 600 px squeezed into a square inch: twice as dense vertically as horizontally.
+    let mut f = page_with("q 72 0 0 72 100 100 cm /Im Do Q");
+    let report = f.check_with(&lenient_ppi());
+    assert_eq!(codes(&report), set(&[c::IMAGE_DISTORTED]));
+    assert_eq!(report.findings.len(), 1);
+    let found = &report.findings[0];
+    assert_eq!((found.severity, found.page), (Severity::Warning, Some(1)));
+    assert!(found.message.contains("image /Im"), "{found}");
+    assert!(found.message.contains("300 × 600 ppi"), "{found}");
+    assert!(found.message.contains("100 %"), "{found}");
+    assert!(report.passed());
+
+    // Rotation is not distortion, and half a percent of rounding is tolerated.
+    for placement in
+        ["0 72 -144 0 300 100 cm", "72 0 0 144.7 100 100 cm", "72.3 0 0 144 100 100 cm"]
+    {
+        let mut f = page_with(&format!("q {placement} /Im Do Q"));
+        let report = f.check_with(&lenient_ppi());
+        assert!(report.findings.is_empty(), "{placement}: {:#?}", report.findings);
+    }
+    // 1.5 % is not.
+    let mut f = page_with("q 72 0 0 146.2 100 100 cm /Im Do Q");
+    assert_eq!(codes(&f.check_with(&lenient_ppi())), set(&[c::IMAGE_DISTORTED]));
+
+    // Swatches and gradient strips (two pixels a side or fewer) may be stretched at will.
+    let mut f =
+        page_with("q 200 0 0 20 100 100 cm /Strip Do Q q 50 0 0 80 100 300 cm /Swatch Do Q");
+    let strip = grey_image(&mut f, 256, 1);
+    let swatch = grey_image(&mut f, 2, 2);
+    f.add_resource(f.page1, "XObject", "Strip", strip);
+    f.add_resource(f.page1, "XObject", "Swatch", swatch);
+    let report = f.check_with(&lenient_ppi());
+    assert!(report.findings.is_empty(), "{:#?}", report.findings);
+    assert_eq!(images(&report).len(), 2);
 }

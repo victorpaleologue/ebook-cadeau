@@ -381,6 +381,17 @@ fn path_rejects_unusable_geometry_instead_of_emitting_garbage() {
     }
     // Negative page coordinates (inside the bleed) and tiny modules are legitimate.
     assert!(!qr.to_path(Point::new(-3.0, -3.0), 1e-6).is_empty());
+    // Finite arguments whose far corner overflows: empty as well, never infinite points.
+    for (origin, module) in [
+        (Point::new(0.0, 0.0), f64::MAX),
+        (Point::new(1e308, 0.0), 1e307),
+        (Point::new(0.0, 1e308), 1e307),
+        (Point::new(f64::MAX, 0.0), 1e292),
+    ] {
+        assert!(qr.to_path(origin, module).is_empty(), "{origin:?}, {module:e}");
+    }
+    // Large but representable geometry is still drawn.
+    assert!(!qr.to_path(Point::new(-1e300, 1e300), 1e300).is_empty());
 }
 
 // --- size helpers -------------------------------------------------------------------------

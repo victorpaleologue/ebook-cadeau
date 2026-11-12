@@ -253,6 +253,11 @@ impl SetRun {
     pub(crate) fn length(&self) -> f64 {
         self.measure.length() * self.size_pt
     }
+
+    /// The same run at another size (ink is proportional to the size).
+    pub(crate) fn with_size(&self, size_pt: f64) -> Self {
+        Self { size_pt, ..self.clone() }
+    }
 }
 
 /// How far down the fitting ladder the title had to go.

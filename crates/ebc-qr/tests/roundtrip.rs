@@ -314,6 +314,115 @@ fn url_normalisation_buys_smaller_symbols() {
     }
 }
 
+/// The payload printed on the cards: an upper-case claim URL. It must be stored as ONE
+/// alphanumeric segment — checked against a symbol built by hand from such a segment with
+/// the backend — whatever the case in which scheme and host were configured.
+#[test]
+fn the_card_claim_url_uses_alphanumeric_mode_end_to_end() {
+    use qrcodegen::{QrCodeEcc, QrSegment, Version};
+
+    let claim = "HTTPS://EBK.EXAMPLE/K/BCDFGHJKLMNP";
+    let by_hand = |segment: QrSegment| {
+        qrcodegen::QrCode::encode_segments_advanced(
+            &[segment],
+            QrCodeEcc::Medium,
+            Version::new(1),
+            Version::new(40),
+            None,
+            true,
+        )
+        .expect("fits")
+    };
+    let alphanumeric = by_hand(QrSegment::make_alphanumeric(claim));
+    let bytes = by_hand(QrSegment::make_bytes(claim.as_bytes()));
+    assert_eq!((alphanumeric.version().value(), bytes.version().value()), (2, 3));
+
+    let inputs = [
+        claim,
+        "https://ebk.example/K/BCDFGHJKLMNP",
+        "Https://Ebk.Example/K/BCDFGHJKLMNP",
+        "hTTPS://EBK.example/K/BCDFGHJKLMNP",
+    ];
+    for input in inputs {
+        assert_eq!(normalize_url(input).as_deref(), Ok(claim), "{input}");
+        let qr = QrCode::encode_url(input, EcLevel::M).expect("fits");
+        assert_eq!((qr.version(), qr.size(), qr.ec_level()), (2, 25, EcLevel::M), "{input}");
+        assert_eq!(qr.mask(), alphanumeric.mask().value());
+        for y in 0..qr.size() {
+            for x in 0..qr.size() {
+                assert_eq!(
+                    qr.module(x, y),
+                    alphanumeric.get_module(x as i32, y as i32),
+                    "{input}: module ({x}, {y}) differs from the alphanumeric-only symbol"
+                );
+            }
+        }
+        let got = decode_raster(&qr, 5, QUIET_ZONE_MODULES).expect("decodes");
+        assert_eq!(got.text, claim);
+    }
+    // Every level: never larger than the hand-made alphanumeric symbol.
+    for (level, backend) in [
+        (EcLevel::L, QrCodeEcc::Low),
+        (EcLevel::M, QrCodeEcc::Medium),
+        (EcLevel::Q, QrCodeEcc::Quartile),
+        (EcLevel::H, QrCodeEcc::High),
+    ] {
+        let reference = qrcodegen::QrCode::encode_segments_advanced(
+            &[QrSegment::make_alphanumeric(claim)],
+            backend,
+            Version::new(1),
+            Version::new(40),
+            None,
+            true,
+        )
+        .expect("fits");
+        let qr = QrCode::encode_url("https://ebk.example/K/BCDFGHJKLMNP", level).expect("fits");
+        assert_eq!(qr.version(), reference.version().value(), "{level:?}");
+    }
+}
+
+/// A path, query or fragment whose case matters is never altered — not when it merely
+/// *could* be upper-cased into the alphanumeric set, and not through a backslash.
+#[test]
+fn case_significant_paths_are_never_altered() {
+    let urls = [
+        "https://ebk.example/k/bcdfghjklmnp",
+        "https://ebk.example/K/bcdfghjklmnp",
+        "https://ebk.example/k/BCDFGHJKLMNP",
+        "https://ebk.example/K/BCDFGHJKLMNp",
+        "https://ebk.example/a",
+        "https://ebk.example/K/BCDF?c=x",
+        "https://ebk.example/K/BCDF#f",
+        "https://ebk.example?k=bcdf",
+        "https://ebk.example#bcdf",
+        "https://ebk.example/K/%c3%a9",
+        "https://ebk.example/k\\bcdf",
+        "HTTPS://EBK.EXAMPLE/k/bcdfghjklmnp",
+    ];
+    for url in urls {
+        let tail_at = url.char_indices().skip(8).find(|&(_, c)| "/?#".contains(c)).expect("tail").0;
+        let (head, tail) = url.split_at(tail_at);
+        let expected = format!("{}{tail}", head.to_ascii_uppercase());
+        assert_eq!(normalize_url(url).as_deref(), Ok(expected.as_str()), "{url}");
+        for level in EcLevel::ALL {
+            let qr = QrCode::encode_url(url, level).expect("fits");
+            let got = decode_raster(&qr, 4, QUIET_ZONE_MODULES).expect("decodes");
+            assert_eq!(got.text, expected, "{url} at {level:?}");
+            assert!(got.text.ends_with(tail));
+        }
+    }
+    // The ambiguous form is refused rather than guessed at; other schemes pass verbatim.
+    assert!(matches!(
+        QrCode::encode_url("https://ebk.example\\k\\bcdfghjklmnp", EcLevel::M),
+        Err(QrError::InvalidUrl(_))
+    ));
+    for verbatim in ["opds://authorize/", "ebk+app://Open/Item", "mailto:Zoe@Example.com"] {
+        let qr = QrCode::encode_url(verbatim, EcLevel::M).expect("fits");
+        assert_eq!(qr, QrCode::encode(verbatim, EcLevel::M).expect("fits"));
+        assert_eq!(decode_raster(&qr, 4, QUIET_ZONE_MODULES).expect("decodes").text, verbatim);
+    }
+}
+
 #[test]
 fn mixed_segments_beat_single_mode_encoding() {
     // 60 digits followed by one lower-case letter: one byte segment would need 61 bytes

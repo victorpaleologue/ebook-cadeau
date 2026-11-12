@@ -15,6 +15,12 @@ serde.workspace = true
 serde_json.workspace = true
 thiserror.workspace = true
 
+[dev-dependencies]
+# The writer is only ever a dev-dependency: the preflight must stay independent of the crate
+# it referees. `tests/writer.rs` uses it to preflight realistic, compressed PDFs.
+ebc-pdf.workspace = true
+ebc-scene.workspace = true
+
 [lints]
 workspace = true
 

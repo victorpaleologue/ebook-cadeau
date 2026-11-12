@@ -48,7 +48,8 @@ pub(crate) struct PageFacts {
     pub(crate) transparency: bool,
     /// Whether an RGB-like colour space was used to paint (allowed or not).
     pub(crate) uses_rgb: bool,
-    /// Bounding box, in default user space, of everything painted whose position is known.
+    /// Bounding box, in default user space, of everything painted in (or reaching into) the
+    /// printed area whose position is known.
     pub(crate) painted: Option<RectPt>,
     /// Whether something was painted whose extent is unknown but may be the whole page
     /// (a shading painted with `sh` fills the clip region).
@@ -742,8 +743,14 @@ impl<'a, 's> Interpreter<'a, 's> {
         }
     }
 
-    /// Extends the bounding box of everything painted so far.
+    /// Extends the bounding box of the artwork painted so far. Whatever lies entirely
+    /// outside the printed area (crop marks, colour bars and notes in the slug) is not
+    /// artwork: counting it would make every page with printer's marks look as if its
+    /// artwork filled the bleed.
     fn note_painted(&mut self, bbox: RectPt) {
+        if self.printed.is_some_and(|printed| !printed.overlaps(&bbox, TOUCH_TOLERANCE_PT)) {
+            return;
+        }
         self.facts.painted = Some(match self.facts.painted {
             None => bbox,
             Some(all) => RectPt {

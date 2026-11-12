@@ -34,7 +34,8 @@ pub fn safe_rect(panel: Rect, profile: &PrintProfile) -> Rect {
 /// crease (so that a crease that drifts does not fold through the lettering) and
 /// `safe_margin` away from the top and bottom trim edges.
 ///
-/// With the default 10 mm spine and the professional profile this is a 7 mm wide band.
+/// With the default 10 mm spine and the built-in profiles (2 mm from each crease) this is
+/// a 6 mm wide band.
 #[must_use]
 pub fn spine_safe_rect(format: &CardFormat, profile: &PrintProfile) -> Rect {
     format.spine().inflate_xy(-sane(profile.spine_safe_margin), -sane(profile.safe_margin))
@@ -139,17 +140,23 @@ mod tests {
     #[test]
     fn safe_areas_of_the_default_card() {
         let (f, p) = (CardFormat::poche(), PrintProfile::professional_eu());
-        assert_eq!(safe_rect(f.front(), &p), Rect::new(124.0, 4.0, 102.0, 170.0));
-        assert_eq!(safe_rect(f.back(), &p), Rect::new(4.0, 4.0, 102.0, 170.0));
-        // 1.5 mm from each crease, 4 mm from top and bottom: a 7 mm text band.
-        assert_eq!(spine_safe_rect(&f, &p), Rect::new(111.5, 4.0, 7.0, 170.0));
+        // 5 mm from the trim and from the crease: the 100 x 168 mm cover box.
+        assert_eq!(safe_rect(f.front(), &p), Rect::new(125.0, 5.0, 100.0, 168.0));
+        assert_eq!(safe_rect(f.back(), &p), Rect::new(5.0, 5.0, 100.0, 168.0));
+        // 2 mm from each crease, 5 mm from top and bottom: a 6 mm text band.
+        assert_eq!(spine_safe_rect(&f, &p), Rect::new(112.0, 5.0, 6.0, 168.0));
         let s = safe_panels(&f, &p);
         assert_eq!(s.left, safe_rect(f.back(), &p));
         assert_eq!(s.spine, spine_safe_rect(&f, &p));
         assert_eq!(s.right, safe_rect(f.front(), &p));
-        // Home: 5 mm and 2 mm, a 6 mm band.
+        // Home: the same margins.
         let h = PrintProfile::home(Sheet::A4);
         assert_eq!(spine_safe_rect(&f, &h), Rect::new(112.0, 5.0, 6.0, 168.0));
+        // A printer's data sheet with other margins is honoured as given.
+        let mut tight = p.clone();
+        (tight.safe_margin, tight.spine_safe_margin) = (4.0, 1.5);
+        assert_eq!(safe_rect(f.front(), &tight), Rect::new(124.0, 4.0, 102.0, 170.0));
+        assert_eq!(spine_safe_rect(&f, &tight), Rect::new(111.5, 4.0, 7.0, 170.0));
     }
 
     #[test]
@@ -193,7 +200,7 @@ mod tests {
         assert_eq!(bounds[0], Rect::new(-3.0, -3.0, 236.0, 184.0)); // bleed
         assert_eq!(bounds[1], Rect::new(0.0, 0.0, 230.0, 178.0)); // trim
         assert_eq!(bounds[2], Rect::new(110.0, 0.0, 10.0, 178.0)); // creases
-        assert_eq!(bounds[3], Rect::new(4.0, 4.0, 222.0, 170.0)); // safe areas
+        assert_eq!(bounds[3], Rect::new(5.0, 5.0, 220.0, 168.0)); // safe areas
         // Invalid input gives an empty layer.
         let bad = CardFormat { cover: Size::new(0.0, 0.0), spine_width: 0.0 };
         assert_eq!(guides(&bad, &p), Item::layer("guides", vec![]));

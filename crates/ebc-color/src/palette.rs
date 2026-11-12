@@ -7,14 +7,21 @@
 //!    (stratified jittered sampling). Small regions are read in full. Jitter avoids the
 //!    aliasing a regular stride would show on pinstripes and halftone screens, and reading
 //!    real pixels (rather than block averages) keeps thin lettering in its true colour.
-//!    Pixels are composited over white first, because that is what a transparent pixel
-//!    becomes on paper.
-//! 2. **Deduplicate.** Identical colours are counted once with a weight.
+//!    Every sample **weighs as many pixels as its cell holds**: the cells of the last
+//!    column and row are narrower than the others when the step does not divide the
+//!    region, and counting them as full cells would over-represent whatever sits in the
+//!    last few pixels (badly so on the thin strips [`edge_palette`] and
+//!    [`has_uniform_border`] look at). Pixels are composited over white first, because
+//!    that is what a transparent pixel becomes on paper.
+//! 2. **Deduplicate.** Identical colours are counted once, with their weights added up.
 //! 3. **Cluster.** Greedy k-means++ seeding with a fixed seed, then Lloyd iterations, on the
 //!    CIELAB coordinates, with ties broken by index.
-//! 4. **Merge and order.** Clusters closer than [`PALETTE_MERGE_DELTA_E`] are merged, so a
-//!    cover with two flat (or noisy but flat-looking) colours yields two swatches whatever
-//!    `k` was asked for. Swatches are sorted by decreasing share, then by colour.
+//! 4. **Merge and order.** Clusters closer than [`PALETTE_MERGE_DELTA_E`] are merged,
+//!    closest pair first, **until no two remain that close** — a merged cluster moves, so
+//!    one pass is not enough. The 8-bit colours that are reported are compared as well as
+//!    the exact centres, so two swatches of one palette are never closer than the threshold. A
+//!    cover with two flat (or noisy but flat-looking) colours thus yields two swatches
+//!    whatever `k` was asked for. Swatches are sorted by decreasing share, then by colour.
 
 use ebc_scene::Pixmap;
 
@@ -25,9 +32,9 @@ use crate::lab::Lab;
 pub const MAX_PALETTE_SIZE: usize = 64;
 
 /// Clusters whose centres are closer than this CIE76 distance (ΔE\*ab) are reported as one
-/// swatch. About 2.3 is a just-noticeable difference; 5 — "the same colour at a glance" —
-/// also absorbs the way k-means splits one noisy flat area (JPEG artefacts, paper grain)
-/// into two halves.
+/// swatch, so no two swatches of a palette are closer than this. About 2.3 is a
+/// just-noticeable difference; 5 — "the same colour at a glance" — also absorbs the way
+/// k-means splits one noisy flat area (JPEG artefacts, paper grain) into two halves.
 pub const PALETTE_MERGE_DELTA_E: f64 = 5.0;
 
 /// The colour spread (RMS ΔE\*ab around the mean colour) at which [`edge_uniformity`]
@@ -51,7 +58,8 @@ pub struct Swatch {
     /// The cluster's centre, as sRGB.
     pub color: Rgb8,
     /// Share of the analysed pixels belonging to this cluster, `0.0..=1.0`. The shares of
-    /// a palette add up to 1.
+    /// a palette add up to 1. On regions too large to be read in full the share is an
+    /// estimate from one sampled pixel per grid cell, each weighted by its cell's area.
     pub share: f32,
 }
 
@@ -150,9 +158,16 @@ pub fn has_uniform_border(img: &Pixmap) -> Option<Rgb8> {
 /// together; the border is accepted when, on **each** of the four edges, at least
 /// `min_coverage` of the band lies within `tolerance_delta_e` of that colour. Hostile
 /// options never panic: a NaN or negative tolerance, or a NaN coverage, rejects every
-/// image.
+/// image — whatever the other option says (a coverage of 0 or less does not turn a
+/// tolerance that matches nothing into an acceptance).
 #[must_use]
 pub fn uniform_border_with(img: &Pixmap, options: &BorderOptions) -> Option<Rgb8> {
+    // Checked up front: with `min_coverage <= 0` the per-edge comparison below would
+    // accept a band in which nothing matched.
+    let tolerance_usable = options.tolerance_delta_e >= 0.0; // false for NaN
+    if !tolerance_usable || options.min_coverage.is_nan() {
+        return None;
+    }
     let shorter = img.width().min(img.height());
     let fraction =
         if options.band_fraction.is_nan() { 0.0 } else { options.band_fraction.clamp(0.0, 0.5) };
@@ -171,7 +186,6 @@ pub fn uniform_border_with(img: &Pixmap, options: &BorderOptions) -> Option<Rgb8
 
     for samples in &bands {
         let total: f64 = samples.iter().map(|s| s.weight).sum();
-        // A NaN or negative tolerance matches nothing.
         let inside: f64 = samples
             .iter()
             .filter(|s| s.lab.delta_e76(centre) <= options.tolerance_delta_e)
@@ -233,7 +247,9 @@ impl Region {
     }
 }
 
-/// A distinct colour found in a region, with the number of sampled pixels that have it.
+/// A distinct colour found in a region, with the number of pixels it stands for: the summed
+/// areas of the sampling cells in which it was read (the pixel count itself when the region
+/// is read in full).
 #[derive(Debug, Clone, Copy)]
 struct Sample {
     lab: Lab,
@@ -292,14 +308,15 @@ fn over_white([r, g, b, a]: [u8; 4]) -> Rgb8 {
 }
 
 /// Reads the region's pixels (all of them, or a jittered grid) and returns the distinct
-/// colours in ascending RGB order with their counts.
+/// colours in ascending RGB order with their weights (pixels represented, see [`Sample`]).
 fn sample(img: &Pixmap, region: Region) -> Vec<Sample> {
     let step = sampling_step(region.w, region.h);
     let (cols, rows) = (region.w.div_ceil(step), region.h.div_ceil(step));
     let data = img.data();
     let stride = img.width() as usize;
 
-    let mut keys: Vec<u32> = Vec::with_capacity(cols as usize * rows as usize);
+    // (colour key, area of the cell the pixel stands for)
+    let mut keys: Vec<(u32, u64)> = Vec::with_capacity(cols as usize * rows as usize);
     for cy in 0..rows {
         let cell_h = step.min(region.h - cy * step);
         for cx in 0..cols {
@@ -315,18 +332,22 @@ fn sample(img: &Pixmap, region: Region) -> Vec<Sample> {
             let offset = (y * stride + x) * 4;
             let pixel = data.get(offset..offset + 4).and_then(|p| <[u8; 4]>::try_from(p).ok());
             if let Some(rgba) = pixel {
-                keys.push(over_white(rgba).to_key());
+                // A partial cell on the right/bottom rim stands for fewer pixels.
+                keys.push((over_white(rgba).to_key(), u64::from(cell_w) * u64::from(cell_h)));
             }
         }
     }
+    // Sorting by (key, area) keeps the floating-point sums below independent of the
+    // order in which the pixels were visited.
     keys.sort_unstable();
 
     let mut samples: Vec<Sample> = Vec::new();
     let mut previous: Option<u32> = None;
-    for key in keys {
+    for (key, area) in keys {
+        let weight = area as f64;
         match samples.last_mut() {
-            Some(last) if previous == Some(key) => last.weight += 1.0,
-            _ => samples.push(Sample { lab: Lab::from_rgb8(Rgb8::from_key(key)), weight: 1.0 }),
+            Some(last) if previous == Some(key) => last.weight += weight,
+            _ => samples.push(Sample { lab: Lab::from_rgb8(Rgb8::from_key(key)), weight }),
         }
         previous = Some(key);
     }
@@ -369,7 +390,7 @@ fn weighted_median(values: &mut [(f64, f64)]) -> Option<f64> {
 // Clustering
 // ---------------------------------------------------------------------------------------
 
-/// A cluster centre and the number of sampled pixels assigned to it.
+/// A cluster centre and the weight (pixels represented) of the samples assigned to it.
 #[derive(Debug, Clone, Copy)]
 struct Cluster {
     lab: Lab,
@@ -499,10 +520,18 @@ fn kmeans(samples: &[Sample], k: usize) -> Vec<Cluster> {
 }
 
 /// Drops empty clusters, merges near-duplicates, converts to sRGB and orders the result.
+///
+/// Merging is agglomerative: the closest pair below [`PALETTE_MERGE_DELTA_E`] is replaced
+/// by its weighted mean, again and again, until no such pair is left. (A single greedy pass
+/// is not enough: a cluster that absorbs a neighbour moves, possibly to within the
+/// threshold of a third one.) A pair counts as close when either its exact centres or the
+/// colours as they will be reported — rounded to 8-bit sRGB — are within the threshold, so
+/// the guarantee holds for the returned swatches exactly, not merely up to rounding. At
+/// most [`MAX_PALETTE_SIZE`] clusters come in, so the cubic worst case is negligible.
 fn finalize(mut clusters: Vec<Cluster>) -> Vec<Swatch> {
     clusters.retain(|c| c.weight > 0.0);
-    // Heaviest first so that small clusters merge into large ones; the Lab tie-break
-    // makes the order total.
+    // Heaviest first; the Lab tie-break makes the order — and with it the choice between
+    // equally close pairs below — total.
     clusters.sort_by(|x, y| {
         y.weight
             .total_cmp(&x.weight)
@@ -511,29 +540,40 @@ fn finalize(mut clusters: Vec<Cluster>) -> Vec<Swatch> {
             .then(x.lab.b.total_cmp(&y.lab.b))
     });
     let threshold = PALETTE_MERGE_DELTA_E * PALETTE_MERGE_DELTA_E;
-    let mut kept: Vec<Cluster> = Vec::with_capacity(clusters.len());
-    for cluster in clusters {
-        let nearest = kept
-            .iter_mut()
-            .map(|k| (k.lab.distance_squared(cluster.lab), k))
-            .min_by(|a, b| a.0.total_cmp(&b.0));
-        match nearest {
-            Some((distance, target)) if distance < threshold => {
-                let weight = target.weight + cluster.weight;
-                let blend = |a: f64, b: f64| (a * target.weight + b * cluster.weight) / weight;
-                target.lab = Lab::new(
-                    blend(target.lab.l, cluster.lab.l),
-                    blend(target.lab.a, cluster.lab.a),
-                    blend(target.lab.b, cluster.lab.b),
-                );
-                target.weight = weight;
+    let reported = |c: &Cluster| Lab::from_rgb8(c.lab.to_rgb8());
+    let mut shown: Vec<Lab> = clusters.iter().map(reported).collect();
+    loop {
+        // The closest pair under the threshold; the first such pair on ties.
+        let mut closest: Option<(f64, usize, usize)> = None;
+        for (i, (a, a_shown)) in clusters.iter().zip(&shown).enumerate() {
+            for (j, (b, b_shown)) in clusters.iter().zip(&shown).enumerate().skip(i + 1) {
+                let distance =
+                    a.lab.distance_squared(b.lab).min(a_shown.distance_squared(*b_shown));
+                if distance < threshold && closest.is_none_or(|(d, _, _)| distance < d) {
+                    closest = Some((distance, i, j));
+                }
             }
-            _ => kept.push(cluster),
         }
+        let Some((_, i, j)) = closest else { break };
+        // `i < j`, so removing `j` leaves `i` in place.
+        let absorbed = clusters.remove(j);
+        shown.remove(j);
+        let (Some(target), Some(target_shown)) = (clusters.get_mut(i), shown.get_mut(i)) else {
+            break;
+        };
+        let weight = target.weight + absorbed.weight;
+        let blend = |a: f64, b: f64| (a * target.weight + b * absorbed.weight) / weight;
+        target.lab = Lab::new(
+            blend(target.lab.l, absorbed.lab.l),
+            blend(target.lab.a, absorbed.lab.a),
+            blend(target.lab.b, absorbed.lab.b),
+        );
+        target.weight = weight;
+        *target_shown = reported(target);
     }
 
-    let total: f64 = kept.iter().map(|c| c.weight).sum();
-    let mut swatches: Vec<Swatch> = kept
+    let total: f64 = clusters.iter().map(|c| c.weight).sum();
+    let mut swatches: Vec<Swatch> = clusters
         .iter()
         .map(|c| Swatch { color: c.lab.to_rgb8(), share: (c.weight / total) as f32 })
         .collect();
@@ -599,11 +639,26 @@ mod tests {
         let region = Region::band(&img, Edge::Right, 300);
         let samples = sample(&img, region);
         assert_eq!(samples.len(), 1);
-        let step = sampling_step(300, 600);
-        assert!(step > 1);
-        let expected = f64::from(300_u32.div_ceil(step) * 600_u32.div_ceil(step));
-        assert_eq!(samples[0].weight, expected);
+        assert!(sampling_step(300, 600) > 1);
+        // Every sample weighs its cell's area, so the weights add up to the region's
+        // pixel count whatever the step.
+        assert_eq!(samples[0].weight, 300.0 * 600.0);
         assert_eq!(samples[0].lab, Lab::from_rgb8(Rgb8::new(0, 200, 0)));
+    }
+
+    #[test]
+    fn partial_cells_weigh_their_area_not_a_full_cell() {
+        // 7 x 4500: step 2, so the columns are sampled as cells of width 2, 2, 2 and 1.
+        // The last (red) column must weigh 1/7 of the region, not 1/4.
+        let img =
+            image(7, 4_500, |x, _| if x == 6 { [200, 0, 0, 255] } else { [255, 255, 255, 255] });
+        assert_eq!(sampling_step(7, 4_500), 2);
+        let samples = sample(&img, Region::whole(&img));
+        assert_eq!(samples.len(), 2);
+        let total: f64 = samples.iter().map(|s| s.weight).sum();
+        assert_eq!(total, 7.0 * 4_500.0);
+        let red = samples.iter().map(|s| s.weight).fold(f64::INFINITY, f64::min);
+        assert_eq!(red, 4_500.0);
     }
 
     #[test]
@@ -730,5 +785,59 @@ mod tests {
         let merged = swatches[0].color.to_lab().l;
         assert!((merged - 51.3).abs() < 0.3, "{merged}");
         assert!(finalize(Vec::new()).is_empty());
+    }
+
+    #[test]
+    fn finalize_keeps_merging_until_no_pair_is_within_the_threshold() {
+        // C is kept, A is 5.2 away (kept), X sits between them nearer to A: once X has
+        // been merged into A, the merged centre is within 5 of C and must merge again.
+        let clusters = vec![
+            Cluster { lab: Lab::new(60.0, 0.0, 0.0), weight: 100.0 },
+            Cluster { lab: Lab::new(54.8, 0.0, 0.0), weight: 99.0 },
+            Cluster { lab: Lab::new(57.3, 0.0, 0.0), weight: 98.0 },
+        ];
+        let swatches = finalize(clusters);
+        assert_eq!(swatches.len(), 1, "{swatches:?}");
+        assert_eq!(swatches[0].share, 1.0);
+        let l = swatches[0].color.to_lab().l;
+        assert!((l - 57.37).abs() < 0.3, "weighted mean of all three: {l}");
+
+        // A chain of clusters 4 apart collapses pairwise (closest first, heaviest first on
+        // ties) and never leaves two reported colours under the threshold.
+        let chain: Vec<Cluster> = (0..12)
+            .map(|i| Cluster { lab: Lab::new(20.0 + 4.0 * f64::from(i), 3.0, -3.0), weight: 1.0 })
+            .collect();
+        let swatches = finalize(chain);
+        assert!(swatches.len() > 1 && swatches.len() < 12, "{swatches:?}");
+        for (i, s) in swatches.iter().enumerate() {
+            for t in swatches.iter().skip(i + 1) {
+                let d = s.color.to_lab().delta_e76(t.color.to_lab());
+                assert!(d >= PALETTE_MERGE_DELTA_E, "{s:?} / {t:?}: {d}");
+            }
+        }
+        let total: f32 = swatches.iter().map(|s| s.share).sum();
+        assert!((total - 1.0).abs() < 1e-6);
+    }
+
+    #[test]
+    fn hostile_border_options_reject_whatever_the_other_option_is() {
+        let flat = Pixmap::filled(30, 30, [9, 9, 9, 255]);
+        let options = |tolerance_delta_e: f64, min_coverage: f64| BorderOptions {
+            tolerance_delta_e,
+            min_coverage,
+            ..BorderOptions::default()
+        };
+        for coverage in [1.0, 0.0, -1.0, f64::NEG_INFINITY] {
+            for tolerance in [f64::NAN, -0.001, f64::NEG_INFINITY] {
+                assert_eq!(uniform_border_with(&flat, &options(tolerance, coverage)), None);
+            }
+        }
+        assert_eq!(uniform_border_with(&flat, &options(5.0, f64::NAN)), None);
+        // Legitimate extremes still work.
+        assert_eq!(uniform_border_with(&flat, &options(0.0, 1.0)), Some(Rgb8::new(9, 9, 9)));
+        assert_eq!(
+            uniform_border_with(&flat, &options(f64::INFINITY, 0.0)),
+            Some(Rgb8::new(9, 9, 9))
+        );
     }
 }

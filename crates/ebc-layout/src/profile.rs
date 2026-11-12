@@ -31,6 +31,25 @@ pub const MAX_SHEET_MM: f64 = 5080.0;
 /// Light enough not to shout if a sliver survives the cut, dark enough to survive a
 /// draft-mode home print.
 pub const GUIDE_GRAY_LEVEL: f32 = 0.55;
+/// The unprintable border [`PrintProfile::home`] assumes on every side of the sheet:
+/// 6.35 mm, a quarter of an inch.
+///
+/// Why this value: it is the usual hardware margin of laser printers and of inkjets on US
+/// Letter, and the largest of the 3 to 6.35 mm that home printers publish for the left,
+/// right and top edges; A4 devices often manage 3 to 5 mm, so on those the marks simply
+/// sit a little further in than they had to. With it the default card (110 × 178 mm
+/// covers) still gets its full 5 mm cut marks and its 100 mm ruler on A4 (7.65 mm
+/// between the bleed and the printable edge, above and below) and on Letter (10.6 mm). A
+/// larger default would cost that: at 10 mm the A4 marks shrink to 4 mm and the ruler to
+/// 50 mm.
+///
+/// What it does not cover: some inkjets cannot print the last 12 to 15 mm at the *bottom*
+/// of the sheet. There the lower cut and fold marks are clipped (the upper ones and the
+/// card itself are not); raise `printable_margin` for such a device.
+///
+/// A house default from `docs/research/03-print-requirements.md` §9.2 (not fact-checked),
+/// not a specification of any printer.
+pub const HOME_PRINTABLE_MARGIN_MM: f64 = 6.35;
 
 /// Image-resolution verdicts within this relative distance of a threshold count as
 /// reaching it, so that a scan made at exactly 300 ppi is not judged "below 300" because
@@ -394,7 +413,7 @@ impl PrintProfile {
     /// | safe margin | 5 mm (hand cutting and home duplex registration are 1–2 mm off) |
     /// | spine safe margin | 2 mm (a 6 mm text band on a 10 mm spine) |
     /// | marks | light grey black-only guides, 0.5 pt: solid cut marks, dashed fold marks, a scale ruler; no registration colour, no targets |
-    /// | printable margin | 6.35 mm (0.25 in — the top of the 3 to 6.35 mm range of home printers) |
+    /// | printable margin | [`HOME_PRINTABLE_MARGIN_MM`]: 6.35 mm (0.25 in), the usual hardware margin of laser printers and of inkjets on Letter |
     /// | PDF | plain PDF (no PDF/X claims, no output intent needed) |
     /// | images | 200 ppi target, warning below 150 ppi, error below 100 ppi |
     ///
@@ -418,7 +437,7 @@ impl PrintProfile {
             min_ppi: 100.0,
             max_total_ink_percent: 300.0,
             sheet: Some(sheet),
-            printable_margin: 6.35,
+            printable_margin: HOME_PRINTABLE_MARGIN_MM,
         }
     }
 
@@ -599,6 +618,7 @@ mod tests {
             assert_eq!((p.safe_margin, p.spine_safe_margin), (5.0, 2.0));
             // A quarter of an inch: the largest hardware margin of common home printers.
             assert_eq!(p.printable_margin, 6.35);
+            assert_eq!(p.printable_margin, HOME_PRINTABLE_MARGIN_MM);
             assert_eq!((p.target_ppi, p.warn_ppi(), p.min_ppi), (200.0, 150.0, 100.0));
             assert_eq!(p.standard, PdfStandard::Plain);
             assert_eq!(p.sheet, Some(sheet));

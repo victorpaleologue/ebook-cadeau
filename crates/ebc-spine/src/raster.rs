@@ -47,15 +47,40 @@ impl Raster {
 
     /// The mean colour of all pixels.
     pub(crate) fn mean(&self) -> Rgb8 {
+        self.rows_mean(0, self.h)
+    }
+
+    /// The mean colour of the rows `y0..y1` (clamped; at least one row).
+    pub(crate) fn rows_mean(&self, y0: usize, y1: usize) -> Rgb8 {
+        let y0 = y0.min(self.h - 1);
+        let y1 = y1.clamp(y0 + 1, self.h);
         let mut sum = [0u64; 3];
-        for p in self.data.chunks_exact(3) {
+        let rows = self.data.get(y0 * self.w * 3..y1 * self.w * 3).unwrap_or(&[]);
+        for p in rows.chunks_exact(3) {
             sum[0] += u64::from(p[0]);
             sum[1] += u64::from(p[1]);
             sum[2] += u64::from(p[2]);
         }
-        let n = (self.w * self.h).max(1) as u64;
+        let n = ((y1 - y0) * self.w).max(1) as u64;
         let avg = |s: u64| ((s + n / 2) / n).min(255) as u8;
         Rgb8::new(avg(sum[0]), avg(sum[1]), avg(sum[2]))
+    }
+
+    /// A copy with the first row repeated `top` times above and the last row repeated
+    /// `bottom` times below (edge replication, used to build the bleed).
+    pub(crate) fn extend_rows(&self, top: usize, bottom: usize) -> Self {
+        let stride = self.w * 3;
+        let first = self.data.get(..stride).unwrap_or(&[]);
+        let last = self.data.get(self.data.len().saturating_sub(stride)..).unwrap_or(&[]);
+        let mut data = Vec::with_capacity((self.h + top + bottom) * stride);
+        for _ in 0..top {
+            data.extend_from_slice(first);
+        }
+        data.extend_from_slice(&self.data);
+        for _ in 0..bottom {
+            data.extend_from_slice(last);
+        }
+        Self { w: self.w, h: self.h + top + bottom, data }
     }
 }
 
@@ -150,6 +175,48 @@ impl Grid {
     pub(crate) fn new(w: usize, h: usize) -> Self {
         let (w, h) = (w.max(1), h.max(1));
         Self { w, h, data: vec![0.0; w * h * 3] }
+    }
+
+    /// The raster as a grid, flipped left to right: column `x` of the grid is column
+    /// `w - 1 - x` of the raster.
+    pub(crate) fn mirrored(raster: &Raster) -> Self {
+        let mut grid = Self::new(raster.w, raster.h);
+        for y in 0..raster.h {
+            for x in 0..raster.w {
+                let p = raster.px(raster.w - 1 - x, y);
+                let i = (y * raster.w + x) * 3;
+                if let Some(cell) = grid.data.get_mut(i..i + 3) {
+                    cell[0] = f32::from(p[0]);
+                    cell[1] = f32::from(p[1]);
+                    cell[2] = f32::from(p[2]);
+                }
+            }
+        }
+        grid
+    }
+
+    /// The cells with the lowest and the highest luma, as 8-bit colours.
+    pub(crate) fn extremes(&self) -> ([u8; 3], [u8; 3]) {
+        let to8 = |p: &[f32]| -> [u8; 3] {
+            let c = |v: f32| (v.clamp(0.0, 255.0) + 0.5) as u8;
+            [c(p[0]), c(p[1]), c(p[2])]
+        };
+        let mut darkest = [255u8; 3];
+        let mut lightest = [0u8; 3];
+        let (mut lo, mut hi) = (u32::MAX, 0u32);
+        for p in self.data.chunks_exact(3) {
+            let rgb = to8(p);
+            let l = luma(rgb);
+            if l < lo {
+                lo = l;
+                darkest = rgb;
+            }
+            if l >= hi {
+                hi = l;
+                lightest = rgb;
+            }
+        }
+        (darkest, lightest)
     }
 
     fn at(&self, x: usize, y: usize, c: usize) -> f32 {

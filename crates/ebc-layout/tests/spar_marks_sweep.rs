@@ -362,6 +362,9 @@ fn directed_extremes() {
 fn a_sheet_that_fits_exactly_is_the_page() {
     for (name, format) in CardFormat::presets() {
         let mut p = PrintProfile::home(Sheet::A4);
+        // The unprintable margin this test was written for (the home default has since
+        // become 6.35 mm, see `PrintProfile::home`).
+        p.printable_margin = 5.0;
         let spread = format.spread();
         // Equal margins on all four sides: bleed 2 + unprintable 5 + 9 mm for marks.
         let (w, h) = (spread.w + 32.0, spread.h + 32.0);

@@ -170,8 +170,12 @@ fn the_default_output_profile_is_a_printer_profile_and_others_are_reported() {
     // The same file named as the caller's own profile: not managed, and said so.
     let mut own_cc0 = req.clone();
     own_cc0.output_profile = Some(
-        OutputProfile::new(OutputProfile::bundled_cc0_fallback().unwrap().icc().clone(), "CGATS TR 001", "x")
-            .unwrap(),
+        OutputProfile::new(
+            OutputProfile::bundled_cc0_fallback().unwrap().icc().clone(),
+            "CGATS TR 001",
+            "x",
+        )
+        .unwrap(),
     );
     let (_, own_warnings) = compose(&own_cc0, &fonts).unwrap();
     assert!(own_warnings.iter().any(|w| matches!(w, CardWarning::ColourNotManaged { .. })));

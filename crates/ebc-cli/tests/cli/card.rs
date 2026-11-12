@@ -107,14 +107,22 @@ fn a_cover_with_rights_is_printed_and_the_card_passes_preflight() {
     let made = with_cover("pro", "rights_holder_declared");
     assert_eq!(status(&made), 0, "{}", stderr(&made));
     assert!(stdout(&made).contains("cover card"), "{}", stdout(&made));
-    assert!(stderr(&made).contains("sRGB"), "the unconverted cover is announced");
-    // A PDF/X-4 file carries the cover as tagged sRGB: strict CMYK-only expectations
-    // refuse it, and say how to accept it.
+    // The cover is converted to the output intent's CMYK (docs/research/03 §3.4): no
+    // "left as sRGB" warning, and the card passes the profile's own CMYK-only preflight.
+    assert!(!stderr(&made).contains("sRGB"), "{}", stderr(&made));
     let strict = preflight(&pdf, "pro").output().unwrap();
-    assert_eq!(status(&strict), 2, "{}", stdout(&strict));
-    assert!(stderr(&strict).contains("--allow-rgb"), "{}", stderr(&strict));
-    let relaxed = preflight(&pdf, "pro").arg("--allow-rgb").output().unwrap();
-    assert_eq!(status(&relaxed), 0, "{}", stdout(&relaxed));
+    assert_eq!(status(&strict), 0, "{}", stdout(&strict));
+    let upload = with_cover("upload", "rights_holder_declared");
+    assert_eq!(status(&upload), 0, "{}", stderr(&upload));
+    let checked = preflight(&pdf, "upload").output().unwrap();
+    assert_eq!(status(&checked), 0, "{}", stdout(&checked));
+    // A file with marks and a slug is not an upload (check B4).
+    let marked = with_cover("pro", "rights_holder_declared");
+    assert_eq!(status(&marked), 0, "{}", stderr(&marked));
+    let refused = preflight(&pdf, "upload").output().unwrap();
+    assert_eq!(status(&refused), 2, "{}", stdout(&refused));
+    assert!(stdout(&refused).contains("MARKS_NOT_ALLOWED"), "{}", stdout(&refused));
+    assert!(stdout(&refused).contains("BOX_MEDIA_NOT_BLEED"), "{}", stdout(&refused));
 
     let home = with_cover("home-a4", "user_private_copy");
     assert_eq!(status(&home), 0, "{}", stderr(&home));

@@ -280,8 +280,8 @@ pub(crate) struct PreflightArgs {
     /// Check against the profile only: no expected trim size, spine or QR module
     #[arg(long, conflicts_with = "format")]
     pub(crate) generic: bool,
-    /// Accept RGB colour in a professional file (a PDF/X-4 card carries its cover as
-    /// tagged sRGB)
+    /// Accept RGB colour in a professional file (for printers that convert RGB
+    /// themselves; cards made by `ebc card` are CMYK)
     #[arg(long)]
     pub(crate) allow_rgb: bool,
     /// Print the full report as JSON

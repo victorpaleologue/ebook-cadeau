@@ -63,7 +63,12 @@ fn spine_never_sets_reversed_or_outlined_text_below_8_pt() {
     let (_doc, warnings) = compose(&req, &fonts()).unwrap();
     let small: Vec<_> = warnings
         .iter()
-        .filter(|w| matches!(w, ebc_card::CardWarning::Spine(ebc_spine::SpineNote::SmallReversedText { .. })))
+        .filter(|w| {
+            matches!(
+                w,
+                ebc_card::CardWarning::Spine(ebc_spine::SpineNote::SmallReversedText { .. })
+            )
+        })
         .collect();
     assert!(small.is_empty(), "{small:?}");
 }
@@ -83,7 +88,8 @@ fn walk<'a>(items: &'a [Item], out: &mut Vec<&'a Item>) {
 /// painted on the front panel (x 120..122 on the poche).
 #[test]
 fn edge_continuation_spine_paints_no_stripe_on_the_front_panel() {
-    let mut req = with_cover(poche(PrintProfile::home(Sheet::A4)), RightsBasis::RightsHolderDeclared);
+    let mut req =
+        with_cover(poche(PrintProfile::home(Sheet::A4)), RightsBasis::RightsHolderDeclared);
     req.spine = SpineChoice::EdgeContinuation;
     req.adaptation_authorised = true;
     let (doc, _) = compose(&req, &fonts()).unwrap();
@@ -108,5 +114,8 @@ fn edge_continuation_spine_paints_no_stripe_on_the_front_panel() {
             _ => None,
         })
         .collect();
-    assert!(stripe.is_empty(), "flat fills other than the ground reach onto the front panel: {stripe:?}");
+    assert!(
+        stripe.is_empty(),
+        "flat fills other than the ground reach onto the front panel: {stripe:?}"
+    );
 }

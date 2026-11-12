@@ -26,7 +26,7 @@ const MM: f64 = 72.0 / 25.4;
 ///
 /// (The repository's CC0 CMYK profile, `assets/icc/CGATS001Compat-v2-micro.icc`, is not
 /// used here because its header declares the input-device class `scnr`, which
-/// `ebc-preflight` rightly reports as a warning on an output intent.)
+/// `ebc-preflight` refuses as the output intent of a PDF/X file.)
 fn output_profile() -> Vec<u8> {
     let mut data = vec![0u8; 132];
     data[0..4].copy_from_slice(&132u32.to_be_bytes());
@@ -237,7 +237,7 @@ impl SampleCard {
         let front_x = bleed + cover + self.spine_mm;
         let _ = writeln!(
             c,
-            "q 0.02 0.02 0.10 0 k {:.4} 0 {:.4} {media_h:.4} re f Q",
+            "q 0.05 0.05 0.10 0 k {:.4} 0 {:.4} {media_h:.4} re f Q",
             front_x * MM,
             (cover + bleed) * MM
         );

@@ -15,6 +15,11 @@
 //! the typographic card. The composer's rights gate (a promotion-only licence cannot go
 //! to a printer) surfaces as [`CardRenderError::RightsRefused`].
 //!
+//! On `pro` the cover is converted to the FOGRA39 CMYK of the output intent; a cover too
+//! small for print (below 150 ppi on the panel) is refused by the composer, and that
+//! refusal, like an undecodable cover, is the partner's to fix
+//! ([`CardRenderError::Unprocessable`], 422).
+//!
 //! The output is deterministic for a given gift: the creation date of the PDF is the
 //! gift's, nothing reads the clock.
 
@@ -99,6 +104,8 @@ fn render_error(error: &CardError) -> CardRenderError {
         | CardError::CoverDecode(_)
         | CardError::CoverTooLarge { .. }
         | CardError::CoverColourSpace { .. }
+        | CardError::CoverResolutionTooLow { .. }
+        | CardError::ClaimUrlCodeMismatch { .. }
         | CardError::FormatTooSmall { .. } => CardRenderError::Unprocessable(error.to_string()),
         _ => CardRenderError::Failed(error.to_string()),
     }
@@ -211,6 +218,29 @@ mod tests {
         let mut promo = declared.clone();
         promo.cover_rights = CoverRights::PromoAllMedia;
         assert!(matches!(renderer.render(&promo), Err(CardRenderError::RightsRefused(_))));
+    }
+
+    #[test]
+    fn a_cover_too_small_for_print_is_the_partners_problem() {
+        let renderer = ComposedCardRenderer::new().unwrap();
+        // A 60 x 96 px image: far below 150 ppi on the cover box.
+        let mut png = Vec::new();
+        {
+            let mut encoder = png::Encoder::new(&mut png, 60, 96);
+            encoder.set_color(png::ColorType::Rgb);
+            encoder.set_depth(png::BitDepth::Eight);
+            let mut writer = encoder.write_header().unwrap();
+            writer.write_image_data(&[90u8; 60 * 96 * 3]).unwrap();
+        }
+        let mut pro = request(CardFormat::Poche, CardProfile::Pro);
+        pro.cover = Some((png, "image/png".to_owned()));
+        pro.cover_rights = CoverRights::PrintLicence;
+        let refused = renderer.render(&pro);
+        assert!(matches!(refused, Err(CardRenderError::Unprocessable(_))), "{refused:?}");
+        // At home it prints, with a warning.
+        let mut home = pro.clone();
+        home.profile = CardProfile::HomeA4;
+        assert!(renderer.render(&home).is_ok());
     }
 
     #[test]

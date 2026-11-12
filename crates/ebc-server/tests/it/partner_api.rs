@@ -851,7 +851,9 @@ async fn uploads_cover_and_card_rendering_through_the_renderer_seam() {
 /// A valid PNG: a 200 × 320 px portrait "cover" in two flat colours.
 #[cfg(feature = "card")]
 fn cover_png() -> Vec<u8> {
-    let (width, height) = (200u32, 320u32);
+    // About 300 ppi on the 100 mm wide cover box of a poche card: a professional card
+    // refuses covers below 150 ppi.
+    let (width, height) = (1200u32, 1920u32);
     let mut pixels = Vec::with_capacity((width * height * 3) as usize);
     for y in 0..height {
         for _ in 0..width {

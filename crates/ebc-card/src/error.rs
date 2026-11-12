@@ -264,7 +264,9 @@ pub enum CardWarning {
     /// The spine is outside the 5–15 mm range validated for spine text
     /// (`docs/research/03-print-requirements.md`, implication 6): the one-line spine
     /// setting was not designed for it.
-    #[error("the spine is {spine_mm:.1} mm wide, outside the 5–15 mm range validated for spine text")]
+    #[error(
+        "the spine is {spine_mm:.1} mm wide, outside the 5–15 mm range validated for spine text"
+    )]
     SpineOutsideTextRange {
         /// The spine width, in millimetres.
         spine_mm: f64,

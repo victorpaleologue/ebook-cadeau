@@ -31,9 +31,11 @@ fn card_pdf(bleed_mm: f64) -> Vec<u8> {
     let format = CardFormat::poche();
     let mut profile = PrintProfile::upload_eu(); // trim + bleed, no marks
     profile.bleed = bleed_mm;
+    // A printer-class (`prtr`) output profile: the printer's preflight refuses a scanner
+    // or display profile as the output intent of a PDF/X file (check A6).
     let profile_bytes: &[u8] = include_bytes!(concat!(
         env!("CARGO_MANIFEST_DIR"),
-        "/../../assets/icc/CGATS001Compat-v2-micro.icc"
+        "/../../crates/ebc-card/assets/icc/ISOcoated_v2_300_bas.icc"
     ));
     let mut document = Document {
         info: DocInfo {
@@ -46,8 +48,8 @@ fn card_pdf(bleed_mm: f64) -> Vec<u8> {
         },
         standard: PdfStandard::X4,
         output_intent: Some(OutputIntent {
-            condition_identifier: "CGATS TR 001".to_owned(),
-            info: "SWOP (CGATS TR 001) compatible".to_owned(),
+            condition_identifier: "FOGRA39".to_owned(),
+            info: "ISO Coated v2 300% (basICColor)".to_owned(),
             registry_name: "http://www.color.org".to_owned(),
             icc_profile: Some(Arc::from(profile_bytes)),
             components: 4,

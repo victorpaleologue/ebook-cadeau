@@ -116,8 +116,9 @@ done
 
 # A cover image with a declared basis, on every profile (poche). The image is drawn here
 # with ghostscript at 300 ppi for 100 x 150 mm (no binary fixture of that size exists in
-# the repository). A PDF/X-4 card carries the cover as tagged sRGB, which preflight
-# accepts with --allow-rgb.
+# the repository). A professional (PDF/X-4) card carries the cover converted to the
+# output intent's CMYK, so it must pass the profile's own CMYK-only preflight: no
+# --allow-rgb any more (product rule changed with the ICC conversion of covers).
 cover="$out/cover-300ppi.png"
 gs -q -dNOPAUSE -dBATCH -dSAFER -sDEVICE=png16m -r300 -g1181x1772 -o "$cover" -c \
     "0.13 0.32 0.27 setrgbcolor clippath fill 0.93 0.85 0.62 setrgbcolor 4 setlinewidth" \
@@ -131,24 +132,39 @@ for profile in "${profiles[@]}"; do
         fail "$what: ebc card: $message"
         continue
     fi
-    check_pdf "$pdf" poche "$profile" "$what" --allow-rgb
+    check_pdf "$pdf" poche "$profile" "$what"
 done
 
 # The other way round: a 91 ppi cover (the 360 x 540 px fixture of the wasm tests) must be
-# refused by preflight, or the checks above prove nothing.
+# refused, or the checks above prove nothing. Since the composer refuses to write a
+# professional file below the profile's minimum resolution (product rule, research 03
+# §4.2: offer the typographic card instead), `ebc card` refuses it; the same cover on a
+# home sheet (where the composer only warns) must still be refused by preflight, whose
+# home minimum is 100 ppi.
 pdf="$out/lowres-poche-upload.pdf"
-"$ebc" card --title "Les Vagues du soir" --cover "$lowres" --cover-rights print_licence \
-    --cover-credit "Éditions du Lac (démo)" "${common[@]}" --format poche --profile upload -o "$pdf" >/dev/null 2>&1
 set +e
-verdict="$("$ebc" preflight --format poche --profile upload --allow-rgb "$pdf" 2>&1)"
+message="$("$ebc" card --title "Les Vagues du soir" --cover "$lowres" --cover-rights print_licence \
+    --cover-credit "Éditions du Lac (démo)" "${common[@]}" --format poche --profile upload -o "$pdf" 2>&1)"
 status=$?
 set -e
-if [[ $status -eq 2 && "$verdict" == *IMAGE_LOW_RES* ]]; then
-    echo "ok    a 91 ppi cover is refused by preflight (IMAGE_LOW_RES)"
+if [[ $status -eq 1 && "$message" == *"91 ppi"* && ! -e "$pdf" ]]; then
+    echo "ok    a 91 ppi cover is refused for a professional card"
 else
-    fail "a 91 ppi cover passed preflight (status $status): $verdict"
+    fail "a 91 ppi professional card was written (status $status): $message"
 fi
-rm -f "$pdf"
+home_pdf="$out/lowres-poche-home-a4.pdf"
+"$ebc" card --title "Les Vagues du soir" --cover "$lowres" --cover-rights print_licence \
+    --cover-credit "Éditions du Lac (démo)" "${common[@]}" --format poche --profile home-a4 -o "$home_pdf" >/dev/null 2>&1
+set +e
+verdict="$("$ebc" preflight --generic --profile home-a4 "$home_pdf" 2>&1)"
+home_status=$?
+set -e
+if [[ $home_status -eq 2 && "$verdict" == *IMAGE_LOW_RES* ]]; then
+    echo "ok    a 91 ppi cover is refused by preflight at home too (IMAGE_LOW_RES)"
+else
+    fail "a 91 ppi cover passed preflight (status $home_status): $verdict"
+fi
+rm -f "$pdf" "$home_pdf"
 
 echo "print-check: $checked PDF(s) checked, $failures failure(s); files in $out"
 [[ $failures -eq 0 ]]

@@ -305,7 +305,9 @@ mod tests {
     #[test]
     fn grounds_judged_through_the_output_profile_stay_within_the_ink_limit() {
         let link = crate::OutputProfile::bundled_fogra39()
-            .and_then(|p| p.colour_link().map_err(|e| crate::CardError::InvalidOutputProfile(e.to_string())))
+            .and_then(|p| {
+                p.colour_link().map_err(|e| crate::CardError::InvalidOutputProfile(e.to_string()))
+            })
             .expect("the bundled profile is readable");
         let paint = crate::paint::Paint::for_profile(
             &ebc_layout::PrintProfile::upload_eu(),
@@ -332,6 +334,9 @@ mod tests {
         }
         assert!(kept > 300 && white > 300, "kept {kept}, white {white}");
         // Paper-like colours are too faint through the profile as well.
-        assert_eq!(objection(Rgb8::new(253, 253, 252), 300.0, Some(&link)), Some(Objection::TooFaint));
+        assert_eq!(
+            objection(Rgb8::new(253, 253, 252), 300.0, Some(&link)),
+            Some(Objection::TooFaint)
+        );
     }
 }

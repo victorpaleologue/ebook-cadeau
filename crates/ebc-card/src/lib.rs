@@ -186,7 +186,11 @@ pub fn render_pdf(
 }
 
 /// The checks that stop a professional print file from being written.
-fn print_gates(req: &CardRequest, doc: &Document, warnings: &[CardWarning]) -> Result<(), CardError> {
+fn print_gates(
+    req: &CardRequest,
+    doc: &Document,
+    warnings: &[CardWarning],
+) -> Result<(), CardError> {
     if doc.standard == ebc_scene::PdfStandard::Plain {
         return Ok(());
     }
@@ -194,7 +198,10 @@ fn print_gates(req: &CardRequest, doc: &Document, warnings: &[CardWarning]) -> R
     // professional order is blocked and the typographic card is offered instead.
     for warning in warnings {
         if let CardWarning::LowResolution { ppi, threshold_ppi, below_minimum: true } = warning {
-            return Err(CardError::CoverResolutionTooLow { ppi: *ppi, minimum_ppi: *threshold_ppi });
+            return Err(CardError::CoverResolutionTooLow {
+                ppi: *ppi,
+                minimum_ppi: *threshold_ppi,
+            });
         }
     }
     // §3.2 / §3.4, implication 23: CMYK and grey only, unless the profile allows RGB.

@@ -146,6 +146,9 @@ async fn catalogue_lists_the_products_with_geometry_and_prices() {
     assert!(poche["paper"].as_str().unwrap().contains("350 g/m²"));
     assert_eq!(poche["cmyk_only"], false);
     assert_eq!(products[4]["cmyk_only"], true);
+    // Digital products are uploads (no marks, no slug); the offset product takes marks.
+    assert_eq!(poche["marks_allowed"], false);
+    assert_eq!(products[4]["marks_allowed"], true);
 
     let (status, one) = p.get("/v1/products/card-a5").await;
     assert_eq!(status, StatusCode::OK);

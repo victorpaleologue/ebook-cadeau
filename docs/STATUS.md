@@ -6,22 +6,36 @@ interrupted overnight build) are in the git history.
 
 ## Checks
 
-Run on the whole workspace, locally, at the commit that introduced this page:
+Run on the whole workspace, locally, after the adversarial review fixes:
 
 | Check | Result |
 |---|---|
 | `cargo fmt --all -- --check` | clean |
 | `cargo clippy --workspace --all-targets --locked -- -D warnings` | clean |
-| `cargo test --workspace --locked` | **1 814 passed, 0 failed**, 19 ignored (opt-in live and reference tests) |
+| `cargo test --workspace --locked` | **1 865 passed, 0 failed**, 19 ignored (opt-in live and reference tests) |
 | `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps` | clean |
 | `scripts/wasm-crates.sh build` (all pure libraries for `wasm32-unknown-unknown`) | clean |
 | `cargo deny check` | advisories, bans, licences, sources: ok |
-| `e2e/run.sh` (9 Playwright tests in Chromium) | 9 passed, about 10 s |
-| `node --test web/tests/*.test.mjs` and `web/tests/browser-smoke.mjs` | 9 passed; 31 browser checks passed |
+| `e2e/run.sh` (10 Playwright tests in Chromium) | 10 passed |
+| `e2e/print-check.sh` (every format × profile through preflight, qpdf, pdffonts, gs) | 21 PDFs, 0 failures |
+| `python3 -m unittest` in `tools/bizmodel` | 48 passed |
+| `CI=1 node --test web/tests/*.test.mjs` (incl. wasm output byte-identical to native) | 9 passed |
 
-CI on GitHub runs the same checks (`docs/ci.md`); see the Actions tab for the run of this commit.
-The `e2e`, `print-check` and the sparring review (`claude-review.yml`, needs a secret) have not
-run on GitHub before this commit.
+CI on GitHub runs the same checks (`docs/ci.md`). The run before the review (commit `52b5101`)
+passed 10 of 11 jobs, including `e2e` and `print-check`; the one failure was a MuPDF version
+difference in a test, since fixed. The sparring review workflow (`claude-review.yml`) needs a
+secret and has never run.
+
+## Adversarial review
+
+Three independent reviewers (security and privacy; print domain; correctness where crates
+meet) attacked the whole repository and backed findings with failing tests. All 23 findings
+were fixed or decided; their tests now pass and stay in the suite (`spar_*`). Highlights:
+partner-request replay closed, signatures checked before large bodies are read, atomic
+send limits, connection timeouts, a 30-day retention of personal data, a real ICC colour
+conversion for professional cards, upload preflight that refuses marks, an 8 pt floor for
+spine text, a 5 mm minimum spine, structured print-order addresses, and CI now enforcing
+the native-vs-wasm golden cards.
 
 ## What exists
 
@@ -65,11 +79,20 @@ in 07–09 and every vendor price except La Poste's remain unverified at source.
 
 ## Known gaps and approximations
 
-- **No colour management.** Covers are embedded as sRGB; the card ground uses a naive CMYK
-  conversion, so in PDF/X files a faint box can show around the cover.
-- **Spine sizes**: `ebc-spine` uses 7–14 pt; research 08 now recommends 9–13 pt with an 8 pt
-  floor for outlined text. Direction falls back to the site locale where research 11 says
-  top-to-bottom for unknown languages; no two-line spine; no right-to-left or CJK setting.
+- **Colour management is a small in-house CMM** (`ebc_color::icc`): sRGB → the output
+  profile's CMYK through its `lut8`/`lut16` tables, relative colorimetric with black-point
+  compensation, sampled on a 33³ grid; covers, spine images and grounds of PDF/X cards go
+  through it (CMYK JPEG covers pass through unchanged). Checked against Little CMS 2.19
+  with the bundled FOGRA39 profile: ΔE2000 ≤ 1.0 (mean 0.12) on a 9³ sRGB lattice. Not
+  handled: ICC v4 `mAB`/`mBA` profiles (a professional cover is then refused unless the
+  profile allows RGB), covers' own embedded profiles (treated as sRGB), and the ground
+  of a CMYK JPEG cover is judged from a naive RGB decoding. Dark grounds now often exceed
+  the 240 % house ink limit through the real profile and fall back to paper white on
+  professional cards (home cards keep them).
+- **Spine**: titles 9–13 pt, nothing below 8 pt (outlined/reversed floor). Direction falls
+  back to the site locale where research 11 says top-to-bottom for unknown languages; no
+  two-line spine; no right-to-left or CJK setting. Spines wider than 15 mm only get a
+  warning (`SpineOutsideTextRange`).
 - **Font identification** is the classical v0; the learned embedding (research 10, training
   plan) is not built. Connected scripts and stencils are not recognised.
 - **Server storage** is one JSON snapshot rewritten per change; uploads are buffered in memory;
@@ -79,6 +102,13 @@ in 07–09 and every vendor price except La Poste's remain unverified at source.
 - **Devices**: e-reader behaviour is simulated (user agents, JavaScript off, mail sink, LCP
   shape only), not tested on hardware.
 - **Partner card options**: a partner cannot yet choose output profile, spine style or ground.
+- **Print-review gaps left open** (research 03 §10.1): (b) no per-printer profile records
+  (bleed, crease encoding, label, `confirmed` status) — only the three built-in profiles;
+  (d) no generated plan PDF or French printer brief (implications 11–12); (e) the 260 % /
+  270 % ink limits cannot be met (no ink-limiting transform). Also not checked by
+  preflight: B8 colour boundaries near creases, D3/D5/D6 type-size and safety-zone
+  geometry, C7 overprint; and the stated output condition is not compared with the
+  profile's own description.
 - `docs/api.md` does not yet list `cover_rights`, the 422 rights codes and a few fields the
   server accepts (they are documented in `crates/ebc-server/README.md`).
 

@@ -56,6 +56,9 @@ pub fn expectations(product: &Product) -> Expectations {
     expect.allow_rgb = !product.cmyk_only;
     expect.allow_transparency = !product.cmyk_only;
     expect.max_total_ink_percent = Some(product.max_total_ink_percent);
+    // An upload-style product wants exactly trim + bleed: no marks, no slug.
+    expect.marks_allowed = product.marks_allowed;
+    expect.require_media_equals_bleed = !product.marks_allowed;
     expect
 }
 
@@ -179,8 +182,10 @@ mod tests {
         assert!(digital.allow_rgb && digital.allow_transparency, "digital products accept RGB");
         assert_eq!(digital.max_total_ink_percent, Some(300.0));
         assert_eq!(digital.min_qr_module_mm, Some(MIN_QR_MODULE_MM));
+        assert!(!digital.marks_allowed && digital.require_media_equals_bleed, "an upload");
         let press = expectations(offset());
         assert!(!press.allow_rgb && !press.allow_transparency, "CMYK-only products refuse RGB");
+        assert!(press.marks_allowed && !press.require_media_equals_bleed, "offset takes marks");
         assert_eq!(expectations(catalog::find("card-a5").unwrap()).trim_mm, Some((306.0, 210.0)));
     }
 

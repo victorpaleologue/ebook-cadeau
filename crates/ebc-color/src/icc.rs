@@ -887,11 +887,11 @@ mod tests {
         let mut header = vec![0u8; 132];
         header[36..40].copy_from_slice(b"acsp");
         header[16..20].copy_from_slice(b"RGB ");
-        assert_eq!(CmykProfile::parse(&header).unwrap_err(), IccError::NotCmyk);
+        assert_eq!(CmykProfile::parse(&header).err(), Some(IccError::NotCmyk));
         header[16..20].copy_from_slice(b"CMYK");
-        assert_eq!(CmykProfile::parse(&header).unwrap_err(), IccError::UnsupportedPcs);
+        assert_eq!(CmykProfile::parse(&header).err(), Some(IccError::UnsupportedPcs));
         header[20..24].copy_from_slice(b"Lab ");
-        assert_eq!(CmykProfile::parse(&header).unwrap_err(), IccError::MissingTag("B2A0"));
+        assert_eq!(CmykProfile::parse(&header).err(), Some(IccError::MissingTag("B2A0")));
         // A tag count far beyond the data.
         header[128..132].copy_from_slice(&u32::MAX.to_be_bytes());
         assert!(matches!(CmykProfile::parse(&header), Err(IccError::Malformed(_))));
@@ -910,7 +910,6 @@ mod tests {
             Err(IccError::UnsupportedTag { tag: "B2A0", .. })
         ));
         // An mft2 header announcing a huge table in a few bytes.
-        let len = p.len();
         p.truncate(144);
         let mut lut = b"mft2\0\0\0\0".to_vec();
         lut.extend_from_slice(&[3, 4, 255, 0]);
@@ -919,7 +918,6 @@ mod tests {
         lut.extend_from_slice(&4096u16.to_be_bytes());
         p.extend_from_slice(&lut);
         p[140..144].copy_from_slice(&(lut.len() as u32).to_be_bytes());
-        assert!(len > 0);
         assert!(matches!(CmykProfile::parse(&p), Err(IccError::Malformed(_))));
     }
 }

@@ -58,6 +58,12 @@ pub struct Product {
     pub cmyk_only: bool,
     /// Whether a PDF/X output intent is required.
     pub output_intent_required: bool,
+    /// Whether printer's marks (and a slug for them) may be in the file. `false` for the
+    /// digital products, uploaded like at a web-to-print portal: the page must be
+    /// exactly trim + bleed, with nothing in the registration colour
+    /// (`docs/research/03-print-requirements.md` §2.2 rule 1, check B4). The offset
+    /// product takes crop and fold marks in the slug.
+    pub marks_allowed: bool,
     /// Minimum effective image resolution, in pixels per inch.
     pub min_ppi: f64,
     /// Total ink limit, in percent.
@@ -114,6 +120,7 @@ const fn digital(
         pdf_standard: "PDF/X-4",
         cmyk_only: false,
         output_intent_required: true,
+        marks_allowed: false,
         min_ppi: 150.0,
         max_total_ink_percent: 300.0,
         min_quantity: 1,
@@ -168,6 +175,7 @@ static PRODUCTS: [Product; 5] = [
         pdf_standard: "PDF/X-1a",
         cmyk_only: true,
         output_intent_required: true,
+        marks_allowed: true,
         min_ppi: 150.0,
         max_total_ink_percent: 300.0,
         min_quantity: 250,

@@ -16,8 +16,7 @@
 //! Text, QR code and rules are never RGB in either case.
 
 use ebc_color::{
-    NEAR_BLACK_LSTAR, Rgb8, SrgbToCmyk, black_or_white, finish_flat, to_cmyk_ink_safe,
-    to_scene_rgb,
+    NEAR_BLACK_LSTAR, Rgb8, SrgbToCmyk, black_or_white, finish_flat, to_cmyk_ink_safe, to_scene_rgb,
 };
 use ebc_layout::PrintProfile;
 use ebc_scene::{Color, Item, PdfStandard};

@@ -11,16 +11,20 @@ use crate::util::{Streams, format_by_name, profile_by_name, read_input};
 pub(crate) fn run(args: &PreflightArgs, streams: &mut Streams<'_>) -> Result<Status, CliError> {
     let profile = profile_by_name(&args.profile)?;
     let plain = profile.standard == PdfStandard::Plain;
+    // An upload portal wants exactly trim + bleed: no marks, no slug (check B4).
+    let upload = profile.sheet.is_none() && !profile.marks.any();
     let mut expect = Expectations {
         bleed_mm: profile.bleed,
         min_ppi: profile.min_ppi,
         require_output_intent: !plain,
-        allow_rgb: plain || args.allow_rgb,
+        allow_rgb: plain || profile.allow_rgb || args.allow_rgb,
         allow_transparency: false,
         max_total_ink_percent: Some(profile.max_total_ink_percent),
         trim_mm: None,
         spine_mm: None,
         min_qr_module_mm: None,
+        marks_allowed: !upload,
+        require_media_equals_bleed: upload,
     };
     if !args.generic {
         let format = format_by_name(&args.format)?;
@@ -60,8 +64,9 @@ pub(crate) fn run(args: &PreflightArgs, streams: &mut Streams<'_>) -> Result<Sta
             && report.errors().any(|f| f.code == ebc_preflight::codes::COLOR_RGB)
         {
             streams.note(
-                "hint: a PDF/X-4 card carries its cover image as tagged sRGB; if that is the \
-                 RGB found here, check again with --allow-rgb",
+                "hint: cards made by `ebc card` for a professional profile are CMYK; RGB here \
+                 means the file was not converted to the output intent. Check again with \
+                 --allow-rgb only if your printer converts RGB itself",
             );
         }
     }

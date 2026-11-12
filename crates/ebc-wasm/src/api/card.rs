@@ -405,6 +405,8 @@ fn card_error(error: &CardError) -> ApiError {
         CardError::RightsRouteRefused { .. } => "rights_route_refused",
         CardError::AdaptationNotAuthorised { .. } => "adaptation_not_authorised",
         CardError::CoverColourSpace { .. } => "cover_colour_space",
+        CardError::CoverResolutionTooLow { .. } => "cover_resolution_too_low",
+        CardError::ClaimUrlCodeMismatch { .. } => "claim_url_code_mismatch",
         CardError::MissingCreationDate => "missing_creation_date",
         CardError::NoOutputProfile => "no_output_profile",
         CardError::InvalidOutputProfile(_) => "invalid_output_profile",
@@ -471,6 +473,12 @@ fn warning_dto(warning: &CardWarning) -> WarningDto {
             ("output_profile_not_printer_class", vec![("class", class.clone())])
         }
         CardWarning::GuidesIncluded => ("guides_included", vec![]),
+        CardWarning::ColourNotManaged { reason } => {
+            ("colour_not_managed", vec![("reason", reason.clone())])
+        }
+        CardWarning::SpineOutsideTextRange { spine_mm } => {
+            ("spine_outside_text_range", vec![("spine", format!("{spine_mm:.1}"))])
+        }
         _ => ("other", vec![]),
     };
     WarningDto { code, message: warning.to_string(), params }
@@ -492,8 +500,10 @@ pub struct RenderedCard {
 /// `request_json` is the card request (see the crate documentation for its fields);
 /// `cover` is the image file the user picked, if any — it is printed only with a rights
 /// basis other than `none` in `request.cover.rights`; `icc` is the CMYK output-intent
-/// profile for the professional (PDF/X) profiles — FOGRA39 is assumed — without which
-/// the bundled CC0 fallback is used and reported (`fallback_output_profile`).
+/// profile for the professional (PDF/X) profiles — FOGRA39 is assumed — through which
+/// the cover and the grounds are converted to CMYK. Without it the bundled CC0 fallback
+/// is used and reported (`fallback_output_profile`); nothing can be converted to it, so
+/// a cover on a professional profile is then refused (`cover_colour_space`).
 ///
 /// The same arguments always give the same bytes.
 ///
@@ -503,7 +513,8 @@ pub struct RenderedCard {
 /// `text_too_long`; the rights gate: `rights_basis_not_available`,
 /// `rights_route_refused`, `adaptation_not_authorised`, `unknown_declaration`; the
 /// cover: `not_an_image`, `cover_placeholder`, `cover_decode`, `cover_too_large`; the
-/// composer: `empty_title`, `invalid_claim_url`, `missing_creation_date`,
+/// composer: `empty_title`, `invalid_claim_url`, `claim_url_code_mismatch`,
+/// `cover_colour_space`, `cover_resolution_too_low`, `missing_creation_date`,
 /// `invalid_output_profile`, `layout`, `format_too_small`, ….
 pub fn render_card(
     request_json: &str,
@@ -927,17 +938,33 @@ mod tests {
             "rights_route_refused"
         );
 
-        // The bases that open the route do print — as PDF/X, with the fallback profile
-        // reported when the page supplies none.
+        // The bases that open the route do print — as PDF/X, the cover converted to
+        // the output intent's CMYK through the profile the page supplies (FOGRA39).
+        let fogra39 = std::fs::read(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../ebc-card/assets/icc/ISOcoated_v2_300_bas.icc"
+        ))
+        .expect("the bundled FOGRA39 profile");
         for basis in ["rights_holder_declared", "public_domain"] {
             let json = with(
                 with(request(), pro.clone()).parse().expect("json"),
                 json!({"cover": {"rights": basis}}),
             );
-            let card = render_card(&json, Some(cover.clone()), None).expect(basis);
+            let card = render_card(&json, Some(cover.clone()), Some(&fogra39)).expect(basis);
             assert!(has_image(&card.pdf), "{basis}");
             let codes = warning_codes(&card.warnings_json);
-            assert!(codes.contains(&"cover_not_converted".to_owned()), "{codes:?}");
+            assert!(!codes.contains(&"cover_not_converted".to_owned()), "{codes:?}");
+            // With a profile nothing can be converted to (the CC0 input-class profile has
+            // no B2A tables), the cover could only stay RGB, which a professional
+            // (CMYK-only) profile refuses. (Without any profile the outcome depends on the
+            // features of ebc-card compiled in: the bundled FOGRA39, or the CC0 fallback.)
+            let cc0 = std::fs::read(concat!(
+                env!("CARGO_MANIFEST_DIR"),
+                "/../../assets/icc/CGATS001Compat-v2-micro.icc"
+            ))
+            .expect("the CC0 profile");
+            let err = render_card(&json, Some(cover.clone()), Some(&cc0)).expect_err(basis);
+            assert_eq!(err.code, "cover_colour_space", "{basis}");
         }
     }
 

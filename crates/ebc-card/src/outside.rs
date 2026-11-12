@@ -3,11 +3,15 @@
 //! # Layout decisions
 //!
 //! * **One flat ground.** Back, spine and front share one flat colour that fills the
-//!   bleed (`docs/research/03-print-requirements.md`, implications 14–15): a neutral when
-//!   a cover is printed (paper white, or a dark grey when the cover's own edges are
-//!   light, so that the cover always stands out), a colour picked from a fixed palette by
-//!   a hash of the title for the typographic card. No colour change falls on a crease
-//!   unless a spine style with its own colour is chosen.
+//!   bleed (`docs/research/03-print-requirements.md`, implications 14–15), so that the
+//!   outside reads as one object — a jacket — and not as three panels. With a cover it
+//!   is one colour *computed* from the cover (its frame, its plain binding edge or its
+//!   dominant colour; never pixels), or paper white when that colour would be too
+//!   faint, too heavy in ink or would leave no legible text: the rule is spelt out in
+//!   `ground.rs`. For the typographic card it is a colour picked from a fixed palette
+//!   by a hash of the title. [`CardRequest::ground`](crate::CardRequest::ground)
+//!   overrides both. No colour change falls on a crease unless the spine is given a
+//!   colour the ground does not have.
 //! * **The cover is never altered** (`docs/research/07-…`, implications 5–10): uniform
 //!   scaling, no rotation, no crop — letterboxed in the panel's safe area, at least 3 mm
 //!   inside the trim — unless the request says `trim_authorised`, in which case it fills
@@ -17,12 +21,15 @@
 //!   height, at the top of the panel, with title, author and publisher retyped *below*
 //!   it (the panel is portrait: there is no room beside a cover of that size).
 //! * **Spine**: `ebc-spine`'s flat-colour typeset spine on the shared ground by default.
-//!   A spine with its own colour continues 2 mm past the front crease (never as far as
-//!   the cover), so that a crease that drifts does not show a sliver of the other colour.
+//!   `SpineChoice::CoverColour` puts the colour computed from the cover on the spine and
+//!   the back whatever the ground is — which only shows when the ground is white or was
+//!   set by the caller. A spine with its own colour continues 2 mm past the front crease
+//!   (never as far as the cover), so that a crease that drifts does not show a sliver of
+//!   the other colour.
 //! * **Back**: a short text, then a block at the foot with the product line, the address,
 //!   the imprint and — when a cover is printed — its credit line. No barcode, no logo.
 
-use ebc_color::{Edge, Rgb8, edge_palette, relative_luminance};
+use ebc_color::Rgb8;
 use ebc_i18n::{Msg, spine_direction_for_book, t, tf};
 use ebc_layout::{Face, Fit, place_image, place_image_aligned, safe_rect};
 use ebc_scene::{Color, Item, Page, Path, Pixmap, Point, Rect, Stroke};
@@ -34,6 +41,7 @@ use ebc_text::Font;
 
 use crate::compose::{Composer, CoverPlan};
 use crate::error::{CardError, CardWarning, TextField};
+use crate::ground;
 use crate::request::SpineChoice;
 use crate::rights::{Placement, RightsBasis};
 use crate::text::{
@@ -64,12 +72,6 @@ const PALETTE: [Rgb8; 10] = [
     Rgb8::new(201, 162, 39),  // ochre
     Rgb8::new(232, 220, 194), // cream
 ];
-/// Neutral ground behind a cover whose edges are dark or mid-toned: paper white.
-const NEUTRAL_LIGHT: Rgb8 = Rgb8::new(255, 255, 255);
-/// Neutral ground behind a cover whose edges are light: a dark grey (black plate only).
-const NEUTRAL_DARK: Rgb8 = Rgb8::new(51, 51, 51);
-/// Mean luminance of a cover's edges above which the dark neutral is used.
-const LIGHT_EDGE_LUMINANCE: f64 = 0.6;
 
 /// The typographic card's ground for a title: FNV-1a over the lower-cased title.
 pub(crate) fn palette_ground(title: &str) -> Rgb8 {
@@ -82,19 +84,6 @@ pub(crate) fn palette_ground(title: &str) -> Rgb8 {
     PALETTE[(hash % PALETTE.len() as u64) as usize]
 }
 
-/// The neutral ground for a cover: white, or dark grey when the cover's edges are light.
-fn neutral_ground(cover: &Pixmap) -> Rgb8 {
-    let mut sum = 0.0;
-    let mut weight = 0.0;
-    for edge in Edge::ALL {
-        for swatch in edge_palette(cover, edge, 0.04, 3) {
-            sum += relative_luminance(swatch.color) * f64::from(swatch.share);
-            weight += f64::from(swatch.share);
-        }
-    }
-    if weight > 0.0 && sum / weight > LIGHT_EDGE_LUMINANCE { NEUTRAL_DARK } else { NEUTRAL_LIGHT }
-}
-
 impl Composer<'_> {
     pub(crate) fn outside_page(&mut self, cover: Option<CoverPlan>) -> Result<Page, CardError> {
         let format = self.req.format;
@@ -104,8 +93,12 @@ impl Composer<'_> {
         let mut page = self.new_page(Face::Outside)?;
 
         let analysis = cover.as_ref().map(|plan| plan.image.analysis());
-        let ground = self.req.ground.unwrap_or_else(|| match &analysis {
-            Some(pixels) => neutral_ground(pixels),
+        // The one colour the cover stands for (a computed value, never pixels) …
+        let cover_colour = analysis.as_ref().map(ground::cover_colour);
+        // … which is the ground of the whole outside unless the caller names one or
+        // print argues for white (see `ground.rs`).
+        let ground = self.req.ground.unwrap_or_else(|| match cover_colour {
+            Some(colour) => ground::ground_from(colour, profile.max_total_ink_percent),
             None => palette_ground(&self.req.book.title),
         });
         let full_bleed = cover
@@ -119,7 +112,8 @@ impl Composer<'_> {
             }
             _ => None,
         };
-        let spine = self.design_spine(ground, analysis.as_ref(), sample.as_ref())?;
+        let spine =
+            self.design_spine(ground, cover_colour, analysis.as_ref(), sample.as_ref())?;
         let own_spine_colour = !matches!(self.req.spine, SpineChoice::Typeset) && cover.is_some();
         let back_ground = if own_spine_colour { spine.background } else { ground };
 
@@ -210,9 +204,12 @@ impl Composer<'_> {
         Ok(page)
     }
 
+    /// Designs the spine. `ground` is the card's ground, `cover_colour` the colour
+    /// computed from the cover when one is printed.
     fn design_spine(
         &mut self,
         ground: Rgb8,
+        cover_colour: Option<Rgb8>,
         analysis: Option<&Pixmap>,
         sample: Option<&Pixmap>,
     ) -> Result<SpineDesign, CardError> {
@@ -221,9 +218,13 @@ impl Composer<'_> {
         let spine = format.spine();
         let rect = Rect::new(spine.x, spine.y - bleed, spine.w, spine.h + 2.0 * bleed);
         let (background, source, cover) = match (&self.req.spine, analysis) {
-            (SpineChoice::CoverColour, Some(pixels)) => {
-                (BackgroundStyle::Auto, SpineSource::Synthesize, Some(pixels))
-            }
+            // The colour computed from the cover, by the card's own rule: the very
+            // value of the default ground, so that the two can never differ by a shade.
+            (SpineChoice::CoverColour, Some(_)) => (
+                BackgroundStyle::Solid(cover_colour.unwrap_or(ground)),
+                SpineSource::Synthesize,
+                None,
+            ),
             (SpineChoice::EdgeContinuation, Some(pixels)) => (
                 BackgroundStyle::EdgeContinuation,
                 SpineSource::Synthesize,
@@ -631,17 +632,12 @@ mod tests {
                 .map(|title| palette_ground(title).to_hex())
                 .collect();
         assert!(distinct.len() >= 3, "{distinct:?}");
-        for ground in PALETTE.into_iter().chain([NEUTRAL_LIGHT, NEUTRAL_DARK]) {
+        for ground in PALETTE.into_iter().chain([Rgb8::WHITE]) {
             let text = ebc_color::black_or_white(ground);
             assert!(contrast_ratio(text, ground) >= 4.5, "{ground}");
+            // Also with black counted as ink on paper, as for a ground computed from a
+            // cover.
+            assert!(ground::text_contrast(ground) >= ground::GROUND_MIN_CONTRAST, "{ground}");
         }
-    }
-
-    #[test]
-    fn the_neutral_ground_contrasts_with_the_cover_edges() {
-        let dark = Pixmap::filled(60, 90, [20, 30, 60, 255]);
-        let light = Pixmap::filled(60, 90, [250, 248, 240, 255]);
-        assert_eq!(neutral_ground(&dark), NEUTRAL_LIGHT);
-        assert_eq!(neutral_ground(&light), NEUTRAL_DARK);
     }
 }

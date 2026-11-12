@@ -21,7 +21,7 @@ default = ["net", "fontid"]
 # `--offline-fixtures`.
 net = ["ebc-catalog/client", "dep:tokio"]
 # The `ebc fontid` subcommand (font identification with the bundled or a given index).
-fontid = ["dep:ebc-fontid"]
+fontid = ["dep:ebc-fontid", "dep:ebc-text"]
 
 [dependencies]
 clap = { version = "4.6.7", features = ["derive", "env"] }
@@ -35,6 +35,7 @@ ebc-model = { workspace = true }
 ebc-preflight = { workspace = true }
 ebc-qr = { workspace = true }
 ebc-scene = { workspace = true }
+ebc-text = { workspace = true, optional = true }
 getrandom = "0.4.3"
 image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
 serde = { workspace = true }
@@ -44,6 +45,8 @@ tokio = { version = "1.54.1", default-features = false, features = ["rt", "time"
 
 [dev-dependencies]
 assert_cmd = "2.2.2"
+# Draws the title of the own-made cover of the `fontid` tests.
+ebc-text = { workspace = true }
 jpeg-encoder = "0.7.1"
 predicates = "3.1.4"
 rqrr = "0.11.0"

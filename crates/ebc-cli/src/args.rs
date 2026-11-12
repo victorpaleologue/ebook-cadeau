@@ -177,7 +177,7 @@ pub(crate) struct CardArgs {
     /// Publisher
     #[arg(long, value_name = "NAME")]
     pub(crate) publisher: Option<String>,
-    /// ISBN of the book (recorded with the card; nothing is looked up)
+    /// ISBN of the book: checked, but neither printed nor looked up
     #[arg(long, value_name = "ISBN")]
     pub(crate) isbn: Option<String>,
     /// Language of the book, e.g. fr or en (decides the reading direction of the spine)
@@ -203,7 +203,12 @@ pub(crate) struct CardArgs {
     pub(crate) trim_authorised: bool,
 
     /// The gift code printed on the card (twelve letters, e.g. BCDF-GHJK-LMNP)
-    #[arg(long, value_name = "CODE", required_unless_present = "random_code", conflicts_with = "random_code")]
+    #[arg(
+        long,
+        value_name = "CODE",
+        required_unless_present = "random_code",
+        conflicts_with = "random_code"
+    )]
     pub(crate) code: Option<String>,
     /// Draw a fresh code from the system's secure random source and print it
     #[arg(long)]
@@ -342,9 +347,13 @@ pub(crate) struct FontidArgs {
     /// How many fonts to list
     #[arg(long, value_name = "N", default_value_t = 5, value_parser = clap::value_parser!(u32).range(1..=100))]
     pub(crate) top: u32,
-    /// Skip the slower second pass that renders the title with each candidate font
-    #[arg(long)]
-    pub(crate) no_rerank: bool,
+    /// Directory holding the font files of the index (matched by file name): the best
+    /// candidates are then re-ranked by rendering the title with each of them
+    #[arg(long, value_name = "DIR")]
+    pub(crate) fonts: Option<PathBuf>,
+    /// Where the title is, in pixels, instead of detecting it: X,Y,WIDTH,HEIGHT
+    #[arg(long, value_name = "X,Y,W,H")]
+    pub(crate) region: Option<String>,
     /// Print JSON
     #[arg(long)]
     pub(crate) json: bool,

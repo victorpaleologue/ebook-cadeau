@@ -110,10 +110,7 @@ fn select_providers(
     for id in &args.providers {
         let id = id.trim().to_ascii_lowercase();
         let provider = provider_by_id(&id, config).ok_or_else(|| {
-            CliError::usage(format!(
-                "unknown provider {id:?}; known: {}",
-                PROVIDER_IDS.join(", ")
-            ))
+            CliError::usage(format!("unknown provider {id:?}; known: {}", PROVIDER_IDS.join(", ")))
         })?;
         if provider.info().requires_key && config.google_books_key.is_none() {
             return Err(CliError::usage(format!(
@@ -293,13 +290,17 @@ pub(crate) fn run(args: &LookupArgs, streams: &mut Streams<'_>) -> Result<Status
 
     // A lookup that only talks to fixture servers on this machine has no remote service
     // to be polite to and no proxy to go through.
-    let all_local = providers.iter().all(|p| {
-        config.base_urls.get(p.info().id).is_some_and(|url| is_loopback_url(url))
-    });
+    let all_local = providers
+        .iter()
+        .all(|p| config.base_urls.get(p.info().id).is_some_and(|url| is_loopback_url(url)));
     let transport = Transport::open(
         args.net.offline_fixtures.as_deref(),
         NetOptions {
-            user_agent: args.net.user_agent.clone().unwrap_or_else(|| DEFAULT_USER_AGENT.to_owned()),
+            user_agent: args
+                .net
+                .user_agent
+                .clone()
+                .unwrap_or_else(|| DEFAULT_USER_AGENT.to_owned()),
             timeout: Duration::from_secs(args.net.timeout),
             use_proxy: !(args.net.no_proxy || all_local),
             min_interval: all_local.then_some(Duration::ZERO),
@@ -322,6 +323,14 @@ pub(crate) fn run(args: &LookupArgs, streams: &mut Streams<'_>) -> Result<Status
             None => streams.line(format!("ISBN       {}", isbn.hyphenated()))?,
         }
         print_sources(&report, &infos, streams)?;
+    }
+
+    if transport.is_offline()
+        && report.errors().any(|e| matches!(e, ebc_catalog::CatalogError::Transport { .. }))
+    {
+        streams.note(
+            "note: --offline-fixtures: a request without a fixture fails like an unreachable host",
+        );
     }
 
     match (&report.merged, report.errors().next()) {

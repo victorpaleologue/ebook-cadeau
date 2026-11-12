@@ -106,8 +106,11 @@ pub enum SpineChoice {
     /// colour. Nothing is taken from the cover.
     #[default]
     Typeset,
-    /// Typeset on one flat colour *computed* from the cover (its plain binding edge, its
-    /// frame or a dominant colour — never pixels); the back panel takes the same colour.
+    /// Typeset on one flat colour *computed* from the cover (its frame, its plain binding
+    /// edge or its dominant colour — never pixels); the back panel takes the same colour.
+    /// That colour is the default ground of a card with a cover, so this choice only
+    /// shows where the ground is something else: paper white (the default when print
+    /// argues against the computed colour) or a [`CardRequest::ground`] of the caller's.
     /// Needs a printable cover, no authorisation.
     CoverColour,
     /// **Adaptation — needs authorisation.** A mirrored, blurred strip of the cover
@@ -333,9 +336,12 @@ pub struct CardRequest {
     pub back_text: Option<String>,
     /// What goes on the spine. Default: typeset on the flat ground.
     pub spine: SpineChoice,
-    /// The flat ground colour of the outside. Default: a neutral for a card with a cover,
-    /// a colour picked from a fixed palette by a hash of the title for the typographic
-    /// card.
+    /// The flat ground colour of the outside: back, spine and front. Used as given.
+    /// Default (`None`): for a card with a cover, one colour computed from the cover (its
+    /// frame, its plain binding edge or its dominant colour — never pixels), or paper
+    /// white when that colour is too faint, too heavy in ink or leaves no legible text
+    /// (see the crate documentation, "The ground of the outside"); for the typographic
+    /// card, a colour picked from a fixed palette by a hash of the title.
     pub ground: Option<Rgb8>,
     /// The URL the QR code leads to, e.g. `"https://ebk.example/k/BCDFGHJKLMNP"`
     /// ([`ebc_model::claim_url`]). When it ends in `/k/<code>` the QR code carries it

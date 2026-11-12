@@ -43,7 +43,12 @@ fn an_invalid_isbn_fails_with_the_reason() {
 #[test]
 fn hostile_input_is_refused_without_a_panic() {
     let long = "9".repeat(100_000);
-    for input in [long.as_str(), "978\u{0}2070360024", "９７８２０７０３６００２４", "97820703600２4\u{202e}"] {
+    for input in [
+        long.as_str(),
+        "978\u{0}2070360024",
+        "９７８２０７０３６００２４",
+        "97820703600２4\u{202e}",
+    ] {
         let output = ebc().args(["isbn", "--", input]).output();
         // An argument with a NUL byte cannot even be passed to a process.
         let Ok(output) = output else { continue };
@@ -58,7 +63,7 @@ fn extract_finds_every_isbn_in_a_file() {
     let file = dir.path().join("list.txt");
     std::fs::write(
         &file,
-        "EAN 9782070360024, also sold as ISBN-10: 0-306-40615-2.\nNot one: 9782070360025.\n\xff\xfe",
+        b"EAN 9782070360024, also sold as ISBN-10: 0-306-40615-2.\nNot one: 9782070360025.\n\xff\xfe",
     )
     .unwrap();
     let output = ebc().arg("isbn").arg("--extract").arg(&file).output().unwrap();

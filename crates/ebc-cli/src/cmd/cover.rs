@@ -19,7 +19,7 @@ use ebc_covers::quality::{Quality, Thresholds, Verdict, print_quality_with};
 use ebc_covers::robots::Robots;
 use ebc_covers::sniff::{Format, ImageInfo};
 use ebc_covers::{
-    AssetOrigin, CandidateRole, CoverCandidate, Policy, PrintableCover, Risk, RightsBasis,
+    AssetOrigin, CandidateRole, CoverCandidate, Policy, PrintableCover, RightsBasis, Risk,
     candidates, guard, probe,
 };
 use ebc_layout::CardFormat;
@@ -136,15 +136,24 @@ struct Fetcher<'a> {
     robots: HashMap<String, Robots>,
     last_request: HashMap<String, Instant>,
     requests: usize,
+    /// The delay applied before the latest candidate request, in milliseconds.
+    last_delay_ms: Option<u32>,
 }
 
 impl<'a> Fetcher<'a> {
     fn new(transport: &'a Transport, policy: &'a Policy) -> Self {
-        Self { transport, policy, robots: HashMap::new(), last_request: HashMap::new(), requests: 0 }
+        Self {
+            transport,
+            policy,
+            robots: HashMap::new(),
+            last_request: HashMap::new(),
+            requests: 0,
+            last_delay_ms: None,
+        }
     }
 
     /// Waits until `delay_ms` has passed since the previous request to `host`. Fixture
-    /// runs do not wait: there is no host to spare.
+    /// runs do not wait — there is no host to spare — but report the same delay.
     fn pace(&mut self, host: &str, delay_ms: u32) {
         if self.transport.is_offline() {
             return;
@@ -158,7 +167,11 @@ impl<'a> Fetcher<'a> {
         }
     }
 
-    fn execute(&mut self, host: &str, request: &ebc_model::HttpRequest) -> Result<HttpResponse, String> {
+    fn execute(
+        &mut self,
+        host: &str,
+        request: &ebc_model::HttpRequest,
+    ) -> Result<HttpResponse, String> {
         self.requests += 1;
         let result = self.transport.execute(request);
         self.last_request.insert(host.to_owned(), Instant::now());
@@ -191,13 +204,15 @@ impl<'a> Fetcher<'a> {
     /// The [`Outcome`] that explains why there is no usable response.
     fn fetch(&mut self, candidate: &CoverCandidate) -> Result<HttpResponse, Outcome> {
         let url = &candidate.request.url;
-        let parts = url_like::Parts::of(url)
-            .map_err(|refusal| Outcome::Refused(refusal.to_string()))?;
+        let parts =
+            url_like::Parts::of(url).map_err(|refusal| Outcome::Refused(refusal.to_string()))?;
         let robots = self.robots_for(&parts, candidate.min_interval_ms);
         self.policy
             .may_fetch(url, Some(&robots))
             .map_err(|refusal| Outcome::Refused(refusal.to_string()))?;
-        self.pace(&parts.host, self.policy.delay_ms(candidate, Some(&robots)));
+        let delay_ms = self.policy.delay_ms(candidate, Some(&robots));
+        self.last_delay_ms = Some(delay_ms);
+        self.pace(&parts.host, delay_ms);
         self.execute(&parts.host, &candidate.request).map_err(Outcome::Failed)
     }
 }
@@ -271,19 +286,29 @@ struct Saved {
     source: &'static str,
 }
 
+/// The result of [`walk`]: one outcome and one applied delay per candidate, and the
+/// image that was saved, if any.
+struct Walk {
+    outcomes: Vec<Outcome>,
+    delays: Vec<Option<u32>>,
+    saved: Option<Saved>,
+}
+
 /// Walks the cascade top to bottom and returns one outcome per candidate.
 fn walk(
     run: &Run<'_>,
     steps: &[CoverCandidate],
     fetcher: &mut Fetcher<'_>,
     streams: &mut Streams<'_>,
-) -> Result<(Vec<Outcome>, Option<Saved>), CliError> {
+) -> Result<Walk, CliError> {
     let mut outcomes = Vec::with_capacity(steps.len());
+    let mut delays = Vec::with_capacity(steps.len());
     let mut saved: Option<Saved> = None;
     // (source, ISBN) pairs a fact-only request showed to have no cover.
     let mut absent: Vec<(&'static str, Option<ebc_model::Isbn13>)> = Vec::new();
 
     for candidate in steps {
+        fetcher.last_delay_ms = None;
         let key = (candidate.source, candidate.isbn);
         let outcome = match candidate.role {
             CandidateRole::Preview | CandidateRole::Link | CandidateRole::Page => Outcome::Listed,
@@ -366,7 +391,9 @@ fn walk(
                         }
                     }
                 }
-                (Some(_), Some(_)) => Outcome::Skipped("no cover located at this source".to_owned()),
+                (Some(_), Some(_)) => {
+                    Outcome::Skipped("no cover located at this source".to_owned())
+                }
                 _ => Outcome::NotRun,
             },
         };
@@ -382,11 +409,12 @@ fn walk(
             ));
         }
         outcomes.push(outcome);
+        delays.push(fetcher.last_delay_ms);
     }
-    Ok((outcomes, saved))
+    Ok(Walk { outcomes, delays, saved })
 }
 
-fn candidate_json(candidate: &CoverCandidate, outcome: &Outcome) -> Value {
+fn candidate_json(candidate: &CoverCandidate, outcome: &Outcome, delay_ms: Option<u32>) -> Value {
     json!({
         "source": candidate.source,
         "source_name": candidate.source_info().map(|s| s.name),
@@ -398,6 +426,10 @@ fn candidate_json(candidate: &CoverCandidate, outcome: &Outcome) -> Value {
         "other_edition": candidate.other_edition,
         "declared_px": candidate.declared_px,
         "min_interval_ms": candidate.min_interval_ms,
+        // The pause observed before this request when another request to the same host
+        // preceded it: the source's interval or robots.txt's Crawl-delay, whichever is
+        // longer. Absent when the request was not made.
+        "delay_ms": delay_ms,
         "rights_basis": candidate.rights_basis().as_str(),
         "note": candidate.note,
         "outcome": outcome.name(),
@@ -538,7 +570,7 @@ pub(crate) fn run(args: &CoverArgs, streams: &mut Streams<'_>) -> Result<Status,
     let steps = candidates(&book, &policy);
 
     let needs_requests = basis.is_some() || args.probe;
-    let (outcomes, saved, requests) = if needs_requests {
+    let (outcomes, delays, saved, requests) = if needs_requests {
         let transport = Transport::open(
             args.net.offline_fixtures.as_deref(),
             NetOptions {
@@ -557,22 +589,28 @@ pub(crate) fn run(args: &CoverArgs, streams: &mut Streams<'_>) -> Result<Status,
             panel,
         };
         let mut fetcher = Fetcher::new(&transport, &policy);
-        let (outcomes, saved) = walk(&run, &steps, &mut fetcher, streams)?;
-        (outcomes, saved, fetcher.requests)
+        let walked = walk(&run, &steps, &mut fetcher, streams)?;
+        (walked.outcomes, walked.delays, walked.saved, fetcher.requests)
     } else {
         let outcomes = steps
             .iter()
             .map(|c| match c.role {
-                CandidateRole::Preview | CandidateRole::Link | CandidateRole::Page => Outcome::Listed,
+                CandidateRole::Preview | CandidateRole::Link | CandidateRole::Page => {
+                    Outcome::Listed
+                }
                 _ => Outcome::NotRun,
             })
             .collect();
-        (outcomes, None, 0)
+        (outcomes, vec![None; steps.len()], None, 0)
     };
 
     if args.json {
-        let rows: Vec<Value> =
-            steps.iter().zip(&outcomes).map(|(c, o)| candidate_json(c, o)).collect();
+        let rows: Vec<Value> = steps
+            .iter()
+            .zip(&outcomes)
+            .zip(&delays)
+            .map(|((candidate, outcome), delay)| candidate_json(candidate, outcome, *delay))
+            .collect();
         streams.json(&json!({
             "isbn": isbn.to_plain(),
             "mode": if basis.is_some() { "operator" } else { "list" },
@@ -611,9 +649,8 @@ pub(crate) fn run(args: &CoverArgs, streams: &mut Streams<'_>) -> Result<Status,
                 "Rights basis of every candidate: none. They help you find the cover; none \
                  may be printed as found.",
             )?;
-            streams.line(
-                "To save an image you hold the rights to: --rights-basis <basis> -o FILE.",
-            )?;
+            streams
+                .line("To save an image you hold the rights to: --rights-basis <basis> -o FILE.")?;
         }
         return Ok(Status::Success);
     };
@@ -641,7 +678,8 @@ pub(crate) fn run(args: &CoverArgs, streams: &mut Streams<'_>) -> Result<Status,
             }
             if path.extension().and_then(|e| e.to_str()).is_some_and(|ext| {
                 let ext = ext.to_ascii_lowercase();
-                ext != saved.info.format.extension() && !(ext == "jpeg" && saved.info.format == Format::Jpeg)
+                ext != saved.info.format.extension()
+                    && !(ext == "jpeg" && saved.info.format == Format::Jpeg)
             }) {
                 streams.note(format!(
                     "note: the file is {}, whatever its name says",

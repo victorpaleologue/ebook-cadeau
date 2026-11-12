@@ -1,6 +1,8 @@
 # ISBN & book-metadata databases we are allowed to access
 
-_Status: draft — research date 2026-11-12_
+_Status: fact-checked — research date 2026-11-12_
+
+> **Fact-check pass (2026-11-12).** Web search worked for this pass. Claims marked **[FC]** were re-verified with fresh searches or by re-reading the primary file; corrections are written in place and listed in the "Verification log" at the end and in `factcheck/isbn-databases.md`. Trade sources (§4.2–4.4, §4.6), the legal authorities of §5 and all live HTTP behaviour were **not** re-checked and keep their original markers.
 
 > **Scope.** This document answers one question: from which databases may the service fetch **text metadata** (title, contributors, publisher, date, identifiers) for a book identified by its ISBN, and on what terms. It is research to brief the implementation, not legal advice. Finding and previewing cover images is covered in `02-cover-sources.md`; whether a cover may be printed is decided in `07-legal-covers-and-reseller-rights.md`. Where the documents meet, doc 07 governs.
 
@@ -37,15 +39,15 @@ _Status: draft — research date 2026-11-12_
 1. **The best metadata source is not a database.** In standalone mode it is the user's own EPUB (its OPF metadata) plus what the user types. In reseller mode it is the ONIX record the reseller already holds for the title. Both are authoritative and raise no database-licence question. ISBN databases are a convenience: they pre-fill a form from a typed or scanned ISBN.
 2. **"Allowed" falls into four classes.** (A) Open: no key, a licence that permits commercial reuse and storage. (B) Terms-bound: a free API whose terms limit storage, branding or use. (C) Contract: paid or negotiated access. (D) Excluded: the terms or the law bar our use. §5.5 says what each class lets us do.
 3. **Class A is large enough for France and the main EU languages.** BnF catalogue général and data.bnf.fr (Licence Ouverte) [V1 for the licence statement, dated 2016], Libris (CC0) [V1], Open Library (contributions under CC0) [V1], Crossref [V1], BookBrainz core data (CC0) [V1]; and, from memory only: SUDOC (Licence Ouverte), DNB, K10plus, lobid, Finna, BNE, Wikidata, Inventaire, DOAB/OAPEN (CC0) [M].
-4. **For a French title, ask BnF first.** ISBNs starting 978-2 (French language) and 979-10 (France) go to the BnF SRU service, which needs no key [V2 for the endpoint]. Route other registration groups to their national library (§3.1).
-5. **979-prefixed ISBNs have no ISBN-10** [V2]. Any provider keyed on ISBN-10 fails silently on recent French titles. The reverse also holds: old BnF records may carry only the ISBN-10, so the query must send both forms for 978 ISBNs [V1].
-6. **An eBook has its own ISBN, and catalogues know print ISBNs better** [M]. Expect misses on eBook ISBNs at BnF [M, low]. Google Books is the open-ish source most likely to know an eBook ISBN [M]; DNB covers German eBooks well [M]. None of this was measured.
-7. **Class B is one useful source: Google Books.** API key, about 1,000 requests per day by default, no permanent copy, branding and link back — all [M]. Use it for display-only pre-fill and store nothing.
+4. **For a French title, ask BnF first.** ISBNs starting 978-2 (French language) and 979-10 (France) go to the BnF SRU service, which needs no key [V2 for the endpoint; FC: confirmed on bnf.fr]. Route other registration groups to their national library (§3.1).
+5. **979-prefixed ISBNs have no ISBN-10** [V2]. Any provider keyed on ISBN-10 fails silently on recent French titles. The reverse also holds: old BnF records may carry only the ISBN-10, so the query must send both forms for 978 ISBNs [V1]. BnF also documents a dedicated index, `bib.fuzzyIsbn`, that matches EAN, ISBN-13 and ISBN-10 in one operand [FC] (§3.3).
+6. **An eBook has its own ISBN, and catalogues know print ISBNs better** [M]. Expect misses on eBook ISBNs at BnF [FC: BnF has no per-title deposit step for digital publications yet and counted 2,606 digital books against 77,341 printed books deposited in 2025]. Google Books is the open-ish source most likely to know an eBook ISBN [M]; DNB covers German eBooks well [M]. None of this was measured.
+7. **Class B is one useful source: Google Books — but not for a paid product without Google's permission.** API key; about 1,000 requests per day by default [FC, secondary sources]; branding guidelines [FC]; no permanent copy [M]. **Correction [FC]:** the Books API has its own terms on top of the Google APIs terms, and they say: "You may not charge users any fee for the use of your application, unless you have entered into a separate agreement with Google or obtained Google's written permission", and "You may not reorder or otherwise alter the results". Treat it as usable only in a free flow, or after written permission; otherwise keep it off.
 8. **No French trade database is open, and none was priced.** Dilicom (FEL, Hub), Electre, Tite-Live and Decitre ORB are subscriber services for booksellers and libraries [V1 for ORB's subscription and Dilicom's credentials; M for the rest]. Whether a company that is neither can subscribe is unknown. As of 2026-11 no price could be confirmed for any of them.
 9. **No commercial source grants a right to print a cover** [M]. Buying a database solves pre-fill, not the cover.
-10. **ONIX 3.0/3.1 is the canonical trade feed** (current: ONIX 3.1.3, code lists Issue 75, October 2026 [V1]). It can carry a full jacket (List 158 code 29 [V2]) and a spine image (code 56 [V1]). It carries terms for assets (audience, territory, dates, credit) [V2] and, since 3.1.1, a per-image licence slot (`EpubLicense`) [V1]. It has no code meaning "may be printed on a physical object".
+10. **ONIX 3.0/3.1 is the canonical trade feed** (current: code lists Issue 75 [FC: EDItEUR's site]; ONIX 3.1.3 per the Jonix README only [V1, not confirmed by search]). It can carry a full jacket (List 158 code 29 [V2]) and a spine image (code 56 [FC: added in Issue 70; code 57 in Issue 71]). It carries terms for assets (audience, territory, dates, credit) [V2] and, since 3.1.1, a per-image licence slot (`EpubLicense`) [V1]. It has no code meaning "may be printed on a physical object".
 11. **Browser-direct lookup is verified for one source only**: Open Library sends `Access-Control-Allow-Origin: *` on `.json` and `/api/` paths [V1]. For every SRU service CORS is unverified. Plan a server-side relay for **text metadata**. This is not the image proxy that docs 02 and 07 forbid (§6.1).
-12. **Excluded**: Amazon (API replaced in 2026 [V2]; terms bar offline and printed use [M]), Goodreads, LibraryThing for commercial use, Babelio, Fnac, Kobo, Decitre's website, OCLC WorldCat's internal API, the ISBN Agency's publisher register [M unless marked].
+12. **Excluded**: Amazon (PA-API 5.0 shut off on 15 May 2026, replaced by the Creators API [FC]; terms bar offline and printed use [M]), Goodreads, LibraryThing for commercial use, Babelio, Fnac, Kobo, Decitre's website, OCLC WorldCat's internal API, the ISBN Agency's publisher register [M unless marked].
 
 ### 1.2 Recommended provider priority — standalone mode
 
@@ -59,7 +61,7 @@ Steps 0–2 need no network. A step runs only when the steps above it left title
 | 3 | ONIX 3.0/3.1 file from a publisher, author platform or e-distributor (opt-in) | Rights holder | All fields; the only channel that can carry a print permission for the cover | Per account | On when the feature ships |
 | 4 | National library routed by registration group. 978-2 and 979-10: BnF SRU, then data.bnf.fr | A | Pre-fill | Cache with source and date | On |
 | 5 | Open Library | A | Pre-fill, all groups | Cache | On |
-| 6 | Google Books | B | Pre-fill for misses, mainly eBook ISBNs | None beyond the session | On only when a key is configured |
+| 6 | Google Books | B | Pre-fill for misses, mainly eBook ISBNs | None beyond the session | On only when a key is configured **and** the flow charges the user nothing or Google's written permission is on file [FC] |
 | 7 | Inventaire, Wikidata; SUDOC `isbn2ppn` for academic titles | A | Last resort | Cache | Off until the hit-rate test shows a gain |
 | 8 | ISBNdb | C, self-serve | Pre-fill | Per its terms | Off |
 | 9 | One contracted French base (Decitre ORB or Electre), Dilicom "FEL à la demande" for EAN and fixed-price validation | C | Pre-fill and validation only | Per contract | Off |
@@ -90,28 +92,28 @@ Legend. **Class**: A open, B terms-bound, C contract, D excluded. **CORS**: "ver
 
 | Source | Coverage | Access | Key / limits | Data licence | Commercial use OK? | Covers? | CORS | Verdict |
 |---|---|---|---|---|---|---|---|---|
-| **BnF catalogue général** (FR) | French legal deposit; 14 million bibliographic records in 2016 [V1]. High for French print, partial for eBooks [M, low] | SRU 1.2 XML; also Z39.50 and OAI-PMH [V2] | None. No published limit known [M] | Licence Ouverte [V1, 2016 statement] | Yes, with attribution [V1 for the licence text] | Thumbnail endpoint [V1]; not covered by the metadata licence [M] | Unverified | **Tier 1** for 978-2 and 979-10 (A) |
+| **BnF catalogue général** (FR) | French legal deposit; 14 million bibliographic records in 2016 [V1]. High for French print, partial for eBooks [M, low] | SRU 1.2 XML; also Z39.50 and OAI-PMH [V2] | None. No published limit found [FC: unsupported either way]. `maximumRecords` defaults to 10, at most 1000 [FC] | Licence Ouverte since 1 January 2014, Dewey authority records excepted [FC] | Yes, with attribution [FC; one BnF portal sentence about paid commercial reuse appears to concern digitised documents — re-read it] | Thumbnail endpoint [V1]; not covered by the metadata licence [M] | Unverified | **Tier 1** for 978-2 and 979-10 (A) |
 | **data.bnf.fr** (BnF) | Same catalogue as linked data: works, authors, editions | SPARQL JSON; RDF dumps (editions: 39 GB RDF/XML) [V2] | None | Licence Ouverte [V1] | Yes, with attribution | No | Unverified | Tier 1 back-up; work and author identifiers (A) |
-| **SUDOC** (ABES, FR) | Union catalogue of French academic libraries | `isbn2ppn` web service, XML or JSON [V1]; record by PPN [M] | None. Limits unknown | Licence Ouverte [M] | Yes [M] | No | Unverified | Optional, academic titles (A) |
-| **Open Library** (Internet Archive, US) | 192 million records of all types in the Nov 2021 dump [V1]. Print-heavy, patchy for French eBooks [M] | REST JSON; dumps on archive.org [V1] | None. 180 requests/min per IP on JSON and API paths, 1 request/s on HTML pages [V1]. User-Agent with contact | Contributions under CC0 [V1] | Yes | Yes; no licence on the images [M] | **Verified**: `*` on `.json` and `/api/` [V1] | **Tier 2**, all groups (A) |
-| **Google Books** | Very broad, including eBooks; `saleInfo.isEbook`, per-country sale data [V1]. High for eBook ISBNs [M] | REST JSON | API key; about 1,000 requests/day by default [M] | Google APIs terms: no scraping, no permanent database, branding and link back [M] | Display yes, storage no [M] | Thumbnails about 80 to 1280 px wide [V1]; no reuse right | Yes [M] | **Tier 3**, display-only (B) |
-| **DNB** (DE) | German legal deposit, including online publications [M] | SRU 1.1 XML: MARC21-xml, oai_dc, RDFxml [V2] | None; no token in current client code [V2] | CC0 1.0 [M] | Yes [M] | Cover endpoint fed by MVB, rights unclear [V1] | Unverified | Tier 1 for 978-3 (A) |
-| **K10plus** (GBV + BSZ, DE) | German academic union catalogue | SRU XML [V1] | None | CC0 [M] | Yes [M] | No | Unverified | German back-up (A) |
-| **lobid-resources** (hbz, DE) | North Rhine-Westphalia union catalogue | JSON-LD REST, JSONP, weekly JSON-lines dump [V1] | None. A usage policy exists, not read [V1] | CC0 [M] | Yes [M] | No | JSONP documented [V1] | German back-up (A) |
-| **Libris** (KB, SE) | Swedish union catalogue | JSON-LD `find`, SRU, OAI-PMH, SPARQL [V1] | None. User-Agent required; KB may rate-limit or block [V1] | CC0 [V1] | Yes | No | Docs show a browser `fetch()` [V1]; header unverified | Tier 1 for 978-91 (A) |
-| **Finna** (FI) | Finnish libraries, archives, museums | REST JSON [V1] | None | Metadata CC0, images excluded [M] | Yes [M] | Per-record rights [V1 for the endpoint] | Yes [M, low] | Tier 1 for 978-951, 978-952 (A) |
+| **SUDOC** (ABES, FR) | Union catalogue of French academic libraries | `isbn2ppn` web service, XML or JSON [V1]; record by PPN [M] | None. Limits unknown | Licence Ouverte (Etalab), ABES policy since 2012 [FC] | Yes [FC] | No | Unverified | Optional, academic titles (A) |
+| **Open Library** (Internet Archive, US) | 192 million records of all types in the Nov 2021 dump [V1]. Print-heavy, patchy for French eBooks [M] | REST JSON; dumps on archive.org [V1] | None. 180 requests/min per IP on JSON and API paths, 1 request/s on HTML pages [V1, FC re-read]. Published policy: 1 request/s unidentified, 3 with a User-Agent naming the application and a contact [FC] | Contributions under CC0 [V1] | Yes | Yes; no licence on the images [M] | **Verified**: `*` on `.json` and `/api/` [V1] | **Tier 2**, all groups (A) |
+| **Google Books** | Very broad, including eBooks; `saleInfo.isEbook`, per-country sale data [V1]. High for eBook ISBNs [M] | REST JSON | API key; about 1,000 requests/day by default [FC, secondary] | Google APIs terms **plus the Books API terms**: no fee charged to users without Google's written permission; results not to be reordered or altered; branding guidelines [FC]. No permanent database [M] | Display only, and **not in a paid application without written permission** [FC]; storage no [M] | Thumbnails about 80 to 1280 px wide [V1]; no reuse right | Yes [M] | **Tier 3**, display-only (B) |
+| **DNB** (DE) | German legal deposit, including online publications [M] | SRU 1.1 XML: MARC21-xml, oai_dc, RDFxml [V2] | None; no registration since at least 2023 [FC] | CC0 1.0 since 1 July 2015 [FC] | Yes [FC] | Cover endpoint fed by MVB, rights unclear [V1] | Unverified | Tier 1 for 978-3 (A) |
+| **K10plus** (GBV + BSZ, DE) | German academic union catalogue | SRU XML [V1; FC for endpoint and `pica.isb`] | None | CC0 [M; FC found "open data" and "public domain" statements but none naming CC0] | Yes [M] | No | Unverified | German back-up (A) |
+| **lobid-resources** (hbz, DE) | North Rhine-Westphalia union catalogue | JSON-LD REST, JSONP, weekly JSON-lines dump [V1] | None. A usage policy exists, not read [V1] | CC0 1.0, stated by hbz and carried in each record [FC] | Yes [FC] | No | JSONP documented [V1] | German back-up (A) |
+| **Libris** (KB, SE) | Swedish union catalogue | JSON-LD `find`, SRU, OAI-PMH, SPARQL [V1] | None. User-Agent required; KB may rate-limit or block [V1, FC re-read] | CC0 **for the Swedish national bibliography and authority records** [FC: that is what KB's text says; other union-catalogue records are not expressly covered] | Yes for those records | No | Docs show a browser `fetch()` [V1]; header unverified | Tier 1 for 978-91 (A) |
+| **Finna** (FI) | Finnish libraries, archives, museums | REST JSON [V1] | None | Metadata CC0, images excluded [FC] | Yes [FC] | Per-record rights [V1 for the endpoint] | Unverified [FC: nothing found] | Tier 1 for 978-951, 978-952 (A) |
 | **BNE datos** (ES) | Spanish national library | SPARQL JSON [V1] | None | CC0 [M] | Yes [M] | No | Unverified | Tier 1 for 978-84, 979-13 (A) |
 | **KB** (NL) | Dutch union catalogue (GGC) | SRU XML [V2]; RDF dumps [V1] | None | Bibliographic sets open; some KB datasets are CC BY-NC-ND [V1] | Check per collection | No | Unverified | Tier 1 for 978-90, 978-94 after a licence check |
 | **swisscovery** (SLSP, CH); **OBV** (AT) | Swiss and Austrian academic networks | Alma SRU XML [V1 for the Swiss base URL; M, low for Austria] | None | Unknown | Unknown | No | Unverified | Hold |
 | **ICCU / OPAC SBN** (IT) | Italian union catalogue | 2020 HTML-form URL returning UNIMARC [V1, stale] | None | Unknown | Unknown | — | — | Hold: find the current API |
 | **KBR**, Unicat (BE) | Belgian national library; union catalogue | No public ISBN API found; Unicat SRU, age unknown [V1] | — | Unknown | Unknown | — | — | Hold |
 | **PORBASE** (BNP, PT) | Portuguese union catalogue | Dublin Core XML by URN [V1, 2021] | None | Unknown | Unknown | No | Unverified | Hold |
-| **Library of Congress** (US) | US deposit | SRU XML [V2, sources predate 2025]; JSON on loc.gov [M] | None; loc.gov limits [M] | US government work [M] | Yes [M] | No | Unknown | Skip: low value, endpoint status unknown since 2025 [M, low] |
+| **Library of Congress** (US) | US deposit | SRU XML [V2, sources predate 2025]; JSON on loc.gov [M] | None; loc.gov limits [M] | US government work [M] | Yes [M] | No | Unknown | Skip: low value. LoC still lists `lx2.loc.gov`; 2026 reports say only `http://lx2.loc.gov:210/lcdb` answers and the `https` form fails the TLS handshake; the "2025 platform change" itself is unsupported [FC] |
 | **British Library / BNB** (UK) | British national bibliography | None I can vouch for [M, low] | — | — | — | — | — | Hold |
-| **Wikidata** | Low for editions | SPARQL JSON [V2] | None. User-Agent policy; 60 s timeout, 5 parallel queries per IP [M] | CC0 [M] | Yes | Rarely (P18) | Yes [M] | Optional, last resort (A) |
+| **Wikidata** | Low for editions | SPARQL JSON [V2] | None. User-Agent policy; 60 s timeout [FC]; "5 parallel queries per IP" unsupported [FC] | CC0 [M] | Yes | Rarely (P18) | Yes [M] | Optional, last resort (A) |
 | **Inventaire.io** (FR association) | Aggregator: re-queries BnF, BNE, Open Library, Wikidata [V1] | REST JSON [V1] | None; limits unknown | Data CC0 [M]; server code AGPL-3.0 [V1] | Yes [M] | User uploads | [M, low] | Optional, last resort (A) |
-| **Crossref** | Scholarly books with a DOI | REST JSON [V1] | None. Polite pool with `mailto`; limits in response headers [V1]; lower since Dec 2025 [M] | "no claims of ownership"; may be "cached and incorporated" [V1] | Yes | No | Yes [M] | Skip unless academic titles matter (A) |
-| **OpenAlex** | Scholarly works | REST JSON | Free API key required since 2026-02-13 [V1, sources conflict: §6.1] | CC0 [V1] | Yes | No | Yes [V1] | **Not usable: no ISBN filter** [V1] |
+| **Crossref** | Scholarly books with a DOI | REST JSON [V1] | None. Polite pool with `mailto`; limits in response headers [V1]. Since 1 December 2025: list requests (ours) 1 request/s, concurrency 1 in the public pool; 3 requests/s, concurrency 3 in the polite pool [FC] | "no claims of ownership"; may be "cached and incorporated" [V1] | Yes | No | Yes [M] | Skip unless academic titles matter (A) |
+| **OpenAlex** | Scholarly works | REST JSON | Free API key required since 2026-02-13; `mailto` ignored [FC: OpenAlex announcement and deprecations page] | CC0 [V1] | Yes | No | Yes [V1] | **Not usable: no ISBN filter** [V1] |
 | **DOAB / OAPEN** | Open-access books | REST, OAI-PMH [M] | None | CC0 [M] | Yes [M] | — | Unknown | Skip |
 | **BookBrainz** (MetaBrainz) | Very low | REST by BBID, JSON dumps [M] | None | Core data CC0; other data CC BY-SA 4.0 [V1] | Yes for core data | No | Unknown | Skip |
 | **Hardcover** | English-centric reading community | GraphQL [V1] | Token. Free: 5,000/day, 60/min, burst 10; 30 s timeout; beta [V1] | No rights claimed on the data; user-owned data barred for commercial products; no LLM training [V1] | Limited [V1] | User uploads; takedown policy advised [V1] | "CORS is open" but browser use forbidden to protect the token [V1] | Skip (B) |
@@ -123,7 +125,7 @@ Legend. **Class**: A open, B terms-bound, C contract, D excluded. **CORS**: "ver
 
 ### 2.2 Trade and commercial sources
 
-No price in this table could be confirmed as of 2026-11.
+No price in this table could be confirmed as of 2026-11, except ISBNdb's public price list [FC].
 
 | Source | Coverage | Access | Key / limits | Data licence | Commercial use OK? | Covers? | CORS | Verdict |
 |---|---|---|---|---|---|---|---|---|
@@ -135,8 +137,8 @@ No price in this table could be confirmed as of 2026-11.
 | **Tite-Live Médiabase** (FR) | Base shipped with its bookshop software [M] | Bundled [M] | Tite-Live customers only [M] | Customer bookshop's own tools [M] | No | For customers [M] | n/a | Not available |
 | **VLB** (MVB, DE) | German books in print | REST and ONIX; cover API with a token [V1] | Paid licence [M] | Terms of service bind display [V1]; use limited to promoting the title [M] | By contract | Token-gated [V1] | n/a | Later, if Germany justifies it (C) |
 | **CB, Boekenbank (NL/BE); DILVE (ES); Informazioni Editoriali (IT); Nielsen BookData, BDS (UK); Bowker (US)** | National trade bases | Feeds, portals, web services [M] | Subscription or trade status [M] | By contract [M] | By contract | By contract | n/a | Later, per country (C) |
-| **ISBNdb** | Global; depth for French eBooks unknown | REST, self-serve [M] | Paid plans; 2025 recollection: about USD 15 / 30 / 75 per month at 1 / 3 / 5 requests/s [M, low] | Use inside your own application, no resale as a dataset [M] | Yes for pre-fill [M] | Unknown provenance, no rights warranty [M] | Key must stay server-side | Optional: only after a hit-rate test (C) |
-| **Amazon Creators API** | Amazon catalogue | OAuth2 credentials from the Associates portal [V2] | Associates account with qualifying sales [M] | Content only to send traffic to Amazon; no offline or printed use [M] | **No** | Yes, but barred | — | **Excluded** (D) |
+| **ISBNdb** | Global; depth for French eBooks unknown | REST, self-serve [M] | Paid plans, public price list read 2026-11 [FC]: Basic USD 14.99 (5,000 searches/day, 1 call/s), Premium USD 35.99 (15,000/day, 3 calls/s), Pro USD 99.99 (50,000/day, 5 calls/s), Enterprise by quote | Use inside your own application, no resale as a dataset [M] | Yes for pre-fill [M] | Unknown provenance, no rights warranty [M] | Key must stay server-side | Optional: only after a hit-rate test (C) |
+| **Amazon Creators API** | Amazon catalogue | OAuth2 credentials from the Associates portal [V2] | Associates account with qualifying sales [M; one 2026 source says 10 in the previous 30 days, FC] | Content only to send traffic to Amazon; no offline or printed use [M] | **No** | Yes, but barred | — | **Excluded** (D) |
 | **Goodreads; LibraryThing; Babelio; Kobo; Fnac; Bookshop.org** | Community and retailer catalogues | No new keys; non-commercial key; no public catalogue API [M] | — | Site terms [M] | No | — | — | **Excluded** (D) |
 
 ---
@@ -195,7 +197,9 @@ https://catalogue.bnf.fr/api/SRU?version=1.2&operation=searchRetrieve
 ```
 
 - Send both ISBN forms for a 978 ISBN, as isbnlib-bnf does [V1]. For a 979 ISBN send the single operand `bib.isbn%20all%20%22{isbn13}%22`.
-- Without `recordSchema` the records come back as `marcxchange`; the Zotero translator keeps only those [V1]. `recordSchema=dublincore` is what isbnlib-bnf requests [V1]. The schema names `unimarcXchange` and `intermarcXchange` are [M].
+- **Alternative documented by BnF [FC]:** the index `bib.fuzzyIsbn` is a "fuzzy" search across EAN, ISBN-13 and ISBN-10, complementary to the exact `bib.isbn` and `bib.ean`. BnF's manual finds a record that holds only an ISBN-10 with `bib.fuzzyIsbn all "9782070363735"` ([criteria table](https://www.bnf.fr/sites/default/files/2019-04/tableau_criteres_sru.pdf), [query manual](https://www.bnf.fr/sites/default/files/2019-04/manuel_requetes_sru.pdf)). One operand then covers both forms. Not tested live, and the capitalisation of the index name differs between renderings (`bib.fuzzyIsbn` / `bib.fuzzyISBN`): read it in the Explain response before coding. Keep the two-operand form as the default.
+- `maximumRecords` defaults to 10 and may not exceed 1000 ([service description](https://www.bnf.fr/sites/default/files/2019-04/service_sru_bnf.pdf)) [FC]. BnF's own example query is `bib.isbn all "2-07-036373-2"` [FC].
+- Without `recordSchema` the records come back as `marcxchange`; the Zotero translator keeps only those [V1]. `recordSchema=dublincore` is what isbnlib-bnf requests [V1]. `intermarcXchange` appears in BnF's examples [FC]; `unimarcXchange` is still [M].
 - The clients above ask for one record. Several records can share an ISBN (reprints) [M], so ask for up to 5 and choose (requirement 9).
 - Titles need cleaning: Inventaire runs a `cleanupBnfTitle` step on BnF titles ([resolver](https://raw.githubusercontent.com/inventaire/inventaire/main/server/data/bnf/get_bnf_entry_from_isbn.ts)) [V1]. Author headings arrive as "Surname, Forename (dates)" [M].
 - **Do not confuse it with Gallica's SRU** at `gallica.bnf.fr/SRU`, which searches the digital library and caps responses at 50 records ([BnF wiki](https://raw.githubusercontent.com/wiki/hackathonBnF/hackathon2016/API-SRU.md)) [V1].
@@ -216,11 +220,13 @@ SELECT ?edition WHERE {
 
 `bnf-onto:isbn` holds hyphenated values and `bnf-onto:ean` the 13 digits [V1, Inventaire]; `bibo:isbn13` and `bibo:isbn10` also exist [V1, BELTRANS]. The full editions dump is 39 GB of RDF/XML [V1]; we do not mirror it.
 
-**Licence.** "L'ensemble des métadonnées descriptives est disponible sous Licence Ouverte" ([BnF wiki](https://raw.githubusercontent.com/wiki/hackathonBnF/hackathon2016/Home.md), 2016) [V1]. The licence text allows commercial reuse with attribution [V1] (§5.2). The same page states that Gallica **images** are for non-commercial use [V1]: the open licence is about metadata.
+**Licence.** "L'ensemble des métadonnées descriptives est disponible sous Licence Ouverte" ([BnF wiki](https://raw.githubusercontent.com/wiki/hackathonBnF/hackathon2016/Home.md), 2016) [V1]. Confirmed on BnF's current pages [FC]: all descriptive metadata under the State's Licence Ouverte since 1 January 2014 ([conditions](https://www.bnf.fr/fr/conditions-de-reutilisations-des-donnees-de-la-bnf), [catalogue conditions](https://catalogue.bnf.fr/conditions.do)), Dewey authority records excepted; data.bnf.fr says reuse is free for any use, commercial included, with attribution ([about](https://data.bnf.fr/fr/about)). BnF asks reusers to keep the source mention and the retrieval date. The version number (1.0 or 2.0) was not seen. The licence text allows commercial reuse with attribution [V1] (§5.2). The same page states that Gallica **images** are for non-commercial use [V1]: the open licence is about metadata.
 
 **Cover endpoint.** `https://catalogue.bnf.fr/couverture?appName=NE&idArk=ark:/12148/cb{id}&couverture=1`, with placeholder bodies of 4566 or 4658 bytes [V1, Inventaire]. The BnF wiki lists a "Couverture Service" for the catalogue [V1]. Image rights are not granted by the metadata licence [M]; see doc 02.
 
-**Limits and CORS.** No published rate limit that we know of [M]. CORS unverified: use the relay.
+**Limits and CORS.** No published rate limit found [FC: searched, nothing either way]. CORS unverified: use the relay.
+
+**eBooks [FC].** BnF states that publishers currently have no deposit step for digital publications: they are collected through web harvesting, and a per-title deposit circuit is still being studied ([help centre](https://www.bnf.fr/fr/centre-d-aide/depot-legal)). Key figures: 77,341 printed books and 2,606 digital books deposited in 2025 ([chiffres clés](https://www.bnf.fr/fr/depot-legal-chiffres-cles)). An eBook ISBN will usually miss; query the print ISBN.
 
 ### 3.4 SUDOC (ABES)
 
@@ -228,7 +234,7 @@ SELECT ?edition WHERE {
 https://www.sudoc.fr/services/isbn2ppn/9782070360024        (header  Accept: text/json)
 ```
 
-Returns the PPN (record number) of matching records; `ean2ppn` and `issn2ppn` also exist and accept comma-separated batches ([node-sudoc 1.0.4, Inist-CNRS](https://registry.npmjs.org/sudoc)) [V1]. That client dates from 2022 and uses `http://`; the `https` form above is [M]. The record itself is then at `https://www.sudoc.fr/{ppn}.rdf` or `.xml` [M]. Licence Ouverte [M]. Value: low to medium, academic holdings.
+Returns the PPN (record number) of matching records; `ean2ppn` and `issn2ppn` also exist and accept comma-separated batches ([node-sudoc 1.0.4, Inist-CNRS](https://registry.npmjs.org/sudoc)) [V1]. That client dates from 2022 and uses `http://`; the `https` form above is [M]. The record itself is then at `https://www.sudoc.fr/{ppn}.rdf` or `.xml` [M]. Licence Ouverte (Etalab): ABES policy since 2012, and data.gouv.fr lists the Sudoc API under an open licence ([ABES](https://abes.fr/en/api-et-web-services/), [data.gouv.fr](https://www.data.gouv.fr/dataservices/api-systeme-universitaire-de-documentation-sudoc)) [FC]. Value: low to medium, academic holdings.
 
 ### 3.5 Open Library
 
@@ -241,7 +247,7 @@ https://openlibrary.org/search.json?q=9782070360024
 Evidence [V2]: [Open Library code.py](https://raw.githubusercontent.com/internetarchive/openlibrary/master/openlibrary/plugins/openlibrary/code.py), [Inventaire](https://raw.githubusercontent.com/inventaire/inventaire/main/server/data/openlibrary/get_openlibrary_entry_from_isbn.ts), [BookWyrm](https://raw.githubusercontent.com/bookwyrm-social/bookwyrm/main/bookwyrm/management/commands/initdb.py).
 
 - **Rate limits, from the deployed nginx configuration** ([nginx.conf](https://raw.githubusercontent.com/internetarchive/openlibrary/master/docker/nginx.conf), [web_nginx.conf](https://raw.githubusercontent.com/internetarchive/openlibrary/master/docker/web_nginx.conf)) [V1, re-read]: 180 requests per minute per IP (burst 25) on `/api/*` and `*.json`; 1 request per second on HTML pages; covers have their own zone at 400 per minute. The limit is keyed on the IP when the request has no session cookie and neither the IP nor the User-Agent is allow-listed. A 429 answer is JSON and reads "Too Many Requests. Consider using https://openlibrary.org/developers/dumps."
-- The public documentation asks for a User-Agent with an application name and a contact, and quotes 1 request per second unidentified, 3 identified [M]. Doc 02 recalls a further figure for ISBN-keyed cover requests (100 per 5 minutes) [M, low]. These concern different endpoints; §6.1 states the design value.
+- The public documentation asks for a User-Agent with an application name and a contact, and quotes 1 request per second unidentified, 3 identified ([developers/api](https://openlibrary.org/developers/api)) [FC]. It warns that violations "may result in aggressive rate limiting or blocking". Doc 02 recalls a further figure for ISBN-keyed cover requests (100 per 5 minutes) [M, low]. These concern different endpoints; §6.1 states the design value.
 - **CORS**: `Access-Control-Allow-Origin: *` on any path ending in `.json` and on `/api/` ([processors.py](https://raw.githubusercontent.com/internetarchive/openlibrary/master/openlibrary/plugins/openlibrary/processors.py)) [V1, re-read]. The [public-apis list](https://raw.githubusercontent.com/public-apis/public-apis/master/README.md) still says "No"; the source code wins.
 - **Licence**: edits are contributed under CC0 ([i18n strings](https://raw.githubusercontent.com/internetarchive/openlibrary/master/openlibrary/i18n/messages.pot)) [V1]. No licence on cover images [M].
 - **Missing ISBNs**: the site can import from Amazon and Better World Books on demand ([vendors.py](https://raw.githubusercontent.com/internetarchive/openlibrary/master/openlibrary/core/vendors.py)) [V1], but plain `/isbn/` lookups run with `allow_import=False` [V1, re-read]. A miss stays a miss.
@@ -260,7 +266,8 @@ Evidence [V2]: [discovery document](https://raw.githubusercontent.com/googleapis
 - `country` exists on the second call only [V1]. The list call takes `q`, `langRestrict`, `printType`, `projection`, `maxResults` and others, but no country. Results of the list call depend on the caller's IP location [M]; a relay hosted in the EU is therefore part of the design.
 - Useful fields: `volumeInfo` (title, authors, publisher, publishedDate, industryIdentifiers), `saleInfo.isEbook`, `saleInfo.country`, `accessInfo.epub` [V1].
 - Image links come in six widths from about 80 to about 1280 px [V1]. They are candidates for preview only (doc 02).
-- **Terms** [M]: Google APIs Terms of Service — no scraping, no permanent database, cache only as long as cache headers allow; Books branding ("Powered by Google", link back). Default quota about 1,000 requests per day per project [M]. Light use without a key may still be served [M]. None of this wording was read; it is the first thing to check with network access (§6.2).
+- **Terms.** Google APIs Terms of Service — no scraping, no permanent database, cache only as long as cache headers allow [M]; Books branding guidelines exist as a separate page ([branding](https://developers.google.cn/books/branding?hl=en)) [FC]; exact "Powered by Google" wording not read. Default quota about 1,000 requests per day per project, raisable on request [FC, developer-forum and third-party sources; no official quota page retrieved]. Light use without a key may still be served [M].
+- **Books API additional terms — correction [FC].** The Books API has its own terms ([developers.google.com/books/terms](https://developers.google.com/books/terms?csw=1); console copy dated 25 April 2012). As returned by the search tool: "You may not charge users any fee for the use of your application, unless you have entered into a separate agreement with Google or obtained Google's written permission"; "You may not reorder or otherwise alter the results returned by the Google Books API Family"; the APIs "are not intended to replace commercial services". I could not open the page itself, so read the clause before relying on either reading. Until then: Google Books is not available to a flow in which the user pays.
 
 ### 3.7 Germany: DNB, K10plus, lobid
 
@@ -270,15 +277,15 @@ https://sru.k10plus.de/opac-de-627?version=1.1&operation=searchRetrieve&query=pi
 https://lobid.org/resources/search?q=isbn:9782070360024&format=json
 ```
 
-- DNB [V2]: [DNBLab SRU tutorial](https://raw.githubusercontent.com/deutsche-nationalbibliothek/dnblab/main/DNB_SRU_Tutorial.ipynb), [calibre-dnb](https://raw.githubusercontent.com/citronalco/calibre-dnb/master/__init__.py). Schemas MARC21-xml, oai_dc, RDFxml; the tutorial pages by 100 records [V1]. No access token appears in current client code [V2]. Data licence CC0 1.0 [M]. Cover endpoint `portal.dnb.de/opac/mvb/cover?isbn=`, fed by the trade body MVB, rights unclear [V1].
-- K10plus [V1]: [Zotero K10plus ISBN](https://raw.githubusercontent.com/zotero/translators/master/K10plus%20ISBN.js), last updated 2024-10. Returns MARCXML. CC0 [M].
-- lobid [V1]: [API page source](https://raw.githubusercontent.com/hbz/lobid-resources/master/web/app/views/api.scala.html). The `isbn:` field name is [M]. Weekly full dump in JSON lines, daily updates, JSONP [V1]. CC0 [M].
+- DNB [V2]: [DNBLab SRU tutorial](https://raw.githubusercontent.com/deutsche-nationalbibliothek/dnblab/main/DNB_SRU_Tutorial.ipynb), [calibre-dnb](https://raw.githubusercontent.com/citronalco/calibre-dnb/master/__init__.py). Schemas MARC21-xml, oai_dc, RDFxml; the tutorial pages by 100 records [V1]. No access token appears in current client code [V2]. Data licence CC0 1.0: DNB has offered all its metadata free of charge under CC0 since 1 July 2015 ([press release](https://www.dnb.de/EN/Ueber-uns/Presse/ArchivPM2015/metadatenCC0.html)); the SRU address is unchanged on DNB's page updated 2 November 2026 ([SRU page](https://www.dnb.de/EN/Professionell/Metadatendienste/Datenbezug/SRU/sru_node.html)) [FC]. Cover endpoint `portal.dnb.de/opac/mvb/cover?isbn=`, fed by the trade body MVB, rights unclear [V1].
+- K10plus [V1]: [Zotero K10plus ISBN](https://raw.githubusercontent.com/zotero/translators/master/K10plus%20ISBN.js), last updated 2024-10. Returns MARCXML. CC0 [M; not confirmed by search, which found only "open data" statements].
+- lobid [V1]: [API page source](https://raw.githubusercontent.com/hbz/lobid-resources/master/web/app/views/api.scala.html). The `isbn:` field name is [M]. Weekly full dump in JSON lines, daily updates, JSONP [V1]. CC0 1.0, stated by hbz and present as a licence field in API records ([API page](https://lobid.org/resources/api)) [FC].
 
 ### 3.8 Other national and union catalogues
 
 | Source | Request for the example ISBN | Notes |
 |---|---|---|
-| **Libris** (SE) | `https://libris.kb.se/find.jsonld?q=9782070360024` | Also SRU at `https://libris.kb.se/sru/libris?operation=searchRetrieve&version=1.2&query=…` [V1: [find](https://raw.githubusercontent.com/libris/libris-api-docs/master/docs/reference/find.en.md), [SRU](https://raw.githubusercontent.com/libris/libris-api-docs/master/docs/reference/sru.en.md)]. "freely available without restrictions", CC0; KB may rate-limit or block; anonymous clients may be blocked without warning ([terms](https://raw.githubusercontent.com/libris/libris-api-docs/master/docs/index.en.md), [User-Agent](https://raw.githubusercontent.com/libris/libris-api-docs/master/docs/howto/user_agent.en.md)) [V1]. The legacy `xsearch` API is being retired ([placeholder page](https://raw.githubusercontent.com/libris/libris-api-docs/master/docs/howto/xsearch_migration.sv.md)) [V1] |
+| **Libris** (SE) | `https://libris.kb.se/find.jsonld?q=9782070360024` | Also SRU at `https://libris.kb.se/sru/libris?operation=searchRetrieve&version=1.2&query=…` [V1: [find](https://raw.githubusercontent.com/libris/libris-api-docs/master/docs/reference/find.en.md), [SRU](https://raw.githubusercontent.com/libris/libris-api-docs/master/docs/reference/sru.en.md)]. "The Swedish national bibliography and Swedish authority records are freely available without restrictions. The license form is Creative Commons Zero" — the statement names those two sets, not every union-catalogue record [FC, re-read]; KB may rate-limit or block; anonymous clients may be blocked without warning ([terms](https://raw.githubusercontent.com/libris/libris-api-docs/master/docs/index.en.md), [User-Agent](https://raw.githubusercontent.com/libris/libris-api-docs/master/docs/howto/user_agent.en.md)) [V1]. The legacy `xsearch` API is being retired ([placeholder page](https://raw.githubusercontent.com/libris/libris-api-docs/master/docs/howto/xsearch_migration.sv.md)) [V1] |
 | **Finna** (FI) | `https://api.finna.fi/api/v1/search?lookfor=9782070360024&type=AllFields` | [V1: [finna-client](https://pypi.org/pypi/finna-client/json)]. An `isbn:` field query is [M]. Covers at `api.finna.fi/Cover/Show?id=…` [V1], rights per record |
 | **BNE datos** (ES) | `https://datos.bne.es/sparql?format=json&query=…` with `?e <https://datos.bne.es/def/P3013> "9782070360024"` | Try plain and hyphenated, 10 and 13 digits [V1: [Inventaire](https://raw.githubusercontent.com/inventaire/inventaire/main/server/data/bne/get_bne_entry_from_isbn.ts)] |
 | **KB** (NL) | `https://jsru.kb.nl/sru/sru?version=1.2&operation=searchRetrieve&startRecord=0&x-collection=GGC&recordSchema=dc&maximumRecords=1&query=identifier.ISBN%20exact%209782070360024` | [V2: [KB python API](https://raw.githubusercontent.com/KBNLresearch/KB-python-API/master/kb/nl/api/sru.py), [isbnlib-kb](https://pypi.org/pypi/isbnlib-kb/json)]. The plugin literally sends `query=query=identifier.ISBN…` and retries with the ISBN-10: test both forms live. Dumps at `data.bibliotheken.nl/files/` [V1: [BELTRANS](https://raw.githubusercontent.com/kbrbe/beltrans-data-integration/main/data-sources/kb/README.md)]. Some KB datasets are CC BY-NC-ND ([README](https://raw.githubusercontent.com/KBNLresearch/KB-python-API/master/README.rst)) [V1] |
@@ -286,7 +293,7 @@ https://lobid.org/resources/search?q=isbn:9782070360024&format=json
 | **ICCU / OPAC SBN** (IT) | — | Only a 2020 HTML-form URL on `opac.sbn.it/sbn3.0/opaclib` [V1, stale: [isbnlib-sbn](https://pypi.org/pypi/isbnlib-sbn/json)] |
 | **KBR**, Unicat (BE) | — | KBR's own project obtained data by catalogue export; Unicat SRU at `http://www.unicat.be/sru` [V1: [BELTRANS KBR](https://raw.githubusercontent.com/kbrbe/beltrans-data-integration/main/data-sources/kbr/README.md), [Catmandu-SRU](https://raw.githubusercontent.com/LibreCat/Catmandu-SRU/master/README.md), age unknown] |
 | **PORBASE** (PT) | `http://urn.porbase.org/isbn/dc/xml?id=9782070360024` | [V1, 2021: [isbnlib-porbase](https://pypi.org/pypi/isbnlib-porbase/json)] |
-| **Library of Congress** | `https://lx2.loc.gov/sru/lcdb?operation=searchRetrieve&version=1.1&query=bath.ISBN=^9782070360024&maximumRecords=1` | [V2: [Zotero](https://raw.githubusercontent.com/zotero/translators/master/Library%20of%20Congress%20ISBN.js) (last updated 2023-08), [isbnlib-loc](https://pypi.org/pypi/isbnlib-loc/json), [Koha](https://raw.githubusercontent.com/Koha-Community/Koha/main/installer/data/mysql/en/optional/sample_z3950_servers.yml)]. All predate the 2025 platform change. JSON alternative `https://www.loc.gov/books/?q=9782070360024&fo=json` [M] |
+| **Library of Congress** | `https://lx2.loc.gov/sru/lcdb?operation=searchRetrieve&version=1.1&query=bath.ISBN=^9782070360024&maximumRecords=1` | [V2: [Zotero](https://raw.githubusercontent.com/zotero/translators/master/Library%20of%20Congress%20ISBN.js) (last updated 2023-08), [isbnlib-loc](https://pypi.org/pypi/isbnlib-loc/json), [Koha](https://raw.githubusercontent.com/Koha-Community/Koha/main/installer/data/mysql/en/optional/sample_z3950_servers.yml)]. All predate 2025. Status 2026 [FC]: LoC's server page still lists `lx2.loc.gov`; developers report that SRU answers on `http://lx2.loc.gov:210/lcdb`, that the `https` form does not complete a TLS handshake, and that `www.loc.gov` serves a Cloudflare challenge to server-side clients ([LoC servers](https://www.loc.gov/standards/sru/resources/lcServers.html), [report](https://github.com/guycorbaz/mybibli/pull/503)). JSON alternative `https://www.loc.gov/books/?q=9782070360024&fo=json` [M] |
 | **British Library / BNB** | — | `bnb.data.bl.uk` is what [public-apis](https://raw.githubusercontent.com/public-apis/public-apis/master/README.md) still lists [M, low] |
 | **NDL Search** (JP) | `https://ndlsearch.ndl.go.jp/api/opensearch?isbn=9782070360024` | [M]. Zotero's [NDL translator](https://raw.githubusercontent.com/zotero/translators/master/National%20Diet%20Library%20Catalogue.js) still targets the dead `iss.ndl.go.jp` [V1] |
 | **Trove** (AU) | API v3 with an `X-API-KEY` header | [M]; key requirement [V1: public-apis] |
@@ -306,7 +313,7 @@ SELECT ?item WHERE {
 }
 ```
 
-P212 is the ISBN-13 property, P957 the ISBN-10. CC0 [M]. Query-service limits (60 s timeout, 5 parallel queries per IP, User-Agent policy) are [M]. Since the 2025 graph split, scholarly articles live on a separate endpoint and book editions stay on the main one [M]. Hit rate for editions is low [M].
+P212 is the ISBN-13 property, P957 the ISBN-10. CC0 [M]. Query-service limits: 60 s timeout [FC]; the figure "5 parallel queries per IP" could not be found anywhere and is withdrawn [FC]; User-Agent policy [M]. The graph split went live on 9 May 2025: scholarly items moved to `query-scholarly.wikidata.org`, book editions stay on the main endpoint ([WDQS graph split](https://meta.wikimedia.org/wiki/WikiCite/WDQS_graph_split)) [FC]. Hit rate for editions is low [M].
 
 **Inventaire.io** [V1: [BookWyrm](https://raw.githubusercontent.com/bookwyrm-social/bookwyrm/main/bookwyrm/management/commands/initdb.py)]:
 
@@ -322,7 +329,7 @@ A French association's service that resolves an ISBN by querying BnF, BNE, Open 
 https://api.crossref.org/works?filter=isbn:9782070360024&mailto=contact@example.org
 ```
 
-"Crossref asserts no claims of ownership to individual items of bibliographic metadata … may be cached and incorporated into the user's content and systems" [V1]. A `mailto` in the query or the User-Agent routes to the polite pool; limits are announced in `X-Rate-Limit-Limit` and `X-Rate-Limit-Interval` headers [V1]. Lower limits since 2025-12-01 are [M]. Covers scholarly books with DOIs only.
+"Crossref asserts no claims of ownership to individual items of bibliographic metadata … may be cached and incorporated into the user's content and systems" [V1]. A `mailto` in the query or the User-Agent routes to the polite pool; limits are announced in `X-Rate-Limit-Limit` and `X-Rate-Limit-Interval` headers [V1]. Since 1 December 2025 the limits depend on the request type ([announcement](https://www.crossref.org/blog/announcing-changes-to-rest-api-rate-limits/)) [FC]: public pool 5 requests/s for one record, 1 request/s for lists, concurrency 1; polite pool 10 and 3 requests/s, concurrency 3. A `filter=isbn:` call is a list request. Covers scholarly books with DOIs only.
 
 **OpenAlex.** The works filter list has no ISBN filter ([filter-works](https://raw.githubusercontent.com/ourresearch/openalex-docs/main/api-entities/works/filter-works.md)) [V1]. Not usable for ISBN lookup, whatever its key policy (§6.1). Data CC0 ([README](https://raw.githubusercontent.com/ourresearch/openalex-docs/main/README.md)) [V1].
 
@@ -336,7 +343,7 @@ https://api.crossref.org/works?filter=isbn:9782070360024&mailto=contact@example.
 
 ### 3.10 OCLC WorldCat — excluded
 
-- Classify is discontinued: the isbnlib plugin is marked "DISCONTINUED" ([PyPI](https://pypi.org/pypi/isbnlib-oclc/json)) [V1]; date 31 January 2024 [M].
+- Classify is discontinued: the isbnlib plugin is marked "DISCONTINUED" ([PyPI](https://pypi.org/pypi/isbnlib-oclc/json)) [V1]; web interface and API discontinued on 31 January 2024 ([OCLC](https://help.oclc.org/Librarian_Toolbox/Troubleshooting/Why_is_OCLC_discontinuing_OCLC_Classify)) [FC].
 - The Search API needs a WSKey and a subscription [M].
 - Zotero's translator (updated 2026-08-28) calls an internal `search.worldcat.org/api/search` with a cookie and a response-decryption step ([source](https://raw.githubusercontent.com/zotero/translators/master/Open%20WorldCat.js)) [V1]. That is not a public API. OCLC litigates against bulk scraping [M]. **Do not replicate it**, and do not use datasets derived from such scraping.
 
@@ -358,20 +365,22 @@ https://api.crossref.org/works?filter=isbn:9782070360024&mailto=contact@example.
 
 | Service | What happened | Confidence |
 |---|---|---|
-| OCLC Classify | Discontinued (31 Jan 2024 [M]) | [V1] + [M] date |
+| OCLC Classify | Discontinued on 31 January 2024 | [FC] |
 | OCLC WorldCat website | Internal search API behind a cookie and response decryption | [V1] |
-| OpenAlex | API key and credit-based limits from 2026-02-13 | [V1], sources conflict (§6.1) |
+| OpenAlex | API key required and credit-based limits from 2026-02-13; `mailto` ignored | [FC] |
 | Hardcover | Scoped tokens (Aug 2026), published limits, LLM-training ban | [V1] |
 | Open Library | Amazon PA-API 5 being replaced by the "Creators API" in its importer; explicit nginx limits and bot rules [V1]. The October 2024 breach and the end of *Hachette v. Internet Archive* affected lending, not metadata [M] | [V1] / [M] |
-| Amazon | PA-API 5.0 replaced by the Creators API in 2026 (§4.5) | [V2] |
-| Crossref | GitHub REST docs deprecated [V1]; pool limits reduced on 2025-12-01 [M] | [V1] / [M] |
+| Amazon | PA-API 5.0 deprecated 30 April 2026 and shut off 15 May 2026; replaced by the Creators API (§4.5) | [FC] |
+| Crossref | GitHub REST docs deprecated [V1]; per-request-type limits since 2025-12-01 (lists: 1 request/s public, 3 polite) | [V1] / [FC] |
 | Libris | Legacy `xsearch` on its way out | [V1], date unknown |
 | British Library / BNB | Crippled by the October 2023 cyber-attack; linked-data access offline through 2024, relaunched later | [M, low] |
 | NDL Search | Relaunched January 2024 on `ndlsearch.ndl.go.jp`; old URLs dead | [M] |
 | Trove | API v2 retired for v3; keys reissued | [M, low] |
-| Library of Congress | New platform replaced Voyager in 2025; fate of `lx2.loc.gov` SRU unknown | [M, low] |
-| Wikidata Query Service | 2025 graph split | [M] |
-| ONIX | 3.1.1 (2024) added per-resource `EpubUsageConstraint` and `EpubLicense`; 3.1.3 and Issue 75 current | [V1] |
+| Library of Congress | "New platform in 2025" unsupported; `lx2.loc.gov` still listed, reported reachable over plain HTTP on port 210 only | [FC] |
+| Wikidata Query Service | Graph split live on 9 May 2025 | [FC] |
+| DNB | "Blurb" hyperlinks in SRU/OAI data paused in July 2026, back with a new structure on 25 August 2026; old links stop on 25 February 2027 ([DNB](https://www.dnb.de/EN/Professionell/Metadatendienste/Kataloganreicherung/Inhaltstexte/inhaltstexte.html)) | [FC] |
+| Goodreads | No new developer keys since 8 December 2020 | [FC] |
+| ONIX | 3.1.1 (2024) added per-resource `EpubUsageConstraint` and `EpubLicense` [V1]; Issue 75 current, List 158 code 56 added in Issue 70 and 57 in Issue 71 [FC]; release 3.1.3 not confirmed by search | [V1] / [FC] |
 
 ---
 
@@ -473,9 +482,9 @@ All [M] unless marked; none checked against 2026 terms. The free national altern
 
 | Source | Status as of 2026-11 | Constraints | Verdict |
 |---|---|---|---|
-| **ISBNdb** | Paid REST API, self-serve by credit card, no trade status needed [M]. Plans as recalled from 2025: Basic about USD 15, Premium about USD 30, Pro about USD 75 per month, at 1 / 3 / 5 requests per second, plus bulk licences by quote [M, low]; **2026 prices not confirmed**. isbnlib documents an `isbndb` provider with an API key ([isbnlib](https://pypi.org/pypi/isbnlib/json)) [V1]; Open Library has imported ISBNdb bulk dumps ([importer](https://raw.githubusercontent.com/internetarchive/openlibrary/master/scripts/providers/isbndb.py)) [V1] | Use inside your own application; no resale as a competing dataset; cover images of unknown provenance, no rights warranty [M] | Possible for metadata pre-fill, not for covers. Test the hit rate on French eBook ISBNs first |
-| **Amazon** | **PA-API 5.0 replaced by the Creators API**: OAuth2 credentials from the Associates portal. python-amazon-paapi deprecated PA-API in 6.0.0 (2026-01-29) and removed it in 7.0.0 (2026-09-04) ([changelog](https://raw.githubusercontent.com/sergioteula/python-amazon-paapi/master/CHANGELOG.md), [migration guide](https://raw.githubusercontent.com/sergioteula/python-amazon-paapi/master/docs/pages/migration-guide-6.md), [PyPI](https://pypi.org/pypi/python-amazon-paapi/json), [Creators SDK on PyPI](https://pypi.org/pypi/amazon-creatorsapi-python-sdk/json)); Open Library added an `AmazonCreatorsAPI` class ([vendors.py](https://raw.githubusercontent.com/internetarchive/openlibrary/master/openlibrary/core/vendors.py)) [V2] | Associates account with qualifying sales; content only to send traffic to Amazon, with links; short cache window; images not stored; **no offline or printed use** [M] | **Excluded** |
-| **Goodreads** | No new API keys since December 2020 [M] | — | Excluded |
+| **ISBNdb** | Paid REST API, self-serve by credit card, no trade status needed [M]. Price list on [isbndb.com](https://isbndb.com/isbn-database), read through search on 2026-11-12 [FC]: Basic USD 14.99 per month (5,000 searches a day, 1 call per second, 7-day trial), Premium USD 35.99 (15,000 a day, 3 calls per second), Pro USD 99.99 (50,000 a day, 5 calls per second, the only tier with price data), Enterprise by quote. The figures recalled in the draft (USD 15 / 30 / 75) were out of date. Licence terms were not read. isbnlib documents an `isbndb` provider with an API key ([isbnlib](https://pypi.org/pypi/isbnlib/json)) [V1]; Open Library has imported ISBNdb bulk dumps ([importer](https://raw.githubusercontent.com/internetarchive/openlibrary/master/scripts/providers/isbndb.py)) [V1] | Use inside your own application; no resale as a competing dataset; cover images of unknown provenance, no rights warranty [M] | Possible for metadata pre-fill, not for covers. Test the hit rate on French eBook ISBNs first |
+| **Amazon** | **PA-API 5.0 replaced by the Creators API**: Amazon's documentation reads "PA-API will be deprecated on May 15th, 2026. Please migrate to Creators API"; the endpoint has returned errors since that date ([PA-API docs](https://webservices.amazon.com/paapi5/documentation/), [Open Library issue](https://github.com/internetarchive/openlibrary/issues/12255)) [FC]. OAuth2 credentials from the Associates portal. python-amazon-paapi deprecated PA-API in 6.0.0 (2026-01-29) and removed it in 7.0.0 (2026-09-04) ([changelog](https://raw.githubusercontent.com/sergioteula/python-amazon-paapi/master/CHANGELOG.md), [migration guide](https://raw.githubusercontent.com/sergioteula/python-amazon-paapi/master/docs/pages/migration-guide-6.md), [PyPI](https://pypi.org/pypi/python-amazon-paapi/json), [Creators SDK on PyPI](https://pypi.org/pypi/amazon-creatorsapi-python-sdk/json)); Open Library added an `AmazonCreatorsAPI` class ([vendors.py](https://raw.githubusercontent.com/internetarchive/openlibrary/master/openlibrary/core/vendors.py)) [V2] | Associates account with qualifying sales; content only to send traffic to Amazon, with links; short cache window; images not stored; **no offline or printed use** [M] | **Excluded** |
+| **Goodreads** | No new API keys since 8 December 2020 [FC] | — | Excluded |
 | **LibraryThing** | Cover service by developer key (`covers.librarything.com/devkey/{key}/…`, [VuFind](https://raw.githubusercontent.com/vufind-org/vufind/dev/module/VuFind/src/VuFind/Content/Covers/LibraryThing.php)) [V1]; thingISBN | Non-commercial, about 1,000 requests a day; the commercial offer is "LibraryThing for Libraries" [M, low] | Excluded for a commercial product |
 | **Babelio** | No public API. Its B2B product "Babelthèque" injects reviews into library catalogues ([Koha prefs](https://raw.githubusercontent.com/Koha-Community/Koha/main/koha-tmpl/intranet-tmpl/prog/en/modules/admin/preferences/enhanced_content.pref)) [V1] | Site terms forbid extraction [M] | Excluded |
 | **Kobo / Rakuten** | Affiliate programme with links and a product feed; no public catalogue API [M] | Feed only to promote Kobo links [M] | Not a data source; relevant only as Fnac's back end |
@@ -532,11 +541,11 @@ Two consequences shape the design:
 | Licence | Sources | What it grants | Condition | Verified? |
 |---|---|---|---|---|
 | **Licence Ouverte 2.0** (Etalab) | BnF catalogue and data.bnf.fr [V1, 2016 statement]; SUDOC [M] | Free, non-exclusive, worldwide, unlimited reuse "for commercial or non-commercial purposes": copy, adapt, redistribute, include in a product. Covers the grantor's copyright and "sui generis rights of database producers". Governed by French law; stated compatible with CC BY, OGL and ODC-BY | Name the source (at least the grantor) and the date of the most recent update of the reused information; a hyperlink to the source can satisfy this. Do not suggest endorsement; do not mislead about content, source or date | Text [V1] ([English](https://raw.githubusercontent.com/etalab/licence-ouverte/master/open-licence.md), [French](https://raw.githubusercontent.com/etalab/licence-ouverte/master/LO.md)). Version applied by BnF today [M]: the 2016 page predates version 2.0 |
-| **CC0 1.0** | Libris [V1]; Open Library contributions [V1]; BookBrainz core [V1]; OpenAlex [V1]; DNB, K10plus, lobid, Finna, BNE, Wikidata, Inventaire, DOAB/OAPEN [M] | Waiver of copyright and database rights | None. Credit the source anyway | As marked |
+| **CC0 1.0** | Libris (Swedish national bibliography and authority records) [FC]; Open Library contributions [V1]; BookBrainz core [V1]; OpenAlex [V1]; DNB, lobid, Finna metadata [FC]; K10plus, BNE, Wikidata, Inventaire, DOAB/OAPEN [M] | Waiver of copyright and database rights | None. Credit the source anyway | As marked |
 | **CC BY-SA 4.0** | BookBrainz non-core data [V1] | Reuse with attribution and share-alike | Share-alike would bind derived datasets | Not used |
 | **CC BY-NC-ND** | Some KB (NL) datasets [V1] | Non-commercial, no derivatives | Incompatible with our use | Check which KB collection the SRU serves |
 | **Crossref statement** | Crossref | No ownership claimed on individual items; may be cached and incorporated [V1] | Etiquette: contact address | [V1] |
-| **Operator API terms** | Google Books [M]; Hardcover [V1]; Europeana, Trove [M] | A right to call and display | Google: no permanent copy, branding. Hardcover: no user-owned data in a commercial product, token secrecy, no LLM training | Google wording unread |
+| **Operator API terms** | Google Books [FC for the fee clause, M for caching]; Hardcover [V1]; Europeana, Trove [M] | A right to call and display | Google: no fee charged to users without written permission, results not altered, branding, no permanent copy. Hardcover: no user-owned data in a commercial product, token secrecy, no LLM training | Google wording unread |
 
 ### 5.3 Terms of use as contracts
 
@@ -570,7 +579,7 @@ Two consequences shape the design:
 | Class | Sources | Query on a user action | Store the result | Show in the form | Print facts | Bulk reuse |
 |---|---|---|---|---|---|---|
 | **A — open** | BnF, data.bnf.fr, SUDOC, DNB, K10plus, lobid, Libris, Finna, BNE, Wikidata, Open Library, Inventaire, Crossref | Yes | Yes, with source and date | Yes | Yes | Yes (Licence Ouverte: with attribution) |
-| **B — terms-bound** | Google Books; Hardcover | Yes, within quota | No durable copy | Yes, with the required branding | Yes once the user has confirmed the form: what is printed is the user's input (my analysis) | No |
+| **B — terms-bound** | Google Books; Hardcover | Yes, within quota; Google Books only in a flow that charges the user nothing, or with Google's written permission [FC] | No durable copy | Yes, with the required branding | Yes once the user has confirmed the form: what is printed is the user's input (my analysis) | No |
 | **C — contract** | Reseller ONIX; ORB; Electre; Dilicom; ISBNdb; VLB | Per contract | Per contract, scoped to the tenant | Per contract | Per contract | No |
 | **D — excluded** | Amazon; Goodreads; LibraryThing; Babelio; Fnac, Kobo and Decitre sites; WorldCat internal API; ISBN publisher register | No | No | No | No | No |
 
@@ -595,13 +604,13 @@ Two consequences shape the design:
 
 | Topic | A says | B says | Kept, and why |
 |---|---|---|---|
-| OpenAlex key and credits | pyalex README: key required since 2026-02-13; 100 credits/day without a key, 100,000 with a free key; singleton requests free, list requests 1 credit ([pyalex](https://raw.githubusercontent.com/J535D165/pyalex/main/README.md)) [V1] | Official docs repository: "You don't need an API key"; 100,000 credits/day for free users; singleton 1 credit, list 10 credits ([rate limits](https://raw.githubusercontent.com/ourresearch/openalex-docs/main/how-to-use-the-api/rate-limits-and-authentication.md)) [V1] | Neither: OpenAlex has no ISBN filter [V1], so we do not use it. If that changes, assume the stricter reading (key required, list = 10 credits) |
+| OpenAlex key and credits | pyalex README: key required since 2026-02-13; 100 credits/day without a key, 100,000 with a free key; singleton requests free, list requests 1 credit ([pyalex](https://raw.githubusercontent.com/J535D165/pyalex/main/README.md)) [V1] | Official docs repository: "You don't need an API key"; 100,000 credits/day for free users; singleton 1 credit, list 10 credits ([rate limits](https://raw.githubusercontent.com/ourresearch/openalex-docs/main/how-to-use-the-api/rate-limits-and-authentication.md)) [V1] | Resolved by the fact-check: OpenAlex's own announcement and deprecations page say a key is required since 2026-02-13 and `mailto` is ignored [FC]; the GitHub docs page is stale. Still unused: OpenAlex has no ISBN filter [V1] |
 | Open Library rate limit | Open note: 180 requests/min per IP on JSON and API paths, read in nginx [V1]; public docs 1 and 3 requests/s [M] | Doc 02: 400/min on the cover server [V1]; 100 per 5 minutes for ISBN-keyed cover requests [M, low] | Different endpoints, no conflict. For metadata, 180/min is the verified ceiling; we design for **1 request per second** per outgoing IP, which satisfies every figure quoted |
 | ONIX spine code | Doc 02: List 158 has no spine-only code (im_onix's copy of the list) [V1] | Trade note: 56 "Spine image", 57 "Spine panorama image" (Jonix, Issue 75) [V1] | The trade note. Jonix tracks the October 2026 issue; im_onix ships an older list. Re-read today |
 | Legal basis for reading a reseller's licence narrowly | Trade note: "French law reads grants narrowly (CPI L.131-3)" [M] | Doc 07, after fact-check: L. 131-3 governs authors' contracts only; the reseller-level limit is ordinary contract interpretation plus the publisher's upstream grant [M] | Doc 07. It governs where the documents meet, and its correction is reasoned. The practical conclusion is unchanged |
 | Server-side relay | Open note: "plan a thin server-side relay with a cache" for SRU sources | Docs 02 and 07: "no image proxy"; the service never fetches a cover into a PDF | Both. The relay carries **text metadata** under Licence Ouverte or CC0. It never fetches, caches or forwards an image. Lookup returns text only (doc 07, implication 18) |
 | Google Books `country=FR` on the list call | Open note: use it "if the live check confirms it" [M] | Discovery document: no such parameter on the list method [V1] | The discovery document. Use the two-step form or an EU-hosted relay |
-| DNB licence | Open note: CC0 [M] | DNBLab README licence line: "CC BY 3.0" [V1] | CC0 stays [M]. The README line covers the tutorial repository, not the catalogue data. Confirm on dnb.de |
+| DNB licence | Open note: CC0 [M] | DNBLab README licence line: "CC BY 3.0" [V1] | CC0 1.0, confirmed by DNB's 2015 press release [FC]. The README line covers the tutorial repository, not the catalogue data |
 
 ### 6.2 Could not verify
 
@@ -610,7 +619,7 @@ Nothing below was checked against an operator's live site, a vendor's price list
 - **Every price**: Dilicom membership, FEL, FEL à la demande and Hub fees; Electre NG and its API; Decitre ORB; Tite-Live; VLB licences and cover token; CB; DILVE; Informazioni Editoriali; Nielsen BookData; BDS; Bowker; ISBNdb 2026 plans, daily caps and bulk licences.
 - **Who may subscribe**: whether Dilicom, Electre, ORB and VLB accept a service provider that is neither bookseller nor library, and under which contract. Whether Dilicom logins are GLNs (inferred from one README example).
 - **Every licence and terms statement marked [M]**: the Licence Ouverte version and attribution wording used by BnF and ABES; CC0 for DNB, K10plus, lobid, Finna, BNE, Wikidata, DOAB/OAPEN, Inventaire; the licences of OPAC SBN, swisscovery, OBV/ÖNB and KBR data; which KB collection is under which licence.
-- **Google Books**: exact wording on caching and branding, the default quota, whether keyless calls are still served, whether list results depend on the caller's IP.
+- **Google Books**: exact wording on caching and branding, the official quota page, whether keyless calls are still served, whether list results depend on the caller's IP, and — new — the full text and current date of the Books API clause on charging users (seen through search only).
 - **CORS headers** of every service except Open Library (source) and Hardcover (operator statement).
 - **Open Library**: the figures on its public API page; dump frequency.
 - **BnF**: current SRU record schemas and any rate limit; eBook legal-deposit coverage; whether the catalogue général was re-platformed in 2024–2026 (the wiki read dates from 2016); terms of the cover endpoint.
@@ -712,16 +721,16 @@ Numbers marked "proposal" are design defaults chosen here, to be revised after t
 6. Field precedence: typed input > EPUB OPF > uploaded or reseller ONIX > routed national library > Open Library > Google Books > others. A lower source never overwrites a higher one. Each field keeps its source.
 7. Standalone mode runs the cascade of §1.2; reseller mode that of §1.3. In reseller mode a catalogue result may fill an empty field but never changes a field the reseller supplied.
 8. Route the first network call by registration group using the table in §3.1. Query the routed library and Open Library in parallel; call Google Books only if both leave title or first author empty and a key is configured.
-9. BnF SRU: send ISBN-10 and ISBN-13 in one CQL `or` query for 978 ISBNs; request `recordSchema=dublincore` and `maximumRecords=5`. When several records match, prefer the record whose identifier equals the queried ISBN-13, then the most recent date. Clean titles and convert "Surname, Forename (dates)" headings to display order.
+9. BnF SRU: send ISBN-10 and ISBN-13 in one CQL `or` query for 978 ISBNs (fact-check: `bib.fuzzyIsbn` is BnF's documented one-operand alternative, see item 47); request `recordSchema=dublincore` and `maximumRecords=5`. When several records match, prefer the record whose identifier equals the queried ISBN-13, then the most recent date. Clean titles and convert "Surname, Forename (dates)" headings to display order.
 10. data.bnf.fr and Wikidata: send the hyphenated ISBN-13, the plain ISBN-13 and, for 978, the ISBN-10 forms, as in §3.3 and §3.9.
 11. eBook ISBNs: on a miss, retry with the print ISBN when ONIX `RelatedProduct` gives one, and mark the result `matched_via = print_isbn`. Otherwise offer a title-and-author search and ask the user to confirm. Never substitute silently.
 
 **Network etiquette**
 
 12. Send one fixed User-Agent on every request: `eBookCadeauBot/{version} (+https://{site}/bot; mailto:contact@{site})`. It contains a URL and a contact address, as Open Library, Libris and Crossref ask, and must never contain "CloudFront" (doc 02).
-13. Per upstream host, a token bucket of 1 request per second with a burst of 5 (proposal). Open Library's verified ceiling is 180 per minute per IP; Hardcover's is 60 per minute; never exceed either.
+13. Per upstream host, a token bucket of 1 request per second with a burst of 5 (proposal). Open Library's verified ceiling is 180 per minute per IP and its published policy is 1 request per second unidentified, 3 identified [FC]; Hardcover's is 60 per minute; Crossref allows 1 list request per second with no parallel request in the public pool [FC]; never exceed any of them.
 14. Timeouts (proposal): 4 s per provider, 8 s for the whole lookup. On 429 or 503, honour `Retry-After`; otherwise back off 2 s, 4 s, 8 s, at most 2 retries. After 5 consecutive failures skip that provider for 10 minutes.
-15. Google Books: count calls per day and stop at 900 (proposal, against a recalled quota of 1,000). Never request it without a configured key in production.
+15. Google Books: count calls per day and stop at 900 (proposal, against a default quota of 1,000 confirmed by secondary sources). Never request it without a configured key in production. Fact-check: a key is not enough — see item 48.
 16. One user action triggers at most one lookup per provider. No background enumeration, no crawling, no pre-warming of the cache with ISBN lists.
 
 **Transport and architecture**
@@ -768,3 +777,48 @@ Numbers marked "proposal" are design defaults chosen here, to be revised after t
 44. Live tests are opt-in and never run in the default CI job. A scheduled job may send one request per enabled provider per day to detect endpoint drift.
 45. Provide the fake-reseller demos with synthetic ONIX: a "fake 7switch" in Immatériel-style ONIX 3.0, and a "fake Fnac" with a Kobo-style partner payload. Include one title with a print permission, one without, one with audience 01, one outside its territory, and one with a text-and-data-mining reservation.
 46. Build the measurement harness of §6.4 as a command-line tool that takes a list of ISBNs and writes per-provider hit rate, field completeness and latency to CSV, at 1 request per second.
+
+**Added by the fact-check (2026-11-12)**
+
+47. BnF SRU: support `bib.fuzzyIsbn all "{isbn13}"` as a query form (one operand, matches EAN, ISBN-13 and ISBN-10 per BnF's criteria table). Until a live test, keep the exact two-operand `bib.isbn` query as the default and use `bib.fuzzyIsbn` as the retry on zero records. Request-builder tests cover both.
+48. Google Books is gated by two settings, not one: an API key **and** a recorded permission basis (`free_flow` or a reference to Google's written permission). The Books API terms forbid charging users a fee for an application that uses the API without that permission. In any flow where the user pays, the provider is disabled unless the permission reference is set.
+49. Expect eBook ISBNs to miss at BnF (2,606 digital books against 77,341 printed books deposited in 2025). The print-ISBN retry of item 11 is the normal path for eBooks, and the measurement of §6.4 must report eBook ISBNs separately.
+50. Libris results are class A with a caveat: KB states CC0 for the Swedish national bibliography and authority records. Store the record's own licence or source field when present; do not label every Libris record CC0.
+51. Crossref: never send two requests in parallel without `mailto`; a `filter=isbn:` call counts as a list request (1 per second public, 3 per second polite, since 1 December 2025).
+52. Library of Congress: the `https://lx2.loc.gov/sru/lcdb` form is reported not to complete TLS in 2026. The provider stays disabled; do not downgrade to plain HTTP.
+53. ISBNdb, if ever enabled: plan for daily caps (5,000 / 15,000 / 50,000 searches) as well as the per-second rate.
+
+## Verification log
+
+Fact-check of 2026-11-12. Method: 27 fresh web searches (10 extended), 6 primary files re-read on raw.githubusercontent.com. Vendor pages could not be opened directly; where noted, a quote comes from the search tool's rendering of the page. Full table with every source URL: `factcheck/isbn-databases.md`.
+
+| # | Claim | Verdict | Change made |
+|---|---|---|---|
+| 1 | BnF SRU endpoint, version 1.2, `bib.isbn`, `dublincore` | CONFIRMED | Marked [FC]; BnF pages cited |
+| 2 | Two-operand ISBN query is the way to reach ISBN-10-only records | PARTLY | Added `bib.fuzzyIsbn` and the 10 / 1000 `maximumRecords` values; implication 47 |
+| 3 | BnF metadata under Licence Ouverte, commercial reuse allowed | CONFIRMED | Dated 1 January 2014; Dewey exception; one portal sentence flagged for re-reading |
+| 4 | BnF has no published rate limit | UNSUPPORTED | Reworded "not found" |
+| 5 | BnF eBook coverage partial | CONFIRMED, stronger | Deposit figures added; implication 49 |
+| 6 | Open Library policy 1 / 3 requests per second | CONFIRMED | [M] replaced by the official page |
+| 7 | Open Library nginx limits (180/min, 1/s, 400/min) | CONFIRMED | Re-read |
+| 8 | Open Library CORS `*` | CONFIRMED | Re-read |
+| 9 | Google Books 1,000 requests/day | CONFIRMED (secondary) | Marker updated |
+| 10 | Google Books usable for display in our product | WRONG by omission | Books API fee clause added in findings, tables, §3.6, §5; implication 48 |
+| 11 | `country` only on `volumes/{id}` | CONFIRMED | Re-read |
+| 12 | DNB endpoint, no token, CC0 | CONFIRMED | [M] replaced by DNB sources |
+| 13 | K10plus endpoint; CC0 | PARTLY | Endpoint confirmed; CC0 stays [M] |
+| 14 | lobid CC0; `isbn:` query | CONFIRMED / UNSUPPORTED | Licence marker updated |
+| 15 | Libris CC0 | PARTLY | Scope narrowed to national bibliography and authority records; implication 50 |
+| 16 | Finna CC0 metadata; CORS | CONFIRMED / UNSUPPORTED | CORS set to unverified |
+| 17 | SUDOC `isbn2ppn`, Licence Ouverte | CONFIRMED | Marker updated |
+| 18 | Crossref lower limits since December 2025 | CONFIRMED | Figures added; implication 51 |
+| 19 | Wikidata limits and graph split | PARTLY | "5 parallel queries" withdrawn; split dated 9 May 2025 |
+| 20 | OpenAlex key policy "conflict" | Resolved | Key required since 2026-02-13 |
+| 21 | Amazon PA-API replaced in 2026 | CONFIRMED | Shut-off date 15 May 2026 added |
+| 22 | ISBNdb about USD 15 / 30 / 75 | OUTDATED | USD 14.99 / 35.99 / 99.99 with daily caps; implication 53 |
+| 23 | ONIX Issue 75, List 158 codes 56 and 57; ONIX 3.1.3 | CONFIRMED / UNSUPPORTED | Issues of addition (70, 71) recorded; 3.1.3 marked unconfirmed |
+| 24 | ISBN registration groups; 979 without ISBN-10 | CONFIRMED | Re-read |
+| — | OCLC Classify 31 January 2024; Goodreads December 2020 | CONFIRMED | Dates sourced |
+| — | Library of Congress "2025 platform change" | UNSUPPORTED | Reworded; implication 52 |
+
+Not re-checked in this pass: Dilicom, Electre, Decitre ORB, Tite-Live, VLB and the other trade bases; e-distributor contracts; Hardcover, HathiTrust, Europeana, Trove, NDL; Inventaire and LibraryThing terms; every legal citation in §5; every CORS header other than Open Library's; every live response.

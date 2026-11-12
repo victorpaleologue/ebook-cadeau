@@ -1,0 +1,11 @@
+{
+  "book": { "title": "Abendflut", "contributors": [{ "name": "Johanna König" }], "language": "de" },
+  "code": "TBLCZHJQPBXF",
+  "base_url": "https://ebk.example",
+  "ground": "#1f3a5f",
+  "recipient": "Bodo",
+  "locale": "de",
+  "format": "digest",
+  "profile": "upload_eu",
+  "created_unix": 1780000000
+}

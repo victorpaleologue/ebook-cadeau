@@ -141,7 +141,9 @@ fn offline_fixtures_answer_instead_of_the_network() {
     let text = stdout(&output);
     assert!(text.contains("Albert Camus") && text.contains("Gallimard"), "{text}");
     assert!(text.contains("bnf") && text.contains("error"), "{text}");
-    assert!(stderr(&output).contains("no fixture"), "{}", stderr(&output));
+    let notes = stderr(&output);
+    assert!(notes.contains("bnf: transport error"), "{notes}");
+    assert!(notes.contains("without a fixture"), "{notes}");
 
     let empty = tempfile::tempdir().unwrap();
     write_fixtures(empty.path(), &[]);

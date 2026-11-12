@@ -29,10 +29,8 @@ fn main() -> ExitCode {
         Ok(cli) => cli,
         Err(error) => {
             // `--help` and `--version` are answers, not errors.
-            let informational = matches!(
-                error.kind(),
-                ErrorKind::DisplayHelp | ErrorKind::DisplayVersion
-            );
+            let informational =
+                matches!(error.kind(), ErrorKind::DisplayHelp | ErrorKind::DisplayVersion);
             let _ = error.print();
             return exit(if informational { EXIT_OK } else { EXIT_USAGE });
         }

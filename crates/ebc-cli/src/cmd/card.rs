@@ -199,7 +199,11 @@ pub(crate) fn run(args: &CardArgs, streams: &mut Streams<'_>) -> Result<Status, 
     let lines = [
         Some(format!(
             "wrote {}: {} bytes, 2 pages, {kind} card, profile {} ({route})",
-            if to_stdout { "standard output".to_owned() } else { args.output.display().to_string() },
+            if to_stdout {
+                "standard output".to_owned()
+            } else {
+                args.output.display().to_string()
+            },
             pdf.len(),
             request.profile.name,
         )),

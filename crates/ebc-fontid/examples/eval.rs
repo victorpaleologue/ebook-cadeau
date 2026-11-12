@@ -19,6 +19,9 @@
 //!   comma-separated `NAMES`.
 //! * `--verbose`: one line per cover that went wrong somewhere (on standard error).
 //! * `--tables-only`: skip the hold-out and scaling measurements.
+//! * `--dump FILE`: write one tab-separated line per cover (condition, case, font,
+//!   labelled glyphs, rank of the true face, its score, the best score of another
+//!   family, confident, detected) — the data the score calibration was read from.
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -82,6 +85,7 @@ fn run() -> Result<(), String> {
     let mut only: Option<String> = None;
     let mut verbose = false;
     let mut tables_only = false;
+    let mut dump_path: Option<PathBuf> = None;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         let mut value = || args.next().ok_or_else(|| format!("{arg} needs a value"));
@@ -96,6 +100,7 @@ fn run() -> Result<(), String> {
             "--only" => only = Some(value()?),
             "--verbose" => verbose = true,
             "--tables-only" => tables_only = true,
+            "--dump" => dump_path = Some(PathBuf::from(value()?)),
             other => return Err(format!("unknown argument {other} (see the file header)")),
         }
     }
@@ -141,7 +146,22 @@ fn run() -> Result<(), String> {
     ))?;
     line(format!("Covers: 600 x 900 px, {cases} per condition, seed {seed}; rerank on the best {rerank_top}.\n"))?;
 
+    let dump = std::cell::RefCell::new(String::new());
     let observer = |r: &CaseReport| {
+        if dump_path.is_some() {
+            dump.borrow_mut().push_str(&format!(
+                "{}\t{}\t{}\t{}\t{:?}\t{:.4}\t{:.4}\t{}\t{}\n",
+                r.condition,
+                r.case,
+                r.font,
+                r.labelled_glyphs,
+                r.id_rank,
+                r.true_score,
+                r.other_family_score,
+                r.confident,
+                r.detected,
+            ));
+        }
         let wrong = !r.detected || r.id_rank != Some(0) || r.auto_rank != Some(0);
         if verbose && wrong {
             let _ = writeln!(
@@ -170,6 +190,9 @@ fn run() -> Result<(), String> {
         .collect();
     let rows = evaluate(&cover_fonts, &index, &conditions, &opts);
     line(format_table(&rows))?;
+    if let Some(path) = &dump_path {
+        std::fs::write(path, dump.borrow().as_bytes()).map_err(|e| format!("{}: {e}", path.display()))?;
+    }
     if tables_only {
         return Ok(());
     }

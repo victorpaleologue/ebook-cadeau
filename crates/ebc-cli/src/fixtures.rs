@@ -71,7 +71,10 @@ impl Fixtures {
     fn find(&self, url: &str) -> Option<&Entry> {
         self.entries.iter().find(|entry| entry.url.as_deref() == Some(url)).or_else(|| {
             self.entries.iter().find(|entry| {
-                entry.url_contains.as_deref().is_some_and(|part| !part.is_empty() && url.contains(part))
+                entry
+                    .url_contains
+                    .as_deref()
+                    .is_some_and(|part| !part.is_empty() && url.contains(part))
             })
         })
     }
@@ -81,14 +84,21 @@ impl Fixtures {
             return Ok(entry.body.clone().unwrap_or_default().into_bytes());
         };
         let relative = Path::new(file);
-        if !relative.components().all(|part| matches!(part, Component::Normal(_) | Component::CurDir))
+        if !relative
+            .components()
+            .all(|part| matches!(part, Component::Normal(_) | Component::CurDir))
         {
-            return Err(format!("fixture file {file:?} is not a path inside the fixture directory"));
+            return Err(format!(
+                "fixture file {file:?} is not a path inside the fixture directory"
+            ));
         }
         let path = self.dir.join(relative);
         let size = std::fs::metadata(&path).map_err(|e| format!("{}: {e}", path.display()))?.len();
         if size > MAX_FIXTURE_BYTES {
-            return Err(format!("{}: fixture larger than {MAX_FIXTURE_BYTES} bytes", path.display()));
+            return Err(format!(
+                "{}: fixture larger than {MAX_FIXTURE_BYTES} bytes",
+                path.display()
+            ));
         }
         std::fs::read(&path).map_err(|e| format!("{}: {e}", path.display()))
     }

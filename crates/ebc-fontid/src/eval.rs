@@ -234,6 +234,8 @@ pub struct CaseReport {
     pub best: String,
     /// Score of the true face with the true box.
     pub true_score: f32,
+    /// Best score of a face of another family with the true box.
+    pub other_family_score: f32,
     /// The identification with the true box was flagged confident.
     pub confident: bool,
 }
@@ -473,6 +475,11 @@ pub fn evaluate(
                     format!("{} {} {:.2}", m.entry.family, m.entry.style, m.score)
                 }),
                 true_score: rank.map_or(0.0, |r| id.matches[r].score),
+                other_family_score: id
+                    .matches
+                    .iter()
+                    .find(|m| m.entry.family != meta.family)
+                    .map_or(0.0, |m| m.score),
                 confident: id.confident,
             };
             row.labelled += usize::from(id.labelled_glyphs > 0);

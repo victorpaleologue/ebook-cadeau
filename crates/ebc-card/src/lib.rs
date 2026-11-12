@@ -47,13 +47,33 @@
 //! never repaired silently.
 //!
 //! A printed cover is never altered: uniform scaling, no rotation and, by default, no
-//! crop (it is letterboxed on a flat neutral ground, at least 3 mm inside the trim).
+//! crop (it is letterboxed, at least 3 mm inside the trim, on the flat ground of the
+//! outside).
 //! `trim_authorised` allows full-bleed placement; `adaptation_authorised` — with a
 //! `print_licence` or `rights_holder_declared` basis — allows the spine styles that
 //! sample or re-fit artwork. A credit line for the cover is printed on the back panel.
 //! These are conservative defaults from
 //! `docs/research/07-legal-covers-and-reseller-rights.md`, pending a lawyer's review;
 //! the layout decisions are documented on the two page modules' source.
+//!
+//! # The ground of the outside
+//!
+//! Back, spine and front share **one flat ground**, so that the card reads as one
+//! object, like a book jacket. [`CardRequest::ground`] sets it; by default it is
+//!
+//! * for the typographic card, a colour picked from a fixed palette by a hash of the
+//!   title;
+//! * for a card with a cover, one colour *computed* from the cover — never pixels: the
+//!   colour of its frame if it has a plain one, else of its plain binding edge, else its
+//!   dominant colour — with the text on it black or white, whichever contrasts more;
+//! * **paper white** when print argues against that colour: no process channel reaches
+//!   [`GROUND_MIN_TINT_PERCENT`] (too faint to print), the total ink exceeds
+//!   [`GROUND_MAX_INK_PERCENT`] or the profile's limit (this solid covers the sheet and
+//!   crosses both creases), or the text on it would stay under
+//!   [`GROUND_MIN_CONTRAST`]:1 with black counted as ink on paper (saturated mid-tones).
+//!
+//! On press the ground is close to the cover's own frame or edge colour, not identical
+//! with it: see *Colour* below.
 //!
 //! # Colour
 //!
@@ -87,6 +107,7 @@
 mod compose;
 mod cover;
 mod error;
+mod ground;
 mod inside;
 pub mod inspect;
 mod outside;
@@ -104,6 +125,7 @@ pub use cover::{
     MAX_COVER_BYTES, MAX_COVER_PIXELS, MAX_COVER_SIDE_PX, MAX_EMBED_PPI, RESAMPLE_PPI,
 };
 pub use error::{CardError, CardWarning, TextField};
+pub use ground::{GROUND_MAX_INK_PERCENT, GROUND_MIN_CONTRAST, GROUND_MIN_TINT_PERCENT};
 pub use inside::{CODE_PT, QR_BOX_MAX_MM, QR_BOX_MM, QR_MIN_SYMBOL_MM, STEPS_PT, qr_payload};
 pub use outside::{MIN_COVER_INSET_MM, REDUCED_COVER_SHARE};
 #[cfg(feature = "bundled-fonts")]

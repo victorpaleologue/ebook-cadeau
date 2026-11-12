@@ -47,8 +47,7 @@ pub(crate) fn run(args: &PreflightArgs, streams: &mut Streams<'_>) -> Result<Sta
             ))?;
         }
         let errors = report.errors().count();
-        let warnings =
-            report.findings.iter().filter(|f| f.severity == Severity::Warning).count();
+        let warnings = report.findings.iter().filter(|f| f.severity == Severity::Warning).count();
         streams.line(format!(
             "{}: {} — {errors} error(s), {warnings} warning(s), {} page(s), profile {}",
             args.pdf.display(),

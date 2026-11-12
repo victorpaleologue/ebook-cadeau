@@ -1,6 +1,6 @@
 # Finding book covers (and spines) when absent — sources, scraping practice, legality of acquisition
 
-_Status: draft — research date 2026-11-12_
+_Status: fact-check corrections applied (the fact-check had limited web access) — research date 2026-11-12_
 
 > **Research to brief the implementation and a lawyer, not legal advice.** This document covers the **acquisition** step: finding, fetching, previewing and storing a cover or spine the user did not supply. Whether a cover may be **printed** is decided in `07-legal-covers-and-reseller-rights.md`. Where the two documents meet, doc 07 governs.
 
@@ -11,23 +11,24 @@ _Status: draft — research date 2026-11-12_
 - **No web search ran**, for either researcher or for this synthesis. The shared budget of 200 searches was already spent; the five queries I sent were refused. WebFetch is blocked for almost every host. I did not work around either limit.
 - The one reachable content host is `raw.githubusercontent.com`. "Source" in this document therefore means a primary file read there: the source code and server configuration of a service, the cover-provider code of library systems (calibre, VuFind, Koha, Coce, Inventaire), and specifications kept in Git (Readium LCP, W3C TDMRep, EPUB 3.3, Kobo's EPUB guidelines, Google's API discovery document). For [V2], "independent" means independent code bases or documents.
 - The two researcher notes are `notes/cover-sources.sources.md` (about 45 files read) and `notes/cover-sources.scraping-law.md` (written entirely from memory). For this synthesis I read 26 files (19 new to the cover notes, 7 re-read; §9.3); they are the only new evidence.
+- **Fact-check pass (2026-11-12, `factcheck/cover-sources.md`).** The checker also had no web search (all 8 queries refused) and could not reach provider, legal or standards sites. It re-read 31 files on `raw.githubusercontent.com`, four of them independent of this document, and compared sibling notes. Its corrections are applied below; where it relied on memory the text says "fact-checker's recall" and the claim stays unverified. The editor re-read ten of those files and ran two web searches; one of the checker's findings was not upheld (see the Verification log at the end).
 - **Not verified by anyone**: every provider's terms of use and quotas, every legal authority (cases, CPI articles, CNIL guidance), every live HTTP behaviour, every French bookseller URL pattern. GPL/AGPL code (calibre, VuFind, Koha, Inventaire) was read for facts only; none of it may be copied into this BSD-3 repository.
 
 **What this pass changed against the notes.**
 
 | Point | Notes said | Now | Evidence |
 |---|---|---|---|
-| Open Library cover server and CORS | "not verified; plan a server-side fetch proxy" | `Access-Control-Allow-Origin: *` is added to every response [V1]; the final hop is often archive.org, unverified | [asgi_app.py](https://raw.githubusercontent.com/internetarchive/openlibrary/master/openlibrary/coverstore/asgi_app.py) |
+| Open Library cover server and CORS | "not verified; plan a server-side fetch proxy" | The cover server's code adds `Access-Control-Allow-Origin: *` to every response [V1, repository code]. Not shown: that production runs this code path (the nginx in front adds no CORS header). The final hop is often archive.org, unverified | [asgi_app.py](https://raw.githubusercontent.com/internetarchive/openlibrary/master/openlibrary/coverstore/asgi_app.py) |
 | BnF cover URL and placeholder | [M] in the sources note, [V1] in `notes/isbn-databases.open.md` | [V1]: URL pattern, HEAD probe, placeholder bodies of 4566 or 4658 bytes | [Inventaire](https://raw.githubusercontent.com/inventaire/inventaire/main/server/data/bnf/get_bnf_entry_from_isbn.ts) |
 | Google Books image sizes | [M] | [V1]: widths of about 80, 128, 300, 575, 800, 1280 px | [discovery document](https://raw.githubusercontent.com/googleapis/google-api-go-client/main/books/v1/books-api.json) |
 | LCP leaves the cover unencrypted | [M, low] | [V1] | [Readium LCP spec](https://raw.githubusercontent.com/readium/lcp-specs/master/releases/lcp/latest.md) |
-| TDMRep signal names and precedence | [M, low] | [V1] | [TDMRep draft spec](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/spec/index.html) |
-| TDMRep deployed by French trade publishers | belief, [M, low] | [V1]: Hachette Livre (most of its houses' websites) and Média-Participations (technique not stated) | [adopters list](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/docs/adopters.md) |
+| TDMRep signal names and precedence | [M, low] | [V1] | [TDMRep specification](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/spec/index.html) (a Community Group Final Report, `CG-FINAL`, not a draft) |
+| TDMRep deployed by French trade publishers | belief, [M, low] | [V1] for the list entry only: Hachette Livre (most of its houses' websites) and Média-Participations (technique not stated). The list is self-declared and undated; no site was probed | [adopters list](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/docs/adopters.md) |
 | Wording of DSM art. 4 and recital 18 | [M] | [V1]; recital 18 itself names website terms and conditions | [extracts](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/docs/eu-act-extracts.md) |
-| Size of the cover inside an EPUB | "1400–2560 px, usually no upscaling" [M] | Contradicted: Kobo states a store average of 800 x 1224 px [V1] | [Kobo EPUB spec](https://raw.githubusercontent.com/kobolabs/epub-spec/master/README.md) |
-| ONIX List 158 | codes 29 and 51 exist [V1] | Full list read: no spine-only code; 29 `FullCover` is the only one that includes a spine [V1] | [im_onix codelist](https://raw.githubusercontent.com/immateriel/im_onix/master/data/codelists/codelist-158.yml) |
-| Amazon API status | "could not check" | PA-API 5.0 is being replaced by the "Creators API" [V1]; its image variants can include back cover and spine [V1] | [Open Library vendors.py](https://raw.githubusercontent.com/internetarchive/openlibrary/master/openlibrary/core/vendors.py) |
-| robots.txt fetch errors, 500 KiB cap | [M] | [V1] (secondary: a parser's README restating Google's guidance) | [texting_robots](https://raw.githubusercontent.com/Smerity/texting_robots/main/README.md) |
+| Size of the cover inside an EPUB | "1400–2560 px, usually no upscaling" [M] | Put in doubt: Kobo states a store-wide average of 800 x 1224 px [V1 for the quote; undated, not a measurement of French EPUBs] | [Kobo EPUB spec](https://raw.githubusercontent.com/kobolabs/epub-spec/master/README.md) |
+| ONIX List 158 | codes 29 and 51 exist [V1] | **Corrected by the fact-check.** The draft said "no spine-only code": wrong. The im_onix copy stops at code 55 (plus 99) and is stale; code-list Issue 75 adds **56 "Spine image"** (2D, portrait orientation) and **57 "Spine panorama image"** [V1]. 29 "Full cover" also includes the spine [V1] | [Jonix ResourceContentTypes](https://raw.githubusercontent.com/zach-m/jonix/master/jonix-common/src/main/java/com/tectonica/jonix/common/codelist/ResourceContentTypes.java); stale copy: [im_onix codelist](https://raw.githubusercontent.com/immateriel/im_onix/master/data/codelists/codelist-158.yml) |
+| Amazon API status | "could not check" | PA-API 5.0 was replaced by the "Creators API" during 2026 [V2: Open Library's importer; a client library deprecated PA-API on 2026-01-29 and removed it on 2026-09-04]. Amazon's own shutdown date is in neither file. That image variants "can include back cover and spine" is a comment in a third party's code, not Amazon documentation [unverified] | [Open Library vendors.py](https://raw.githubusercontent.com/internetarchive/openlibrary/master/openlibrary/core/vendors.py), [python-amazon-paapi changelog](https://raw.githubusercontent.com/sergioteula/python-amazon-paapi/master/CHANGELOG.md) |
+| robots.txt fetch errors, 500 KiB cap | [M] | [V1] (secondary: a parser's README restating Google's guidance; it never mentions RFC 9309) | [texting_robots](https://raw.githubusercontent.com/Smerity/texting_robots/main/README.md) |
 
 ---
 
@@ -35,16 +36,18 @@ _Status: draft — research date 2026-11-12_
 
 ### 1.1 Findings
 
-1. **The best cover source is not a cover API.** In reseller mode it is the cover in the reseller's ONIX or distributor feed. In standalone mode it is the cover inside the user's own EPUB, read in the browser. Both come with the cleanest rights position and need no acquisition from a third party. Public ISBN cover APIs are thumbnail services: about 500 px on the long side, about 71 ppi on a 178 mm front [est.].
-2. **No lookup source grants a print right, and none is print-grade.** Open Library, Google Books, BnF and DNB can locate and preview a cover. Under doc 07 their images never enter a PDF produced by the hosted service. The acquisition tools therefore produce two different things: **printable assets** (bytes with a recorded rights basis) and **candidates** (a URL plus facts, rights basis `none`).
-3. **Open Library is the only open, keyless source whose behaviour is verified in its own source code** [V1/V2]: size suffixes, original-size URL, JSON endpoint with pixel dimensions, `?default=false` returning 404, rate limits, user-agent rules, CORS. It carries no licence on the images [M].
+1. **The best cover source is not a cover API.** In reseller mode it is the cover in the reseller's ONIX or distributor feed. In standalone mode it is the cover inside the user's own EPUB, read in the browser. Both come with the cleanest rights position and need no acquisition from a third party. Public ISBN cover APIs serve thumbnails by default: Open Library's `-L` size fits a 500 px box, about 71 ppi on a 178 mm front [est.]. Larger files exist for some titles — Open Library's no-suffix URL returns the uncapped original [V1] and Google documents `extraLarge` at about 1280 px wide [V1] — but the hit rate is unmeasured (corrected by the fact-check: the draft said "about 500 px" for all of them).
+2. **No lookup source grants a print right, and none is reliably print-grade.** Open Library, Google Books, BnF and DNB can locate and preview a cover. Under doc 07 their images never enter a PDF produced by the hosted service. The acquisition tools therefore produce two different things: **printable assets** (bytes with a recorded rights basis) and **candidates** (a URL plus facts, rights basis `none`).
+3. **Open Library is the only open, keyless source whose behaviour is verified in its own source code** [V1/V2]: size suffixes, original-size URL, JSON endpoint with pixel dimensions, `?default=false` returning 404, rate limits, user-agent rules, CORS. "Verified" means read in the repository: that production runs the same code, and what archive.org sends on redirect targets, are not verified. It carries no licence on the images [M]; its covers are uploads and imports of unknown provenance, which is why its preview is now rated Medium, not Low–Medium (§6.4).
 4. **Amazon, Goodreads-derived APIs, retailer pages and subscription services are out.** Either their terms forbid offline use [M] or they are paid B2B services licensed for catalogue display [M]. A real-time relay of a retailer's catalogue also has the structure condemned in *Innoweb* [M].
 5. **"Publicly reachable" is not "free to take".** Three regimes apply separately: copyright in the image, the sui generis database right of the aggregator or retailer, and contract or unfair competition (terms of use, *parasitisme*) [M].
 6. **robots.txt is not a licence, but a `Disallow` is a prohibition with legal weight**: it is the standard machine-readable opt-out under DSM art. 4(3) [M], and the directive's recital 18 also counts website terms and conditions [V1].
-7. **The text-and-data-mining exception covers analysis only.** It allows a transient copy to derive facts (dominant colour, hash, font class) and requires the copy to go afterwards. It never covers display, caching or printing [V1 for the article text; application is my analysis]. French trade publishers have started to opt out: the TDMRep adopters list names Hachette Livre, on most of its houses' websites, and Média-Participations [V1].
+7. **The text-and-data-mining exception covers analysis only.** It allows a transient copy to derive facts (dominant colour, hash, font class) and requires the copy to go afterwards. It never covers display, caching or printing [V1 for the article text; application is my analysis]. French trade publishers have started to opt out: the TDMRep adopters list names Hachette Livre, on most of its houses' websites, and Média-Participations [V1 for the list; it is self-declared and undated, and no site was probed].
 8. **Linking and copying are treated oppositely.** A browser that loads an image from the source server makes no new communication if the source is authorised and unprotected (*Svensson* line [M]). Downloading it and serving it from our server does (*Renckhoff* [V2\*]). A server-side image proxy counts as a re-host.
-9. **Resolution.** A 110 x 178 mm front needs 1299 x 2102 px at 300 ppi [est.]. A 500 px cover needs 4.2x upscaling; the cover inside an EPUB may be only about 800 x 1224 px (175 ppi) [V1], so it can also need help. In-browser super-resolution is feasible with permissively licensed, image-only models (Real-ESRGAN BSD-3, SwinIR and Swin2SR Apache-2.0, waifu2x MIT) [V1 each], but GAN models damage small type.
-10. **Spines cannot be found.** No public source exposes spines by ISBN. ONIX has a full-cover code (List 158 code 29) [V1] that no known French feed fills [M, low]. Even a real spine rarely fits a 10 mm panel without adaptation. Generating the spine is the only general path; an optional flat-cover upload is the only source of a real one.
+9. **Resolution.** A 110 x 178 mm front needs 1299 x 2102 px at 300 ppi [est.]. A 500 px cover needs 4.2x upscaling; the cover inside an EPUB may be only about 800 x 1224 px (175 ppi), so it can also need help — that figure is Kobo's undated store-wide average [V1 for the quote], not a measurement of French EPUBs, and must not drive design before the sample run. In-browser super-resolution is feasible with permissively licensed, image-only models (Real-ESRGAN BSD-3, SwinIR and Swin2SR Apache-2.0, waifu2x MIT) [V1 each, for the code; the licence files do not mention weights], but GAN models damage small type [M, unverified].
+10. **Spines cannot be looked up, but ONIX has slots for them** (corrected by the fact-check). No public source exposes spines by ISBN [M]. ONIX List 158 has a full-cover code (29) and, since Issue 75, a spine code (56 "Spine image") and a spine-panorama code (57) [V1]; whether any French feed fills them is unknown [M, low]. Even a real spine rarely fits a 10 mm panel without adaptation. Generating the spine stays the general path; a real one can come from a flat-cover upload or from a feed that fills code 29 or 56.
+11. **ONIX carries usage data that decide how a feed cover may be handled** (added by the fact-check, from `notes/isbn-databases.trade.md` and Jonix [V1]). List 161 (`ResourceForm`): 01 "linkable" lets the recipient embed the URL, 02 "downloadable" requires the recipient to host its own copy. `EpubUsageConstraint` type 11 (text and data mining) on a resource version, since ONIX 3.1.1, is an opt-out channel inside the feed. Also relevant: List 160 code 01 (required credit), List 154 audience, territory and embargo dates, and List 158 code 60 "LLM training data".
+12. **The typical gift buyer holds no EPUB** (added by the fact-check, from `notes/ereader-ux.ecosystems.md` §4.3). An ACSM file is a token, and Kindle and Kobo deliver into an account. Cascade step 3 therefore mostly serves authors, publishers and buyers of DRM-free files; for the typical gifter the realistic outcomes are a local image file (step 4) or the typographic card (step 12).
 
 ### 1.2 Recommended cascade
 
@@ -54,38 +57,38 @@ Risk is the exposure of the service, France first, on three acts: (a) locate and
 |---|---|---|---|---|---|---|
 | 1 | Publisher or reseller feed cover **with an express print clause or per-title flag** (`print_licence`) | Reseller | Printable front; back and full cover if supplied | Low | Low | Low |
 | 2 | Rights-holder upload: image, or flat full cover ("couverture à plat") from an author or publisher (`rights_holder_declared`) | Standalone | Printable front, real spine, back | Low | Low | Low |
-| 3 | Cover extracted **in the browser** from the user's own EPUB (`user_private_copy`) | Standalone | Printable front for one home print | Low | Low if never uploaded; Medium if we host it | Home: Low–Medium. Pro: High unless the user is the rights holder |
+| 3 | Cover extracted **in the browser** from the user's own EPUB (`user_private_copy`) — available mostly to authors, publishers and buyers of DRM-free files (finding 12) | Standalone | Printable front for one home print | Low | Low if never uploaded; Medium if we host it | Home: Low–Medium. Pro: High unless the user is the rights holder |
 | 4 | Local image file picked by the user (scan, photo, saved image) | Standalone | Same as 3 | Low | as 3 | as 3 |
-| 5 | Public-domain artwork (artist dead more than 70 years) from a host without contractual restriction (`public_domain`) | Both | Printable | Low | Low | Low |
+| 5 | Public-domain artwork from a host without contractual restriction (`public_domain`). "Artist dead more than 70 years" is a simplification — see the note under §6.10 | Both | Printable | Low | Low | Low |
 | 6 | Reseller feed cover under a "promotion and sale" licence only (`promo_all_media` if declared, else `none`) | Reseller | Preview on the reseller's pages; reduced-size print only with the reseller's written declaration | Low | Low | Medium |
-| 7 | Open Library: ISBN → cover id and pixel size → preview by inline link, link to the original | Standalone | Candidate | Low–Medium | Medium–High | High |
+| 7 | Open Library: ISBN → cover id and pixel size → preview by inline link, link to the original | Standalone | Candidate | Medium (raised from Low–Medium by the fact-check until counsel answers question 5(b): unknown provenance, §6.4) | Medium–High | High |
 | 8 | Google Books with an API key and attribution, used as its terms say | Standalone | Candidate, thumbnail only | Low–Medium | Medium–High | High |
 | 9 | National catalogue cover: BnF for 978-2 and 979-10, DNB for 978-3 — **disabled until their image terms have been read** | Standalone | Candidate | Medium (terms unread; my rating) | High | High |
 | 10 | Publisher's own page, URL pasted by the user: extract `og:image` or JSON-LD image URL, show it as a link | Standalone | Candidate | Low–Medium | High | High |
 | 11 | Transient analysis of a candidate from 7–10: dominant colour, aspect ratio, perceptual hash, font class; the image is then discarded | Standalone | Facts only | Low–Medium, and only where no opt-out is expressed | Image: must go. Facts: Low | Colour and font choice on our own typographic card: Low |
 | 12 | Typographic cover: title, author, publisher retyped in an open font | Both | Always available | Low | Low | Low |
 
-**Never, in any mode** (High on all three acts, or contractually barred): Amazon image URLs, product pages and the PA-API or Creators API; Goodreads and Goodreads-derived APIs; pages or image CDNs of retailers and aggregators (Fnac, Decitre, Furet du Nord, Cultura, leslibraires.fr, Babelio); Electre, Dilicom, Tite-Live, ORB, VLB, Syndetics, Content Cafe without a contract; image-search results; bulk download or mirroring of any cover catalogue; any route that needs a login, a CAPTCHA, IP rotation, a spoofed user-agent or a forged Referer.
+**Never, in any mode** (High on all three acts, or contractually barred): Amazon image URLs, product pages and the PA-API or Creators API; Goodreads and Goodreads-derived APIs; pages or image CDNs of retailers and aggregators (Fnac, Decitre, Furet du Nord, Cultura, leslibraires.fr, Babelio; also Kobo's image CDN and Apple Books / iTunes Search artwork, which the draft omitted although Fnac/Kobo is a target reseller — fact-checker's recall, host names unverified); Electre, Dilicom (FEL, Hub, Distrimage), Tite-Live, ORB, VLB, Syndetics, Content Cafe without a contract; image-search results; bulk download or mirroring of any cover catalogue; any route that needs a login, a CAPTCHA, IP rotation, a spoofed user-agent or a forged Referer.
 
 How the steps are used:
 
 - **Hosted service, standalone.** Steps 2–5 feed the composer. Steps 7–10 only help the user find the cover: a small preview loaded by the browser from the source, the pixel size, and a plain link to the original so that a user who has the right can save it and drop the file (which is then step 4). Step 11 is optional and off by default.
-- **Hosted service, reseller mode.** Steps 1 and 6 only. The lookup steps are not run: the reseller's feed is the source.
+- **Hosted service, reseller mode.** Steps 1 and 6 only. The lookup steps are not run: the reseller's feed is the source. The feed's own usage data apply (finding 11): `ResourceForm` decides link versus stored copy, and a TDM usage constraint closes palette and font-class analysis exactly as a web opt-out would.
 - **Command-line and self-hosted tool.** The operator may let the tool download bytes from steps 7, 9 and 10 by passing an explicit rights basis (doc 07, implication 4), for instance a publisher fetching its own covers. Without the argument the tool lists candidates and builds the typographic card.
 
 ### 1.3 Contradictions between the notes, and how they are resolved
 
 | Topic | Sources note | Scraping-law note | Decision |
 |---|---|---|---|
-| Image proxy | "Plan for a small server-side fetch proxy" because CORS was unverified | "No image proxy": a proxy is a re-host (*Renckhoff*, *VCAST*) | No proxy. Doc 07 (implication 18) says the same. The need has also shrunk: Open Library sends `Access-Control-Allow-Origin: *` [V1]. |
+| Image proxy | "Plan for a small server-side fetch proxy" because CORS was unverified | "No image proxy": a proxy is a re-host (*Renckhoff*, *VCAST*) | No proxy. Doc 07 (implication 18) says the same. The need may also have shrunk: Open Library's cover-server code sends `Access-Control-Allow-Origin: *` [V1, repository code]. Production behaviour and the archive.org redirect targets are unverified; where the header is missing, the browser-side read fails and the step is skipped, never proxied. |
 | Open Library, Google, BnF and pasted URLs as cascade steps that feed the card | Steps 4–7 of its cascade | Preview by inline link at most; store and print rated High | Kept as **discovery** steps (7–10 above). Their output type cannot carry pixels into the composer. |
 | Open Library "usable for print: technically yes" | Yes, with no licence on the images [M] | Print High: no licence, outside any display terms, too small | Not printable by the hosted service. |
-| Open Library rate limit | nginx: 400 requests/min per IP [V1]; public documentation: 100 requests per 5 minutes for ISBN-keyed lookups [M] | 100 per 5 minutes [M, low] | Design for the stricter figure: at most one ISBN-keyed cover request every 3 s per IP. `notes/isbn-databases.open.md` adds a third figure for the JSON API (1 request/s) [M]. |
+| Open Library rate limit | nginx: 400 requests/min per IP [V1], applied only when there is no session cookie; non-identifying crawlers share a separate bucket of 150 requests/s [V1]. Public documentation: 100 requests per 5 minutes for ISBN-keyed lookups [M, unverified] | 100 per 5 minutes [M, low] | Design for the stricter figure: at most one ISBN-keyed cover request every 3 s per IP. `notes/isbn-databases.open.md` adds a third figure for the JSON API (1 request/s) [M]. |
 | BnF cover URL | [M] | not covered | [V1], from Inventaire's code, read twice (the ISBN note and this pass). |
 | Opt-out by terms of use | not covered | "France is wider than the Directive" (CPI R122-28 [M]) | Recital 18 of the Directive already lists "terms and conditions of a website or a service" among machine-readable means [V1]. The rule "a terms-of-use clause is an opt-out" is applied EU-wide and no longer rests on R122-28, whose wording stays [M]. |
 | Size of the cover in an EPUB | 1400–2560 px, "usually needs no upscaling" [M] | not covered | Kobo's guidelines give a store average of 800 x 1224 px [V1, undated text]. Plan for 800–2560 px; measure each file; do not assume print quality. |
-| User-pasted product URL | Server-side extraction, "far lower risk than crawling by EAN" | Retailer page Medium–High; publisher page by inline link Low–Medium | Publisher pages only, subject to robots.txt, TDMRep and a denylist of retailer hosts. The result is shown as a link, not inlined (§7.3). |
-| LCP and the cover | not covered | [M, low] | [V1]: the LCP specification forbids encrypting cover images. |
+| User-pasted product URL | Server-side extraction, "far lower risk than crawling by EAN" | Retailer page Medium–High; publisher page by inline link Low–Medium | Publisher pages only, subject to robots.txt, TDMRep and a denylist of retailer hosts. The result is shown as a link, not inlined (§7.3). The fact-check points out that a denylist alone does not enforce "publisher pages only": any unlisted host passes, including blogs and unlisted retailers. An allow-list of publisher domains is required (§7.1, implication 51). |
+| LCP and the cover | not covered | [M, low] | [V1]: the LCP specification (1.0 revision 5, §2.1) forbids encrypting cover images — only those declared with the `cover-image` property. It says nothing about Adobe, Kobo or Kindle protection. |
 
 ### 1.4 What "tools to scrape covers" means in this project
 
@@ -107,48 +110,50 @@ Terms are as of 2026-11 and, unless marked otherwise, from memory. Risk is given
 
 | Source | URL pattern | Typical resolution | Auth and limits | Terms | Risk |
 |---|---|---|---|---|---|
-| EPUB file (user's own, or reseller's) | none: manifest item with `properties="cover-image"` (EPUB 3) [V2]; `<meta name="cover">` (EPUB 2) [V2] | Kobo store average 800 x 1224 px [V1]; retail masters 1400–2560 px [M] | Local, in the browser. LCP leaves the cover unencrypted [V1] | The user's or reseller's own file | L / L if never uploaded / home L–M, pro H unless rights holder |
-| Reseller ONIX or distributor feed | `SupportingResource`, List 158 code 01 `FrontCover`, 02 `BackCover`, 29 `FullCover`, 51 `CoverFlap` [V1] | Feed-dependent, often 1400 px or more [M] | Contract | "Offered for promotional use by supply chain partners" [V1\*]; no print right without a clause | L / L / M (L with a print clause) |
-| Open Library Covers | `covers.openlibrary.org/b/isbn/{isbn}-L.jpg` [V2]; `/b/id/{coverid}-M.jpg`; no suffix = original upload [V1]; `/b/isbn/{isbn}.json` for dimensions [V1] | `-S` fits 116 x 58, `-M` 180 x 360, `-L` 500 x 500 px [V1]; originals vary [M] | Keyless. nginx: 400 requests/min per IP, burst 400 [V1]; documentation: 100 per 5 min for ISBN-keyed requests [M]. CORS `*` [V1] | No licence on the images (the data is CC0) [M]; a takedown list exists [V1] | L–M / M–H / H |
-| Google Books | `books.google.com/books?jscmd=viewapi&bibkeys=ISBN:{isbn}` [V1]; API v1 `volumes?q=isbn:{isbn}` [M] with `imageLinks` [V1]; `books?id={vol}&printsec=frontcover&img=1&zoom=N` [V1] | `imageLinks` widths of about 80, 128, 300, 575, 800, 1280 px [V1]; larger sizes mainly for previewable titles [M] | Key recommended; 1,000 requests/day per project by default [M] | No durable caching, attribution and link back [M]; VuFind deliberately does not cache it [V1] | L–M / M–H / H |
+| EPUB file (user's own, or reseller's) | none: manifest item with `properties="cover-image"` (EPUB 3) [V2]; `<meta name="cover">` (EPUB 2) [V2] | Kobo store-wide average 800 x 1224 px [V1 for the quote; undated]; retail masters 1400–2560 px [M] | Local, in the browser. LCP leaves a cover declared with `cover-image` unencrypted [V1] | The user's or reseller's own file | L / L if never uploaded / home L–M, pro H unless rights holder |
+| Reseller ONIX or distributor feed | `SupportingResource`, List 158 code 01 `FrontCover`, 02 `BackCover`, 29 `FullCover`, 51 `CoverFlap` [V1], 56 "Spine image", 57 "Spine panorama image" [V1, Jonix]; `ResourceForm` (List 161) 01 linkable, 02 downloadable [V1] | Feed-dependent, often 1400 px or more [M] | Contract | "Offered for promotional use by supply chain partners" [V1\*, a BISG slide deck, unverified]; no print right without a clause; per-resource usage constraints and required credit may apply (finding 11) | L / L / M (L with a print clause) |
+| Open Library Covers | `covers.openlibrary.org/b/isbn/{isbn}-L.jpg` [V2]; `/b/id/{coverid}-M.jpg`; no suffix = original upload [V1]; `/b/isbn/{isbn}.json` for dimensions [V1] | `-S` fits 116 x 58, `-M` 180 x 360, `-L` 500 x 500 px [V1]; originals vary [M] | Keyless. nginx: 400 requests/min per IP without a session cookie, burst 400 [V1]; documentation: 100 per 5 min for ISBN-keyed requests [M, unverified]. CORS `*` in the repository code [V1]; production and archive.org unverified | No licence on the images (the data is CC0) [M]; a takedown list exists [V1] | M / M–H / H |
+| Google Books | `books.google.com/books?jscmd=viewapi&bibkeys=ISBN:{isbn}` [V1]; API v1 `volumes?q=isbn:{isbn}` [M] with `imageLinks` [V1]; `books?id={vol}&printsec=frontcover&img=1&zoom=N` [V1] | `imageLinks` widths of about 80, 128, 300, 575, 800, 1280 px [V1]; larger sizes mainly for previewable titles [M] | Key recommended; 1,000 requests/day per project by default [M, unverified] | No durable caching, attribution and link back [M, unverified]; VuFind does not enable caching for it [V1 for the code; that this is deliberate and due to Google's terms is an inference] | L–M / M–H / H |
 | BnF catalogue | SRU by ISBN → ARK, then `catalogue.bnf.fr/couverture?appName=NE&idArk=ark:/12148/cb{id}&couverture=1` [V1] | Thumbnail [M, low] | Keyless; no published limit known [M] | Metadata under Licence Ouverte [V1\*]; that licence does not cover the images [M]; image terms unknown | M / H / H until the terms are read |
-| DNB (Germany) | `portal.dnb.de/opac/mvb/cover?isbn={isbn}` [V1] | Unknown | Keyless | Images come from MVB (the path says so); reuse terms unknown | M / H / H until the terms are read |
-| Publisher's own page | JSON-LD `image`, `og:image` | 300–1200 px typical [M] | Per-site CGU; TDMRep reservation on most Hachette Livre sites, and at Média-Participations [V1] | Per site | L–M / H / H |
+| DNB (Germany) | `portal.dnb.de/opac/mvb/cover?isbn={isbn}` [V1] | Unknown | Keyless | The path contains `mvb`; that the images come from MVB is read off the path only [unverified]; reuse terms unknown | M / H / H until the terms are read |
+| Publisher's own page | JSON-LD `image`, `og:image` | 300–1200 px typical [M] | Per-site CGU; TDMRep reservation reported on most Hachette Livre sites, and at Média-Participations [V1 for the self-declared list; no site probed] | Per site | L–M / H / H |
 | Publisher press area ("espace presse", "couverture HD") | Manual download | Print resolution [M] | Often an account | Press and bookseller use, per publisher [M] | As the publisher's terms state |
 | Internet Archive scans | `covers.openlibrary.org/b/ia/{identifier}-L.jpg` → `archive.org/download/{id}/page/cover_w500_h500.jpg` [V1] | Scan resolution [M] | Keyless | A photograph of a library copy; same cover rights | as Open Library |
 | LibraryThing | `covers.librarything.com/devkey/{KEY}/{size}/isbn/{isbn}` [V1] | Unknown | Developer key, about 1,000 requests/day [M, low] | Unclear [M, low] | Not used |
-| ORB (France) | `api.base-orb.fr/v1/products?eans={ean}`, basic auth, `thumbnail` and `original` versions [V2] | "original" | Paid account [V1] | Contract | By contract only |
+| ORB (France), operated by the Decitre bookseller group [M, `notes/isbn-databases.trade.md`] | `api.base-orb.fr/v1/products?eans={ean}`, basic auth, `thumbnail` and `original` versions [V2] | "original" | Paid account [V1] | Contract | By contract only |
 | VLB / MVB (Germany) | `api.vlb.de/api/v1/cover/{isbn}/{s,m,l}?access_token=` [V1] | Unknown | Paid token [V1] | Contract | By contract only |
 | Electre, Dilicom (FEL, Hub), Tite-Live | Proprietary | Varies | Paid B2B [M] | Catalogue display for subscribers [M] | By contract only |
+| Dilicom Distrimage (the French trade cover service; added by the fact-check) | Proprietary; "FEL à la demande" returns no image [M] | Front covers of FEL titles [M] | Dilicom members | Free inside bookshop management software; "pour tout autre usage (internet, extranet), il convient de prendre contact avec le service clients" ([SLF, 2012](https://www.syndicat-librairie.fr/le_service_distrimage_de_dilicom)) [V1\*, doc 07 §3.3] | By contract only; print is not a default use |
 | Syndetics | `secure.syndetics.com/index.aspx?isbn={isbn}/{SC.GIF,MC.GIF,LC.JPG}&client={id}` [V2] | `LC` | Library subscription | Library catalogue display | Never |
 | Content Cafe (Baker & Taylor) | `contentcafe2.btol.com/ContentCafe/Jacket.aspx?...&Type={S,M,L}&Value={isbn}` [V1] | `L` | Subscription [V1] | Library catalogue display | Never |
 | Amazon legacy image URL | `images-na.ssl-images-amazon.com/images/P/{ISBN10}.01.LZZZZZZZ.jpg` [V1] | About 500 px [M] | Undocumented; needs an ISBN-10, which 979-10 ISBNs do not have [M] | Associates terms forbid offline use [M] | Never |
-| Amazon product page; PA-API 5.0 and its successor, the Creators API [V1] | `"hiRes"`, `data-a-dynamic-image` [V1]; API `images.primary`, `images.variants` [V1] | Up to 1500–2560 px [M] | Anti-bot; Associates account with sales [M] | Images only to send traffic to Amazon, short cache, no print [M] | Never |
+| Amazon product page; PA-API 5.0 and the Creators API that replaced it during 2026 [V2] | `"hiRes"`, `data-a-dynamic-image` [V1]; API `images.primary`, `images.variants` [V1] | Up to 1500–2560 px [M] | Anti-bot; Associates account with sales [M] | Images only to send traffic to Amazon, short cache, no print [M] | Never |
 | bookcover-api (Goodreads-derived) | `bookcover.longitood.com/bookcover?isbn=` [V1] | Goodreads image [V1] | Free, HTTP 429 limits [V1] | Goodreads images are Amazon's | Never |
 | French retailer pages and CDNs | Hints only, §2.6 | 475–600 px [M, low] | Per-site CGU; Fnac has strong anti-bot [M] | EU database makers; *parasitisme* exposure (§6.7–6.8) | M–H / H / H: never |
 | Inventaire, Hardcover, BookWyrm | Their own APIs | User uploads | Varies | Not researched for images | Not used |
+| Not researched — named by the fact-check from memory, nothing verified: Apple Books / iTunes Search artwork; Kobo's image CDN; Amazon's current media hosts; OPDS feeds from e-distributors; ISBNdb, DILVE (Spain), CB (Netherlands), Informazioni Editoriali (Italy), Nielsen (UK) — the last five appear in `notes/isbn-databases.trade.md` | Unknown | Unknown | Unknown | Unread | Retailer and store CDNs (Apple, Kobo, Amazon): never. Trade databases and OPDS feeds: by contract only |
 
 ### 2.1 Open Library Covers
 
 From the cover server ([code.py](https://raw.githubusercontent.com/internetarchive/openlibrary/master/openlibrary/coverstore/code.py), [config.py](https://raw.githubusercontent.com/internetarchive/openlibrary/master/openlibrary/coverstore/config.py)):
 
-- **Routes**: `/{category}/{key}/{value}-{S|M|L}.jpg` and `/{category}/{key}/{value}.jpg`, category `b` for books, keys `isbn`, `id`, `olid`, `ia` and others [V1]. Hyphens in ISBNs are stripped server-side [V1].
+- **Routes**: `/{category}/{key}/{value}-{S|M|L}.jpg` and `/{category}/{key}/{value}.jpg`, category `b` for books, keys `isbn`, `id`, `olid`, `ia` and others [V1]. Hyphens in ISBNs are stripped server-side [V1], on the `.json` route as well (the shared `_query` helper does it for `b/isbn`; corrected by the fact-check and re-read by the editor).
 - **Sizes** are bounding boxes (maximum width, maximum height): `S` (116, 58), `M` (180, 360), `L` (500, 500) [V1]. A portrait `-L` cover is at most 500 px tall.
 - **No suffix returns the original upload** [V1]. This is the only way past 500 px; how large originals are depends on who uploaded them [M].
 - **`?default=false` returns HTTP 404** instead of a placeholder [V2: Open Library source; hard-coded by [calibre](https://raw.githubusercontent.com/kovidgoyal/calibre/master/src/calibre/ebooks/metadata/sources/openlibrary.py) and [VuFind](https://raw.githubusercontent.com/vufind-org/vufind/dev/module/VuFind/src/VuFind/Content/Covers/OpenLibrary.php)]. `?default=<url>` redirects (303) only to vetted hosts since a security fix ([utils.py](https://raw.githubusercontent.com/internetarchive/openlibrary/master/openlibrary/coverstore/utils.py)) [V1].
 - **`/b/isbn/{isbn}.json`** redirects (302) to `/b/id/{coverid}.json`, whose record includes `width`, `height` and `source_url`; an unknown ISBN gets a 404 [V1]. Use it to learn the pixel size before any image request.
-- **Redirects to archive.org** are common: `L` and original sizes of covers stored in the archive.org cluster, and every size of covers with an id of 8,000,000 or more once they have been archived, answer with a 302 [V1]. A client must follow redirects and allow `archive.org`.
+- **Redirects to archive.org** are common: `L` and original sizes of covers stored in the archive.org cluster, and every size of covers with an id of 8,000,000 or more once they have been archived, answer with a 302 [V1]. A client must follow redirects and allow `archive.org`. Because ids of 8,000,000 and above are the recent uploads, most recent titles are served from archive.org once archived; whether those responses carry a CORS header is unverified, so a browser-side read of the bytes (transient analysis, implication 30) may fail for them. An `<img>` preview is unaffected.
 - **Caching**: ISBN-keyed responses carry `Expires` +10 minutes; id-keyed responses "100 years" plus an ETag [V1]. Resolve the ISBN to a cover id once, then use `/b/id/`.
-- **CORS**: the application adds `Access-Control-Allow-Origin: *`, methods GET, HEAD, OPTIONS, to every response, with or without an `Origin` header ([asgi_app.py](https://raw.githubusercontent.com/internetarchive/openlibrary/master/openlibrary/coverstore/asgi_app.py)) [V1]. The JSON endpoints of `openlibrary.org` do the same [V1\*, `notes/isbn-databases.open.md`]. Browser code can therefore call the JSON endpoint and read image bytes served by `covers.openlibrary.org` directly. Whether archive.org sends the header on the redirect target is **not verified**.
+- **CORS**: the ASGI application in the repository adds `Access-Control-Allow-Origin: *`, methods GET, HEAD, OPTIONS, to every response, with or without an `Origin` header ([asgi_app.py](https://raw.githubusercontent.com/internetarchive/openlibrary/master/openlibrary/coverstore/asgi_app.py)) [V1, code only]. The JSON endpoints of `openlibrary.org` do the same [V1\*, `notes/isbn-databases.open.md`]. **Not shown** (fact-check): that production runs this ASGI app — the production compose file names no application module ([compose.production.yaml](https://raw.githubusercontent.com/internetarchive/openlibrary/master/compose.production.yaml)) and the nginx in front adds no CORS header ([covers_nginx.conf](https://raw.githubusercontent.com/internetarchive/openlibrary/master/docker/covers_nginx.conf)). On the editor's re-read, a comment in the same file says the older web.py application also "answered every request with `Access-Control-Allow-Origin: *`", so either application would send it; no live response was observed. Browser code can therefore probably call the JSON endpoint and read image bytes served by `covers.openlibrary.org` directly; treat this as unverified until a live request confirms it. Whether archive.org sends the header on the redirect target is **not verified**.
 - **Takedowns**: a `blocked_covers` list exists in the server configuration [V1], so removal requests do occur.
 - **Other users**: BookWyrm reads the `covers` ids of an edition and builds `/b/id/{id}-L.jpg` ([connector](https://raw.githubusercontent.com/bookwyrm-social/bookwyrm/main/bookwyrm/connectors/openlibrary.py)) [V1]. An edition record already fetched by the catalogue lookup therefore gives the cover id with no extra request.
 
-Rate limits and user-agent rules, from the deployed nginx configuration ([nginx.conf](https://raw.githubusercontent.com/internetarchive/openlibrary/master/docker/nginx.conf), [covers_nginx.conf](https://raw.githubusercontent.com/internetarchive/openlibrary/master/docker/covers_nginx.conf)):
+Rate limits and user-agent rules, from the nginx configuration in the repository ([nginx.conf](https://raw.githubusercontent.com/internetarchive/openlibrary/master/docker/nginx.conf), [covers_nginx.conf](https://raw.githubusercontent.com/internetarchive/openlibrary/master/docker/covers_nginx.conf)):
 
-- `cover_limit`: **400 requests per minute, burst 400, per client IP**, applied when there is no session cookie and the IP and user-agent are not allow-listed. Excess gets HTTP 429 with a JSON body asking to email `info@archive.org` [V1].
+- `cover_limit`: **400 requests per minute, burst 400, per client IP**, applied only when there is no session cookie and the IP and user-agent are not allow-listed. Excess gets HTTP 429 with a JSON body asking to email `info@archive.org` [V1]. Crawlers that do not identify themselves also share one global bucket of 150 requests per second for covers (`global_crawler_cover_limit`) [V1, added by the fact-check].
 - Requests whose user-agent contains `CloudFront` or `Bytespider` are dropped (nginx 444) [V1]. Do not fetch Open Library covers through a CloudFront origin fetch.
 - A user-agent containing "bot", "spider", "crawl", "google", "http" or "@" counts as self-identifying and stays out of the shared bucket for non-identifying crawlers [V1].
-- The public documentation states 100 requests per IP per 5 minutes for ISBN-keyed lookups, with id and OLID lookups exempt [M]. The repository configuration is more generous. Design for the stricter figure.
+- The public documentation states 100 requests per IP per 5 minutes for ISBN-keyed lookups, with id and OLID lookups exempt [M, unverified: neither the researcher nor the fact-checker could open the documentation]. The repository configuration is more generous. Design for the stricter figure.
 
 Bulk: covers 0–7,139,999 are zips of 10,000 images in `olcovers{N}` items of the `ol_exports` collection on archive.org ([coverstore README](https://raw.githubusercontent.com/internetarchive/openlibrary/master/openlibrary/coverstore/README.md)) [V1]. We do not mirror them (§6.7, §7).
 
@@ -156,16 +161,16 @@ Bulk: covers 0–7,139,999 are zips of 10,000 images in `olcovers{N}` items of t
 
 - Dynamic Links endpoint: `https://books.google.com/books?jscmd=viewapi&bibkeys=ISBN:{isbn13}&callback=x` returns JSONP with `thumbnail_url` ([VuFind Google.php](https://raw.githubusercontent.com/vufind-org/vufind/dev/module/VuFind/src/VuFind/Content/Covers/Google.php)) [V1].
 - Image by volume id: `https://books.google.com/books?id={volumeId}&printsec=frontcover&img=1&zoom=N` ([calibre google.py](https://raw.githubusercontent.com/kovidgoyal/calibre/master/src/calibre/ebooks/metadata/sources/google.py)) [V1]. VuFind rewrites `zoom=5` to `zoom=1`; calibre tries `zoom=0` then `zoom=1`: 5 is the smallest thumbnail, 0 and 1 are larger [V2].
-- The API's `imageLinks` object has six keys: `smallThumbnail` (about 80 px wide), `thumbnail` (128), `small` (300), `medium` (575), `large` (800), `extraLarge` (1280) ([discovery document](https://raw.githubusercontent.com/googleapis/google-api-go-client/main/books/v1/books-api.json)) [V1]. That the larger keys are returned only by `volumes/{id}` and mostly for titles with a publisher preview is [M]. An `extraLarge` image would be about 296 ppi on a 110 mm panel [est.], but the terms do not allow that use.
+- The API's `imageLinks` object has six keys: `smallThumbnail` (about 80 px wide), `thumbnail` (128), `small` (300), `medium` (575), `large` (800), `extraLarge` (1280) ([discovery document](https://raw.githubusercontent.com/googleapis/google-api-go-client/main/books/v1/books-api.json)) [V1]. That the larger keys are returned only by `volumes/{id}` and mostly for titles with a publisher preview is [M, unverified]. An `extraLarge` image would be about 296 ppi on a 110 mm panel [est.], but the terms do not allow that use.
 - `&edge=curl` adds a page-curl effect; strip it [M].
 - **Placeholder**: Google returns a dummy "image not available" picture, not a 404. calibre rejects two MD5 digests: `0de4383ebad0adad5eeb8975cd796657` and `a64fa89d7ebc97075c1d363fc5fea71f` [V1].
-- **Terms**: VuFind enables local caching for Open Library, LibraryThing, Syndetics and Content Cafe but not for Google, and its configuration says "due to terms of service, some services will never have images cached" ([config.ini](https://raw.githubusercontent.com/vufind-org/vufind/dev/config/vufind/config.ini)) [V1]. Google's exact wording, the branding rules and the quota are [M].
+- **Terms**: VuFind enables local caching for Open Library, LibraryThing, Syndetics and Content Cafe but not for Google, and its configuration says "due to terms of service, some services will never have images cached" ([config.ini](https://raw.githubusercontent.com/vufind-org/vufind/dev/config/vufind/config.ini)) [V1]. That the omission is deliberate and aimed at Google is an inference: `Google.php` simply does not set `cacheAllowed`, and the configuration comment names no service. Google's exact wording, the branding rules and the quota are [M, unverified].
 - Results depend on the caller's country; server IPs can get location errors without a `country` parameter [M].
 
 ### 2.3 BnF and DNB
 
 - **BnF**: resolve the ISBN to an ARK through the SRU API (`bib.isbn`), then send a HEAD request to `https://catalogue.bnf.fr/couverture?appName=NE&idArk=ark:/12148/cb{id}&couverture=1`. Inventaire accepts the URL when the status is 200 and the `Content-Length` is neither 4566 nor 4658, the two placeholder sizes it knows ([source](https://raw.githubusercontent.com/inventaire/inventaire/main/server/data/bnf/get_bnf_entry_from_isbn.ts)) [V1]. The returned size, the origin of the images (publisher deposit or a supplier) and their reuse terms are not verified. BnF metadata is under the Licence Ouverte ([BnF hackathon wiki](https://raw.githubusercontent.com/wiki/hackathonBnF/hackathon2016/Home.md)) [V1\*]; I believe the images are not [M, low]. Gallica holds public-domain scans only, so it does not help for in-print eBooks.
-- **DNB**: `https://portal.dnb.de/opac/mvb/cover?isbn={isbn}`; calibre-dnb probes it with HEAD and treats an HTTP error as "no cover" ([calibre-dnb](https://raw.githubusercontent.com/citronalco/calibre-dnb/master/__init__.py)) [V1]. The path indicates that the images come from MVB, the German trade catalogue; reuse terms unknown.
+- **DNB**: `https://portal.dnb.de/opac/mvb/cover?isbn={isbn}`; calibre-dnb probes it with HEAD and treats an HTTP error as "no cover" ([calibre-dnb](https://raw.githubusercontent.com/citronalco/calibre-dnb/master/__init__.py)) [V1]. The path contains `mvb`, which suggests MVB, the German trade catalogue; the file says nothing about the origin of the images or their terms [unverified].
 - Both stay disabled in the hosted service until someone has read their terms (§8).
 
 ### 2.4 Amazon
@@ -173,9 +178,10 @@ Bulk: covers 0–7,139,999 are zips of 10,000 images in `olcovers{N}` items of t
 - Legacy pattern still shipped in Koha: `https://images-na.ssl-images-amazon.com/images/P/{ISBN10}.01.{M|L}ZZZZZZZ.jpg` ([opac-detail.tt](https://raw.githubusercontent.com/Koha-Community/Koha/main/koha-tmpl/opac-tmpl/bootstrap/en/modules/opac-detail.tt)) [V1]. A missing image is a 1 x 1 GIF, not a 404 [M].
 - Product pages: calibre extracts `"hiRes"`, `imageGalleryData[0].mainUrl` or the widest entry of `data-a-dynamic-image`, and strips the `._XX_.` size modifier ([amazon.py](https://raw.githubusercontent.com/kovidgoyal/calibre/master/src/calibre/ebooks/metadata/sources/amazon.py)) [V1].
 - VuFind's `dev` branch no longer ships an Amazon cover provider ([Deprecated.php](https://raw.githubusercontent.com/vufind-org/vufind/dev/module/VuFind/src/VuFind/Content/Covers/Deprecated.php), provider list in config.ini) [V1].
-- Open Library's importer contains an `AmazonCreatorsAPI` class described as the "replacement for AmazonAPI (PA-API 5.0)", with OAuth 2.0 credentials, and maps `images.variants` to "alternate cover image URLs (back cover, spine, etc.)" ([vendors.py](https://raw.githubusercontent.com/internetarchive/openlibrary/master/openlibrary/core/vendors.py)) [V1]. It also filters a known placeholder (`/01RmK+J4pJL.` in the image URL) [V1].
-- Terms [M]: product images only through the official API, linked to Amazon, cached for a short window, no "offline" use including print; the API needs an Associates account with qualifying sales. Amazon data requires a link back ([LibraryThing blog](https://blog.librarything.com/category/covers/)) [V1\*]; Goodreads' own librarians were told that covers from Amazon or other booksellers could not legally be reused ([Goodreads thread](https://www.goodreads.com/topic/show/1277733-source-of-book-covers?page=1)) [V1\*].
-- **Conclusion: Amazon is out**, including for spines, even though it is the only API seen that may return one.
+- Open Library's importer contains an `AmazonCreatorsAPI` class described as the "replacement for AmazonAPI (PA-API 5.0)", with OAuth 2.0 credentials, and maps `images.variants` to "alternate cover image URLs (back cover, spine, etc.)" ([vendors.py](https://raw.githubusercontent.com/internetarchive/openlibrary/master/openlibrary/core/vendors.py)) [V1]. That description is a code comment by Open Library's developers, not Amazon documentation: whether the API returns spines is unverified. It also filters a known placeholder (`/01RmK+J4pJL.` in the image URL) [V1].
+- Independently, the python-amazon-paapi client library deprecated its PA-API 5.0 module on 2026-01-29 (version 6.0.0) and removed it on 2026-09-04 (version 7.0.0) in favour of the Creators API ([changelog](https://raw.githubusercontent.com/sergioteula/python-amazon-paapi/master/CHANGELOG.md)) [V1; with the importer above, V2 for "replaced during 2026"]. Amazon's own shutdown date for PA-API is in neither file.
+- Terms [M, unverified — Associates terms on offline use and the 24-hour cache could not be opened]: product images only through the official API, linked to Amazon, cached for a short window, no "offline" use including print; the API needs an Associates account with qualifying sales. Amazon data requires a link back ([LibraryThing blog](https://blog.librarything.com/category/covers/)) [V1\*]; Goodreads' own librarians were told that covers from Amazon or other booksellers could not legally be reused ([Goodreads thread](https://www.goodreads.com/topic/show/1277733-source-of-book-covers?page=1)) [V1\*].
+- **Conclusion: Amazon is out**, including for spines, even though it is the only API for which anything read here suggests a spine image (a third party's comment, unverified).
 
 ### 2.5 Library and trade services
 
@@ -183,9 +189,10 @@ Bulk: covers 0–7,139,999 are zips of 10,000 images in `olcovers{N}` items of t
 - **Syndetics**: pattern in Koha and [VuFind](https://raw.githubusercontent.com/vufind-org/vufind/dev/module/VuFind/src/VuFind/Content/Covers/Syndetics.php) [V2]; files `SC.GIF`, `MC.GIF`, `LC.JPG`; `index.xml` lists the sizes that exist [V1].
 - **Content Cafe**: "a subscription service" needing a user id and password ([ContentCafe.php](https://raw.githubusercontent.com/vufind-org/vufind/dev/module/VuFind/src/VuFind/Content/Covers/ContentCafe.php)) [V1].
 - **VLB (MVB)**: `https://api.vlb.de/api/v1/cover/{isbn}/{s|m|l}?access_token=…` ([Buchhandel.php](https://raw.githubusercontent.com/vufind-org/vufind/dev/module/VuFind/src/VuFind/Content/Covers/Buchhandel.php)) [V1].
-- **ORB (France)**, `base-orb.fr`: REST `products?eans=` with basic auth, image versions `thumbnail` and `original` ([Orb.php](https://raw.githubusercontent.com/vufind-org/vufind/dev/module/VuFind/src/VuFind/Content/Covers/Orb.php); also a provider in [Coce](https://raw.githubusercontent.com/fredericd/coce/master/README.md)) [V2]. Operator, price and terms not checked.
+- **ORB (France)**, `base-orb.fr`: REST `products?eans=` with basic auth, image versions `thumbnail` and `original` ([Orb.php](https://raw.githubusercontent.com/vufind-org/vufind/dev/module/VuFind/src/VuFind/Content/Covers/Orb.php); also a provider in [Coce](https://raw.githubusercontent.com/fredericd/coce/master/README.md)) [V2]. Operated by the Decitre bookseller group according to `notes/isbn-databases.trade.md` [M] — the same group whose image CDN is on the denylist; a contract with ORB would be the lawful way to its covers. Price and terms not checked.
 - **Koha** lists Amazon, Google, Open Library and Syndetics as cover sources, and Babelthèque, Novelist Select and LibraryThing for Libraries as other enriched content ([enhanced_content.pref](https://raw.githubusercontent.com/Koha-Community/Koha/main/koha-tmpl/intranet-tmpl/prog/en/modules/admin/preferences/enhanced_content.pref)) [V1].
 - **Electre**, **Dilicom** (FEL notices; the Hub that carries eBook notices and cover links between French e-distributors and resellers) and **Tite-Live/ePagine**: all [M]. They are subscriber services. A reseller in mode 2 already receives covers through one of them, which is why reseller mode needs no lookup.
+- **Dilicom Distrimage** (added by the fact-check): the French trade cover service for FEL titles. Free inside bookshop management software; "pour tout autre usage (internet, extranet), il convient de prendre contact avec le service clients de DILICOM" ([SLF, 2012](https://www.syndicat-librairie.fr/le_service_distrimage_de_dilicom)) [V1\*, quoted in doc 07 §3.3]. "FEL à la demande" returns no image [M]. A reseller whose covers come through Distrimage therefore holds a display licence tied to bookshop software, not a print right.
 
 ### 2.6 Publisher and bookseller pages
 
@@ -240,9 +247,9 @@ All [est.]. Doc 07 places the cover inset from the trim with a flat ground in th
 
 All ppi and factors are [est.]. Consequences:
 
-1. Every public ISBN cover API result fails even the 150 ppi error threshold on its own.
+1. The **default sizes** of the public ISBN cover APIs (Open Library `-L`, Google `thumbnail` and `small`) fail even the 150 ppi error threshold. Larger files exist for some titles — the Open Library original (no suffix) and Google `extraLarge`, which the table above rates at 295 ppi — but how often they exist is unmeasured (corrected by the fact-check: the draft said "every result fails", which its own table contradicted). Neither may be printed by the hosted service in any case.
 2. A 2x model is not enough for 500 px inputs.
-3. **The cover inside an EPUB is not automatically print-grade.** Kobo's guidelines say "the average size and dimensions for ebook covers in the Kobo store are 800:1224px" and that larger covers "will not improve the display" ([Kobo EPUB spec](https://raw.githubusercontent.com/kobolabs/epub-spec/master/README.md)) [V1]. The text is undated and probably several years old [M]; the sources note's 1400–2560 px figure is [M]. Until a sample is measured, assume 800–2560 px and let preflight decide per file.
+3. **The cover inside an EPUB is not automatically print-grade.** Kobo's guidelines say "the average size and dimensions for ebook covers in the Kobo store are 800:1224px" and that larger covers "will not improve the display" ([Kobo EPUB spec](https://raw.githubusercontent.com/kobolabs/epub-spec/master/README.md)) [V1]. The text is undated and probably several years old [M]; it is a store-wide average, not a measurement of French EPUBs; the sources note's 1400–2560 px figure is [M]. Until a sample is measured, assume 800–2560 px, let preflight decide per file, and do not use "175 ppi" as a planning figure.
 4. Feed covers supplied by a publisher for print should be requested at 2102 px or more on the long side.
 5. Actual sizes returned by live requests were not measured.
 
@@ -253,8 +260,9 @@ All ppi and factors are [est.]. Consequences:
 3. EPUB 2: `<meta name="cover" content="{manifest id}"/>`, the form Kobo documents and reads for its thumbnails [V1]; EPUB 3.3 acknowledges it for EPUB 2 reading systems [V1].
 4. Fallbacks [M]: `<guide><reference type="cover">` and the first image in that document; a manifest image whose id or path contains "cover"; the first image of the first spine document. Kobo notes that covers set through CSS `background-image` defeat automatic extraction [V1].
 5. The spec's own examples use an SVG cover [V1], so SVG must be rasterised or refused with a clear message.
-6. **DRM**: Readium LCP states that cover images "must not be encrypted", along with the navigation documents and the package document ([LCP spec](https://raw.githubusercontent.com/readium/lcp-specs/master/releases/lcp/latest.md)) [V1]. Reading the cover of an LCP-protected file therefore touches no protection measure. Adobe ADEPT and Kindle formats were not checked [M, low]. Rule: if `META-INF/encryption.xml` lists the cover resource, report "cover encrypted" and stop; never decrypt.
+6. **DRM**: Readium LCP states that cover images "must not be encrypted", along with the navigation documents and the package document ([LCP spec](https://raw.githubusercontent.com/readium/lcp-specs/master/releases/lcp/latest.md)) [V1]. Reading the cover of an LCP-protected file therefore touches no protection measure — provided the cover is declared with the `cover-image` property: the rule (LCP 1.0 revision 5, §2.1) covers only resources carrying it, so a cover marked only by `<meta name="cover">` is not exempt and may be encrypted. The rule says nothing about Adobe ADEPT, Kobo or Kindle protection, which were not checked [M, low]. Rule: if `META-INF/encryption.xml` lists the cover resource, report "cover encrypted" and stop; never decrypt.
 7. An EPUB may carry a TDM reservation in its package metadata (`tdm:reservation`) [V1]; Bookwire, Edigita, GEMS and Penguin Random House Spain put it in the files they distribute [V1]. See §8, question 9.
+8. **Who has an EPUB to read** (added by the fact-check, `notes/ereader-ux.ecosystems.md` §4.3): usually not the gift buyer. An ACSM file is a download token, not the book, and Kindle and Kobo purchases are delivered into an account. This extractor serves authors, publishers and buyers of DRM-free or LCP files.
 
 ### 3.4 In-browser, image-only super-resolution
 
@@ -276,9 +284,9 @@ No language model is involved in any option below.
 Notes:
 
 - Runtime: ONNX Runtime is MIT ([LICENSE](https://raw.githubusercontent.com/microsoft/onnxruntime/main/LICENSE)) [V1]. nunif's README (note dated 2026-08) advises against fp16 weights on WebGPU because `shader-f16` support is limited, and reports fp16 on wasm as practically identical at half the download [V1]. Plan: fp32 for WebGPU, fp16 for the wasm fallback.
-- Model sizes are [M]; none was downloaded. Timings on consumer hardware are unknown. Benchmark before promising anything in the interface.
+- Model sizes are [M, unverified]; none was downloaded. The licence files verified in the table cover the code; none of them mentions the pretrained weights. Timings on consumer hardware are unknown. Benchmark before promising anything in the interface.
 - Licence traps [M]: community models are often CC BY-NC; the training sets behind the official weights (DIV2K, Flickr2K, OST) carry research-oriented terms although code and weights are BSD or Apache. If the project trains its own model, train on covers it has rights to or on synthetic covers (see `08-legal-fonts-and-genai.md`).
-- Covers are type-heavy. GAN upscalers invent plausible but wrong glyph shapes on small text [M].
+- Covers are type-heavy. GAN upscalers invent plausible but wrong glyph shapes on small text [M, unverified].
 
 ### 3.5 Decisions
 
@@ -322,12 +330,12 @@ Design notes:
 
 | Candidate source | Finding | Confidence |
 |---|---|---|
-| ONIX 3.0 List 158 | 56 codes read. Cover-related: 01 `FrontCover`, 02 `BackCover`, 03 `CoverPack`, 27 `CoverThumbnail`, **29 `FullCover`**, 45 `CoverHoldingImage`, **51 `CoverFlap`**, 54 `PageEdgeDecoImage`, 55 `EndpaperDecoImage`. There is **no spine-only code** ([im_onix codelist](https://raw.githubusercontent.com/immateriel/im_onix/master/data/codelists/codelist-158.yml)). This answers an open point of doc 07 | [V1] |
-| French feeds (Dilicom, Electre, e-distributors) | Front cover, sometimes back cover ("4e de couverture"); no feed known to carry code 29 | [M, low] |
+| ONIX List 158 | Cover-related codes: 01 `FrontCover`, 02 `BackCover`, 03 `CoverPack`, 27 `CoverThumbnail`, **29 `FullCover`** ("includes cover, back cover, spine and - where appropriate - any flaps"), 45 `CoverHoldingImage`, **51 `CoverFlap`**, 54 `PageEdgeDecoImage`, 55 `EndpaperDecoImage`, **56 "Spine image"** ("2D, portrait orientation"), **57 "Spine panorama image"** ("2D, image spans multiple upright spines"). **Corrected by the fact-check**: the draft read a stale copy that stops at 55 ([im_onix codelist](https://raw.githubusercontent.com/immateriel/im_onix/master/data/codelists/codelist-158.yml)) and concluded there was no spine-only code; codes 56 and 57 are in code-list Issue 75 ([Jonix](https://raw.githubusercontent.com/zach-m/jonix/master/jonix-common/src/main/java/com/tectonica/jonix/common/codelist/ResourceContentTypes.java)). Doc 07 §3.3 and `notes/isbn-databases.trade.md` already said so | [V1] for 56–57 (one code base, re-read by the editor); [V2] for 01–55 |
+| French feeds (Dilicom, Electre, e-distributors) | Front cover, sometimes back cover ("4e de couverture"); no feed known to carry code 29, 56 or 57 — nobody checked a feed | [M, low, unverified] |
 | Publisher print files ("couverture à plat": plat 1 + dos + plat 4) | Exist for every printed book; held by publisher and printer; not public | [M] |
 | Self-publishing and print-on-demand authors (KDP, BoD, Lulu, Bookelis) | The author owns the wraparound PDF: an upload path gives a real spine | [M] |
 | Publisher press kits | HD front common; flat full cover rare | [M, low] |
-| Amazon Creators API | `images.variants` described as "alternate cover image URLs (back cover, spine, etc.)" by Open Library's importer | [V1]; barred by terms [M] |
+| Amazon Creators API | `images.variants` described as "alternate cover image URLs (back cover, spine, etc.)" in a code comment of Open Library's importer, not in Amazon documentation | [V1] for the comment, unverified for the API; barred by terms [M] |
 | Internet Archive scans | Front and often back photographed; spine not systematically captured | [M, low] |
 | BnF Gallica | Binding views ("plat supérieur", "dos", "plat inférieur") for heritage items; public domain only | [M] |
 | Retailer "3D" packshots | Synthesised from the front with a generic spine; not real spine data | [M] |
@@ -337,13 +345,13 @@ Design notes:
 
 Conclusions:
 
-1. **There is nothing to scrape.** The only API that may return a spine is Amazon's, which we cannot use. "Finding" a spine otherwise means shelf photographs or printer files: routes rated High, with a photographer's right on top.
+1. **There is nothing to scrape.** The only API said to return a spine is Amazon's (a third party's comment), which we cannot use. "Finding" a spine otherwise means shelf photographs or printer files: routes rated High, with a photographer's right on top.
 2. Many eBooks are digital-only and never had a spine.
-3. **A real spine rarely fits.** Our spine panel is 10 mm wide and as tall as the front. A supplied spine scaled uniformly to the panel height keeps its own proportions: a *poche* spine fits only if the book's spine was 10 mm or less (roughly 150–200 pages [M]); a 20 mm spine of a 140 x 205 mm book becomes 17.4 mm at 178 mm height and does not fit [est.]. Re-fitting it is an adaptation that needs consent (doc 07, implication 13).
+3. **A real spine rarely fits.** Our spine panel is 10 mm wide and as tall as the front. A supplied spine scaled uniformly to the panel height keeps its own proportions: a *poche* spine fits only if the book's spine was 10 mm or less (roughly 150–200 pages [M, unverified]); a 20 mm spine of a 140 x 205 mm book becomes 17.4 mm at 178 mm height and does not fit [est.]. Re-fitting it is an adaptation that needs consent (doc 07, implication 13).
 4. So: **generate the spine by default** (flat colour, title and author retyped; doc 07, implications 11–12). Accept an optional flat-cover upload from a rights holder; use its spine only when it fits.
 5. Shelf datasets are useful only to learn conventions for the generator: order of title, author and publisher mark; colour continuity with the front.
-6. Reading direction: French and most continental spines read bottom-to-top, English-language spines top-to-bottom [M]. Make it a per-locale default with an override.
-7. A feed that does carry code 29 or 51 should be ingested: it is the clean way for a publisher to supply a real spine.
+6. Reading direction (corrected by the fact-check against `notes/spine-design.conventions.md`; all of it from memory, unverified): French, Italian and Spanish spines mostly read bottom-to-top; German-language spines do so in the majority but not uniformly; English-language spines read top-to-bottom, and so do **Dutch and Flemish** ones — the draft wrongly put Dutch with the bottom-to-top group. ISO 6357:1985 prefers a transverse title and otherwise a descending (top-to-bottom) one ([ISO catalogue entry](https://www.iso.org/standard/12665.html), found by the editor's search) [V1, search summary]; the editor's search found no source for Dutch practice. Choose the direction from the **book** (language or country of publication, ISBN registration group as a proxy), not from the site locale, with an override.
+7. A feed that does carry code 29, 51, 56 or 57 should be ingested: it is the clean way for a publisher to supply a real spine.
 
 ---
 
@@ -370,8 +378,8 @@ Everything in this section is [M] unless marked. It is a map for French IP couns
 
 - The rules "are not a form of access authorization" and the protocol "is not a substitute for valid content security measures" [M].
 - Longest match wins; on a tie `Allow` wins; user-agent matching is case-insensitive [M].
-- A 4xx on `/robots.txt` means no restrictions, except 429, which means retry later; a 5xx means do not crawl until it is fixed [V1, a parser's README restating Google's guidance: [texting_robots](https://raw.githubusercontent.com/Smerity/texting_robots/main/README.md)]. The RFC says the same in its own words [M].
-- Parse at least the first 500 KiB [V1 for the 500 kibibyte figure as Google's recommendation, same README]; follow at least five redirects; do not use a cached copy for more than 24 hours unless the file is unreachable [M].
+- A 4xx on `/robots.txt` means no restrictions, except 429, which means retry later; a 5xx means do not crawl until it is fixed [V1, a parser's README restating Google's guidance: [texting_robots](https://raw.githubusercontent.com/Smerity/texting_robots/main/README.md)]. That README attributes all of this to Google and never mentions RFC 9309; the draft's sentence that "the RFC says the same in its own words" is deleted. What the RFC itself says, from the editor's search result on [RFC 9309](https://datatracker.ietf.org/doc/html/rfc9309) (a search summary, the text was not opened): a 4xx ("unavailable") lets the crawler access any resource, and an unreachable file (5xx, network error) means the crawler must assume complete disallow [V1]. The 429 exception was not found there and is Google's practice according to the fact-checker's recall [unverified]. The behaviour we implement is the more conservative one and stays.
+- Parse at least the first 500 KiB: the README gives it as Google's recommendation [V1], and RFC 9309 itself requires a parsing limit of at least 500 kibibytes [V1, search result]. Follow at least five redirects; do not use a cached copy for more than 24 hours unless the file is unreachable [M].
 
 **Legal weight in the EU.**
 
@@ -405,15 +413,15 @@ Whether terms written in natural language count as "machine-readable" is dispute
 
 France transposed by ordonnance n° 2021-1518 of 24 Nov 2021; the opt-out provision is CPI R122-28 (décret n° 2022-928 of 23 June 2022), which as recalled lets the opposition be expressed "par tout moyen", including a site's terms of use [M]. Both sibling legal documents cite the same article number; none verified it.
 
-**Opt-out signals in use.** The W3C Community Group protocol TDMRep defines `tdm-reservation` (1 = rights reserved, 0 = not reserved) and an optional `tdm-policy` URL, carried by four techniques ([README](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/README.md), [draft spec](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/spec/index.html)) [V1]:
+**Opt-out signals in use.** The W3C Community Group protocol TDMRep defines `tdm-reservation` (1 = rights reserved, 0 = not reserved) and an optional `tdm-policy` URL, carried by four techniques ([README](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/README.md), [specification](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/spec/index.html) — a Community Group Final Report, status `CG-FINAL`, which the draft wrongly called a draft) [V1]:
 
 - a site-wide file `/.well-known/tdmrep.json`: an array of rules with `location`, `tdm-reservation`, `tdm-policy`; patterns use `*` and `$` as in robots.txt; the most specific match is the first in sequence;
-- HTTP response headers `tdm-reservation` and `tdm-policy`, described as the preferred technique;
+- HTTP response headers `tdm-reservation` and `tdm-policy`. A non-normative note in the header section of the specification file says "This is currently the preferred technique for implementing the protocol" [V1, re-read by the editor]. The fact-check marked this unsupported; the sentence is in the file it cites (not in the README or the technique note), so the claim stays, as a note rather than a rule;
 - HTML `<meta name="tdm-reservation" content="1">`. This covers the HTML document only, **not the images it references** ([technique note](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/techniques/technique-html-meta.md)) [V1], so an image's own response headers and its origin's `tdmrep.json` must be checked separately;
 - metadata inside EPUB and PDF files (`tdm:reservation`).
 - Precedence: check the file first; a header supersedes the file; HTML or in-file metadata supersedes both; the absence of a value at a later step does not reset an earlier one [V1].
 
-**Adoption.** The group's adopters list names, among trade publishers, **Hachette Livre** ("on most websites of the group's publishing houses": Hachette.fr, Livre de Poche, Grasset, Fayard, Larousse and others) and **Média-Participations** ("in its different publishing houses, including La Martinière, Seuil, Fleurus"; the technique is not stated), plus Mondadori, Aufbau and Diogenes; among platforms, Cairn, Bookwire and Edigita ([adopters](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/docs/adopters.md)) [V1]. That the SNE recommends it to French publishers is [M, low]. Other signals a fetcher should read: `X-Robots-Tag` and meta `noai`, `noimageai` (non-standard); IPTC "Data Mining" photo metadata; the IETF "AI Preferences" work [M, low].
+**Adoption.** The group's adopters list names, among trade publishers, **Hachette Livre** ("on most websites of the group's publishing houses": Hachette.fr, Livre de Poche, Grasset, Fayard, Larousse and others) and **Média-Participations** ("in its different publishing houses, including La Martinière, Seuil, Fleurus"; the technique is not stated), plus Mondadori, Aufbau and Diogenes; among platforms, Cairn, Bookwire and Edigita ([adopters](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/docs/adopters.md)) [V1 for what the list says; the editor re-read it and the house names quoted here are in it]. The list is self-declared and undated, and no site was probed: read it as "reported reserved", not as a measured state. **Feed-level reservations exist too** (added by the fact-check, same list [V1]): Penguin Random House Germany declares the reservation in its ONIX records, Bookwire and Edigita in every EPUB and in the ONIX data they distribute; ONIX 3.1.1 has a dedicated channel for it, `EpubUsageConstraint` type 11 (text and data mining) on a resource version [V1, `notes/isbn-databases.trade.md`]. Reseller-mode analysis of a feed cover (palette, font class) therefore needs the same opt-out check as a web fetch. The list links a tracker of French publishers kept by a trade outlet ([Mind Media](https://www.mind.eu.com/media/data/ia-generative-quels-editeurs-francais-bloquent-les-robots-dopenai-et-google-lesquels-ont-adopte-le-protocole-tdmrep/)) [link in the list; page not opened]; it would answer open question 7. That the SNE recommends TDMRep to French publishers is [M, low]. Other signals a fetcher should read: `X-Robots-Tag` and meta `noai`, `noimageai` (non-standard); IPTC "Data Mining" photo metadata; the IETF "AI Preferences" (AIPREF) drafts; Cloudflare "Content Signals" lines in robots.txt; RSL licence directives; and whatever comes out of the Commission's consultation on opt-out protocols [M, low — the last four are named from the fact-checker's recall, nothing verified].
 
 **What TDM allows us to do** (my application): fetch a cover from a lawfully accessible location, analyse it automatically to generate information — dominant colours, title bounding box, typeface class, a perceptual hash to check that a user-supplied image matches the ISBN — then discard the copy. The derived facts are not protected and may be stored and used to build our own typographic card. Training a font-identification model on such images is also TDM, under the same opt-outs.
 
@@ -426,7 +434,7 @@ France transposed by ordonnance n° 2021-1518 of 24 Nov 2021; the opt-out provis
 - Ignoring robots.txt, TDMRep or a terms-of-use clause.
 - Bypassing a paywall or login: access would not be "lawful".
 
-**Practical effect.** For the websites of Hachette Livre's houses at least, the TDM route is closed [V1 for the reservation]; expect the same wherever a French publisher follows them. The route remains open only where no reservation is expressed, which must be checked per request.
+**Practical effect.** The websites of Hachette Livre's houses are reported reserved [V1 for the self-declared list entry; no live check], so plan for the TDM route being closed there, and expect the same wherever a French publisher follows them. The state of any given site is established only by the per-request check; the route remains open only where that check finds no reservation.
 
 ### 6.4 Linking versus copying
 
@@ -441,9 +449,10 @@ France transposed by ordonnance n° 2021-1518 of 24 Nov 2021; the opt-out provis
 Reading for covers:
 
 - **Inline display from the source server is the only unlicensed display route with CJEU support**, and only if (i) the source posted the cover with the rightholder's consent — a publisher's own site yes, a retailer under licence yes, an unknown blog no, and as a commercial service we carry the *GS Media* presumption; (ii) the source uses no hotlink protection (Referer checks, signed or expiring URLs, tokens). If it does, stop.
+- **Open Library does not clearly pass test (i)** (fact-check). Its covers are user uploads and imports, carry no licence, and the server keeps a takedown list [V1]. That is closer to "unknown provenance", with the *GS Media* presumption against a commercial linker, than to "posted with consent". The preview risk for Open Library is therefore rated **Medium**, not Low–Medium, until counsel answers question 5(b) in §8. This rating, like the others, is an assessment and not a sourced ruling.
 - Copyright is not the only constraint on hotlinking: the source's terms, bandwidth free-riding as *parasitisme*, and data protection — the visitor's IP address goes to the third-party host (compare LG München I, 20 Jan 2022, 3 O 17493/20, Google Fonts).
 - France has treated image-search thumbnails as licensable: CPI L136-1 to L136-4 set up collective management for automated image-referencing services [M, low]. There is no French thumbnail exception.
-- **A server-side image proxy is a re-host.** Working around a missing CORS header with our own proxy means we fetch, copy and transmit a file we selected: *Renckhoff* and *VCAST* territory, with no "mere conduit" shelter under DSA art. 4 because we select the content (my application; *VCAST* [V2\*] via [Kluwer](https://legalblogs.wolterskluwer.com/copyright-blog/up-in-the-cloud-some-reflections-on-the-cjeu-judgment-in-vcast/)).
+- **A server-side image proxy is a re-host.** Working around a missing CORS header with our own proxy means we fetch, copy and transmit a file we selected: *Renckhoff* and *VCAST* territory, with no "mere conduit" shelter under DSA art. 4 because we select the content (the author's application, with no authority behind either the proxy conclusion or the DSA point; the *Renckhoff* and *VCAST* links were copied from sibling notes and never opened; *VCAST* [V2\*] via [Kluwer](https://legalblogs.wolterskluwer.com/copyright-blog/up-in-the-cloud-some-reflections-on-the-cjeu-judgment-in-vcast/)).
 
 ### 6.5 Terms of use — *Ryanair v PR Aviation*
 
@@ -506,7 +515,7 @@ Exposure of the service, France first. My assessment (taken from the scraping-la
 | 2 | Reseller's ONIX feed cover, "promotional use" licence only | Low | Low (inside the reseller's licence, as its processor) | Medium until a print clause exists (CPI L131-3) |
 | 3 | User's own file: cover extracted **in the browser** from the user's EPUB, or own scan | Low | Low if never uploaded; Medium if we host it (DSA notice duties) | Home print: Low–Medium (the user's private copy). Pro print: High unless the user is the rightholder |
 | 4 | Inline link to the publisher's own page image, with link back, no technical protection, robots and TDMRep clean | Low–Medium | High (*Renckhoff*): keep the URL and derived facts only | High through us |
-| 5 | Cover API with display terms (Open Library, Google Books), used as the terms say | Low–Medium (third-party rights not cleared; IP address goes to the host) | Medium–High (caching limits; *Renckhoff*) | High (outside the terms, no licence, too small anyway) |
+| 5 | Cover API with display terms (Open Library, Google Books), used as the terms say | Open Library: Medium (unknown provenance of uploads, §6.4; raised by the fact-check). Google Books: Low–Medium. Both: third-party rights not cleared; IP address goes to the host | Medium–High (caching limits; *Renckhoff*) | High (outside the terms, no licence, too small anyway) |
 | 6 | On-demand scrape of a retailer or aggregator page (Amazon, Fnac, Decitre, Babelio, Goodreads) | Medium–High (terms, L342-2, *Innoweb*, *parasitisme*) | High | High |
 | 7 | Bulk crawl or mirror of a cover catalogue | High | High | High |
 | 8 | Image-search results of unknown provenance | Medium–High (*GS Media* presumption) | High | High |
@@ -516,6 +525,8 @@ Exposure of the service, France first. My assessment (taken from the scraping-la
 
 Opt-out and takedown lists are mitigation only: after *Soulier and Doke*, an offer to opt out does not legalise an unlicensed use.
 
+**Note on row 10 and cascade step 5 (added by the fact-check, from memory, unverified).** "Artist dead more than 70 years" is too simple a test for a book cover. Collective works are protected from publication, not from a death date; a cover combines several contributions (illustration, photograph, lettering, layout), each with its own term; and French moral rights do not expire. The `public_domain` basis therefore needs a per-cover statement of why each contribution is free, not a single date.
+
 ---
 
 ## 7. Scraper design rules
@@ -523,37 +534,38 @@ Opt-out and takedown lists are mitigation only: after *Soulier and Doke*, an off
 ### 7.1 Scope
 
 1. **Allow-list, not open web.** Each source has a recorded basis (contract, open licence, documented public API, or statutory exception) and the date its terms were last read. A source whose review is older than 180 days (proposal) is disabled until re-read.
-2. **Hosts never contacted**: retailer and aggregator sites and their image CDNs (list seeded from §2.4 and §2.6: Amazon, Goodreads, Fnac, Decitre, Furet du Nord, Cultura, ePagine/leslibraires.fr, Babelio, IBS, Casa del Libro), image search engines, any host that answered with a block.
+2. **Hosts never contacted**: retailer and aggregator sites and their image CDNs (list seeded from §2.4 and §2.6: Amazon, Goodreads, Fnac, Decitre, Furet du Nord, Cultura, ePagine/leslibraires.fr, Babelio, IBS, Casa del Libro), image search engines, any host that answered with a block. Missing from the seed list and to be added once their host names are confirmed (fact-checker's recall): Kobo's image CDN, Apple Books / iTunes artwork hosts, Amazon's current media hosts. The retailer URL patterns behind this list are all unverified (§2.6).
 3. **On demand, no enumeration.** One ISBN per user action. No background crawling, no warm-up of a cover cache, no relay of a retailer's search.
 4. **Never defeat a barrier.** Stop on 401, 403, CAPTCHA or hotlink protection. No retry through another IP, no forged Referer, no browser impersonation.
+5. **Pasted URLs need an allow-list of publisher domains** (added by the fact-check). The denylist only removes known retailers; every other host passes, including blogs and unlisted shops, so "publisher pages only" is not enforced by it. The page extractor runs only for hosts on a reviewed list of publisher domains; for any other host the user is told to supply the image file.
 
 ### 7.2 Identification, rate, caching
 
 | Rule | Default | Basis |
 |---|---|---|
 | User-agent | Fixed string with product name, version, a URL describing the bot and a contact address, for example `eBookCadeauBot/1.0 (+https://{site}/bot; contact@{site})`. Never contains "CloudFront" | Open Library treats "bot", "http", "@" as self-identifying and drops "CloudFront" [V1] |
-| Open Library, ISBN-keyed cover requests | At most 1 every 3 s per IP (100 per 5 minutes) | Documentation [M]; hard limit 400/min [V1] |
+| Open Library, ISBN-keyed cover requests | At most 1 every 3 s per IP (100 per 5 minutes) | Documentation [M, unverified]; hard limit 400/min without a session cookie [V1] |
 | Open Library, id-keyed images and JSON | At most 1 per second | Documentation figure [M]; nginx 180/min on JSON [V1\*] |
-| Google Books API | At most 1 per second; daily cap 1,000 per project | [M] |
+| Google Books API | At most 1 per second; daily cap 1,000 per project | [M, unverified] |
 | BnF, DNB | At most 1 every 2 s | No published limit known [M] |
 | Any other host (pasted URL) | At most 3 requests per user action (robots.txt, tdmrep.json, the page); at least 5 s between actions on the same host | proposal |
 | `Crawl-delay` in robots.txt | Honoured when longer than our default | Non-standard but polite |
 | HTTP 429 | Honour `Retry-After`; otherwise back off 60 s, doubling, three attempts; then stop for 24 h | [V1 for the 429 handling advice] |
 | Timeouts and sizes | 5 s connect, 10 s total; HTML 2 MiB; image 15 MiB; 5 redirects; HTTPS only | proposal |
-| robots.txt and tdmrep.json cache | 24 hours per origin | RFC 9309 [M] |
+| robots.txt and tdmrep.json cache | 24 hours per origin | RFC 9309 [M, not checked] |
 | Candidate facts (URL, id, dimensions) | 7 days; negative results 24 hours | proposal |
-| Google Books results | Not kept beyond the session | Terms [M]; VuFind's practice [V1] |
+| Google Books results | Not kept beyond the session | Terms [M, unverified]; VuFind does not cache them [V1 for the code; the reason is inferred] |
 | Image bytes on our servers | None in the hosted service, outside licensed feed covers (doc 07, implication 26) | §6.4 |
 
 ### 7.3 Where each request runs
 
 | Request | Runs in | Why |
 |---|---|---|
-| Open Library JSON (`/b/isbn/{isbn}.json`, edition records) | The user's browser | CORS `*` [V1]; the rate limit then applies to the user's IP, and our server relays nothing |
+| Open Library JSON (`/b/isbn/{isbn}.json`, edition records) | The user's browser | CORS `*` [V1 in the repository code; production unverified]; the rate limit then applies to the user's IP, and our server relays nothing |
 | Preview image from an allow-listed API host | The user's browser, as an inline link (`<img>`), without reading the pixels | *Svensson* line; doc 07, implication 19 |
 | Google Books, BnF SRU, DNB metadata | Browser where CORS allows, else a server relay that returns **text metadata only** | Metadata is not the cover |
 | The HTML of a pasted publisher page | Our server (browsers cannot read cross-origin HTML), after robots.txt, TDMRep, denylist and SSRF checks; returns URLs and declared dimensions only | §6.1, row 1 |
-| Transient analysis of a candidate image | The user's browser, by a separate CORS fetch, in a code path that returns facts only | §6.3; no proxy |
+| Transient analysis of a candidate image | The user's browser, by a separate CORS fetch, in a code path that returns facts only. Expect it to fail where the bytes come from archive.org (Open Library ids of 8,000,000 and above) if that host sends no CORS header | §6.3; no proxy |
 | Download of image bytes | Command-line or self-hosted tool only, with an explicit rights basis | doc 07, implication 4 |
 
 Display rules for candidates:
@@ -573,6 +585,8 @@ For every server-side fetch, and for every transient analysis:
 4. **Terms of use**: recorded per allow-listed host at review time. For a host that is not reviewed, there is no server-side analysis.
 5. Any reservation means: no fetch for analysis, no facts derived. An inline link by the user's browser is not TDM and stays possible for allow-listed API hosts.
 6. Each decision is logged with the fetch: time, URL, user-agent, robots verdict with a hash of the file, TDM signal state, status, bytes, purpose, and the fact that nothing was retained.
+7. **Feed covers carry their own signals** (added by the fact-check): before any analysis of a reseller-feed cover, read `EpubUsageConstraint` type 11 on the resource version, the `ContentAudience` code, and a `tdm:reservation` declared in the ONIX record or in the EPUB. A prohibition closes the analysis route for that title, as in point 5.
+8. **Newer signals** a fetcher will meet (fact-checker's recall, nothing verified): Cloudflare "Content Signals" lines in robots.txt, RSL licence directives, the IETF AIPREF vocabulary. Until they are read and specified, an unknown directive that plainly expresses an AI or data-mining restriction is treated as a reservation.
 
 ### 7.5 Product-side rules that complete the fetcher
 
@@ -593,12 +607,14 @@ Ordered by how much the design depends on them. None could be checked in this se
 4. **Actual size of covers inside French EPUBs** (the Kobo average is old), and the minimums that distributors impose.
 5. **Counsel**: (a) is a browser-direct import of a candidate image acceptable when the user declares to be the rights holder, or must the user always save and re-select the file? Doc 07 currently requires a local file. (b) Is an inline preview by link acceptable for a commercial service given the *GS Media* presumption? (c) Is transient in-browser analysis of a third-party cover covered by art. 4 or art. 5(1)? (d) Does AI upscaling of a licensed cover count as a modification?
 6. **Legal authorities cited from memory**: CPI R122-28 wording and the TDM items of L342-3; OLG Hamburg 5 U 104/24; Rb. Amsterdam *DPG Media v HowardsHome*; LG München I *GEMA v OpenAI*; the pending CJEU reference C-250/25; the CNIL sheet of 19 June 2025 and whether it frames robots.txt as mandatory; French decision numbers (n° 12-26.023, n° 21-16.307, n° 23-13.535, n° 14-81.336); CPI L136-1 to L136-4; penalties in L343-4 and Code pénal 323-1 and 323-3; RFC 9309 quotations and numeric limits; US district-court outcomes.
-7. **robots.txt, TDMRep and CGU state of French sites** we might touch: publisher sites beyond the two groups on the adopters list, and whether the SNE recommendation is as widely followed as believed. A French trade outlet is said to track this daily (linked from the adopters list; not opened).
-8. **Spines**: whether any French ONIX feed fills List 158 code 29 or 51; whether 7switch's distributor does (the ONIX library read for the code list is published by "immateriel", which I take to be that distributor [M]); the spine reading-direction convention by country.
+7. **robots.txt, TDMRep and CGU state of French sites** we might touch: publisher sites beyond the two groups on the adopters list, and whether the SNE recommendation is as widely followed as believed. A French trade outlet tracks this daily: [Mind Media](https://www.mind.eu.com/media/data/ia-generative-quels-editeurs-francais-bloquent-les-robots-dopenai-et-google-lesquels-ont-adopte-le-protocole-tdmrep/), linked from the adopters list (the page itself was not opened).
+8. **Spines**: whether any French ONIX feed fills List 158 code 29, 51, 56 or 57; whether 7switch's distributor does (the ONIX library read for the code list is published by "immateriel", which I take to be that distributor [M]); the spine reading-direction convention by country.
 9. **TDM reservation inside EPUB files**: should in-browser analysis of the user's own EPUB cover (colour, font class) be skipped when the package carries `tdm:reservation = 1`? Proposal: read and record the flag, keep all results on the device, never use such files for training, and ask counsel.
 10. **Super-resolution**: model file sizes, availability and licence of ready-made ONNX exports, browser timings on mid-range hardware, licence status of pretrained weights against their training data.
 11. **No authority known** for: robots.txt as an "effective technological measure"; a French judgment treating a robots.txt violation as a fault in itself; a French judgment on image hotlinking as *parasitisme*; any EU decision on cover-lookup services.
 12. **Not researched for lack of search budget**: Inventaire's cover API and terms, Babelio, Goodreads' own terms, publisher press-kit practices, Dutch and German retailer patterns, Adobe ADEPT and Kindle handling of cover resources, Amazon Creators API terms.
+13. **Raised by the fact-check, still open**: (a) does production Open Library send the CORS header, and does archive.org on redirect targets (one live request each would settle it); (b) Amazon's shutdown date for PA-API 5.0 and whether the Creators API really returns spine variants; (c) Dilicom Distrimage terms for uses outside bookshop software; (d) whether any ONIX feed we would receive uses `ResourceForm`, `EpubUsageConstraint` type 11, List 160 credits or List 158 code 60; (e) host names of Kobo's and Apple's cover CDNs for the denylist; (f) the public-domain test per contribution (collective works, moral rights); (g) Dutch and German spine direction — the editor's one search confirmed only ISO 6357's preference for transverse or descending titles; (h) newer opt-out signals (Content Signals, RSL, AIPREF, the Commission's consultation).
+14. **No contrary court decision was looked for**, because no legal search could run in the research or in the fact-check. Still untracked: the CJEU reference C-250/25, any further appeal in *Kneschke v LAION* after OLG Hamburg, and *GEMA v OpenAI*. Do not rely on the holdings of OLG Hamburg, *DPG Media v HowardsHome* or the robots.txt wording of the CNIL sheet without reading them; *Zulma v Elior* rests on one law-firm blog.
 
 ---
 
@@ -632,7 +648,7 @@ GPL and AGPL code read for facts only; do not copy.
 - BnF cover probe: [Inventaire get_bnf_entry_from_isbn.ts](https://raw.githubusercontent.com/inventaire/inventaire/main/server/data/bnf/get_bnf_entry_from_isbn.ts)
 - Google Books: [API discovery document](https://raw.githubusercontent.com/googleapis/google-api-go-client/main/books/v1/books-api.json)
 - EPUB and DRM: [EPUB 3.3 core](https://raw.githubusercontent.com/w3c/epub-specs/main/epub33/core/index.html), [Kobo EPUB spec](https://raw.githubusercontent.com/kobolabs/epub-spec/master/README.md), [Readium LCP specification](https://raw.githubusercontent.com/readium/lcp-specs/master/releases/lcp/latest.md)
-- TDMRep (W3C Community Group): [README](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/README.md), [draft specification](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/spec/index.html), [HTTP header technique](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/techniques/technique-http-headers.md), [well-known file technique](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/techniques/technique-file-at-origin.md), [HTML meta technique](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/techniques/technique-html-meta.md), [adopters](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/docs/adopters.md), [robots.txt primer](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/docs/robots.md), [extracts of the CDSM Directive and AI Act](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/docs/eu-act-extracts.md)
+- TDMRep (W3C Community Group): [README](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/README.md), [specification, Community Group Final Report](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/spec/index.html), [HTTP header technique](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/techniques/technique-http-headers.md), [well-known file technique](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/techniques/technique-file-at-origin.md), [HTML meta technique](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/techniques/technique-html-meta.md), [adopters](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/docs/adopters.md), [robots.txt primer](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/docs/robots.md), [extracts of the CDSM Directive and AI Act](https://raw.githubusercontent.com/w3c/tdm-reservation-protocol/main/docs/eu-act-extracts.md)
 - robots.txt handling: [texting_robots README](https://raw.githubusercontent.com/Smerity/texting_robots/main/README.md), [google/robotstxt README](https://raw.githubusercontent.com/google/robotstxt/master/README.md)
 - ONIX: [im_onix codelist 158](https://raw.githubusercontent.com/immateriel/im_onix/master/data/codelists/codelist-158.yml) (full list), [im_onix README](https://raw.githubusercontent.com/immateriel/im_onix/master/README.md)
 
@@ -658,7 +674,25 @@ GPL and AGPL code read for facts only; do not copy.
 - **US**: *hiQ v LinkedIn* (938 F.3d 985; 31 F.4th 1180); *Van Buren v US* (2021); *Meta v Bright Data* (2024); *X Corp v Bright Data* (2024); *Perfect 10 v Amazon* (508 F.3d 1146); *Hunley v Instagram* (2023); *Goldman v Breitbart* (2018); *Feist v Rural* (1991); *Warhol v Goldsmith* (2023).
 - **Standards**: RFC 9309 (September 2022).
 
-Internal cross-references: `07-legal-covers-and-reseller-rights.md` (print rights, rights-basis model), `08-legal-fonts-and-genai.md` (training data, generated spines), `notes/print-requirements.prepress.md` and `notes/print-requirements.folding.md` (resolution and format), `notes/isbn-databases.open.md` (catalogue providers, CORS, ISBN routing).
+### 9.6 Added by the fact-check and by the editor
+
+Read by the fact-checker on `raw.githubusercontent.com` (2026-11-12) and not already listed above:
+
+- [Jonix ResourceContentTypes.java](https://raw.githubusercontent.com/zach-m/jonix/master/jonix-common/src/main/java/com/tectonica/jonix/common/codelist/ResourceContentTypes.java) (ONIX List 158, Issue 75: codes 56, 57, 60) — re-read by the editor
+- [python-amazon-paapi CHANGELOG](https://raw.githubusercontent.com/sergioteula/python-amazon-paapi/master/CHANGELOG.md) — re-read by the editor
+- [Open Library compose.production.yaml](https://raw.githubusercontent.com/internetarchive/openlibrary/master/compose.production.yaml) — re-read by the editor
+
+Copied from sibling documents, not opened:
+
+- [SLF — le service Distrimage de Dilicom (2012)](https://www.syndicat-librairie.fr/le_service_distrimage_de_dilicom) (from doc 07 §3.3)
+- [Mind Media — tracker of French publishers' AI-bot blocking and TDMRep adoption](https://www.mind.eu.com/media/data/ia-generative-quels-editeurs-francais-bloquent-les-robots-dopenai-et-google-lesquels-ont-adopte-le-protocole-tdmrep/) (link read in the TDMRep adopters list)
+
+Returned by the editor's two web searches (result summaries only; pages not opened):
+
+- [RFC 9309 on the IETF datatracker](https://datatracker.ietf.org/doc/html/rfc9309)
+- [ISO 6357:1985, Spine titles on books and other publications](https://www.iso.org/standard/12665.html)
+
+Internal cross-references: `07-legal-covers-and-reseller-rights.md` (print rights, rights-basis model), `08-legal-fonts-and-genai.md` (training data, generated spines), `notes/print-requirements.prepress.md` and `notes/print-requirements.folding.md` (resolution and format), `notes/isbn-databases.open.md` (catalogue providers, CORS, ISBN routing), `notes/isbn-databases.trade.md` (ONIX code lists, Distrimage, ORB), `notes/spine-design.conventions.md` (spine direction), `notes/ereader-ux.ecosystems.md` (what file the buyer holds), `factcheck/cover-sources.md` (the fact-check report).
 
 ---
 
@@ -684,7 +718,7 @@ Numbers marked (proposal) are design choices, not legal thresholds or provider-s
 
 **Open Library adapter**
 
-11. Request `https://covers.openlibrary.org/b/isbn/{isbn13}.json` from the browser, with the ISBN written without hyphens (the JSON route does not strip them), follow the 302 to the id record, read `width` and `height`. A 404 means no cover. Then use id-keyed URLs only: `/b/id/{id}-M.jpg` for the preview, `/b/id/{id}.jpg` (original) as the "open the image" link.
+11. Request `https://covers.openlibrary.org/b/isbn/{isbn13}.json` from the browser, with the ISBN written without hyphens (corrected by the fact-check: the server strips hyphens on this route too; sending the bare form remains the rule because it is the canonical cache key), follow the 302 to the id record, read `width` and `height`. A 404 means no cover. Then use id-keyed URLs only: `/b/id/{id}-M.jpg` for the preview, `/b/id/{id}.jpg` (original) as the "open the image" link.
 12. Every image URL built for Open Library carries `?default=false`. Clients follow up to 5 redirects and allow `archive.org` and its subdomains as redirect targets.
 13. ISBN-keyed requests are limited to 1 every 3 seconds per client; id-keyed requests to 1 per second. No request is ever routed through a CloudFront origin fetch.
 
@@ -721,7 +755,7 @@ Numbers marked (proposal) are design choices, not legal thresholds or provider-s
 
 **Transient analysis (optional, off by default)**
 
-30. When enabled, analysis runs in the browser through a separate cross-origin fetch. If the fetch fails for lack of CORS headers, analysis is skipped; there is no server fallback. The function's return type holds only: one dominant colour and up to four secondary colours, aspect ratio, a 64-bit perceptual hash, and a font-class label. The image buffer is zeroed and dropped before the function returns.
+30. When enabled, analysis runs in the browser through a separate cross-origin fetch. If the fetch fails for lack of CORS headers, analysis is skipped; there is no server fallback. This failure is an expected, tested path, not an edge case: CORS is verified only in Open Library's repository code, and bytes redirected to archive.org (cover ids of 8,000,000 and above) may carry no header. The function's return type holds only: one dominant colour and up to four secondary colours, aspect ratio, a 64-bit perceptual hash, and a font-class label. The image buffer is zeroed and dropped before the function returns.
 31. Analysis is skipped when the image response or its origin expresses a TDM reservation, or when the source descriptor lacks `analyse_transient`.
 
 **EPUB cover extraction (browser)**
@@ -746,9 +780,9 @@ Numbers marked (proposal) are design choices, not legal thresholds or provider-s
 
 **Spine and full cover**
 
-43. Reseller feeds: ONIX `SupportingResource` with List 158 code 01 is the front, 02 the back, 29 a full cover, 51 a flap. Codes 29 and 51 are ingested when present and treated as publisher-supplied files under the same rights flags.
+43. Reseller feeds: ONIX `SupportingResource` with List 158 code 01 is the front, 02 the back, 29 a full cover, 51 a flap, 56 a spine image, 57 a spine panorama image. Codes 29, 51 and 56 are ingested when present and treated as publisher-supplied files under the same rights flags; 57 is recognised and recorded but not placed (it spans several spines). Code 45 (cover holding image) is never printed. (Corrected by the fact-check: the draft knew no spine code.)
 44. A flat full cover is split by measured panel widths supplied by the uploader (back, spine, front), not guessed from the image. Its spine is used only if, scaled uniformly to the panel height, its width is between 6 and 10 mm (proposal); it is then centred on the 10 mm panel with the flat ground colour either side. Otherwise the typographic spine is generated.
-45. Spine text direction defaults to bottom-to-top for French, German, Spanish, Italian and Dutch locales and top-to-bottom for English, with a per-card override.
+45. Spine text direction defaults to bottom-to-top for French, German, Spanish and Italian books and top-to-bottom for English and Dutch books, with a per-card override. The default is chosen from the book (language or country of publication, else ISBN registration group), not from the site locale; an unknown language gets top-to-bottom. (Corrected by the fact-check: Dutch moved to top-to-bottom. The whole mapping is from memory and unverified; German practice is not uniform.)
 46. No adapter, test or tool queries Amazon for spine or variant images.
 
 **Opt-out, abuse, tests**
@@ -757,3 +791,58 @@ Numbers marked (proposal) are design choices, not legal thresholds or provider-s
 48. Lookups are capped at 30 per session per hour and 1 per ISBN per user action (proposal). The extractor never stores review text, ratings or reviewer names.
 49. Integration tests run the fetcher against a fake publisher site and a fake cover API that serve, in turn: a robots.txt `Disallow`, a robots.txt returning 503, `tdm-reservation: 1` as a header and as a `tdmrep.json` rule, an HTML meta reservation with an unreserved image, a 429 with `Retry-After`, a 403, a redirect to a private address, a placeholder image of each known kind, and an oversized body. Each case asserts the decision and the log record.
 50. A scheduled, opt-in live test (never in the default CI run) samples a fixed list of ISBNs against Open Library and reports hit rate and pixel sizes, at 1 request every 3 seconds, to feed open question 2.
+
+**Added after the fact-check** (existing numbers above are unchanged)
+
+51. The pasted-page extractor runs only for hosts on an allow-list of reviewed publisher domains (host, date its terms were read). The denylist of item 7 is kept as a second check on the page host and on every extracted image URL. A host on neither list is refused with the message of item 7.
+52. The denylist of item 7 gains Kobo's image CDN, Apple Books / iTunes artwork hosts and Amazon's current media hosts once their host names have been confirmed; until then the stores' own site domains are listed.
+53. ONIX ingestion reads `ResourceForm` (List 161) for each cover: 02 "downloadable" means the bytes are fetched once, server-side, in the reseller's name and stored; 01 "linkable" permits a link but printing still needs stored bytes under the per-title print flag. A required credit (List 160 code 01) is stored with the asset and printed where doc 07 places credits.
+54. A TDM prohibition in the feed — `EpubUsageConstraint` type 11 with status "prohibited" on the resource version, or a reservation declared in the ONIX record or the EPUB — disables palette, hash and font-class analysis for that title in reseller mode, and excludes it from any training set. Resources of List 158 code 60 ("LLM training data") are ignored.
+55. The Open Library source descriptor stores preview risk Medium (item 6 already stores "Low–Medium" as Medium, so behaviour does not change); the reason recorded is "uploads of unknown provenance; counsel question 5(b) open".
+56. No size or quality default is derived from the Kobo "800 x 1224" average. Preflight measures each file; the live sample of item 50 is extended to EPUB covers when test files are available.
+57. The `public_domain` rights basis requires a recorded reason per contribution (illustration, photograph, lettering) rather than one death date; a cover that is a collective work or whose contributors are not all identified is not accepted on this basis.
+58. The interface does not present "extract the cover from your EPUB" as the main path for a gift buyer: it is offered next to "choose an image file", and the typographic card is the outcome when the buyer has neither.
+
+---
+
+## Verification log
+
+Applied on 2026-11-12 from `factcheck/cover-sources.md`. The fact-checker had no web search and could open only `raw.githubusercontent.com`; where it says "matches my recall", that is memory, and this document keeps the claim unverified.
+
+**Checked by the editor in this pass**
+
+- Re-read on `raw.githubusercontent.com` (HTTP 200): Jonix `ResourceContentTypes.java`; TDMRep `adopters.md` and `spec/index.html`; texting_robots README; python-amazon-paapi changelog; Open Library `nginx.conf`, `covers_nginx.conf`, `coverstore/code.py`, `coverstore/asgi_app.py`, `compose.production.yaml`; Readium LCP specification.
+- Two web searches (summaries only, pages not opened): RFC 9309 and ISO 6357.
+
+**Corrected (wrong or outdated in the draft)**
+
+1. ONIX List 158 does have spine codes: 56 "Spine image" and 57 "Spine panorama image" (Issue 75, Jonix; confirmed on re-read). Changed: the opening table, finding 10, §2 table, §5 table and conclusions, open question 8, implication 43.
+2. Spine direction: Dutch moved to top-to-bottom; direction chosen from the book, not the site locale (§5 conclusion 6, implication 45). Still from memory.
+3. "Every public ISBN cover API result fails 150 ppi" and "about 500 px": now limited to default sizes (finding 1, finding 2, §3.2 consequence 1).
+4. Implication 11: the Open Library JSON route does strip hyphens (confirmed on re-read of `code.py`).
+5. Amazon: "is being replaced" became "replaced during 2026", with the client library's dates (confirmed on re-read); the spine-variant statement is now attributed to a third party's code comment.
+6. TDMRep specification is a Community Group Final Report, not a draft (confirmed: `specStatus: "CG-FINAL"`).
+7. robots.txt: "The RFC says the same in its own words" deleted; the README cites Google only (confirmed). The search result supports the 4xx and 5xx rules and the 500 KiB minimum as RFC text; the 429 exception was not found in it.
+8. Open Library preview risk raised from Low–Medium to Medium (cascade step 7, §2 table, §6.4, §6.10 row 5, implication 55). Behaviour is unchanged because implication 6 already stored Low–Medium as Medium.
+
+**Downgraded to unverified**
+
+Open Library CORS (repository code only; production and archive.org unknown); "the TDM route is closed for Hachette Livre's sites" (now "reported reserved; check per request"); VuFind "deliberately" not caching Google; "DNB images come from MVB"; the Kobo 800 x 1224 figure as a planning input; all quotas (Open Library 100 per 5 minutes, Google 1,000 a day, LibraryThing); provider terms in §2 and §6.5; Associates terms; model sizes and "GAN models damage small type"; "10 mm spine is roughly 150–200 pages"; the proxy conclusion and the DSA art. 4 point (author's application); the retailer URL patterns behind the denylist.
+
+**Added (omissions found by the checker)**
+
+ONIX usage data — List 161, `EpubUsageConstraint` type 11, List 160, List 154, List 158 code 60 (finding 11, implications 53–54); Dilicom Distrimage (§2 table, §2.5); ORB operated by Decitre; the gift buyer usually holds no EPUB (finding 12, §3.3, implication 58); feed-level TDM reservations (§6.3, §7.4); the Mind Media tracker link (§6.3, open question 7); allow-list of publisher domains (§7.1, implication 51); sources missing from the table and from the denylist (§2 table, implication 52); newer opt-out signals (§6.3, §7.4); the public-domain test (note under §6.10, implication 57); untracked cases (open question 14); session-cookie condition and the 150 requests/s crawler bucket for Open Library.
+
+**Checker finding not upheld**
+
+- The checker marked "HTTP headers, described as the preferred technique" as unsupported. The specification file it cites contains, in the header section, the note "This is currently the preferred technique for implementing the protocol, as it is simple and already integrated in the spawning.ai API". The claim is kept, worded as a non-normative note.
+- The checker wrote that the house names the document adds for Hachette "were not re-confirmed": on re-read, Hachette.fr, Livre de Poche, Grasset, Fayard and Larousse are in the adopters list. The list remains self-declared.
+
+**Still unverified**
+
+- Every legal authority in §6 (CJEU, French, German, Dutch, US cases; CPI R122-28, L136-1 to L136-4; CNIL guidance; the GPAI Code): identifiers and holdings match the checker's recall only. Nobody in the project has read R122-28.
+- Every provider's terms and quotas; all live HTTP behaviour (CORS, redirects, placeholder sizes today); real pixel sizes and hit rates.
+- Whether any French feed fills codes 29, 56 or 57, or uses the ONIX usage-constraint elements.
+- Dutch and German spine direction (memory in two notes; the search found no source).
+- The 429 handling in RFC 9309, and the RFC's caching and redirect figures.
+- Items the checker itself named from memory: Apple and Kobo cover CDNs, Amazon's current hosts, OPDS feeds, Content Signals, RSL, AIPREF, the Commission's consultation, the public-domain refinements, ORB's operator.

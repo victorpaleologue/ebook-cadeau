@@ -53,7 +53,8 @@ fn the_code_decodes_back_to_the_text() {
 
 #[test]
 fn a_compact_url_decodes_to_the_equivalent_upper_case_url() {
-    let plain = ebc().args(["qr", "https://ebk.example/K/BCDFGHJKLMNP", "-o", "-"]).output().unwrap();
+    let plain =
+        ebc().args(["qr", "https://ebk.example/K/BCDFGHJKLMNP", "-o", "-"]).output().unwrap();
     let compact = ebc()
         .args(["qr", "https://ebk.example/K/BCDFGHJKLMNP", "--compact-url", "--ec", "Q", "-o", "-"])
         .output()

@@ -1059,7 +1059,7 @@ mod tests {
             (json!({"title_font": "comic_sans"}), "unknown_title_font"),
             (json!({"ground": "red"}), "invalid_colour"),
             (json!({"message": "x".repeat(MAX_TEXT_BYTES + 1)}), "text_too_long"),
-            (json!({"legal_lines": ["a"; 9]}), "text_too_long"),
+            (json!({"legal_lines": vec!["a"; 9]}), "text_too_long"),
             (json!({"base_url": "ftp://ebk.example"}), "invalid_claim_url"),
             (json!({"book": {"title": "   "}}), "empty_title"),
             (json!({"surprise": true}), "invalid_json"),

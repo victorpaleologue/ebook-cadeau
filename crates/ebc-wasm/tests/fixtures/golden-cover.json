@@ -1,0 +1,17 @@
+{
+  "book": {
+    "title": "The Evening Tide",
+    "contributors": [{ "name": "Jane King" }],
+    "publisher": "Lakeside Press",
+    "language": "en"
+  },
+  "code": "TBLCZHJQPBXF",
+  "base_url": "https://ebk.example",
+  "cover": { "rights": "rights_holder_declared", "declaration": "own_work", "credit": "© Jane King" },
+  "spine": "cover_colour",
+  "title_font": "bebas_neue",
+  "giver": "Alice",
+  "locale": "en",
+  "format": "a6",
+  "profile": "home_letter"
+}

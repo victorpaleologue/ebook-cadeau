@@ -672,6 +672,7 @@ dependencies = [
  "ebc-preflight",
  "ebc-qr",
  "ebc-scene",
+ "ebc-text",
  "getrandom 0.4.3",
  "image",
  "jpeg-encoder",

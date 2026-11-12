@@ -75,6 +75,10 @@ pub(crate) fn run(args: &IsbnArgs, streams: &mut Streams<'_>) -> Result<Status, 
     }
     let text = args.text.as_deref().unwrap_or_default();
     let isbn = parse_isbn(text)?;
-    if args.json { streams.json(&describe(&isbn))? } else { print_one(&isbn, streams)? }
+    if args.json {
+        streams.json(&describe(&isbn))?
+    } else {
+        print_one(&isbn, streams)?
+    }
     Ok(Status::Success)
 }

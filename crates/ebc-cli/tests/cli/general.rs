@@ -24,8 +24,16 @@ fn every_subcommand_has_help_that_names_its_flags() {
         (
             "card",
             vec![
-                "--title", "--cover-rights", "--typographic", "--random-code", "--base-url",
-                "--profile", "--icc", "--output-condition", "--preview-svg", "--output",
+                "--title",
+                "--cover-rights",
+                "--typographic",
+                "--random-code",
+                "--base-url",
+                "--profile",
+                "--icc",
+                "--output-condition",
+                "--preview-svg",
+                "--output",
             ],
         ),
         ("preflight", vec!["--profile", "--format", "--json", "--allow-rgb"]),

@@ -18,7 +18,10 @@ pub(crate) const CREATED: &str = "1794000000";
 /// The `ebc` binary, with the environment variables it reads cleared.
 pub(crate) fn ebc() -> Command {
     let mut command = Command::cargo_bin("ebc").expect("the ebc binary is built");
-    command.env_remove("EBC_GOOGLE_BOOKS_KEY").env_remove("EBC_CONTACT").env_remove("SOURCE_DATE_EPOCH");
+    command
+        .env_remove("EBC_GOOGLE_BOOKS_KEY")
+        .env_remove("EBC_CONTACT")
+        .env_remove("SOURCE_DATE_EPOCH");
     command
 }
 

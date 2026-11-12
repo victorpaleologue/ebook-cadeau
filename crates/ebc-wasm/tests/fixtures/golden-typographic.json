@@ -1,0 +1,17 @@
+{
+  "book": {
+    "title": "Les Vagues du soir",
+    "subtitle": "Roman",
+    "contributors": [{ "name": "Jeanne Roy" }],
+    "publisher": "Éditions du Lac",
+    "language": "fr"
+  },
+  "code": "TBLCZHJQPBXF",
+  "base_url": "https://ebk.example",
+  "giver": "Alice",
+  "recipient": "Bob",
+  "message": "Joyeux anniversaire ! Bonne lecture.",
+  "locale": "fr",
+  "format": "poche",
+  "profile": "home_a4"
+}

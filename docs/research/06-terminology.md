@@ -30,7 +30,7 @@ No marker was upgraded in this synthesis. Every link below is either a file the 
 ### 1.1 Findings and decisions
 
 1. **Keep "eBook Cadeau" as the project name and as the option's name in French and Dutch. Do not pay for a word mark.** The phrase is plain French and plain Dutch for the service, so a word mark would probably be refused in France and EU-wide [M] (§3.2). That weakness helps the reseller mode: any shop can use a generic label without a licence.
-2. **The option label is the verb of giving, not a noun.** The only three sourced retailer flows use it: Decitre « Offrir un ebook », button « Offrir »; Hugendubel/Thalia „Verschenken"; Amazon.fr « Acheter pour d'autres personnes » [V2-sib]. Recommended: « Offrir cet ebook », „eBook verschenken", "Cadeau doen", "Regalar este eBook", "Regala questo eBook", "Give as a gift".
+2. **The option label is the verb of giving, not a noun.** The only three sourced retailer flows use it: Decitre « Offrir un ebook », button « Offrir »; Hugendubel/Thalia „Verschenken"; Amazon.fr « Acheter pour d'autres personnes » [V2-sib]. Recommended: « Offrir cet ebook », „eBook verschenken", "Cadeau doen", "Regalar este eBook", "Regala questo eBook", "Give as a gift". No title-level gift option was found at Kobo by Fnac [V1-sib]; 7switch is unknown.
 3. **The card says "book" and "gift".** Headline « Ce livre est un cadeau ». No price, no balance, no "valid until".
 4. **Never use a stored-value word** for the object or the option: carte/chèque/bon cadeau, Gutschein, Geschenkkarte, cadeaubon, cadeaukaart, tarjeta/cheque regalo, buono/carta regalo, gift card, voucher, book token (§4). They promise a balance and bring validity rules into the reader's mind. A lint must enforce this.
 5. **The redemption button uses a plain first-person verb**: « Récupérer mon livre », "Get my book". French, Dutch and Polish have no settled word for "redeem" (three verbs in three products each) [V2]. German, Spanish, Italian, Portuguese and the Nordic languages do (einlösen, canjear, riscattare, resgatar…) [V2]: put that verb in help pages and page metadata, where people search for it, not on the button.
@@ -101,10 +101,10 @@ Shop-counter questions that every buyer knows and that work as a checkbox label 
 |---|---|---|---|---|---|
 | fr | ebook (Decitre [V2-sib]); eBook / Ebook (Kobo, Fnac [M]) | livre numérique (statute title [V2-sib]; calibre [V1]) | liseuse | liseuse [V2] | `official` for running text, `trade` inside the option label |
 | en | eBook | e-book (en-GB dictionary [V1]) | eReader (Kobo) / e-reader | e-reader | `trade` for the book, hyphenated "e-reader" for the device |
-| de | eBook (Hugendubel „eBooks" [V2-sib]) | E-Book (LanguageTool rule [V1]) | eReader | E-Reader, E-Book-Reader [V2] | `trade` |
-| es | eBook | libro electrónico [V2] | eReader | lector de libros electrónicos [V2] | `trade` |
+| de | eBook (Hugendubel „eBooks" [V2-sib]) | E-Book (LanguageTool rule [V1]; three corpora [V2]) | eReader | E-Reader (two corpora), E-Book-Reader (one) [V1 per file] | `trade` |
+| es | eBook | libro electrónico (three corpora, [V1] per file) | eReader | lector de libros electrónicos [V2] | `trade` |
 | it | eBook | e-book (calibre, Foliate) / ebook (dictionary) [V1] | eReader | lettore di e-book [V1] | `trade` |
-| nl | e-book (bol.com writes "ebook" [M]) | e-book, e-boek [V2] | e-reader | e-reader [V2] | `official` (same word) |
+| nl | e-book (bol.com writes "ebook" [M]) | e-book (OpenTaal [V1]); e-boek [V2] | e-reader | e-reader [V2] | `official` (same word) |
 | pt | eBook | livro digital (pt-PT), e-book (pt-BR) [V1/V2] | eReader | leitor de livros digitais [V2] | `trade` |
 
 ### 1.5 Other languages (secondary)
@@ -148,7 +148,7 @@ Languages not shipped. The table gives a glossary to hand to a translator; the d
 
 ### 1.6 Contradictions between the notes, and how they are resolved
 
-1. **German noun.** The usage note proposes „E-Book" as the default (LanguageTool rule [V1], three of four reading-software corpora [V2], Duden [M]). The naming note writes „eBook" in every German string. **We keep „eBook"** as the default: the resellers this product targets write it (Hugendubel „eBooks verschenken" [V2-sib]), the LibreOffice dictionary accepts it [V1], LanguageTool only corrects „EBook" [V1], and the project name uses the same casing. „E-Book" ships as the `official` style for publishers, libraries and the press.
+1. **German noun.** The usage note proposes „E-Book" as the default (LanguageTool rule [V1], three of four reading-software corpora [V2], Duden [M]). The naming note writes „eBook" in every German string. **We keep „eBook"** as the default: the resellers this product targets write it (Hugendubel „eBooks verschenken" [V2-sib]), the LibreOffice dictionary accepts it [V1], the LanguageTool rule that was read targets „EBook", „EBook Reader" and „E Books" [V1] (whether it also flags „eBook" was not checked), and the project name uses the same casing. „E-Book" ships as the `official` style for publishers, libraries and the press.
 2. **Spanish and Portuguese nouns.** The usage note proposes « libro electrónico » or "eBook" (es) and "ebook" (pt-PT); the naming note writes "eBook". **We keep "eBook"**: the product lives in retail, and one casing across es, it, pt, de, en reduces the number of variants. The verified native forms ship as the `official` style.
 3. **French print wording.** The naming note's primary print line is « Scannez le code pour recevoir votre livre » (vous), but its own convention, and the UX note's card text, use the infinitive so that the card does not choose tu or vous on behalf of the giver. **We keep the infinitive** (« Scanner ce code… »), in every language that allows it.
 4. **German button.** The naming note has „Mein eBook abholen"; its buttons in the five other languages say "my book". **We keep „Mein Buch abholen"**: it matches the others and removes the eBook/E-Book spelling question from a hard-coded string.
@@ -229,10 +229,10 @@ Files: [Shopify en](https://raw.githubusercontent.com/Shopify/dawn/main/locales/
 | Generic gift checkbox | "I want to send this as a gift" (key `recipient.form.checkbox`); fields "Recipient email", "Recipient name (optional)", "Message (optional)", "Send on (optional)" | Shopify | [V1] |
 | Generic gift options | "I would like my order to be gift wrapped"; "If you'd like, you can add a note to the gift:" | [PrestaShop](https://raw.githubusercontent.com/PrestaShop/PrestaShop/develop/translations/default/ShopThemeCheckout.xlf) | [V1] |
 | Generic gift options | "Gift Options"; "Do you have any gift items in your order?" | [Magento](https://raw.githubusercontent.com/magento/magento2/2.4-develop/app/code/Magento/GiftMessage/i18n/en_US.csv) | [V1] |
-| Redeem | "QR code — scan to redeem gift card"; "Redeem"; "Redeem voucher" | Shopify; Signal; Mullvad | [V2] |
+| Redeem | "QR code — scan to redeem gift card"; "Redeem"; "Redeem voucher" | Shopify; Signal; Mullvad | [V1] per file; the same verb in all three |
 | Enter the code | "Enter voucher code"; "Voucher code has already been used." | Mullvad | [V1] |
 | Passphrase | "Passphrase" (LCP prompt) | Thorium | [V1] |
-| eBook | "e-book" (« An e-book shop. »); dictionary entry `e-book` | calibre en-GB; LibreOffice | [V2] |
+| eBook | "e-book" (« An e-book shop. »); dictionary entry `e-book` | calibre en-GB; LibreOffice | [V1] each |
 | e-reader | "Ebook reader"; "Send to eReader" | KOReader; calibre-web | [V1] each |
 | Retail nouns | Amazon "Kindle eBooks", "Kindle E-readers"; Kobo "eBooks", "eReaders"; style guides (AP, Chicago, Oxford) "e-book", "e-reader"; trade press "ebook" | recalled | [M, high] |
 | Stored-value words | "Redeem" everywhere; UK also "gift voucher", "book token" | recalled | [M, high] |
@@ -258,7 +258,7 @@ Files: [Shopify de](https://raw.githubusercontent.com/Shopify/dawn/main/locales/
 | Passphrase | „Passwort" | Thorium | [V1] |
 | eBook | „eBook" („eBook-Betrachter", „eBook-Händler") | calibre | [V1] |
 | eBook | „E-Book" | KOReader, calibre-web, Open Library | [V2] |
-| e-reader | „eBook-Reader"; „E-Book-Reader"; „E-Reader" | calibre; KOReader; calibre-web, Open Library | [V1] / [V1] / [V2] |
+| e-reader | „eBook-Reader"; „E-Book-Reader"; „E-Reader" | calibre; KOReader; calibre-web, Open Library | [V1] per file |
 | Send to e-reader | „An E-Reader senden" | calibre-web | [V1] |
 | Spelling rule | Rule group `E_BOOK`: „EBook" → „E-Book"; „EBook Reader" → „E-Book-Reader"; „E Books" → „E-Books" | LanguageTool | [V1] |
 | Spelling dictionary | lists `eBook/S` | LibreOffice | [V1] |
@@ -282,7 +282,7 @@ Files: [Shopify es](https://raw.githubusercontent.com/Shopify/dawn/main/locales/
 | Enter the code | « Escriba el código del cupón »; « El código del cupón ya se ha usado. » | Mullvad | [V1] |
 | QR | « Código QR » | Shopify | [V1] |
 | Passphrase | label « Santo y seña »; the sentence says « contraseña » | Thorium | [V1] |
-| eBook | « libro electrónico » | calibre (also es_MX), Foliate, Open Library | [V2] |
+| eBook | « libro electrónico » | calibre (also es_MX), Foliate, Open Library | [V1] per file; three corpora agree |
 | eBook | « ebooks » | calibre-web | [V1] |
 | e-reader | « lector de libros electrónicos » | calibre, KOReader | [V2] |
 | e-reader | « lectores electrónicos »; « eReader » | Open Library; calibre-web | [V1] each |
@@ -306,8 +306,8 @@ Files: [Shopify it](https://raw.githubusercontent.com/Shopify/dawn/main/locales/
 | Enter the code | « Inserisci codice voucher »; « Il codice voucher è già stato utilizzato. » | Mullvad | [V1] |
 | QR | « Codice QR » | Shopify | [V1] |
 | Passphrase | « Passphrase » | Thorium | [V1] |
-| eBook | « e-book » | calibre, Foliate | [V2] |
-| eBook | « eBook » / « Ebook » | Open Library, calibre-web | [V2] |
+| eBook | « e-book » | calibre, Foliate | [V1] per file |
+| eBook | « eBook » / « Ebook » | Open Library, calibre-web | [V1] per file |
 | e-reader | « lettore di e-book »; « Lettore ebook »; « e-reader »; « eReader » | calibre; KOReader; Open Library; calibre-web | [V1] each |
 | Send to e-reader | « Invia all'eReader » | calibre-web | [V1] |
 | Spelling dictionary | lists `ebook`; no `e-book` entry | LibreOffice | [V1] |
@@ -696,7 +696,7 @@ Where each string comes from:
 
 ### 5.2 Supplementary strings (not part of the requested key set)
 
-`docs/architecture.md` lists further messages (`CardTo`, `CardNoPhone`, `FoldHere`, `CutHere`, `PrintedWith`), and the notes give sub-options, a "paid" line and a reseller variant of steps 2 and 3. Drafts follow under an `extra` namespace so that this block can be concatenated with §5.1. Placeholders: `{name}`, `{host}` (typed-URL host), `{reseller}`, `{product}`. All [M]; the sub-options and `card_paid_line` are the naming note's strings (Portuguese sub-options drafted here), `card_steps_*_reseller` in French is the UX note's text, the rest is drafted here.
+`docs/architecture.md` lists further messages (`CardTo`, `CardNoPhone`, `FoldHere`, `CutHere`, `PrintedWith`), and the notes give sub-options, a "paid" line and a reseller variant of steps 2 and 3. Drafts follow under an `extra` namespace so that this block can be concatenated with §5.1. Placeholders: `{name}`, `{host}` (typed-URL host), `{reseller}`, `{product}`, `{title}`, `{author}`, `{date}`. All [M]. The sub-options and `card_paid_line` are the naming note's strings (Portuguese sub-options drafted here). In French, `card_legal_line` and `card_steps_*_reseller` are the UX note's text and `card_single_use` / `card_no_expiry` come from the commerce note's legal line. Everything else, including every translation of those French lines, is drafted here and has the lowest confidence in this document.
 
 ```toml
 [extra.fr]
@@ -704,6 +704,10 @@ card_from_elided = "De la part d’{name}"  # when {name} starts with a vowel or
 card_to = "Pour {name}"
 card_no_phone = "Sans téléphone ? Sur la liseuse ou un ordinateur, ouvrir le navigateur, aller sur {host} et saisir le code de cette carte."
 card_paid_line = "Ce livre numérique est déjà payé : il ne reste qu’à le lire, sur liseuse, tablette ou téléphone."
+card_legal_line = "{title}, {author}. Un exemplaire numérique, déjà payé\u00A0: rien à régler."
+card_single_use = "Usage unique."
+card_no_expiry = "Sans date limite."
+card_collect_before = "À récupérer avant le {date}."
 card_steps_2_reseller = "Se connecter à son compte {reseller}, ou en créer un."
 card_steps_3_reseller = "Le livre apparaît dans la bibliothèque, sur la liseuse et l’application."
 delivery_home = "Carte à imprimer chez moi (gratuit)"
@@ -722,6 +726,10 @@ pronoun_default = "vous"
 card_to = "For {name}"
 card_no_phone = "No phone? On an e-reader or a computer, open the browser, go to {host} and enter the code on this card."
 card_paid_line = "This eBook is already paid for. Read it on your e-reader, tablet or phone."
+card_legal_line = "{title}, {author}. One digital copy, already paid for: nothing to pay."
+card_single_use = "Single use."
+card_no_expiry = "No time limit."
+card_collect_before = "To be collected before {date}."
 card_steps_2_reseller = "Sign in to a {reseller} account, or create one."
 card_steps_3_reseller = "The book appears in the library, on the e-reader and in the app."
 delivery_home = "Card to print at home (free)"
@@ -740,6 +748,10 @@ pronoun_default = "you"
 card_to = "Für {name}"
 card_no_phone = "Kein Smartphone? Auf dem eReader oder am Computer den Browser öffnen, {host} aufrufen und den Code dieser Karte eingeben."
 card_paid_line = "Dieses eBook ist bereits bezahlt – einfach lesen: auf eReader, Tablet oder Smartphone."
+card_legal_line = "{title}, {author}. Ein digitales Exemplar, bereits bezahlt: nichts mehr zu zahlen."
+card_single_use = "Einmalig verwendbar."
+card_no_expiry = "Zeitlich unbegrenzt."
+card_collect_before = "Abholen bis {date}."
 card_steps_2_reseller = "Im {reseller}-Konto anmelden oder ein Konto anlegen."
 card_steps_3_reseller = "Das Buch erscheint in der Bibliothek, auf dem eReader und in der App."
 delivery_home = "Karte zum Selbstausdrucken (kostenlos)"
@@ -758,6 +770,10 @@ pronoun_default = "none"  # du or Sie comes from the reseller
 card_to = "Para {name}"
 card_no_phone = "¿Sin móvil? En el eReader o en un ordenador, abrir el navegador, ir a {host} e introducir el código de esta tarjeta."
 card_paid_line = "Este eBook ya está pagado. Léelo en tu eReader, tableta o móvil."
+card_legal_line = "{title}, {author}. Un ejemplar digital, ya pagado: no hay nada que pagar."
+card_single_use = "Un solo uso."
+card_no_expiry = "Sin fecha límite."
+card_collect_before = "Recoger antes del {date}."
 card_steps_2_reseller = "Iniciar sesión en la cuenta de {reseller}, o crear una."
 card_steps_3_reseller = "El libro aparece en la biblioteca, en el eReader y en la aplicación."
 delivery_home = "Tarjeta para imprimir en casa (gratis)"
@@ -776,6 +792,10 @@ pronoun_default = "tú"
 card_to = "Per {name}"
 card_no_phone = "Senza telefono? Dall’eReader o da un computer, aprire il browser, andare su {host} e inserire il codice di questo biglietto."
 card_paid_line = "Questo eBook è già pagato. Leggilo su eReader, tablet o smartphone."
+card_legal_line = "{title}, {author}. Una copia digitale, già pagata: niente da pagare."
+card_single_use = "Utilizzabile una sola volta."
+card_no_expiry = "Senza scadenza."
+card_collect_before = "Da ritirare entro il {date}."
 card_steps_2_reseller = "Accedere all’account {reseller}, o crearne uno."
 card_steps_3_reseller = "Il libro compare nella libreria, sull’eReader e nell’app."
 delivery_home = "Biglietto da stampare a casa (gratis)"
@@ -794,6 +814,10 @@ pronoun_default = "tu"
 card_to = "Voor {name}"
 card_no_phone = "Geen telefoon? Open op de e-reader of een computer de browser, ga naar {host} en vul de code van deze kaart in."
 card_paid_line = "Dit e-book is al betaald. Lees het op je e-reader, tablet of telefoon."
+card_legal_line = "{title}, {author}. Eén digitaal exemplaar, al betaald: er valt niets meer te betalen."
+card_single_use = "Eenmalig te gebruiken."
+card_no_expiry = "Geen einddatum."
+card_collect_before = "Ophalen vóór {date}."
 card_steps_2_reseller = "Log in op een {reseller}-account, of maak er een aan."
 card_steps_3_reseller = "Het boek verschijnt in de bibliotheek, op de e-reader en in de app."
 delivery_home = "Kaart zelf printen (gratis)"
@@ -812,6 +836,10 @@ pronoun_default = "je"
 card_to = "Para {name}"
 card_no_phone = "Sem telemóvel? No eReader ou num computador, abrir o navegador, ir a {host} e introduzir o código deste cartão."
 card_paid_line = "Este eBook já está pago. Leia-o no seu eReader, tablet ou telemóvel."
+card_legal_line = "{title}, {author}. Um exemplar digital, já pago: nada a pagar."
+card_single_use = "Utilização única."
+card_no_expiry = "Sem data limite."
+card_collect_before = "Receber até {date}."
 card_steps_2_reseller = "Iniciar sessão na conta {reseller}, ou criar uma."
 card_steps_3_reseller = "O livro aparece na biblioteca, no eReader e na aplicação."
 delivery_home = "Cartão para imprimir em casa (grátis)"
@@ -836,14 +864,14 @@ pronoun_default = "formal"  # third person (você / o seu)
 stored_value = ["carte cadeau", "e-carte cadeau", "chèque cadeau", "bon cadeau", "bon d'achat", "bon pour", "certificat cadeau", "coffret cadeau"]
 scheme_names = ["chèque lire", "chèque culture", "Kadéos", "Cadhoc", "Tir Groupé", "Illicado"]
 print_category = ["livre cadeau"]
-reads_as_free = ["ebook offert", "livre offert"]
+reads_as_free = ["ebook offert"]
 help_only = ["échanger", "valider la carte"]
 
 [banned.en]
 stored_value = ["gift card", "gift voucher", "voucher", "eGift"]
 scheme_names = ["book token"]
 print_category = ["gift book"]
-reads_as_free = ["free eBook"]
+reads_as_free = []
 help_only = ["redeem"]
 
 [banned.de]
@@ -871,14 +899,14 @@ help_only = ["riscattare", "riscatta"]
 stored_value = ["cadeaubon", "cadeaukaart", "voucher"]
 scheme_names = ["boekenbon"]
 print_category = ["cadeauboek"]
-reads_as_free = ["gratis e-book"]
+reads_as_free = []
 help_only = ["verzilveren", "inwisselen"]
 
 [banned.pt]
 stored_value = ["cartão oferta", "cartão de oferta", "cartão presente", "cartão de presente", "cheque prenda", "cheque oferta", "vale presente", "voucher"]
 scheme_names = []
-print_category = ["livro presente"]
-reads_as_free = ["eBook grátis"]
+print_category = []
+reads_as_free = []
 help_only = ["resgatar", "reclamar"]
 ```
 
@@ -999,17 +1027,17 @@ Legal instruments cited from memory, without link: Code de la propriété intell
 
 1. **Locales.** Ship the seven locales of `Locale::ALL` (fr, en, de, es, it, nl, pt) with the strings of §5.1. `fr` is the default. Mark `pt` as provisional in the UI language list until reviewed. Do not ship pl, sv, da, nb, fi, cs, ro, el or ca from the glossaries of §1.5: they are translator briefs, not strings.
 2. **Completeness tests.** For every locale, every key of §5.1 is present and non-empty. For every key, all locales use the same set of `{placeholders}`. No rendered string may contain `{` or `}`.
-3. **Length budget.** In §5.1 the longest values are: `checkout_option_help` 163 characters (pt), `card_steps_*` 60 (de), `card_headline` 28 (de), `redeem_cta` 19 (fr, pt), `checkout_option` 19 (it, pt), `product_name` 19 (pt). The card layout must fit a 60-character step on one line at 12 pt or wrap it to two lines without overflow; add a test that renders each locale and fails on overflow. Tenant overrides are limited to twice these lengths.
+3. **Length budget.** In §5.1 the longest values are: `checkout_option_help` 166 characters (fr), `card_steps_*` 60 (de), `card_headline` 28 (de), `redeem_cta` 19 (fr, pt), `checkout_option` 19 (it, pt), `product_name` 19 (pt). The card layout must fit a 60-character step on one line at 12 pt or wrap it to two lines without overflow; add a test that renders each locale and fails on overflow. Tenant overrides are limited to twice these lengths.
 4. **No noun interpolation.** `ebook_word` and `ereader_word` are used only as stand-alone labels and list items. Any sentence that contains the noun is stored whole, because the article and the compound change with the noun (« cet ebook » / « ce livre numérique »; „E-Book-Reader"; Polish declension). Placeholders are allowed only for proper names, hosts, codes, dates and the reseller's name.
-5. **Noun style per tenant.** Add a tenant setting `noun_style` = `trade` | `official` (table in §1.4, values in §5.2). Default: `trade`, except French running text, which defaults to `official` (« livre numérique »). A tenant may also override whole strings. Demo stores: the fake Fnac uses « Ebook » and « liseuse »; the fake 7switch uses « ebook »; a German demo uses „eBook" and „eReader".
+5. **Noun style per tenant.** Add a tenant setting `noun_style` = `trade` | `official` (table in §1.4, values in §5.2). Default: `trade`, except French running text, which defaults to `official` (« livre numérique »). A tenant may also override whole strings. Demo stores: the fake Fnac uses « Ebook » and « liseuse »; the fake 7switch uses « ebook » (the real site's wording was not checked); a German demo uses „eBook" and „eReader".
 6. **Option wording in the demo checkouts.** Section heading = `product_name` (« eBook Cadeau »); checkbox or button = `checkout_option` (« Offrir cet ebook »); text under it = `checkout_option_help`; then the two sub-options `delivery_home` and `delivery_post`, with the printed card as its own price line, never pre-ticked. If a tenant has no postal option, it must override `checkout_option_help`, which mentions the post.
 7. **Register.** Add a tenant setting `register` = `neutral` (default) | `informal` | `formal`. The default strings contain no second-person pronoun on the card in fr, de, en, es, it and pt; Dutch step 2 uses "je". German has no pronoun default: a German tenant that wants pronoun forms must set `register`. In standalone mode, offer the giver a headline choice between the neutral headline and the two personal ones of §1.3 (« {Prénom} vous offre ce livre » / « {Prénom} t'offre ce livre »).
 8. **French elision.** `card_from` in French has two forms. Use `card_from_elided` (« De la part d'{name} ») when the trimmed name starts with a, e, i, o, u, y, h or an accented form of these (case-insensitive); otherwise `card_from`. Test with « Élise », « Hugo », « Yves », « Marie ».
 9. **Banned-term lint.** Add a test that fails when a default string of the card, the checkout or a button matches an entry of §5.3 for its locale. Matching: compare after lower-casing and Unicode NFKC normalisation; treat space, no-break space, hyphen and U+2011 as the same separator; a one-word entry matches as a substring (this catches German and Dutch compounds and plurals); a multi-word entry matches when each of its words is a prefix of consecutive words in the text (this catches « cartes cadeaux »). `help_only` entries are exempt in strings whose key starts with `help_` or `meta_`. Run the same lint on tenant overrides as a warning shown in the admin screen, not as an error.
-10. **Redemption vocabulary.** The button uses `redeem_cta`. In de, es, it, pt, and en, the redemption page's `<title>`, meta description and help headings also contain the established verb (einlösen, canjear, riscattare, resgatar, redeem) so that site search and web search find the page. French, Dutch use the plain verb everywhere; never « échanger ».
+10. **Redemption vocabulary.** The button uses `redeem_cta`. In de, es, it, pt, and en, the redemption page's `<title>`, meta description and help headings also contain the established verb (einlösen, canjear, riscattare, resgatar, redeem) so that site search and web search find the page. French and Dutch use the plain verb everywhere; never « échanger » in French.
 11. **The typed fallback is a "code".** Label it with `code_label`. The words passphrase, password, mot de passe, Passwort, voucher, bon, Gutschein and coupon never label it, including when the code doubles as an LCP passphrase.
 12. **No "QR" on the card.** Printed steps say « ce code ». On screens, when the term is needed (alternative text, help), use `qr_word` from §5.2, and « code QR » for fr-CA.
-13. **Nothing that looks like stored value on the card**: no price, no balance, no "valid until". With no expiry (the default) print the locale's "no time limit" line (fr « Sans date limite »). If `expires_unix` is set, print « À récupérer avant le {date} » and its translations, never « Valable jusqu'au ». The legal line is « {Titre}, {Auteur}. Un exemplaire numérique, déjà payé : rien à régler. » — not « Bon pour… ».
+13. **Nothing that looks like stored value on the card**: no price, no balance, no "valid until". With no expiry (the default) print `card_no_expiry` (fr « Sans date limite. »). If `expires_unix` is set, print `card_collect_before` (fr « À récupérer avant le {date}. »), never « Valable jusqu'au ». The legal line is `card_legal_line` followed by `card_single_use` (§5.2) — not « Bon pour… ».
 14. **Typography.** French strings carry a no-break space (U+00A0) before `:`, `!` and `?`; all locales use the typographic apostrophe U+2019; German strings contain no « ß » (assert this in a test, so that de-CH needs no variant); Spanish strings open with « ¿ » and « ¡ ». Add a test that every string of §5.1 and §5.2 renders with no missing glyph in each bundled font. When a style upper-cases text, use locale-aware upper-casing and keep accents on French capitals.
 15. **Regional deltas without new locales.** Keep the full language tag of the request or tenant (for example `fr-CA`, `pt-BR`, `es-MX`) next to the folded `Locale`, and apply a small override map: fr-CA (« code QR », « courriel », noun always « livre numérique »); pt-BR (« celular », « câmera », « e-book »); es-419 (« celular »). No delta is needed for fr-BE, fr-CH, de-AT, de-CH, nl-BE.
 16. **White label in reseller mode.** `product_name` and `printed_with` must be optional on the card and on the redemption page: a tenant can hide both. The QR target and the typed host are on the tenant's domain; the default paths are `/cadeau` (fr, nl), `/geschenk` (de), `/regalo` (es, it), `/gift` (en), `/oferta` (pt) for the landing page, while the code path stays language-neutral and short.

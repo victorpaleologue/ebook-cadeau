@@ -20,7 +20,9 @@ use crate::content::{
 use crate::date::DateTime;
 use crate::error::PdfError;
 use crate::font::{EmbeddedFont, FontUsage};
-use crate::image::{IccPool, PreparedImage, SRGB_PROFILE, allows_transparency, max_icc_version};
+use crate::image::{
+    IccPool, ImageSpace, PreparedImage, SRGB_PROFILE, allows_transparency, max_icc_version,
+};
 use crate::{icc, md5, xmp};
 
 /// What the writer calls itself in the Info dictionary and the XMP packet.
@@ -370,7 +372,16 @@ pub(crate) fn write(doc: &Document, opts: &WriteOptions) -> Result<Vec<u8>, PdfE
         PdfStandard::Plain => pdf.set_version(1, 7),
     }
 
-    let icc_refs = pool.write(&mut pdf, &mut refs, compress)?;
+    // Only profiles that something in the file refers to are written.
+    let mut used_profiles: BTreeSet<usize> =
+        srgb_index.into_iter().chain(intent_profile_index).collect();
+    for (id, image) in &images {
+        if let (true, ImageSpace::Icc(index)) = (used.images.contains(id), image.space) {
+            used_profiles.insert(index);
+        }
+    }
+    let icc_refs = pool.write(&mut pdf, &mut refs, compress, &used_profiles)?;
+    let profile_ref = |index: Option<usize>| index.and_then(|i| icc_refs.get(i).copied().flatten());
 
     let mut font_refs = BTreeMap::new();
     for (id, font) in &fonts {
@@ -458,10 +469,8 @@ pub(crate) fn write(doc: &Document, opts: &WriteOptions) -> Result<Vec<u8>, PdfE
                 tint.c1([1.0, 1.0, 1.0, 1.0]);
                 tint.n(1.0);
             }
-            if let (true, Some(profile_ref)) =
-                (page_use.srgb, srgb_index.and_then(|i| icc_refs.get(i)))
-            {
-                dict.insert(Name(SRGB_SPACE)).start::<ColorSpace>().icc_based(*profile_ref);
+            if let (true, Some(srgb_ref)) = (page_use.srgb, profile_ref(srgb_index)) {
+                dict.insert(Name(SRGB_SPACE)).start::<ColorSpace>().icc_based(srgb_ref);
             }
         }
         if !page_use.layers.is_empty() {
@@ -484,14 +493,18 @@ pub(crate) fn write(doc: &Document, opts: &WriteOptions) -> Result<Vec<u8>, PdfE
     // information, so identical input gives identical files and different input
     // (almost certainly) different identifiers.
     let date_xmp = meta.date.map(DateTime::to_xmp);
-    let body_digest = md5::digest(&[
-        pdf.as_bytes(),
-        meta.title.as_bytes(),
-        &[0],
-        meta.author.as_deref().unwrap_or("").as_bytes(),
-        &[0],
-        date_xmp.as_deref().unwrap_or("").as_bytes(),
-    ]);
+    let mut hasher = md5::Md5::new();
+    hasher.update(pdf.as_bytes());
+    let hashed = pdf.len();
+    let body_digest = {
+        let mut body = hasher.clone();
+        body.update(meta.title.as_bytes())
+            .update(&[0])
+            .update(meta.author.as_deref().unwrap_or("").as_bytes())
+            .update(&[0])
+            .update(date_xmp.as_deref().unwrap_or("").as_bytes());
+        body.finish()
+    };
     let document_id = format!("uuid:{}", md5::uuid(md5::digest(&[b"document", &body_digest])));
     let instance_id = format!("uuid:{}", md5::uuid(md5::digest(&[b"instance", &body_digest])));
 
@@ -574,8 +587,8 @@ pub(crate) fn write(doc: &Document, opts: &WriteOptions) -> Result<Vec<u8>, PdfE
         if !description.is_empty() {
             dict.info(TextStr(&description));
         }
-        if let Some(profile_ref) = intent_profile_index.and_then(|i| icc_refs.get(i)) {
-            dict.dest_output_profile(*profile_ref);
+        if let Some(output_profile_ref) = profile_ref(intent_profile_index) {
+            dict.dest_output_profile(output_profile_ref);
         }
     }
     if !layer_refs.is_empty() {
@@ -606,7 +619,9 @@ pub(crate) fn write(doc: &Document, opts: &WriteOptions) -> Result<Vec<u8>, PdfE
     catalog.finish();
 
     // ----- trailer ---------------------------------------------------------------------
-    let file_id = md5::digest(&[pdf.as_bytes()]).to_vec();
+    // The identifier is the digest of every object in the file.
+    hasher.update(pdf.as_bytes().get(hashed..).unwrap_or_default());
+    let file_id = hasher.finish().to_vec();
     pdf.set_file_id((file_id.clone(), file_id));
     Ok(pdf.finish())
 }

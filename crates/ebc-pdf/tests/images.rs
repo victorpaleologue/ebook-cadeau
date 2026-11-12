@@ -282,7 +282,9 @@ fn images_are_placed_upright_and_shared_between_pages() {
     let mut doc = base_doc(PdfStandard::Plain);
     let unused = doc.add_image(raw(PixelFormat::Gray8, 1, 1, vec![7]), None);
     let shared = doc.add_image(raw(PixelFormat::Gray8, 2, 2, vec![0, 255, 255, 0]), None);
-    let invisible = doc.add_image(raw(PixelFormat::Gray8, 1, 1, vec![9]), None);
+    // Tagged with a profile that must not be written either, since nothing shows the image.
+    let invisible =
+        doc.add_image(raw(PixelFormat::Rgb8, 1, 1, vec![9, 9, 9]), Some(srgb_v4_profile()));
     assert_eq!((unused, shared, invisible), (ImageId(0), ImageId(1), ImageId(2)));
     for _ in 0..2 {
         let mut page = Page::new(Size::new(100.0, 80.0), 2.0, 0.0);
@@ -318,6 +320,13 @@ fn images_are_placed_upright_and_shared_between_pages() {
         .filter(|o| o.as_stream().is_ok_and(|s| s.dict.has_type(b"XObject")))
         .count();
     assert_eq!(images, 1, "unused and never-painted images are not embedded");
+    let profiles: Vec<Vec<u8>> = pdf
+        .objects
+        .values()
+        .filter(|o| o.as_stream().is_ok_and(|s| s.dict.has(b"N") && !s.dict.has(b"Type")))
+        .map(stream_data)
+        .collect();
+    assert_eq!(profiles, [cmyk_profile().to_vec()], "only the output intent's profile is written");
 }
 
 #[test]

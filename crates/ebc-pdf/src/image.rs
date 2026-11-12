@@ -2,6 +2,7 @@
 //! colour spaces.
 
 use std::borrow::Cow;
+use std::collections::BTreeSet;
 
 use ebc_scene::{ImageData, ImageId, ImageResource, PdfStandard, PixelFormat};
 use pdf_writer::types::Predictor;
@@ -49,15 +50,21 @@ impl<'a> IccPool<'a> {
         self.profiles.len() - 1
     }
 
-    /// Writes every profile as an ICC stream and returns their references, by index.
+    /// Writes the profiles whose index is in `used` as ICC streams and returns the
+    /// references by index (`None` for profiles nothing refers to).
     pub(crate) fn write(
         &self,
         chunk: &mut Chunk,
         refs: &mut RefAllocator,
         compress: bool,
-    ) -> Result<Vec<Ref>, PdfError> {
+        used: &BTreeSet<usize>,
+    ) -> Result<Vec<Option<Ref>>, PdfError> {
         let mut out = Vec::with_capacity(self.profiles.len());
-        for (profile, components) in &self.profiles {
+        for (index, (profile, components)) in self.profiles.iter().enumerate() {
+            if !used.contains(&index) {
+                out.push(None);
+                continue;
+            }
             let id = refs.next()?;
             let data: Cow<'_, [u8]> =
                 if compress { Cow::Owned(deflate(profile)) } else { Cow::Borrowed(profile) };
@@ -69,7 +76,7 @@ impl<'a> IccPool<'a> {
                 stream.filter(Filter::FlateDecode);
             }
             stream.finish();
-            out.push(id);
+            out.push(Some(id));
         }
         Ok(out)
     }
@@ -353,7 +360,7 @@ impl<'a> PreparedImage<'a> {
         &self,
         chunk: &mut Chunk,
         refs: &mut RefAllocator,
-        icc_refs: &[Ref],
+        icc_refs: &[Option<Ref>],
     ) -> Result<Ref, PdfError> {
         let image_ref = refs.next()?;
         let mask_ref = match &self.mask {
@@ -385,8 +392,8 @@ impl<'a> PreparedImage<'a> {
             ImageSpace::DeviceGray => image.color_space().device_gray(),
             ImageSpace::DeviceRgb => image.color_space().device_rgb(),
             ImageSpace::DeviceCmyk => image.color_space().device_cmyk(),
-            ImageSpace::Icc(index) => match icc_refs.get(index) {
-                Some(profile_ref) => image.color_space().icc_based(*profile_ref),
+            ImageSpace::Icc(index) => match icc_refs.get(index).copied().flatten() {
+                Some(profile_ref) => image.color_space().icc_based(profile_ref),
                 None => {
                     return Err(PdfError::InvalidImage {
                         image: self.id,

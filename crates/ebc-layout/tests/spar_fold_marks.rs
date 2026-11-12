@@ -18,8 +18,8 @@
 
 #![allow(clippy::unwrap_used)]
 
-use ebc_layout::{CardFormat, PrintProfile, Sheet, crop_marks, fold_marks};
-use ebc_scene::{Item, PathSeg, Point, Stroke};
+use ebc_layout::{CardFormat, PrintProfile, Sheet, crop_marks, fold_marks, page_geometry};
+use ebc_scene::{Item, PathSeg, Point, Size, Stroke};
 
 /// The stroke and the straight segments of each stroked path item.
 fn strokes(items: &[Item]) -> Vec<(&Stroke, Vec<(Point, Point)>)> {
@@ -69,6 +69,25 @@ fn home_fold_marks_are_told_apart_from_cut_marks() {
     for (name, format) in CardFormat::presets() {
         assert!(distinguishable(&format, &PrintProfile::home(Sheet::A3)), "{name}");
     }
+}
+
+/// The home profile's only distinction is a dashed *extension* drawn after the solid fold
+/// tick, and it needs 7 mm of margin (5 mm tick + 1 mm gap + 1 mm of dashes). On a sheet
+/// that leaves less — here a 110 x 186 mm cover on A4, 5 mm of printable margin above and
+/// below — the extension is dropped and the fold ticks are again identical to the cut
+/// marks, so "cut on the solid marks, fold on the dashed ones" (the caption suggested in
+/// the `caption_areas` docs) would have the user cut the card in three.
+#[test]
+fn home_fold_marks_stay_told_apart_on_a_tight_sheet() {
+    let format = CardFormat::custom(Size::new(110.0, 186.0), 10.0).unwrap();
+    let profile = PrintProfile::home(Sheet::A4);
+    let band = page_geometry(&format, &profile).unwrap().mark_band_mm();
+    assert!(
+        distinguishable(&format, &profile),
+        "with a {band} mm mark band the home fold marks are solid ticks identical to the \
+         cut marks ({} fold-mark item(s), none dashed)",
+        fold_marks(&format, &profile).len()
+    );
 }
 
 #[test]

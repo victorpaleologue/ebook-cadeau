@@ -595,9 +595,8 @@ fn fetch_permission_combines_guard_and_robots() {
     let policy = Policy::default();
     let robots = Robots::parse(&fixture("robots/publisher.txt"));
     let host = "https://www.phare-imaginaire.example";
-    let verdict = |path: &str| {
-        policy.may_fetch(&format!("{host}{path}"), Some(&robots)).map(|_| ())
-    };
+    let verdict =
+        |path: &str| policy.may_fetch(&format!("{host}{path}"), Some(&robots)).map(|_| ());
     // Our own group applies, not the `*` group.
     assert_eq!(verdict("/catalogue/le-phare-des-brumes"), Ok(()));
     assert_eq!(verdict("/espace-presse/couvertures-hd/phare.jpg"), Err(Refusal::RobotsDisallow));

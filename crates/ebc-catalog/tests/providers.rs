@@ -880,3 +880,36 @@ fn readme_table_matches_provider_info() {
         }
     }
 }
+
+/// A body cut off in transit must be an error, never a silent "not found" that a cache
+/// would then remember as a miss.
+#[test]
+fn truncated_bodies_are_malformed_not_missing() {
+    let config = Config::default().with_google_books_key("SECRET");
+    for (id, isbn_text, path) in [
+        ("bnf", FR, "bnf/etranger-unimarc.xml"),
+        ("dnb", DE, "dnb/verwandlung.xml"),
+        ("k10plus", DE, "k10plus/verwandlung.xml"),
+        ("loc", EN, "loc/pride.xml"),
+        ("openlibrary", FR, "openlibrary/etranger.json"),
+        ("googlebooks", FR, "googlebooks/etranger.json"),
+        ("wikidata", FR, "wikidata/etranger.json"),
+        ("libris", FR, "libris/etranger.jsonld"),
+        ("finna", FR, "finna/etranger.json"),
+        ("lobid", DE, "lobid/verwandlung.json"),
+        ("sudoc", FR, "sudoc/isbn2ppn.json"),
+        ("inventaire", FR, "inventaire/edition.json"),
+        ("crossref", SCHOLARLY, "crossref/book.json"),
+    ] {
+        let provider = provider_by_id(id, &config).expect("known id");
+        let body = fixture(path);
+        for cut in [body.len() / 2, body.len() - 2] {
+            let truncated = response(200, "", body[..cut].to_vec());
+            let result = parse_first(provider.as_ref(), isbn_text, &truncated);
+            assert!(
+                matches!(result, Err(CatalogError::Malformed { .. })),
+                "{id} {path} cut at {cut}: {result:?}"
+            );
+        }
+    }
+}

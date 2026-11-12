@@ -8,7 +8,46 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
+[[bin]]
+name = "ebc"
+path = "src/main.rs"
+# Everything is tested through the binary (tests/cli): one test executable, not two.
+test = false
+
+[features]
+default = ["net", "fontid"]
+# Real HTTP for `ebc lookup` and `ebc cover`: the reqwest + rustls client of ebc-catalog on
+# a current-thread tokio runtime. Without it both commands only work with
+# `--offline-fixtures`.
+net = ["ebc-catalog/client", "dep:tokio"]
+# The `ebc fontid` subcommand (font identification with the bundled or a given index).
+fontid = ["dep:ebc-fontid"]
+
 [dependencies]
+clap = { version = "4.6.7", features = ["derive", "env"] }
+ebc-card = { workspace = true }
+ebc-catalog = { workspace = true }
+ebc-covers = { workspace = true }
+ebc-fontid = { workspace = true, features = ["bundled-index"], optional = true }
+ebc-isbn = { workspace = true }
+ebc-layout = { workspace = true }
+ebc-model = { workspace = true }
+ebc-preflight = { workspace = true }
+ebc-qr = { workspace = true }
+ebc-scene = { workspace = true }
+getrandom = "0.4.3"
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "webp"] }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = { workspace = true }
+tokio = { version = "1.54.1", default-features = false, features = ["rt", "time", "net"], optional = true }
+
+[dev-dependencies]
+assert_cmd = "2.2.2"
+jpeg-encoder = "0.7.1"
+predicates = "3.1.4"
+rqrr = "0.11.0"
+tempfile = "3.27.0"
 
 [lints]
 workspace = true

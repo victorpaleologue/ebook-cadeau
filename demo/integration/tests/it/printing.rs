@@ -1,10 +1,14 @@
-//! (g) Printing. `card.pdf` is not rendered by the server yet (the card composer is not
-//! wired in), so the printer leg is covered with a card-shaped PDF built here with
-//! `ebc-layout` (page boxes, bleed, `EBC.*` geometry keys) and `ebc-pdf` (PDF/X-4): the
-//! real printer accepts it and refuses the same card without bleed, both when a store's
-//! printer client submits it and when the server forwards a creator's print order. The
-//! store's "printed and posted" checkout is checked against whatever `card.pdf` answers
-//! today; the full chain is ready behind `#[ignore]`.
+//! (g) Printing. The server renders `card.pdf` with the card composer (`ebc-card`), and a
+//! "printed and posted" order sends that PDF to the printer, which preflights it:
+//!
+//! * the full chain — checkout → the store fetches `card.pdf` → the printer accepts it →
+//!   its status changes come back to the order page;
+//! * the printer's verdicts on a card-shaped PDF built here with `ebc-layout` (page boxes,
+//!   bleed, `EBC.*` geometry keys) and `ebc-pdf` (PDF/X-4): accepted with bleed, refused
+//!   without, both when a store's printer client submits it and when the server forwards
+//!   a creator's print order;
+//! * a server without a card renderer (`501`): the stores fall back to the link and the
+//!   code, and order nothing from the printer.
 
 use std::sync::Arc;
 use std::time::Duration;
@@ -222,16 +226,20 @@ async fn buy_posted(world: &World) -> (ebc_demo_ereaders::EinkBrowser, Receipt) 
     (buyer, receipt)
 }
 
-/// A "printed and posted" order today: the server cannot render `card.pdf`, so the store
-/// has no file to send — it says so and orders nothing. The day `card.pdf` answers 200,
-/// the same test checks that the printer received the PDF.
+/// A server built without the card composer answers `501`: the stores show the claim URL
+/// and the code instead of a card, and a "printed and posted" order says that nothing was
+/// sent to the printer.
 #[tokio::test]
-async fn a_posted_card_order_follows_what_card_pdf_answers() {
-    let world = World::start().await.unwrap();
-    let (buyer, receipt) = buy_posted(&world).await;
+async fn without_a_card_renderer_the_stores_fall_back_to_the_link_and_the_code() {
+    let world = World::builder()
+        .card_renderer(Arc::new(ebc_server::NoCardRenderer))
+        .start()
+        .await
+        .unwrap();
+    let (mut buyer, receipt) = buy_posted(&world).await;
     let gift = &receipt.gifts[0];
     assert_eq!(gift.status, "created", "the gift itself exists either way: {gift:#?}");
-    assert!(gift.claim_url.is_some() && gift.code.is_some());
+    assert!(gift.claim_url.is_some() && gift.code.is_some(), "the fallback: link and code");
     // The posted card was priced from the printer's catalogue (5,90 € on top of the book).
     let total = buyer.page().unwrap().text_of("order-total").unwrap().to_owned();
     assert!(total.starts_with("8,89"), "{total}");
@@ -244,35 +252,25 @@ async fn a_posted_card_order_follows_what_card_pdf_answers() {
         ))
         .await
         .unwrap();
-    match card.status {
-        501 => {
-            assert!(gift.card_unavailable, "{gift:#?}");
-            assert_eq!(gift.print_status, None, "nothing was sent to the printer");
-            assert!(
-                gift.error
-                    .as_deref()
-                    .is_some_and(|e| e.contains("impression n'a pas été commandée")),
-                "{gift:#?}"
-            );
-            assert!(world.printer.state.orders().is_empty());
-        }
-        200 => {
-            assert!(card.body.starts_with(b"%PDF-"));
-            assert_eq!(gift.print_status.as_deref(), Some("accepted"), "{gift:#?}");
-            let orders = world.printer.state.orders();
-            assert_eq!(orders.len(), 1);
-            assert_eq!(orders[0].reference, receipt.order_ref);
-            assert!(orders[0].pdf_bytes > 1_000);
-        }
-        other => panic!("card.pdf answered {other}: {}", card.text()),
-    }
+    assert_eq!((card.status, card.error_code().as_deref()), (501, Some("not_implemented")));
+    assert!(gift.card_unavailable && gift.card_pdf_url.is_none(), "{gift:#?}");
+    assert_eq!(gift.print_status, None, "nothing was sent to the printer");
+    assert!(
+        gift.error.as_deref().is_some_and(|e| e.contains("impression n'a pas été commandée")),
+        "{gift:#?}"
+    );
+    assert!(world.printer.state.orders().is_empty());
+    assert!(buyer.open(&format!("{}/carte-1.pdf", receipt.order_url)).await.unwrap().is_page());
+    assert_eq!(buyer.page().unwrap().status(), 404);
 }
 
-/// The chain behind a posted card, once `card.pdf` can be rendered: checkout → the store
-/// fetches `card.pdf` from the server → submits it to the printer → the printer's status
-/// changes come back to the order page.
-async fn posted_card_chain(world: &World) -> ebc_demo_printer::orders::Order {
-    let (mut buyer, receipt) = buy_posted(world).await;
+/// The full chain: checkout with the posted card → the store fetches `card.pdf` (the real
+/// card, composed by `ebc-card` with the store's cover) → submits it to the printer,
+/// whose preflight accepts it → the printer's status changes come back to the order page.
+#[tokio::test]
+async fn a_posted_card_reaches_the_printer_and_its_status_comes_back() {
+    let world = World::start().await.unwrap();
+    let (mut buyer, receipt) = buy_posted(&world).await;
     let gift = &receipt.gifts[0];
     assert_eq!(gift.error, None, "{gift:#?}");
     assert!(gift.card_pdf_url.is_some(), "the buyer can also download the card");
@@ -288,7 +286,15 @@ async fn posted_card_chain(world: &World) -> ebc_demo_printer::orders::Order {
         ("Sacha Martin", "Lyon", "FR")
     );
     assert!(order.callback_url.as_deref().is_some_and(|u| u.starts_with(&world.septante.base)));
-    // What the printer holds is what the server rendered for the professional profile.
+    assert!(order.pdf_bytes > 10_000, "a real card, not a stub: {} bytes", order.pdf_bytes);
+    eprintln!(
+        "the printer accepted the card ({} bytes) with {} preflight warning(s): {:#?}",
+        order.pdf_bytes,
+        order.preflight_warnings.len(),
+        order.preflight_warnings
+    );
+    // What the printer holds is what the server renders for the professional profile:
+    // rendering is deterministic.
     let card = world
         .partner_api(world.septante.kind)
         .get(&format!(
@@ -310,37 +316,4 @@ async fn posted_card_chain(world: &World) -> ebc_demo_printer::orders::Order {
         assert_eq!(after.gifts[0].print_status.as_deref(), Some(expected));
     }
     assert!(buyer.page().unwrap().has("print-tracking"));
-    order
-}
-
-/// A stand-in for the card composer: answers every `card.pdf` with the structural fixture
-/// of this file. **Not a card** — it only lets the rest of the chain be exercised today.
-struct FixtureRenderer;
-
-impl ebc_server::CardRenderer for FixtureRenderer {
-    fn render(
-        &self,
-        _request: &ebc_server::CardRequest,
-    ) -> Result<Vec<u8>, ebc_server::CardRenderError> {
-        Ok(card_pdf(3.0))
-    }
-}
-
-/// The store → `card.pdf` → printer → callback chain with every real component, the card
-/// artwork excepted (a stand-in renderer plugged into the server's `CardRenderer` seam).
-#[tokio::test]
-async fn with_a_stand_in_card_renderer_a_posted_card_reaches_the_printer() {
-    let world = World::builder().card_renderer(Arc::new(FixtureRenderer)).start().await.unwrap();
-    let order = posted_card_chain(&world).await;
-    assert_eq!(order.pdf_sha256, sha256_hex(&card_pdf(3.0)));
-}
-
-/// The same chain with the server as shipped: fails with `501` until `ebc-card` backs the
-/// server's `CardRenderer`.
-#[tokio::test]
-#[ignore = "needs ebc-card wired into the server"]
-async fn a_posted_card_reaches_the_printer_and_its_status_comes_back() {
-    let world = World::start().await.unwrap();
-    let order = posted_card_chain(&world).await;
-    assert!(order.pdf_bytes > 10_000, "a real card, not a stub: {} bytes", order.pdf_bytes);
 }

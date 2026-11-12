@@ -5,7 +5,7 @@ use std::collections::HashSet;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use crate::card::{CardRenderer, NoCardRenderer};
+use crate::card::CardRenderer;
 use crate::clock::{Clock, Entropy, OsEntropy, SystemClock};
 use crate::config::Config;
 use crate::error::ServerError;
@@ -82,7 +82,8 @@ impl AppStateBuilder {
         self
     }
 
-    /// The card renderer (default: [`NoCardRenderer`], i.e. `501`).
+    /// The card renderer (default: [`crate::card::default_renderer`] — the card composer
+    /// with the cargo feature `card`, `501` without it).
     #[must_use]
     pub fn card_renderer(mut self, renderer: Arc<dyn CardRenderer>) -> Self {
         self.card_renderer = renderer;
@@ -132,7 +133,7 @@ impl AppState {
             store: None,
             clock: Arc::new(SystemClock),
             entropy: Arc::new(OsEntropy),
-            card_renderer: Arc::new(NoCardRenderer),
+            card_renderer: crate::card::default_renderer(),
         }
     }
 

@@ -5,7 +5,7 @@
 
 use ebc_layout::{
     CardFormat, FOLD_GUIDE_MAX_MM, FURNITURE_BAND_MAX_MM, Face, Fit, LayoutError,
-    MIN_MARK_LENGTH_MM, MarkStyle, PageGeometry, PrintProfile, Resolution, Sheet, caption_areas,
+    MARK_BLEED_GAP_MM, MIN_MARK_LENGTH_MM, MarkStyle, PageGeometry, PrintProfile, Resolution, Sheet, caption_areas,
     check_marks_fit, color_bar, crop_marks, effective_ppi, fold_marks, guides, info_entries, marks,
     new_page, page_geometry, place_image, place_image_aligned, place_image_bleed,
     registration_target_centers, registration_targets, safe_panels, safe_rect, scale_ruler,
@@ -244,12 +244,24 @@ fn rect_close(a: &Rect, b: &Rect) -> bool {
 
 /// Every point of every path is inside the media box and the mark area and outside the
 /// bleed box; the same holds for the ink once stroke widths are taken into account.
+///
+/// What a preflight tool sees is coarser — one box per painted object, around all of its
+/// sub-paths, grown by half the stroke width in every direction because the cap style is
+/// unknown to it. That box must stay clear of the bleed box as well, or marks in the
+/// registration colour are reported as lying in the printed area.
 fn check_layer_stays_in_the_margin(items: &[Item], g: &PageGeometry, ctx: &str) {
     for d in drawn(items) {
         if let Some(s) = d.stroke {
             assert!(s.width_pt > 0.0 && s.width_pt.is_finite(), "{ctx}");
             assert!(s.dash_mm.iter().all(|v| *v > 0.0 && v.is_finite()), "{ctx}");
         }
+        let all: Vec<Point> = subpaths(d.path).into_iter().flat_map(|sp| sp.points).collect();
+        let object = bounds(&all).inflate(d.stroke.map_or(0.0, |s| pt_to_mm(s.width_pt) / 2.0));
+        assert!(
+            !overlap(&object, &g.bleed),
+            "{ctx}: the box of one object, {object:?}, enters the bleed {:?}",
+            g.bleed
+        );
         for sp in subpaths(d.path) {
             for p in &sp.points {
                 assert!(within(&g.media, *p), "{ctx}: {p:?} outside media {:?}", g.media);
@@ -342,26 +354,27 @@ fn check_page(format: &CardFormat, profile: &PrintProfile, g: &PageGeometry, ctx
 
 fn check_crop_marks(format: &CardFormat, profile: &PrintProfile, g: &PageGeometry, ctx: &str) {
     let items = crop_marks(format, profile);
-    let start = profile.marks.offset.max(profile.bleed);
+    // Never on the bleed edge: at least MARK_BLEED_GAP_MM beyond it.
+    let start = profile.marks.offset.max(profile.bleed + MARK_BLEED_GAP_MM);
     let room = g.mark_reach_mm - start;
     let expected_len = profile.marks.length.min(room);
     if expected_len < MIN_MARK_LENGTH_MM {
         assert!(items.is_empty(), "{ctx}: marks drawn without room");
         return;
     }
-    assert_eq!(items.len(), 1, "{ctx}");
-    let d = &drawn(&items)[0];
-    let stroke = d.stroke.expect("crop marks are stroked");
-    assert!(stroke.dash_mm.is_empty(), "{ctx}: crop marks are solid");
-    assert_eq!(stroke.color, profile.marks.color());
-    assert_eq!(stroke.width_pt, profile.marks.weight_pt);
+    assert_eq!(items.len(), 8, "{ctx}: two marks per corner, each its own item");
     let (w, h) = (format.spread().w, format.spread().h);
-    let sps = subpaths(d.path);
-    assert_eq!(sps.len(), 8, "{ctx}: two strokes per corner");
     // corner index: 0 = top-left, 1 = top-right, 2 = bottom-left, 3 = bottom-right
     let mut horizontal = [0u8; 4];
     let mut vertical = [0u8; 4];
-    for sp in &sps {
+    for d in &drawn(&items) {
+        let stroke = d.stroke.expect("crop marks are stroked");
+        assert!(stroke.dash_mm.is_empty(), "{ctx}: crop marks are solid");
+        assert_eq!(stroke.color, profile.marks.color());
+        assert_eq!(stroke.width_pt, profile.marks.weight_pt);
+        let sps = subpaths(d.path);
+        assert_eq!(sps.len(), 1, "{ctx}: one stroke per item");
+        let sp = &sps[0];
         assert!(!sp.curved && sp.segments.len() == 1, "{ctx}");
         let (a, b) = sp.segments[0];
         let len = if a.y == b.y {
@@ -393,7 +406,7 @@ fn check_crop_marks(format: &CardFormat, profile: &PrintProfile, g: &PageGeometr
 
 fn check_fold_marks(format: &CardFormat, profile: &PrintProfile, g: &PageGeometry, ctx: &str) {
     let items = fold_marks(format, profile);
-    let start = profile.marks.offset.max(profile.bleed);
+    let start = profile.marks.offset.max(profile.bleed + MARK_BLEED_GAP_MM);
     let expected_len = profile.marks.length.min(g.mark_reach_mm - start);
     if expected_len < MIN_MARK_LENGTH_MM {
         assert!(items.is_empty(), "{ctx}: fold marks drawn without room");
@@ -405,9 +418,10 @@ fn check_fold_marks(format: &CardFormat, profile: &PrintProfile, g: &PageGeometr
         MarkStyle::Press | MarkStyle::Black => expected_len,
         MarkStyle::Guide => (g.mark_reach_mm - start).min(FOLD_GUIDE_MAX_MM).max(expected_len),
     };
-    assert_eq!(items.len(), 1, "{ctx}: one item, no solid part");
+    assert_eq!(items.len(), 4, "{ctx}: above and below, at both creases; no solid part");
     let [f0, f1] = format.fold_x();
     let h = format.spread().h;
+    let mut seen = [[false; 2]; 2];
     for d in &drawn(&items) {
         let stroke = d.stroke.expect("fold marks are stroked");
         assert_eq!(stroke.color, profile.marks.color());
@@ -421,8 +435,7 @@ fn check_fold_marks(format: &CardFormat, profile: &PrintProfile, g: &PageGeometr
         assert!(3.0 * on + 2.0 * off <= expected_len + EPS, "{ctx}: fewer than three dashes");
         assert!(close(on, 1.0) || close(5.0 * on, expected_len), "{ctx}: dash {on}/{off}");
         let sps = subpaths(d.path);
-        assert_eq!(sps.len(), 4, "{ctx}: above and below, at both creases");
-        let mut seen = [[false; 2]; 2];
+        assert_eq!(sps.len(), 1, "{ctx}: one stroke per item");
         for sp in &sps {
             assert!(!sp.curved && sp.segments.len() == 1, "{ctx}");
             let (a, b) = sp.segments[0];
@@ -443,7 +456,10 @@ fn check_fold_marks(format: &CardFormat, profile: &PrintProfile, g: &PageGeometr
             } else {
                 (a.y.min(b.y) - h, a.y.max(b.y) - h)
             };
-            assert!(near >= profile.bleed - EPS, "{ctx}: fold mark inside the bleed");
+            assert!(
+                near >= profile.bleed + MARK_BLEED_GAP_MM - EPS,
+                "{ctx}: fold mark on or inside the bleed edge"
+            );
             assert!(far <= g.mark_reach_mm + EPS, "{ctx}: fold mark beyond the mark area");
             assert!(close(near, start) && close(far - near, expected_len), "{ctx}");
             // Drawn outwards, so that the dash pattern starts at the end nearest the card.
@@ -452,8 +468,8 @@ fn check_fold_marks(format: &CardFormat, profile: &PrintProfile, g: &PageGeometr
             assert!(!seen[fold][usize::from(below)], "{ctx}: duplicate fold mark");
             seen[fold][usize::from(below)] = true;
         }
-        assert_eq!(seen, [[true; 2]; 2], "{ctx}");
     }
+    assert_eq!(seen, [[true; 2]; 2], "{ctx}");
 }
 
 /// Ink rectangles of every sub-path of a list of items.
@@ -818,7 +834,7 @@ fn the_default_professional_card_has_all_its_marks() {
     let layer = marks(&f, &p);
     let sub: Vec<usize> =
         drawn(layer_items(&layer, "marks")).iter().map(|d| subpaths(d.path).len()).collect();
-    assert_eq!(sub, vec![8, 4]);
+    assert_eq!(sub, vec![1; 8 + 4], "eight crop marks and four fold marks, one item each");
     assert_eq!(check_marks_fit(&f, &p), Ok(()));
     // With everything switched on.
     p.marks.registration = true;
@@ -827,23 +843,26 @@ fn the_default_professional_card_has_all_its_marks() {
     let layer = marks(&f, &p);
     let items = layer_items(&layer, "marks");
     let sub: Vec<usize> = drawn(items).iter().map(|d| subpaths(d.path).len()).collect();
-    // crop (8 strokes), fold (4), targets (4 x (circle + 2 strokes)), 11 patches, ruler
-    // (base line + 11 ticks: 100 mm, its label stacked above the ticks because a 110 mm
-    // panel has no room for it beside the ruler).
-    let mut want = vec![8, 4, 12];
+    // crop (8 strokes), fold (4), four targets (circle + 2 strokes each), 11 patches,
+    // ruler (base line + 11 ticks: 100 mm, its label stacked above the ticks because a
+    // 110 mm panel has no room for it beside the ruler).
+    let mut want = vec![1; 8 + 4];
+    want.extend([3; 4]);
     want.extend([1; 11]);
     want.push(12);
     assert_eq!(sub, want);
     assert_eq!(registration_target_centers(&f, &p).len(), 4);
     assert_eq!(scale_ruler(&f, &p).map(|r| r.length_mm), Some(100.0));
-    // And the home card on A4 and on Letter: solid cut marks, dashed fold guides (one
-    // item: no solid part that could be taken for a cut), the 100 mm ruler.
+    // And the home card on A4 and on Letter: solid cut marks, dashed fold guides (no
+    // solid part that could be taken for a cut), the 100 mm ruler.
     for sheet in [Sheet::A4, Sheet::Letter] {
         let h = PrintProfile::home(sheet);
         let layer = marks(&f, &h);
         let sub: Vec<usize> =
             drawn(layer_items(&layer, "marks")).iter().map(|d| subpaths(d.path).len()).collect();
-        assert_eq!(sub, vec![8, 4, 12], "{sheet:?}");
+        let mut want = vec![1; 8 + 4];
+        want.push(12);
+        assert_eq!(sub, want, "{sheet:?}");
         assert_eq!(check_marks_fit(&f, &h), Ok(()), "{sheet:?}");
         // Nothing is shortened: full 5 mm cut marks inside the printable area.
         let g = page_geometry(&f, &h).unwrap();

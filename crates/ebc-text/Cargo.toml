@@ -10,6 +10,8 @@ authors.workspace = true
 
 [dependencies]
 ebc-scene.workspace = true
+# Shaping. Built on `read-fonts`: keep the two in step (harfrust 0.15 needs read-fonts 0.46),
+# or the font type of one is not the font type of the other.
 harfrust = "0.15"
 read-fonts = "0.46"
 thiserror.workspace = true
@@ -24,7 +26,3 @@ workspace = true
 default = ["raster"]
 # `rasterize()`: 8-bit coverage masks of shaped text (used by font identification and previews).
 raster = ["dep:zeno"]
-
-[dev-dependencies]
-harfrust = "0.15"
-read-fonts = "0.46"

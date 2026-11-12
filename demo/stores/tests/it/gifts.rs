@@ -110,6 +110,12 @@ async fn septante_gift_printed_at_home_uses_a_hosted_file() {
         })
     );
 
+    let cover_upload = &world.ebc.requests_to("PUT", "/g_0001/cover")[0];
+    assert_eq!(
+        cover_upload.query.as_deref(),
+        Some("cover_rights=print_licence"),
+        "the store declares its right to print the cover (in the signed path)"
+    );
     let cover = world.ebc.gift("g_0001").cover.unwrap();
     let decoder = png::Decoder::new(std::io::Cursor::new(&cover));
     let reader = decoder.read_info().unwrap();

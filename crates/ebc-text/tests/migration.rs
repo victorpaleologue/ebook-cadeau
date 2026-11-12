@@ -324,3 +324,16 @@ fn character_maps_and_metrics_are_those_of_the_previous_font_stack() {
         assert_eq!(format!("{:?}", font.metrics()), metrics, "{label}");
     }
 }
+
+/// The auto traits of the public types are part of the API other crates were built
+/// against: a `Font` can be shared between threads and captured by `catch_unwind`.
+#[test]
+fn auto_traits_of_the_public_types_are_unchanged() {
+    use std::panic::{RefUnwindSafe, UnwindSafe};
+    fn all<T: Send + Sync + Unpin + UnwindSafe + RefUnwindSafe + 'static>() {}
+    all::<Font>();
+    all::<ebc_text::FontError>();
+    all::<ebc_text::FontMetrics>();
+    all::<ShapeOptions>();
+    all::<ShapedText>();
+}

@@ -317,6 +317,13 @@ pub struct Font {
     inner: Arc<Inner>,
 }
 
+// A `Font` is immutable font data plus the write-once caches the font libraries keep
+// behind it: a panic can leave such a cache unfilled, never half-written. The libraries
+// hold them behind `dyn` types, which hides this from the compiler — hence the explicit
+// markers, so that a `Font` can be captured by `catch_unwind` as it always could.
+impl std::panic::UnwindSafe for Font {}
+impl std::panic::RefUnwindSafe for Font {}
+
 impl fmt::Debug for Font {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Font")

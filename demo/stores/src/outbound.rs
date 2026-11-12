@@ -458,7 +458,11 @@ impl PartnerClient {
         Ok(created)
     }
 
-    /// `PUT /api/partner/v1/gifts/{id}/cover` — the cover image the store is entitled to print.
+    /// `PUT /api/partner/v1/gifts/{id}/cover?cover_rights=…` — the cover image, with the
+    /// rights basis under which the store may have it printed on a card (`print_licence`,
+    /// `rights_holder_declared`, `public_domain`, `promo_all_media`; `none` keeps the
+    /// card typographic). The declaration is part of the signed path: eBook Cadeau only
+    /// prints a cover its partner declared a right to print.
     ///
     /// # Errors
     /// See [`OutboundError`].
@@ -467,8 +471,13 @@ impl PartnerClient {
         gift_id: &str,
         media_type: &str,
         bytes: Vec<u8>,
+        cover_rights: &str,
     ) -> Result<(), OutboundError> {
-        let path = format!("/api/partner/v1/gifts/{}/cover", segment(gift_id));
+        let path = format!(
+            "/api/partner/v1/gifts/{}/cover?cover_rights={}",
+            segment(gift_id),
+            segment(cover_rights)
+        );
         let response = self.send(Method::PUT, &path, Some(media_type), bytes, &[]).await?;
         if response.status().is_success() { Ok(()) } else { Err(api_error(EBC, response).await) }
     }

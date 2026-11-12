@@ -21,7 +21,8 @@
 //! * [`rate`] — per-client and global budgets for unknown codes.
 //! * [`device`] — device classes from `User-Agent` (a hint; pages carry a chooser).
 //! * [`upload`] — sniffing of uploads, DRM refusal, rights declaration.
-//! * [`card`] — the [`CardRenderer`] seam for `card.pdf` (answers `501` by default).
+//! * [`card`] — `card.pdf`: the [`CardRenderer`] seam, backed by the card composer
+//!   `ebc-card` with the cargo feature `card` (default); `501` without it.
 //! * [`clock`] — injected time and randomness.
 //! * [`names`] — download file names and `Content-Disposition`.
 //! * [`app`] — the router.
@@ -56,8 +57,11 @@ mod text;
 pub mod upload;
 mod webhook;
 
+#[cfg(feature = "card")]
+pub use card::ComposedCardRenderer;
 pub use card::{
-    CardFormat, CardProfile, CardRenderError, CardRenderer, CardRequest, NoCardRenderer,
+    CardFormat, CardProfile, CardRenderError, CardRenderer, CardRequest, CoverRights,
+    NoCardRenderer,
 };
 pub use clock::{Clock, Entropy, ManualClock, OsEntropy, SystemClock};
 pub use config::{Config, Partner, PartnersFile, WebhookPolicy};

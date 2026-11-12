@@ -114,7 +114,8 @@ pub use guides::{GUIDES_LAYER, guides, info_entries, safe_panels, safe_rect, spi
 pub use image::{Fit, effective_ppi, place_image, place_image_aligned, place_image_bleed};
 pub use marks::{
     CAPTION_MIN_HEIGHT_MM, COLOR_BAR_PATCHES, FOLD_GUIDE_MAX_MM, FOLD_MARK_DASH_MM,
-    FURNITURE_BAND_MAX_MM, MARKS_LAYER, MIN_MARK_LENGTH_MM, ScaleRuler, caption_areas,
+    FURNITURE_BAND_MAX_MM, MARK_BLEED_GAP_MM, MARKS_LAYER, MIN_MARK_LENGTH_MM, ScaleRuler,
+    caption_areas,
     check_marks_fit, color_bar, crop_marks, fold_marks, marks, registration_target_centers,
     registration_targets, scale_ruler,
 };

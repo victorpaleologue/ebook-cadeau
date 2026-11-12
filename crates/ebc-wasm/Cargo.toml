@@ -8,7 +8,41 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[features]
+default = ["fontid"]
+# Font identification (`fontid_identify`, text regions in `analyze_cover`) through
+# `ebc-fontid` and its bundled index of the open fonts in `assets/fonts`. Without the
+# feature both answer "unavailable" and the web app says so.
+fontid = ["dep:ebc-fontid"]
+
 [dependencies]
+# A path dependency instead of `workspace = true`: the 1 MB FOGRA39 profile (a default
+# feature of ebc-card) must stay out of the wasm bundle, and a workspace dependency
+# cannot switch default features off. The page fetches the profile as a separate file.
+ebc-card = { path = "../ebc-card", version = "0.1.0", default-features = false, features = ["bundled-fonts", "bundled-icc"] }
+ebc-catalog.workspace = true
+ebc-color.workspace = true
+ebc-covers.workspace = true
+ebc-fontid = { workspace = true, features = ["bundled-index"], optional = true }
+ebc-i18n.workspace = true
+ebc-isbn.workspace = true
+ebc-layout.workspace = true
+ebc-model.workspace = true
+ebc-qr.workspace = true
+ebc-scene.workspace = true
+ebc-text.workspace = true
+image = { version = "0.25", default-features = false, features = ["jpeg", "png", "webp"] }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+wasm-bindgen = "=0.2.130"
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+jpeg-encoder = "0.7"
+sha2 = "0.11"

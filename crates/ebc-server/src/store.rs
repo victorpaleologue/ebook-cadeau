@@ -105,6 +105,10 @@ pub struct GiftRecord {
     /// Hosted files: the declaration made with the upload.
     #[serde(default)]
     pub rights_basis: Option<RightsBasis>,
+    /// The rights basis the partner declared for the cover (`none` unless declared): a
+    /// cover is only printed on a card under a declared basis.
+    #[serde(default)]
+    pub cover_rights: crate::card::CoverRights,
     /// Status last recorded (expiry is applied on read, see [`GiftRecord::status_at`]).
     pub status: GiftStatus,
     /// Creation time.
@@ -649,6 +653,7 @@ mod tests {
             },
             upload_id: None,
             rights_basis: Some(RightsBasis::PublicDomain),
+            cover_rights: crate::card::CoverRights::None,
             status: GiftStatus::Created,
             created_at: 100,
             expires_at: None,

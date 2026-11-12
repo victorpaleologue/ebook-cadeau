@@ -46,18 +46,24 @@ fn strokes(items: &[Item]) -> Vec<(&Stroke, Vec<(Point, Point)>)> {
         .collect()
 }
 
-/// `true` if some fold-mark stroke differs from the crop-mark stroke in a way a person
+/// `true` if every fold-mark stroke differs from the crop-mark stroke in a way a person
 /// can see on paper: a dash pattern, another weight or another colour.
 fn distinguishable(format: &CardFormat, profile: &PrintProfile) -> bool {
     let crop = crop_marks(format, profile);
     let fold = fold_marks(format, profile);
     let crop = strokes(&crop);
     let fold = strokes(&fold);
-    assert_eq!(crop.len(), 1, "one crop-mark item");
-    assert!(!fold.is_empty(), "fold marks are drawn");
+    // Each mark is an item of its own (one object per mark, for preflight tools).
+    assert_eq!(crop.len(), 8, "one item per crop mark");
+    assert_eq!(fold.len(), 4, "one item per fold mark");
     let (crop_stroke, _) = crop[0];
+    for (stroke, segments) in crop.iter().chain(&fold) {
+        assert_eq!(segments.len(), 1, "one stroke per mark");
+        assert!(stroke.width_pt > 0.0);
+    }
+    assert!(crop.iter().all(|(s, _)| *s == crop_stroke), "all crop marks look the same");
     assert!(crop_stroke.dash_mm.is_empty(), "crop marks are solid");
-    fold.iter().any(|(s, _)| {
+    fold.iter().all(|(s, _)| {
         s.dash_mm != crop_stroke.dash_mm
             || s.width_pt != crop_stroke.width_pt
             || s.color != crop_stroke.color

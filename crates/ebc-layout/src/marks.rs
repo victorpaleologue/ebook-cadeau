@@ -9,6 +9,20 @@
 //! butt caps; crop marks **solid**, along the extension of each trim edge; fold marks
 //! **dashed**, along the extension of each crease, so that a finisher cannot take a crease
 //! for a cut; nothing closer to the trim than the bleed.
+//!
+//! # Marks and preflight
+//!
+//! Two rules keep the marks unambiguous for a preflight tool, which judges one painted
+//! object at a time by its bounding box and cannot tell a butt cap from a projecting one:
+//!
+//! * **One object per mark.** Each crop mark, each fold mark and each registration target
+//!   is its own [`Item`]. Eight crop marks in one path would have a bounding box as large
+//!   as the page — "registration colour inside the bleed box" as far as such a tool can
+//!   see.
+//! * **A gap after the bleed.** Crop and fold marks start [`MARK_BLEED_GAP_MM`] beyond the
+//!   bleed edge, not on it, so that no object in the registration colour touches the
+//!   bleed box even when half a stroke width is added around its end points. The other
+//!   furniture (targets, colour bar, ruler, caption areas) keeps the same distance.
 
 use ebc_scene::{Color, Item, Path, Point, Rect, Size, Stroke, pt_to_mm};
 
@@ -19,6 +33,19 @@ use crate::profile::{MarkStyle, Marks, PrintProfile};
 
 /// Name of the layer returned by [`marks`].
 pub const MARKS_LAYER: &str = "marks";
+/// Clear space between the bleed edge and the start of crop and fold marks, in
+/// millimetres.
+///
+/// Prepress convention keeps marks off the bleed: a mark that starts exactly on the bleed
+/// edge is, for a preflight tool that adds half the stroke width around a path (it does
+/// not know the cap is butt), an object in the registration colour that reaches into the
+/// bleed box. Half a millimetre is more than half the heaviest stroke a profile may ask
+/// for ([`MAX_MARK_WEIGHT_PT`](crate::MAX_MARK_WEIGHT_PT): 2 pt, i.e. 0.35 mm), costs the
+/// finisher nothing, and is the distance all other furniture keeps from the bleed edge.
+///
+/// The effective start of a mark is `max(marks.offset, bleed + MARK_BLEED_GAP_MM)` from
+/// the trim: a profile whose offset already clears the bleed by more is honoured as is.
+pub const MARK_BLEED_GAP_MM: f64 = 0.5;
 /// Crop and fold marks that would end up shorter than this (because the slug or the
 /// printable area is too small) are omitted rather than drawn as specks
 /// ([`check_marks_fit`] reports it).
@@ -129,8 +156,7 @@ impl Ctx {
     /// Start and end of crop and fold marks, as distances from the trim edge, or `None`
     /// when there is no room for a mark worth drawing.
     fn tick_span(&self) -> Option<(f64, f64)> {
-        // Never inside the bleed, whatever offset the profile asks for.
-        let start = self.marks.offset.max(self.bleed);
+        let start = mark_start(&self.marks, self.bleed);
         let length = self.marks.length.min(self.reach - start);
         (length >= MIN_MARK_LENGTH_MM).then_some((start, start + length))
     }
@@ -140,10 +166,20 @@ impl Ctx {
     }
 }
 
+/// Distance from the trim edge at which crop and fold marks start: the profile's offset,
+/// but never closer to the bleed edge than [`MARK_BLEED_GAP_MM`].
+fn mark_start(marks: &Marks, bleed: f64) -> f64 {
+    marks.offset.max(bleed + MARK_BLEED_GAP_MM)
+}
+
 /// Crop (trim) marks: at each of the four corners of the trim box, one horizontal and one
 /// vertical stroke on the extensions of the two trim edges that meet there, starting
-/// `max(marks.offset, bleed)` away from the corner and pointing outwards — so they never
-/// enter the bleed. One stroked [`Item`] with eight sub-paths.
+/// `max(marks.offset, bleed + `[`MARK_BLEED_GAP_MM`]`)` away from the corner and pointing
+/// outwards — so they never touch the bleed.
+///
+/// Eight stroked [`Item`]s, one per mark ([`marks`] says why they are not one path): for
+/// each corner in the order top-left, bottom-left, top-right, bottom-right, the
+/// horizontal mark, then the vertical one. Each runs outwards from the card.
 ///
 /// Returns nothing if the page cannot be built ([`new_page`](crate::new_page) would fail)
 /// or there is less than [`MIN_MARK_LENGTH_MM`] of room. Ignores `marks.crop`.
@@ -151,16 +187,20 @@ impl Ctx {
 pub fn crop_marks(format: &CardFormat, profile: &PrintProfile) -> Vec<Item> {
     let Some(cx) = Ctx::new(format, profile) else { return Vec::new() };
     let Some((a, b)) = cx.tick_span() else { return Vec::new() };
-    let mut path = Path::new();
+    let stroke = cx.marks.stroke();
+    let mut items = Vec::with_capacity(8);
+    let mut mark = |from: Point, to: Point| {
+        items.push(Item::stroke(Path::line(from, to), stroke.clone()));
+    };
     for (x, dir_x) in [(0.0, -1.0), (cx.spread.w, 1.0)] {
         for (y, dir_y) in [(0.0, -1.0), (cx.spread.h, 1.0)] {
             // Along the horizontal trim edge, away from the corner.
-            path.move_to(x + dir_x * a, y).line_to(x + dir_x * b, y);
+            mark(Point::new(x + dir_x * a, y), Point::new(x + dir_x * b, y));
             // Along the vertical trim edge, away from the corner.
-            path.move_to(x, y + dir_y * a).line_to(x, y + dir_y * b);
+            mark(Point::new(x, y + dir_y * a), Point::new(x, y + dir_y * b));
         }
     }
-    vec![Item::stroke(path, cx.marks.stroke())]
+    items
 }
 
 /// The dash pattern of a fold mark `length` millimetres long: [`FOLD_MARK_DASH_MM`], or
@@ -187,9 +227,10 @@ fn fold_dash_mm(length: f64) -> Vec<f64> {
 /// nearest the card; marks shorter than 5 mm use a proportionally finer pattern so that
 /// they still show three dashes.
 ///
-/// One stroked [`Item`] with four sub-paths, each running outwards from the card. Returns
-/// nothing if the page cannot be built or there is less than [`MIN_MARK_LENGTH_MM`] of
-/// room. Ignores `marks.fold`.
+/// Four stroked [`Item`]s, one per mark, each running outwards from the card: for each
+/// crease, left to right, the mark above the spread, then the one below. Returns nothing
+/// if the page cannot be built or there is less than [`MIN_MARK_LENGTH_MM`] of room.
+/// Ignores `marks.fold`.
 #[must_use]
 pub fn fold_marks(format: &CardFormat, profile: &PrintProfile) -> Vec<Item> {
     let Some(cx) = Ctx::new(format, profile) else { return Vec::new() };
@@ -199,13 +240,15 @@ pub fn fold_marks(format: &CardFormat, profile: &PrintProfile) -> Vec<Item> {
         MarkStyle::Guide => cx.reach.min(a + FOLD_GUIDE_MAX_MM).max(tick_end),
     };
     let h = cx.spread.h;
-    let mut path = Path::new();
-    for x in cx.fold_x {
-        path.move_to(x, -a).line_to(x, -b);
-        path.move_to(x, h + a).line_to(x, h + b);
-    }
     let dashed = Stroke::dashed(cx.marks.color(), cx.marks.weight_pt, fold_dash_mm(b - a));
-    vec![Item::stroke(path, dashed)]
+    let mut items = Vec::with_capacity(4);
+    for x in cx.fold_x {
+        for (from, to) in [(-a, -b), (h + a, h + b)] {
+            let path = Path::line(Point::new(x, from), Point::new(x, to));
+            items.push(Item::stroke(path, dashed.clone()));
+        }
+    }
+    items
 }
 
 /// Checks that the cut and fold marks the profile asks for can actually be drawn.
@@ -218,9 +261,9 @@ pub fn fold_marks(format: &CardFormat, profile: &PrintProfile) -> Vec<Item> {
 /// # Errors
 /// * whatever [`page_geometry`] reports;
 /// * [`LayoutError::MarksDoNotFit`] — `marks.crop` or `marks.fold` is set but the marks
-///   would be left out: fewer than [`MIN_MARK_LENGTH_MM`] lie between
-///   `max(marks.offset, bleed)` and the edge of the mark area (or `marks.length` itself
-///   is shorter than that).
+///   would be left out: fewer than [`MIN_MARK_LENGTH_MM`] lie between the start of the
+///   marks, `max(marks.offset, bleed + `[`MARK_BLEED_GAP_MM`]`)`, and the edge of the mark
+///   area (or `marks.length` itself is shorter than that).
 ///
 /// Marks that are merely shortened, and registration targets, colour bar or scale ruler
 /// that are dropped for lack of room, are not errors.
@@ -230,7 +273,7 @@ pub fn check_marks_fit(format: &CardFormat, profile: &PrintProfile) -> Result<()
     if !(wanted.crop || wanted.fold) {
         return Ok(());
     }
-    let start = wanted.offset.max(g.bleed_mm);
+    let start = mark_start(wanted, g.bleed_mm);
     let available_mm = wanted.length.min(g.mark_reach_mm - start).max(0.0);
     if available_mm < MIN_MARK_LENGTH_MM {
         return Err(LayoutError::MarksDoNotFit { available_mm, needed_mm: MIN_MARK_LENGTH_MM });
@@ -289,22 +332,22 @@ pub fn registration_target_centers(format: &CardFormat, profile: &PrintProfile) 
 /// Registration targets: a circle and a cross, centred on each side of the spread, in the
 /// middle of the band between the bleed edge and the edge of the mark area (or of its
 /// first [`FURNITURE_BAND_MAX_MM`] when the margin is wider than that). One stroked
-/// [`Item`]. See [`registration_target_centers`] for the placement rule. Ignores
+/// [`Item`] per target (circle, horizontal stroke, vertical stroke), in the order of
+/// [`registration_target_centers`], which also documents the placement rule. Ignores
 /// `marks.registration`.
 #[must_use]
 pub fn registration_targets(format: &CardFormat, profile: &PrintProfile) -> Vec<Item> {
     let Some(cx) = Ctx::new(format, profile) else { return Vec::new() };
-    let targets = target_layout(&cx);
-    if targets.is_empty() {
-        return Vec::new();
-    }
-    let mut path = Path::new();
-    for Target { center: c, half } in targets {
-        path.extend(&Path::circle(c, half * TARGET_CIRCLE_RATIO));
-        path.move_to(c.x - half, c.y).line_to(c.x + half, c.y);
-        path.move_to(c.x, c.y - half).line_to(c.x, c.y + half);
-    }
-    vec![Item::stroke(path, cx.marks.stroke())]
+    let stroke = cx.marks.stroke();
+    target_layout(&cx)
+        .into_iter()
+        .map(|Target { center: c, half }| {
+            let mut path = Path::circle(c, half * TARGET_CIRCLE_RATIO);
+            path.move_to(c.x - half, c.y).line_to(c.x + half, c.y);
+            path.move_to(c.x, c.y - half).line_to(c.x, c.y + half);
+            Item::stroke(path, stroke.clone())
+        })
+        .collect()
 }
 
 /// A colour control strip below the left-hand panel: one filled square per entry of
@@ -454,6 +497,21 @@ pub fn caption_areas(format: &CardFormat, profile: &PrintProfile) -> Option<[Rec
 /// set. Every point of every path lies inside the page's media box (inside the printable
 /// area for sheet-based profiles) and outside its bleed box.
 ///
+/// # Marks and preflight
+///
+/// A preflight tool judges one painted object at a time by its bounding box, and cannot
+/// tell a butt cap from a projecting one. Two rules keep the marks — drawn in the
+/// registration colour for a press — unambiguous for it:
+///
+/// * **One object per mark.** Each crop mark, each fold mark and each registration target
+///   is its own [`Item`]. Eight crop marks in one path would have a bounding box as large
+///   as the page: "registration colour inside the bleed box" as far as such a tool can
+///   see.
+/// * **A gap after the bleed.** Crop and fold marks start [`MARK_BLEED_GAP_MM`] beyond the
+///   bleed edge, not on it, so that no mark touches the bleed box even when half a
+///   stroke width is added around its end points. The other furniture keeps the same
+///   distance.
+///
 /// The layer is empty when [`new_page`](crate::new_page) would fail for the same
 /// arguments, and marks that do not fit the available margin are shortened or left out,
 /// so the function never panics and never draws over the artwork. Use
@@ -505,6 +563,11 @@ mod tests {
         out
     }
 
+    /// The straight sub-paths of all the items, in order.
+    fn all_lines(items: &[Item]) -> Vec<(Point, Point)> {
+        items.iter().flat_map(lines).collect()
+    }
+
     fn stroke_of(item: &Item) -> &Stroke {
         match item {
             Item::Path { stroke: Some(s), fill: None, .. } => s,
@@ -513,22 +576,25 @@ mod tests {
     }
 
     #[test]
-    fn professional_crop_marks_start_at_the_bleed_edge_and_are_5_mm_long() {
+    fn professional_crop_marks_start_clear_of_the_bleed_and_are_5_mm_long() {
         let (f, p) = (CardFormat::poche(), PrintProfile::professional_eu());
         let items = crop_marks(&f, &p);
-        assert_eq!(items.len(), 1);
-        let s = stroke_of(&items[0]);
-        assert_eq!(s.color, Color::Registration);
-        assert_eq!(s.width_pt, 0.25);
-        assert!(s.dash_mm.is_empty());
-        let l = lines(&items[0]);
-        assert_eq!(l.len(), 8, "two strokes per corner");
-        // Top-left corner: horizontal then vertical.
-        assert_eq!(l[0], (Point::new(-3.0, 0.0), Point::new(-8.0, 0.0)));
-        assert_eq!(l[1], (Point::new(0.0, -3.0), Point::new(0.0, -8.0)));
+        assert_eq!(items.len(), 8, "two marks per corner, one item each");
+        for item in &items {
+            let s = stroke_of(item);
+            assert_eq!(s.color, Color::Registration);
+            assert_eq!(s.width_pt, 0.25);
+            assert!(s.dash_mm.is_empty());
+            assert_eq!(lines(item).len(), 1, "one stroke per item");
+        }
+        let l = all_lines(&items);
+        // Top-left corner: horizontal then vertical, from 0.5 mm beyond the 3 mm bleed.
+        assert_eq!(MARK_BLEED_GAP_MM, 0.5);
+        assert_eq!(l[0], (Point::new(-3.5, 0.0), Point::new(-8.5, 0.0)));
+        assert_eq!(l[1], (Point::new(0.0, -3.5), Point::new(0.0, -8.5)));
         // Bottom-right corner.
-        assert_eq!(l[6], (Point::new(233.0, 178.0), Point::new(238.0, 178.0)));
-        assert_eq!(l[7], (Point::new(230.0, 181.0), Point::new(230.0, 186.0)));
+        assert_eq!(l[6], (Point::new(233.5, 178.0), Point::new(238.5, 178.0)));
+        assert_eq!(l[7], (Point::new(230.0, 181.5), Point::new(230.0, 186.5)));
     }
 
     fn close(a: f64, b: f64) -> bool {
@@ -547,24 +613,26 @@ mod tests {
     fn professional_fold_marks_are_dashed_strokes_at_both_creases() {
         let (f, p) = (CardFormat::poche(), PrintProfile::professional_eu());
         let items = fold_marks(&f, &p);
-        assert_eq!(items.len(), 1);
+        assert_eq!(items.len(), 4, "above and below each crease, one item each");
         // Same colour and weight as the crop marks, but dashed 1 mm on, 1 mm off: a 5 mm
         // mark shows three dashes. A crease must never read as a cut.
-        let fold = stroke_of(&items[0]);
         let crop_items = crop_marks(&f, &p);
         let crop = stroke_of(&crop_items[0]);
-        assert_eq!(fold.dash_mm, vec![1.0, 1.0]);
         assert!(crop.dash_mm.is_empty());
-        assert_eq!((fold.color, fold.width_pt), (crop.color, crop.width_pt));
-        assert_eq!(fold.cap, ebc_scene::StrokeCap::Butt);
+        for item in &items {
+            let fold = stroke_of(item);
+            assert_eq!(fold.dash_mm, vec![1.0, 1.0]);
+            assert_eq!((fold.color, fold.width_pt), (crop.color, crop.width_pt));
+            assert_eq!(fold.cap, ebc_scene::StrokeCap::Butt);
+        }
         // Each mark runs outwards from the card, so its first dash is the one nearest it.
         assert_eq!(
-            lines(&items[0]),
+            all_lines(&items),
             vec![
-                (Point::new(110.0, -3.0), Point::new(110.0, -8.0)),
-                (Point::new(110.0, 181.0), Point::new(110.0, 186.0)),
-                (Point::new(120.0, -3.0), Point::new(120.0, -8.0)),
-                (Point::new(120.0, 181.0), Point::new(120.0, 186.0)),
+                (Point::new(110.0, -3.5), Point::new(110.0, -8.5)),
+                (Point::new(110.0, 181.5), Point::new(110.0, 186.5)),
+                (Point::new(120.0, -3.5), Point::new(120.0, -8.5)),
+                (Point::new(120.0, 181.5), Point::new(120.0, 186.5)),
             ]
         );
     }
@@ -573,27 +641,29 @@ mod tests {
     fn home_fold_marks_are_dashed_grey_guides_running_to_the_printable_edge() {
         let (f, p) = (CardFormat::poche(), PrintProfile::home(Sheet::A4));
         let items = fold_marks(&f, &p);
-        assert_eq!(items.len(), 1, "one dashed stroke, no solid part");
-        let dashed = stroke_of(&items[0]);
-        assert_eq!(dashed.dash_mm, vec![1.0, 1.0]);
-        assert_eq!(dashed.color, Color::Gray(crate::GUIDE_GRAY_LEVEL));
-        assert_eq!(dashed.width_pt, 0.5);
-        // From the bleed edge (2 mm) to the printable edge: 16 mm margin - 6.35 mm
-        // unprintable = 9.65 mm from the trim. The solid cut marks stop at 7 mm.
-        let g = lines(&items[0]);
+        assert_eq!(items.len(), 4, "four dashed strokes, no solid part");
+        for item in &items {
+            let dashed = stroke_of(item);
+            assert_eq!(dashed.dash_mm, vec![1.0, 1.0]);
+            assert_eq!(dashed.color, Color::Gray(crate::GUIDE_GRAY_LEVEL));
+            assert_eq!(dashed.width_pt, 0.5);
+        }
+        // From 0.5 mm beyond the bleed edge (2 mm) to the printable edge: 16 mm margin -
+        // 6.35 mm unprintable = 9.65 mm from the trim. The solid cut marks stop at 7.5 mm.
+        let g = all_lines(&items);
         assert_eq!(g.len(), 4);
         for (got, (x, from, to)) in g.iter().zip([
-            (110.0, -2.0, -9.65),
-            (110.0, 180.0, 187.65),
-            (120.0, -2.0, -9.65),
-            (120.0, 180.0, 187.65),
+            (110.0, -2.5, -9.65),
+            (110.0, 180.5, 187.65),
+            (120.0, -2.5, -9.65),
+            (120.0, 180.5, 187.65),
         ]) {
             assert_eq!((got.0.x, got.1.x), (x, x), "exactly on the crease");
             assert!(close(got.0.y, from) && close(got.1.y, to), "{got:?}");
         }
-        let crop = lines(&crop_marks(&f, &p)[0]);
-        assert_eq!(crop[1], (Point::new(0.0, -2.0), Point::new(0.0, -7.0)));
-        assert!(stroke_of(&crop_marks(&f, &p)[0]).dash_mm.is_empty());
+        let crop = all_lines(&crop_marks(&f, &p));
+        assert_eq!(crop[1], (Point::new(0.0, -2.5), Point::new(0.0, -7.5)));
+        assert!(crop_marks(&f, &p).iter().all(|item| stroke_of(item).dash_mm.is_empty()));
     }
 
     #[test]
@@ -604,15 +674,17 @@ mod tests {
             p.slug = slug;
             fold_marks(&f, &p).first().map(|i| stroke_of(i).dash_mm.clone())
         };
-        // 5 mm or more: the nominal pattern.
+        // The marks start MARK_BLEED_GAP_MM into the slug. 5 mm or more of mark: the
+        // nominal pattern.
+        let gap = MARK_BLEED_GAP_MM;
         assert_eq!(dash_of(10.0), Some(vec![1.0, 1.0]));
-        assert_eq!(dash_of(5.0), Some(vec![1.0, 1.0]));
-        // 2.5 mm of slug: a 2.5 mm mark dashed 0.5 / 0.5 — on, off, on, off, on.
-        assert_eq!(dash_of(2.5), Some(vec![0.5, 0.5]));
+        assert_eq!(dash_of(gap + 5.0), Some(vec![1.0, 1.0]));
+        // A 2.5 mm mark is dashed 0.5 / 0.5 — on, off, on, off, on.
+        assert_eq!(dash_of(gap + 2.5), Some(vec![0.5, 0.5]));
         // The shortest mark drawn (2 mm) still has three 0.4 mm dashes.
-        let d = dash_of(MIN_MARK_LENGTH_MM).unwrap();
+        let d = dash_of(gap + MIN_MARK_LENGTH_MM).unwrap();
         assert!(close(d[0], 0.4) && close(d[1], 0.4), "{d:?}");
-        assert_eq!(dash_of(1.9), None);
+        assert_eq!(dash_of(gap + 1.9), None);
         // A long guide never gets coarser than the nominal pattern.
         assert_eq!(fold_dash_mm(20.0), FOLD_MARK_DASH_MM.to_vec());
     }
@@ -628,10 +700,13 @@ mod tests {
             (fold_marks(&f, &press), fold_marks(&f, &black)),
             (registration_targets(&f, &press), registration_targets(&f, &black)),
         ] {
-            assert_eq!(lines(&a[0]), lines(&b[0]));
-            assert_eq!(stroke_of(&a[0]).dash_mm, stroke_of(&b[0]).dash_mm);
-            assert_eq!(stroke_of(&a[0]).color, Color::Registration);
-            assert_eq!(stroke_of(&b[0]).color, Color::BLACK);
+            assert_eq!(a.len(), b.len());
+            assert_eq!(all_lines(&a), all_lines(&b));
+            for (a, b) in a.iter().zip(&b) {
+                assert_eq!(stroke_of(a).dash_mm, stroke_of(b).dash_mm);
+                assert_eq!(stroke_of(a).color, Color::Registration);
+                assert_eq!(stroke_of(b).color, Color::BLACK);
+            }
         }
     }
 
@@ -644,9 +719,9 @@ mod tests {
         assert_eq!(check_marks_fit(&f, &PrintProfile::home(Sheet::Letter)), Ok(()));
         // No marks wanted: nothing to fit, even without a slug.
         assert_eq!(check_marks_fit(&f, &PrintProfile::upload_eu()), Ok(()));
-        // A slug too small for the shortest mark.
+        // A slug too small for the shortest mark: the marks start 0.5 mm into it.
         let mut p = PrintProfile::professional_eu();
-        p.slug = 1.5;
+        p.slug = 2.0;
         assert_eq!(
             check_marks_fit(&f, &p),
             Err(LayoutError::MarksDoNotFit { available_mm: 1.5, needed_mm: 2.0 })
@@ -658,20 +733,22 @@ mod tests {
              but only 1.5 mm is available"
         );
         // Shortened marks are fine.
-        p.slug = 2.0;
+        p.slug = 2.5;
         assert_eq!(check_marks_fit(&f, &p), Ok(()));
+        assert_eq!(crop_marks(&f, &p).len(), 8);
         // Only fold marks wanted: still checked. Only a ruler wanted: not.
         p.slug = 0.0;
         p.marks = Marks { fold: true, ..Marks::none() };
         assert!(matches!(check_marks_fit(&f, &p), Err(LayoutError::MarksDoNotFit { .. })));
         p.marks = Marks { scale_ruler: true, ..Marks::none() };
         assert_eq!(check_marks_fit(&f, &p), Ok(()));
-        // A 110 x 186 mm cover on A4: 12 mm above and below, 6.35 of it unprintable and
-        // 2 mm bleed leave 3.65 mm, enough for shortened marks.
+        // A 110 x 186 mm cover on A4: 12 mm above and below, 6.35 of it unprintable, 2 mm
+        // bleed and the 0.5 mm gap leave 3.15 mm, enough for shortened marks.
         let tight = CardFormat::custom(Size::new(110.0, 186.0), 10.0).unwrap();
         let home = PrintProfile::home(Sheet::A4);
         assert_eq!(check_marks_fit(&tight, &home), Ok(()));
-        let l = lines(&crop_marks(&tight, &home)[0]);
+        let l = all_lines(&crop_marks(&tight, &home));
+        assert!(point_close(l[1].0, Point::new(0.0, -2.5)), "{l:?}");
         assert!(point_close(l[1].1, Point::new(0.0, -5.65)), "{l:?}");
         // Four millimetres taller and the card still fits the sheet, but not its marks.
         let tighter = CardFormat::custom(Size::new(110.0, 190.0), 10.0).unwrap();
@@ -693,22 +770,30 @@ mod tests {
     fn marks_never_start_inside_the_bleed_even_if_the_offset_says_so() {
         let mut p = PrintProfile::professional_eu();
         p.marks.offset = 0.0; // closer than the 3 mm bleed
-        let l = lines(&crop_marks(&CardFormat::poche(), &p)[0]);
-        assert_eq!(l[0], (Point::new(-3.0, 0.0), Point::new(-8.0, 0.0)));
-        // A larger offset is honoured.
+        let l = all_lines(&crop_marks(&CardFormat::poche(), &p));
+        assert_eq!(l[0], (Point::new(-3.5, 0.0), Point::new(-8.5, 0.0)));
+        // On the bleed edge, or less than the gap beyond it: still the gap.
+        for offset in [3.0, 3.2, 3.5] {
+            p.marks.offset = offset;
+            let l = all_lines(&crop_marks(&CardFormat::poche(), &p));
+            assert_eq!(l[0], (Point::new(-3.5, 0.0), Point::new(-8.5, 0.0)), "{offset}");
+        }
+        // A larger offset is honoured as it is.
         p.marks.offset = 6.0;
-        let l = lines(&crop_marks(&CardFormat::poche(), &p)[0]);
+        let l = all_lines(&crop_marks(&CardFormat::poche(), &p));
         assert_eq!(l[0], (Point::new(-6.0, 0.0), Point::new(-11.0, 0.0)));
+        let l = all_lines(&fold_marks(&CardFormat::poche(), &p));
+        assert_eq!(l[0], (Point::new(110.0, -6.0), Point::new(110.0, -11.0)));
     }
 
     #[test]
     fn marks_shrink_to_the_slug_and_vanish_when_there_is_none() {
         let f = CardFormat::poche();
         let mut p = PrintProfile::professional_eu();
-        p.slug = 2.5; // room for 2.5 mm marks only
-        let l = lines(&crop_marks(&f, &p)[0]);
-        assert_eq!(l[0], (Point::new(-3.0, 0.0), Point::new(-5.5, 0.0)));
-        p.slug = 1.9; // below MIN_MARK_LENGTH_MM
+        p.slug = 3.0; // room for 2.5 mm marks only, after the 0.5 mm gap
+        let l = all_lines(&crop_marks(&f, &p));
+        assert_eq!(l[0], (Point::new(-3.5, 0.0), Point::new(-6.0, 0.0)));
+        p.slug = 2.4; // 1.9 mm of mark: below MIN_MARK_LENGTH_MM
         assert!(crop_marks(&f, &p).is_empty());
         assert!(fold_marks(&f, &p).is_empty());
         p.slug = 0.9; // not even room for a registration target or a ruler
@@ -740,12 +825,16 @@ mod tests {
             ]
         );
         let items = registration_targets(&f, &p);
-        assert_eq!(items.len(), 1);
-        let Item::Path { path, .. } = &items[0] else { panic!() };
-        // Four circles (4 cubics each) and four crosses (2 lines each).
-        let cubics = path.segs.iter().filter(|s| matches!(s, PathSeg::CubicTo(..))).count();
-        assert_eq!(cubics, 16);
-        let l = lines(&items[0]);
+        assert_eq!(items.len(), 4, "one item per target");
+        // Each a circle (4 cubics) and a cross (2 lines).
+        for item in &items {
+            let Item::Path { path, .. } = item else { panic!() };
+            let cubics = path.segs.iter().filter(|s| matches!(s, PathSeg::CubicTo(..))).count();
+            assert_eq!(cubics, 4);
+            assert_eq!(lines(item).len(), 2);
+            assert_eq!(stroke_of(item).color, Color::Registration);
+        }
+        let l = all_lines(&items);
         assert_eq!(l.len(), 8);
         assert_eq!(l[0], (Point::new(-11.5, 89.0), Point::new(-4.5, 89.0)));
         assert_eq!(l[1], (Point::new(-8.0, 85.5), Point::new(-8.0, 92.5)));
@@ -763,7 +852,7 @@ mod tests {
         let c = registration_target_centers(&f, &p);
         assert_eq!(c.len(), 4);
         assert_eq!(c[2], Point::new(113.0, -8.0));
-        let l = lines(&registration_targets(&f, &p)[0]);
+        let l = all_lines(&registration_targets(&f, &p));
         let (a, b) = l[4];
         assert!((a.x - (110.0 + 0.5 + half_stroke)).abs() < 1e-9, "{a:?}");
         assert!((b.x - (116.0 - 0.5 - half_stroke)).abs() < 1e-9, "{b:?}");
@@ -773,7 +862,8 @@ mod tests {
         let f = CardFormat::poche().with_spine(4.0).unwrap();
         let c = registration_target_centers(&f, &p);
         assert_eq!(c, vec![Point::new(-8.0, 89.0), Point::new(232.0, 89.0)]);
-        assert_eq!(lines(&registration_targets(&f, &p)[0]).len(), 4);
+        assert_eq!(registration_targets(&f, &p).len(), 2);
+        assert_eq!(all_lines(&registration_targets(&f, &p)).len(), 4);
     }
 
     #[test]
@@ -889,9 +979,9 @@ mod tests {
         assert_eq!(above, Rect::new(117.0, -13.5, 101.0, 11.0));
         assert_eq!(below, Rect::new(117.0, 150.5, 101.0, 11.0));
         // The dashed fold guides stop 20 mm after they start instead of running 66 mm.
-        let g = lines(&fold_marks(&f, &p)[0]);
-        assert_eq!(g[0], (Point::new(105.0, -2.0), Point::new(105.0, -22.0)));
-        assert_eq!(g[1], (Point::new(105.0, 150.0), Point::new(105.0, 170.0)));
+        let g = all_lines(&fold_marks(&f, &p));
+        assert_eq!(g[0], (Point::new(105.0, -2.5), Point::new(105.0, -22.5)));
+        assert_eq!(g[1], (Point::new(105.0, 150.5), Point::new(105.0, 170.5)));
     }
 
     #[test]
@@ -922,20 +1012,20 @@ mod tests {
             other => panic!("{other:?}"),
         };
         let pro = PrintProfile::professional_eu();
-        assert_eq!(count(&pro), 2, "crop + fold");
+        assert_eq!(count(&pro), 8 + 4, "eight crop marks + four fold marks");
         let mut all = pro.clone();
         all.marks.registration = true;
         all.marks.color_bar = true;
         all.marks.scale_ruler = true;
-        assert_eq!(count(&all), 3 + 11 + 1);
+        assert_eq!(count(&all), 8 + 4 + 4 + 11 + 1, "+ targets, patches and the ruler");
         assert_eq!(count(&pro.clone().without_marks()), 0);
         assert_eq!(count(&PrintProfile::upload_eu()), 0);
         let mut only_fold = pro.clone().without_marks();
         only_fold.marks.fold = true;
         only_fold.slug = 10.0;
-        assert_eq!(count(&only_fold), 1);
+        assert_eq!(count(&only_fold), 4);
         // Home: crop + fold + ruler.
-        assert_eq!(count(&PrintProfile::home(Sheet::A4)), 3);
+        assert_eq!(count(&PrintProfile::home(Sheet::A4)), 8 + 4 + 1);
     }
 
     #[test]

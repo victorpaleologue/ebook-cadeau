@@ -7,7 +7,7 @@ use ebc_layout::{
     CardFormat, Face, GUIDES_LAYER, PageGeometry, PrintProfile, caption_areas, check_marks_fit,
     guides, info_entries, marks, new_page_for, page_geometry, scale_ruler,
 };
-use ebc_scene::{DocInfo, Document, Item, Page, Path, PathSeg, PdfStandard, Point, Rect};
+use ebc_scene::{DocInfo, Document, Item, Page, PdfStandard, Point, Rect};
 use ebc_text::fit_size;
 
 use crate::cover::DecodedCover;
@@ -35,8 +35,6 @@ pub(crate) struct Composer<'a> {
     pub(crate) warnings: Vec<CardWarning>,
     pub(crate) paint: Paint,
     pub(crate) geometry: PageGeometry,
-    /// The profile the marks are drawn with (see [`marks_profile`]).
-    marks_profile: PrintProfile,
     /// Module size of the QR code once the inside page is built, in millimetres.
     pub(crate) qr_module_mm: Option<f64>,
     /// The visible rectangle of the cover on the outside page, when one is printed.
@@ -59,8 +57,7 @@ pub(crate) fn compose(
     let geometry = page_geometry(&req.format, &req.profile)?;
     // Without cut and fold marks nobody can finish a home sheet: refuse rather than
     // leave them out silently.
-    let marks_profile = marks_profile(&req.profile);
-    check_marks_fit(&req.format, &marks_profile)?;
+    check_marks_fit(&req.format, &req.profile)?;
     if req.book.title.trim().is_empty() {
         return Err(CardError::EmptyTitle);
     }
@@ -149,7 +146,6 @@ pub(crate) fn compose(
         warnings,
         paint: Paint::for_profile(&req.profile),
         geometry,
-        marks_profile,
         qr_module_mm: None,
         cover_rect: None,
     };
@@ -203,7 +199,8 @@ impl Composer<'_> {
     /// sheet with marks, the ruler's label) and, when asked for, the proofing overlay.
     pub(crate) fn finish_page(&mut self, page: &mut Page, face: Face) -> Result<(), CardError> {
         let (format, profile) = (self.req.format, self.req.profile.clone());
-        page.items.push(one_item_per_subpath(marks(&format, &self.marks_profile)));
+        // One object per mark, clear of the bleed box: `ebc-layout` sees to both.
+        page.items.push(marks(&format, &profile));
         let notes = self.margin_notes(face)?;
         if !notes.is_empty() {
             page.items.push(Item::layer(NOTES_LAYER, notes));
@@ -356,62 +353,10 @@ impl Composer<'_> {
     }
 }
 
-/// How far beyond the bleed edge the cut and fold marks start, in millimetres.
-pub const MARK_CLEARANCE_MM: f64 = 0.2;
-
-/// The profile the marks are drawn with: the request's profile with the marks starting
-/// [`MARK_CLEARANCE_MM`] beyond the bleed edge instead of exactly on it.
-///
-/// A stroke that *ends* on the bleed edge still reaches half its width around its end
-/// point as far as a preflight tool can tell (it does not know the cap style), and
-/// `ebc-preflight` then reports registration colour inside the bleed box. A fifth of a
-/// millimetre of air removes the ambiguity and changes nothing for the printer.
-fn marks_profile(profile: &PrintProfile) -> PrintProfile {
-    let mut adjusted = profile.clone();
-    if adjusted.marks.crop || adjusted.marks.fold {
-        let start = adjusted.marks.offset.max(adjusted.bleed);
-        if start.is_finite() {
-            adjusted.marks.offset = start + MARK_CLEARANCE_MM;
-        }
-    }
-    adjusted
-}
-
-/// Splits every stroked path of the marks layer into one item per sub-path.
-///
-/// `ebc-layout` draws the eight crop marks (and the four fold marks) as one path each.
-/// `ebc-preflight` — like other preflight tools that look at one painted object at a
-/// time — judges an object by the box around all of its sub-paths, which for such a path
-/// is the whole page: the registration-coloured marks then count as "inside the bleed
-/// box". Painting each mark as its own object says the same thing unambiguously.
-fn one_item_per_subpath(item: Item) -> Item {
-    match item {
-        Item::Group { transform, clip, layer, items } => Item::Group {
-            transform,
-            clip,
-            layer,
-            items: items.into_iter().flat_map(split_strokes).collect(),
-        },
-        other => other,
-    }
-}
-
-fn split_strokes(item: Item) -> Vec<Item> {
-    match item {
-        Item::Path { path, fill: None, stroke: Some(stroke) } => {
-            let mut parts: Vec<Path> = Vec::new();
-            for seg in path.segs {
-                match (&seg, parts.last_mut()) {
-                    (PathSeg::MoveTo(_), _) | (_, None) => parts.push(Path { segs: vec![seg] }),
-                    (_, Some(current)) => current.segs.push(seg),
-                }
-            }
-            parts.into_iter().map(|part| Item::stroke(part, stroke.clone())).collect()
-        }
-        group @ Item::Group { .. } => vec![one_item_per_subpath(group)],
-        other => vec![other],
-    }
-}
+/// How far beyond the bleed edge the cut and fold marks start, in millimetres: an alias
+/// of [`ebc_layout::MARK_BLEED_GAP_MM`], where the rule now lives (the marks are drawn
+/// by `ebc-layout` as they come, one object per mark).
+pub const MARK_CLEARANCE_MM: f64 = ebc_layout::MARK_BLEED_GAP_MM;
 
 /// A length for a printed note: at most one decimal, no trailing zero.
 fn trim_mm(value: f64) -> String {

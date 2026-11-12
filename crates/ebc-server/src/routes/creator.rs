@@ -173,7 +173,7 @@ pub(crate) async fn put_card_pdf(
         media_type: "application/pdf".to_owned(),
     };
     let receipt = serde_json::json!({ "sha256": blob.sha256, "size_bytes": blob.size_bytes });
-    state.attach_blob(&id, blob, bytes, false).await?;
+    state.attach_blob(&id, blob, bytes, false, None).await?;
     Ok(json(StatusCode::OK, &receipt))
 }
 

@@ -8,8 +8,17 @@ license.workspace = true
 repository.workspace = true
 authors.workspace = true
 
+[features]
+default = ["card"]
+# Renders `GET /api/partner/v1/gifts/{id}/card.pdf` with the card composer (`ebc-card`,
+# bundled fonts and output profile). Without it the endpoint answers `501` unless the
+# embedding application plugs in its own `CardRenderer`.
+card = ["dep:ebc-card", "dep:ebc-layout"]
+
 [dependencies]
 axum = { version = "0.8.9", default-features = false, features = ["http1", "json", "query", "form", "tokio", "original-uri", "matched-path"] }
+ebc-card = { workspace = true, optional = true }
+ebc-layout = { workspace = true, optional = true }
 ebc-i18n.workspace = true
 ebc-isbn.workspace = true
 ebc-model.workspace = true
@@ -48,6 +57,7 @@ doctest = false
 axum = { version = "0.8.9", features = ["multipart"] }
 http-body-util = "0.1.5"
 mail-parser = "0.11.9"
+png = "0.18"
 roxmltree = "0.21.2"
 scraper = "0.29.0"
 tempfile = "3.27.0"

@@ -73,6 +73,10 @@ pub(crate) struct GiftRequest {
     #[serde(default)]
     pub(crate) locale: Option<String>,
     pub(crate) delivery: DeliveryRequest,
+    /// The rights basis declared for the cover the partner will upload
+    /// ([`crate::card::CoverRights`]); absent means `none`.
+    #[serde(default)]
+    pub(crate) cover_rights: Option<String>,
     #[serde(default)]
     pub(crate) reveal_at: Option<i64>,
     #[serde(default)]
@@ -98,6 +102,24 @@ impl GiftRequest {
         serde_json::from_value(value)
             .map_err(|error| ApiError::unprocessable("invalid_request", error.to_string()))
     }
+}
+
+/// Parses a declared cover rights basis (`cover_rights` in a gift body or on the cover
+/// upload): `Ok(None)` when nothing was declared, `422 invalid_cover_rights` for a value
+/// that is not one of [`crate::card::CoverRights`].
+pub(crate) fn parse_cover_rights(
+    declared: Option<&str>,
+) -> Result<Option<crate::card::CoverRights>, ApiError> {
+    let Some(value) = declared.map(str::trim).filter(|v| !v.is_empty()) else {
+        return Ok(None);
+    };
+    crate::card::CoverRights::parse(value).map(Some).ok_or_else(|| {
+        ApiError::unprocessable(
+            "invalid_cover_rights",
+            "cover_rights must be one of none, print_licence, promo_all_media, \
+             rights_holder_declared, public_domain",
+        )
+    })
 }
 
 /// A gift that was just created, with the secrets that exist only now.
@@ -311,6 +333,7 @@ impl AppState {
             ));
         }
         let text = |value: &Option<String>| value.as_deref().and_then(Gift::normalise_text);
+        let cover_rights = parse_cover_rights(request.cover_rights.as_deref())?.unwrap_or_default();
 
         // Resolve the delivery; hosted files are checked again inside the transaction.
         let (delivery, upload_id) = match &request.delivery {
@@ -411,6 +434,7 @@ impl AppState {
                 delivery: model.delivery,
                 upload_id: upload_id.clone(),
                 rights_basis: None,
+                cover_rights,
                 status: GiftStatus::Created,
                 created_at: now,
                 expires_at: request.expires_at,
@@ -860,17 +884,22 @@ impl AppState {
     }
 
     /// Attaches a stored file (cover, card PDF) to a gift; the previous one is deleted.
+    /// `cover_rights`, when given with a cover, replaces the rights basis declared for it.
     pub(crate) async fn attach_blob(
         &self,
         gift_id: &str,
         blob: BlobRef,
         bytes: Bytes,
         cover: bool,
+        cover_rights: Option<crate::card::CoverRights>,
     ) -> Result<(), ApiError> {
         let sha256 = blob.sha256.clone();
         self.put_blob(&sha256, bytes.clone()).await?;
         let previous = self.db.update(|db| {
             let gift = db.gifts.get_mut(gift_id)?;
+            if let (true, Some(rights)) = (cover, cover_rights) {
+                gift.cover_rights = rights;
+            }
             let slot = if cover { &mut gift.cover } else { &mut gift.card_pdf };
             Some(slot.replace(blob))
         })?;

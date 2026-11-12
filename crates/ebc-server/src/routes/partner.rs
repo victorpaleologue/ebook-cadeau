@@ -294,7 +294,17 @@ pub(crate) async fn status(
     Ok(json(StatusCode::OK, &status_json(&state, &gift)))
 }
 
-/// `PUT /api/partner/v1/gifts/{id}/cover`: the cover image the partner may print.
+/// Query of the cover upload.
+#[derive(Debug, Deserialize)]
+struct CoverQuery {
+    #[serde(default)]
+    cover_rights: Option<String>,
+}
+
+/// `PUT /api/partner/v1/gifts/{id}/cover[?cover_rights=…]`: the cover image the partner
+/// may print. The optional `cover_rights` (part of the signed path) declares the rights
+/// basis under which it may be printed; without it the basis declared at creation — or
+/// `none` — stays, and a cover without a basis is never printed.
 pub(crate) async fn put_cover(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -305,6 +315,9 @@ pub(crate) async fn put_cover(
     if gift.status == GiftStatus::Cancelled {
         return Err(ApiError::conflict("gift_cancelled", "the gift is cancelled"));
     }
+    let Query(query) = Query::<CoverQuery>::try_from_uri(&authed.parts.uri)
+        .map_err(|e| ApiError::bad_request("invalid_parameter", e.to_string()))?;
+    let declared = crate::service::parse_cover_rights(query.cover_rights.as_deref())?;
     let media_type = upload::sniff_image(&authed.body).ok_or_else(|| {
         ApiError::new(
             StatusCode::UNSUPPORTED_MEDIA_TYPE,
@@ -317,8 +330,11 @@ pub(crate) async fn put_cover(
         size_bytes: authed.body.len() as u64,
         media_type: media_type.to_owned(),
     };
-    let receipt = serde_json::json!({ "sha256": blob.sha256, "size_bytes": blob.size_bytes, "media_type": blob.media_type });
-    state.attach_blob(&id, blob, authed.body, true).await?;
+    let receipt = serde_json::json!({
+        "sha256": blob.sha256, "size_bytes": blob.size_bytes, "media_type": blob.media_type,
+        "cover_rights": declared.unwrap_or(gift.cover_rights).as_str(),
+    });
+    state.attach_blob(&id, blob, authed.body, true, declared).await?;
     Ok(json(StatusCode::OK, &receipt))
 }
 
@@ -332,7 +348,8 @@ struct CardQuery {
 }
 
 /// `GET /api/partner/v1/gifts/{id}/card.pdf?format=…&profile=…`: the print-ready card,
-/// through the [`CardRenderer`](crate::card::CardRenderer) (`501` until one is plugged in).
+/// through the [`CardRenderer`](crate::card::CardRenderer) (the card composer with the
+/// cargo feature `card`; `501` without a renderer).
 pub(crate) async fn card_pdf(
     State(state): State<AppState>,
     Path(id): Path<String>,
@@ -377,12 +394,15 @@ pub(crate) async fn card_pdf(
         message: gift.message.clone(),
         locale: gift.locale,
         code,
+        public_url: state.config.public_url.clone(),
         claim_url: ebc_model::claim_url(&state.config.public_url, &code),
         claim_url_qr: ebc_model::claim_url_qr(&state.config.public_url, &code),
         delivery_type: gift.delivery.type_name(),
         store_name: (!matches!(gift.delivery, Delivery::HostedFile { .. }))
             .then(|| authed.partner.display_name().to_owned()),
         cover,
+        cover_rights: gift.cover_rights,
+        expires_unix: gift.expires_at,
         format,
         profile,
         created_unix: gift.created_at,
@@ -397,6 +417,9 @@ pub(crate) async fn card_pdf(
         }
         CardRenderError::Unprocessable(_) => {
             ApiError::unprocessable("card_unprocessable", error.to_string())
+        }
+        CardRenderError::RightsRefused(_) => {
+            ApiError::unprocessable("cover_rights_refused", error.to_string())
         }
         other => ApiError::internal(other),
     })?;

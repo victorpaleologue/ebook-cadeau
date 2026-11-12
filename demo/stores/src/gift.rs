@@ -24,6 +24,10 @@ use crate::state::{
 pub const CARD_FORMAT: &str = "poche";
 /// The printer product matching [`CARD_FORMAT`].
 pub const CARD_PRODUCT: &str = "card-poche";
+/// The rights basis the stores declare for the covers they send: both sell their own
+/// (fictional) editions, whose covers they drew themselves, so each holds the right to
+/// have them printed. A real reseller would declare what its contracts say, per title.
+pub const COVER_RIGHTS: &str = "print_licence";
 /// How long the price of a posted card is cached, in seconds.
 const POST_PRICE_TTL_SECS: i64 = 30;
 
@@ -161,7 +165,7 @@ async fn process_line(state: &AppState, order: &Order, details: &GiftDetails, in
                 return;
             }
         };
-        match partner.put_cover(&gift_id, "image/png", png).await {
+        match partner.put_cover(&gift_id, "image/png", png, COVER_RIGHTS).await {
             Ok(()) => {
                 state.update_gift(line_ref, |g| g.cover_sent = true);
             }

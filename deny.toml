@@ -23,15 +23,10 @@ feature-depth = 1
 [advisories]
 # Vulnerabilities are always errors. To accept one, add it here WITH a reason and a review date:
 #   { id = "RUSTSEC-0000-0000", reason = "not reachable: we never parse untrusted X; revisit 2027-01" }
-ignore = [
-  # DECISION NEEDED (found 2026-11-12, deliberately NOT ignored — `cargo deny check advisories`
-  # fails until someone decides). docs/architecture.md prescribes `ttf-parser` + `rustybuzz`
-  # for ebc-text / ebc-pdf, and both are now flagged *unmaintained* (no known vulnerability).
-  # Either migrate (skrifa / harfrust are the alternatives the advisories name) or accept the
-  # risk explicitly by uncommenting these lines with a real review date:
-  # { id = "RUSTSEC-2026-0192", reason = "ttf-parser is unmaintained; no vulnerability known; migration to skrifa to be evaluated; revisit <date>" },
-  # { id = "RUSTSEC-2026-0206", reason = "rustybuzz is unmaintained; no vulnerability known; migration to harfrust to be evaluated; revisit <date>" },
-]
+# 2026-11-12: nothing is ignored. `ttf-parser` (RUSTSEC-2026-0192) and `rustybuzz`
+# (RUSTSEC-2026-0206), both flagged *unmaintained*, are no longer in the graph: ebc-text
+# shapes with `harfrust` on `read-fonts`, ebc-pdf reads the few font fields it needs itself.
+ignore = []
 # Unmaintained-crate advisories: fail only for crates a workspace member depends on directly
 # (we can act on those); a transitive one is for the crate that depends on it to fix.
 unmaintained = "workspace"

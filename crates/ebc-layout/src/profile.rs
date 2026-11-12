@@ -99,7 +99,8 @@ pub struct Marks {
     /// A colour control strip (CMYK solids, overprints and 50 % tints) below the spread.
     pub color_bar: bool,
     /// Distance from the **trim** edge to the start of crop and fold marks, in millimetres.
-    /// Marks never enter the bleed, so the effective offset is `max(offset, bleed)`.
+    /// Marks never touch the bleed: the effective offset is
+    /// `max(offset, bleed + `[`MARK_BLEED_GAP_MM`](crate::MARK_BLEED_GAP_MM)`)`.
     pub offset: f64,
     /// Length of crop and fold marks, in millimetres. Shortened when the slug (or the
     /// printable area of a home sheet) is too small; marks that would be shorter than
@@ -124,7 +125,8 @@ impl Default for Marks {
 
 impl Marks {
     /// The marks of [`PrintProfile::professional_eu`]: solid crop marks and dashed fold
-    /// marks, 5 mm long, starting 3 mm beyond the trim (i.e. at the bleed edge), 0.25 pt,
+    /// marks, 5 mm long, asked for 3 mm beyond the trim — the bleed edge, so they start
+    /// [`MARK_BLEED_GAP_MM`](crate::MARK_BLEED_GAP_MM) (0.5 mm) beyond it —, 0.25 pt,
     /// registration colour. No registration targets and no colour bar: no surveyed printer
     /// asks for them (`docs/research/03-print-requirements.md` §2.4); switch them on per
     /// printer.
@@ -143,8 +145,8 @@ impl Marks {
         }
     }
 
-    /// The marks of [`PrintProfile::home`]: light grey cut and fold guides starting at the
-    /// 2 mm bleed edge, 0.5 pt (a grey hairline is unreliable on home printers), a scale
+    /// The marks of [`PrintProfile::home`]: light grey cut and fold guides starting 0.5 mm
+    /// beyond the 2 mm bleed edge, 0.5 pt (a grey hairline is unreliable on home printers), a scale
     /// ruler, no registration targets and no colour bar.
     #[must_use]
     pub const fn guides() -> Self {
@@ -358,7 +360,7 @@ impl PrintProfile {
     /// | safe margin | 5 mm from trim and creases (the largest of the published 3, 4 and 5 mm) |
     /// | spine safe margin | 2 mm from each crease (a 6 mm text band on a 10 mm spine) |
     /// | slug | 10 mm |
-    /// | marks | solid crop marks and dashed fold marks, 5 mm long, starting at the bleed edge; 0.25 pt, registration colour; no registration targets, no colour bar |
+    /// | marks | solid crop marks and dashed fold marks, 5 mm long, starting 0.5 mm beyond the bleed edge, one object each; 0.25 pt, registration colour; no registration targets, no colour bar |
     /// | PDF | PDF/X-4 |
     /// | images | 300 ppi target, warning below 250 ppi, error below 150 ppi |
     /// | total ink | 300 % |
@@ -600,9 +602,10 @@ mod tests {
         // Crop and fold marks only: no surveyed printer asks for targets or a colour bar.
         assert!(m.crop && m.fold && !m.registration && !m.color_bar && !m.scale_ruler);
         assert_eq!((m.offset, m.length, m.weight_pt), (3.0, 5.0, 0.25));
-        // Crop marks start at the bleed edge and fit in the slug.
+        // The offset asks for the bleed edge: the marks start MARK_BLEED_GAP_MM beyond it
+        // and still fit in the slug at full length.
         assert_eq!(m.offset, p.bleed);
-        assert!(m.offset + m.length <= p.bleed + p.slug);
+        assert!(p.bleed + crate::MARK_BLEED_GAP_MM + m.length <= p.bleed + p.slug);
         assert_eq!(m.style, MarkStyle::Press);
         assert_eq!(m.color(), Color::Registration);
         assert_eq!(p.validate(), Ok(()));

@@ -64,35 +64,21 @@ async fn a_kobo_types_the_printed_code_and_downloads_the_watermarked_epub() {
     assert_eq!(status["status"], "created");
     assert_eq!(status["order_ref"], receipt.order_ref.as_str());
 
-    // --- the card: `card.pdf` answers 501 until the card composer is wired into the
-    // server. Whatever the server answers today, the store must match it. ---
+    // --- the card: rendered by the server, offered on the order page (its content is
+    // checked in `card.rs`) ---
     let card = api
         .get(&format!("/api/partner/v1/gifts/{gift_id}/card.pdf?format=poche&profile=home-a4"))
         .await
         .unwrap();
+    assert_eq!(card.status, 200, "{}", card.text());
+    assert_eq!(card.header("content-type"), Some("application/pdf"));
     let card_link = format!("{}/carte-1.pdf", receipt.order_url);
-    match card.status {
-        501 => {
-            assert_eq!(card.error_code().as_deref(), Some("not_implemented"));
-            // The store's fallback: no PDF link, a notice, and the claim URL + code (both
-            // asserted above) to pass on.
-            assert!(gift.card_unavailable && gift.card_pdf_url.is_none(), "{gift:#?}");
-            assert_eq!(record["card"]["state"], "unavailable");
-            assert!(buyer.open(&card_link).await.unwrap().is_page());
-            assert_eq!(buyer.page().unwrap().status(), 404);
-        }
-        200 => {
-            assert!(card.body.starts_with(b"%PDF-"), "card.pdf is not a PDF");
-            assert_eq!(card.header("content-type"), Some("application/pdf"));
-            assert!(!gift.card_unavailable, "{gift:#?}");
-            assert_eq!(gift.card_pdf_url.as_deref(), Some(card_link.as_str()));
-            let saved = buyer.open(&card_link).await.unwrap();
-            let entry = saved.download().expect("the browser saves the card PDF");
-            assert_eq!(entry.format, FileFormat::Pdf);
-            assert!(entry.size_bytes > 1_000);
-        }
-        other => panic!("card.pdf answered {other}: {}", card.text()),
-    }
+    assert!(!gift.card_unavailable, "{gift:#?}");
+    assert_eq!(gift.card_pdf_url.as_deref(), Some(card_link.as_str()));
+    let saved = buyer.open(&card_link).await.unwrap();
+    let entry = saved.download().expect("the browser saves the card PDF");
+    assert_eq!(entry.format, FileFormat::Pdf);
+    assert_eq!(entry.sha256, sha256_hex(&card.body), "the card the server rendered for home printing");
 
     // --- the recipient: a Kobo, no phone, no account ---
     let mut kobo = browser(&world, DeviceProfile::kobo_clara());

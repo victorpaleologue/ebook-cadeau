@@ -10,7 +10,10 @@ use crate::common::{
 use axum::body::{Body, Bytes};
 use axum::http::{Method, StatusCode};
 use ebc_server::codes::{redirect_signature, request_signature, verify_request_signature};
-use ebc_server::{AppState, CardRenderError, CardRenderer, CardRequest, ManualClock, app};
+use ebc_server::{
+    AppState, CardRenderError, CardRenderer, CardRequest, CoverRights, ManualClock, NoCardRenderer,
+    app,
+};
 use serde_json::json;
 
 const STORE_URL: &str = "https://store.example/cadeau/activer";
@@ -724,7 +727,62 @@ async fn uploads_cover_and_card_rendering_through_the_renderer_seam() {
         (request.delivery_type, request.store_name.as_deref()),
         ("reseller_redirect", Some("Septante (démo)"))
     );
-    assert_eq!(request.cover, Some((png, "image/png".to_owned())));
+    assert_eq!(request.cover, Some((png.clone(), "image/png".to_owned())));
+    assert_eq!(request.public_url, "https://ebk.example");
+    // Nothing was declared about the cover: the renderer is told so (and must not print it).
+    assert_eq!(request.cover_rights, CoverRights::None);
+    assert_eq!(put.json()["cover_rights"], "none");
+
+    // The rights basis is declared on the upload (in the signed path)…
+    let declared = h
+        .partner(Method::PUT, &format!("{cover_path}?cover_rights=print_licence"), png.clone(), &[])
+        .await;
+    assert_eq!(declared.status, StatusCode::OK, "{}", declared.text());
+    assert_eq!(declared.json()["cover_rights"], "print_licence");
+    h.partner(Method::GET, &card, Bytes::new(), &[]).await;
+    let request = renderer.0.lock().unwrap().last().cloned().unwrap();
+    assert_eq!(request.cover_rights, CoverRights::PrintLicence);
+    // …it stays when the image is replaced without a new declaration…
+    h.partner(Method::PUT, &cover_path, png.clone(), &[]).await;
+    h.partner(Method::GET, &card, Bytes::new(), &[]).await;
+    let request = renderer.0.lock().unwrap().last().cloned().unwrap();
+    assert_eq!(request.cover_rights, CoverRights::PrintLicence);
+    // …can be withdrawn, and anything else is refused without touching the gift.
+    for bad in ["user_private_copy", "PRINT_LICENCE", "yes"] {
+        let reply = h
+            .partner(Method::PUT, &format!("{cover_path}?cover_rights={bad}"), png.clone(), &[])
+            .await;
+        assert_eq!(
+            (reply.status, error_code(&reply).as_str()),
+            (StatusCode::UNPROCESSABLE_ENTITY, "invalid_cover_rights"),
+            "{bad}"
+        );
+    }
+    let withdrawn =
+        h.partner(Method::PUT, &format!("{cover_path}?cover_rights=none"), png.clone(), &[]).await;
+    assert_eq!(withdrawn.json()["cover_rights"], "none");
+    // …or declared when the gift is created.
+    let at_creation = h
+        .partner_gift(
+            json!({ "type": "reseller_redirect", "url": STORE_URL }),
+            json!({ "order_ref": "ORD-RIGHTS", "cover_rights": "public_domain" }),
+        )
+        .await;
+    let other_id = at_creation["id"].as_str().unwrap();
+    h.partner(Method::PUT, &format!("/api/partner/v1/gifts/{other_id}/cover"), png, &[]).await;
+    let other_card = format!("/api/partner/v1/gifts/{other_id}/card.pdf");
+    h.partner(Method::GET, &other_card, Bytes::new(), &[]).await;
+    let request = renderer.0.lock().unwrap().last().cloned().unwrap();
+    assert_eq!(request.cover_rights, CoverRights::PublicDomain);
+    let mut bad_body = gift_body("ORD-BAD-RIGHTS");
+    bad_body["cover_rights"] = json!("whatever");
+    let reply = h.partner_json(Method::POST, "/api/partner/v1/gifts", &bad_body, &[]).await;
+    assert_eq!(
+        (reply.status, error_code(&reply).as_str()),
+        (StatusCode::UNPROCESSABLE_ENTITY, "invalid_cover_rights")
+    );
+    h.partner(Method::GET, &card, Bytes::new(), &[]).await;
+    let request = renderer.0.lock().unwrap().last().cloned().unwrap();
     assert_eq!(
         (request.book.title.as_str(), request.giver_name.as_deref(), request.locale.code()),
         ("Madame Bovary", Some("Camille"), "fr")
@@ -775,9 +833,123 @@ async fn uploads_cover_and_card_rendering_through_the_renderer_seam() {
     assert_eq!(h.get(&format!("/k/{new_code}")).await.status, StatusCode::OK);
 }
 
+/// A valid PNG: a 200 × 320 px portrait "cover" in two flat colours.
+#[cfg(feature = "card")]
+fn cover_png() -> Vec<u8> {
+    let (width, height) = (200u32, 320u32);
+    let mut pixels = Vec::with_capacity((width * height * 3) as usize);
+    for y in 0..height {
+        for _ in 0..width {
+            pixels.extend_from_slice(if y < 110 { &[178, 34, 52] } else { &[244, 236, 220] });
+        }
+    }
+    let mut out = Vec::new();
+    {
+        let mut encoder = png::Encoder::new(&mut out, width, height);
+        encoder.set_color(png::ColorType::Rgb);
+        encoder.set_depth(png::BitDepth::Eight);
+        let mut writer = encoder.write_header().unwrap();
+        writer.write_image_data(&pixels).unwrap();
+    }
+    out
+}
+
+/// With the cargo feature `card` (the default) `card.pdf` is the real card, composed by
+/// `ebc-card`: typographic unless the partner declared a right to print its cover.
+#[cfg(feature = "card")]
 #[tokio::test]
-async fn card_pdf_answers_501_until_a_renderer_is_plugged_in() {
+async fn card_pdf_is_composed_by_ebc_card_and_prints_a_cover_only_with_declared_rights() {
     let h = redirect_harness();
+    let gift = h.partner_gift(redirect_delivery(), json!({})).await;
+    let id = gift["id"].as_str().unwrap();
+    let card = |query: &str| format!("/api/partner/v1/gifts/{id}/card.pdf{query}");
+
+    // Every documented format for the printer; the defaults are poche + pro.
+    let default = h.partner(Method::GET, &card(""), Bytes::new(), &[]).await;
+    assert_eq!(default.status, StatusCode::OK, "{}", default.text());
+    assert_eq!(default.header("content-type"), "application/pdf");
+    assert_eq!(
+        default.header("content-disposition"),
+        "attachment; filename=\"carte-Madame-Bovary.pdf\""
+    );
+    assert!(default.body.starts_with(b"%PDF-"));
+    let poche_pro =
+        h.partner(Method::GET, &card("?format=poche&profile=pro"), Bytes::new(), &[]).await;
+    assert_eq!(poche_pro.body, default.body, "deterministic, and the defaults are poche + pro");
+    for query in [
+        "?format=a6&profile=pro",
+        "?format=digest&profile=pro",
+        "?format=a5&profile=pro",
+        "?format=poche&profile=home-a4",
+        "?format=a6&profile=home-letter",
+    ] {
+        let reply = h.partner(Method::GET, &card(query), Bytes::new(), &[]).await;
+        assert_eq!(reply.status, StatusCode::OK, "{query}: {}", reply.text());
+        assert!(reply.body.starts_with(b"%PDF-") && reply.body != default.body, "{query}");
+    }
+    // An A5 card does not fit an A4 sheet: the request is the problem, not the server.
+    let too_big =
+        h.partner(Method::GET, &card("?format=a5&profile=home-a4"), Bytes::new(), &[]).await;
+    assert_eq!(
+        (too_big.status, error_code(&too_big).as_str()),
+        (StatusCode::UNPROCESSABLE_ENTITY, "card_unprocessable")
+    );
+
+    // A cover without a declared basis is kept but not printed: the same typographic card.
+    let cover_path = format!("/api/partner/v1/gifts/{id}/cover");
+    let put = h.partner(Method::PUT, &cover_path, cover_png(), &[]).await;
+    assert_eq!(put.status, StatusCode::OK, "{}", put.text());
+    let undeclared = h.partner(Method::GET, &card(""), Bytes::new(), &[]).await;
+    assert_eq!(undeclared.body, default.body, "an undeclared cover never enters the print file");
+
+    // Declared as licensed for print: the cover is on the card (the file embeds an image).
+    let put = h
+        .partner(Method::PUT, &format!("{cover_path}?cover_rights=print_licence"), cover_png(), &[])
+        .await;
+    assert_eq!(put.json()["cover_rights"], "print_licence");
+    let with_cover = h.partner(Method::GET, &card(""), Bytes::new(), &[]).await;
+    assert_eq!(with_cover.status, StatusCode::OK, "{}", with_cover.text());
+    assert_ne!(with_cover.body, default.body);
+    let has_image =
+        |pdf: &[u8]| pdf.windows(14).any(|w| w == b"/Subtype /Image" || w == b"/Subtype/Image");
+    assert!(has_image(&with_cover.body) && !has_image(&default.body));
+
+    // The rights gate: a promotion-only licence prints (reduced) at home, never at a printer.
+    h.partner(Method::PUT, &format!("{cover_path}?cover_rights=promo_all_media"), cover_png(), &[])
+        .await;
+    let refused = h.partner(Method::GET, &card("?profile=pro"), Bytes::new(), &[]).await;
+    assert_eq!(
+        (refused.status, error_code(&refused).as_str()),
+        (StatusCode::UNPROCESSABLE_ENTITY, "cover_rights_refused"),
+        "{}",
+        refused.text()
+    );
+    let at_home = h.partner(Method::GET, &card("?profile=home-a4"), Bytes::new(), &[]).await;
+    assert_eq!(at_home.status, StatusCode::OK, "{}", at_home.text());
+
+    // A declared cover that is not a decodable image is the partner's problem (422).
+    let truncated =
+        [&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a][..], &[0u8; 64][..]].concat();
+    h.partner(Method::PUT, &format!("{cover_path}?cover_rights=print_licence"), truncated, &[])
+        .await;
+    let broken = h.partner(Method::GET, &card(""), Bytes::new(), &[]).await;
+    assert_eq!(
+        (broken.status, error_code(&broken).as_str()),
+        (StatusCode::UNPROCESSABLE_ENTITY, "card_unprocessable")
+    );
+}
+
+#[tokio::test]
+async fn card_pdf_answers_501_without_a_renderer() {
+    let mut config = crate::common::test_config();
+    config.partners = vec![partner(&["store.example"], None)];
+    let clock = Arc::new(ManualClock::new(T0));
+    let state = AppState::builder(config)
+        .clock(clock.clone())
+        .card_renderer(Arc::new(NoCardRenderer))
+        .build()
+        .unwrap();
+    let h = Harness { app: app(state.clone()), state, clock };
     let gift = h.partner_gift(redirect_delivery(), json!({})).await;
     let path = format!(
         "/api/partner/v1/gifts/{}/card.pdf?format=a6&profile=pro",

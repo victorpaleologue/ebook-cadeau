@@ -8,10 +8,11 @@ book-shaped card: the book's cover on the front, a **1 cm spine** with the title
 stand on a shelf, and inside, a **QR code and a short code** that put the eBook on the
 recipient's e-reader in a few steps.
 
-> **Status: first complete version.** The workspace builds, 1 814 tests pass, and a card goes
+> **Status: first complete version.** The workspace builds, 1 865 tests pass, and a card goes
 > end to end: a store sells an eBook as a gift, the card PDF is generated with its QR code,
 > and a simulated e-reader redeems it. Nothing has been tested with real printers, e-readers
-> or live ISBN services yet. [`docs/STATUS.md`](docs/STATUS.md) has the details;
+> or live ISBN services yet. **Start with [`docs/OVERVIEW.md`](docs/OVERVIEW.md)**, the full
+> project summary; [`docs/STATUS.md`](docs/STATUS.md) has the details;
 > [`docs/architecture.md`](docs/architecture.md) the design; [`docs/research/`](docs/research/)
 > the studies; [`docs/business/`](docs/business/) the business model; [`docs/samples/`](docs/samples/)
 > sample cards.

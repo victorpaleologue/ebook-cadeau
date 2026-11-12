@@ -52,6 +52,9 @@ pub enum GiftError {
     /// `expires_unix` is not after `created_unix`.
     #[error("the gift expires before or when it is created")]
     ExpiresBeforeCreation,
+    /// `expires_unix` is not after `reveal_unix`: the gift could never be claimed.
+    #[error("the gift expires before it is revealed")]
+    ExpiresBeforeReveal,
     /// A delivery URL that is not an absolute `http://` or `https://` URL.
     #[error("delivery URL must be an absolute http(s) URL without spaces")]
     InvalidUrl,
@@ -81,6 +84,8 @@ impl GiftId {
     pub const MAX_LEN: usize = 64;
     /// Random bytes [`from_random_bytes`](Self::from_random_bytes) needs (128 bits).
     pub const MIN_RANDOM_BYTES: usize = 16;
+    /// Prefix of generated identifiers.
+    pub const PREFIX: &'static str = "g_";
 
     /// Wraps an existing identifier after validating it.
     ///
@@ -95,8 +100,9 @@ impl GiftId {
         if valid { Ok(Self(id)) } else { Err(GiftError::InvalidId) }
     }
 
-    /// Builds an identifier from random bytes supplied by the caller: the first sixteen
-    /// bytes as 32 lower-case hexadecimal characters. Further bytes are ignored.
+    /// Builds an identifier from random bytes supplied by the caller: `g_` followed by
+    /// the first sixteen bytes as 32 lower-case hexadecimal characters. Further bytes are
+    /// ignored.
     ///
     /// # Errors
     /// [`GiftError::NotEnoughRandomness`] if fewer than sixteen bytes are supplied.
@@ -108,7 +114,8 @@ impl GiftId {
             });
         };
         const HEX: &[u8; 16] = b"0123456789abcdef";
-        let mut id = String::with_capacity(2 * Self::MIN_RANDOM_BYTES);
+        let mut id = String::with_capacity(Self::PREFIX.len() + 2 * Self::MIN_RANDOM_BYTES);
+        id.push_str(Self::PREFIX);
         for byte in head {
             id.push(char::from(HEX[usize::from(byte >> 4)]));
             id.push(char::from(HEX[usize::from(byte & 0x0f)]));
@@ -222,7 +229,7 @@ impl<'de> Deserialize<'de> for LicenceFormat {
 
 /// How the eBook reaches the recipient once the code is redeemed.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(tag = "kind", rename_all = "snake_case")]
+#[serde(tag = "type", rename_all = "snake_case")]
 pub enum Delivery {
     /// Standalone mode: the service stores the file and serves it on redemption.
     HostedFile {
@@ -252,10 +259,10 @@ pub enum Delivery {
 }
 
 impl Delivery {
-    /// The serialised `kind` tag: `"hosted_file"`, `"reseller_redirect"` or
+    /// The serialised `type` tag: `"hosted_file"`, `"reseller_redirect"` or
     /// `"reseller_licence"`.
     #[must_use]
-    pub fn kind(&self) -> &'static str {
+    pub fn type_name(&self) -> &'static str {
         match self {
             Self::HostedFile { .. } => "hosted_file",
             Self::ResellerRedirect { .. } => "reseller_redirect",
@@ -344,57 +351,79 @@ fn is_http_url(url: &str) -> bool {
     })
 }
 
-/// Where a gift is in its life.
+/// Where a gift is in its life (the states of `docs/api.md`).
+///
+/// ```text
+/// created ──► redeemed ──► exhausted   (hosted file: download-session limit reached)
+///    │            └──────► fulfilled   (reseller confirmed the book is in an account)
+///    └── any time ──► cancelled | expired | reissued
+/// ```
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, Default)]
 #[serde(rename_all = "snake_case")]
 pub enum GiftStatus {
-    /// Created but not yet redeemable (e.g. payment or file upload not confirmed).
-    Pending,
-    /// Redeemable: the code can be exchanged for the eBook.
+    /// Issued; nobody has claimed it yet.
     #[default]
-    Active,
-    /// The recipient has redeemed the code. Further downloads may still be allowed.
+    Created,
+    /// Claimed at least once. A hosted file stays downloadable by whoever holds the card.
     Redeemed,
-    /// Not redeemed before `expires_unix`.
-    Expired,
+    /// Hosted file: the limit of download sessions has been reached.
+    Exhausted,
+    /// Reseller delivery: the store confirmed the book is in the recipient's account.
+    Fulfilled,
     /// Cancelled by the giver, the store or an administrator (e.g. refund).
-    Revoked,
+    Cancelled,
+    /// Past its `expires_unix`.
+    Expired,
+    /// The code was voided because a new one was issued for the same gift (lost card).
+    Reissued,
 }
 
 impl GiftStatus {
     /// Every status, in life-cycle order.
-    pub const ALL: [GiftStatus; 5] =
-        [Self::Pending, Self::Active, Self::Redeemed, Self::Expired, Self::Revoked];
+    pub const ALL: [GiftStatus; 7] = [
+        Self::Created,
+        Self::Redeemed,
+        Self::Exhausted,
+        Self::Fulfilled,
+        Self::Cancelled,
+        Self::Expired,
+        Self::Reissued,
+    ];
 
-    /// The serialised name: `"pending"`, `"active"`, `"redeemed"`, `"expired"`, `"revoked"`.
+    /// The serialised name: `"created"`, `"redeemed"`, `"exhausted"`, `"fulfilled"`,
+    /// `"cancelled"`, `"expired"`, `"reissued"`.
     #[must_use]
     pub const fn as_str(self) -> &'static str {
         match self {
-            Self::Pending => "pending",
-            Self::Active => "active",
+            Self::Created => "created",
             Self::Redeemed => "redeemed",
+            Self::Exhausted => "exhausted",
+            Self::Fulfilled => "fulfilled",
+            Self::Cancelled => "cancelled",
             Self::Expired => "expired",
-            Self::Revoked => "revoked",
+            Self::Reissued => "reissued",
         }
     }
 
-    /// Whether the code can be redeemed for the first time in this status.
+    /// Whether the holder of the card may (still) obtain the eBook: on first claim
+    /// (`Created`) or again afterwards (`Redeemed`).
     #[must_use]
-    pub const fn is_redeemable(self) -> bool {
-        matches!(self, Self::Active)
+    pub const fn allows_claim(self) -> bool {
+        matches!(self, Self::Created | Self::Redeemed)
     }
 
-    /// Whether the recipient may (still) obtain the eBook: on first redemption or again
-    /// afterwards.
+    /// Whether the code no longer works for a reason the holder cannot fix — what the
+    /// redemption page answers with `410 Gone`: `Cancelled`, `Expired`, `Reissued`.
     #[must_use]
-    pub const fn allows_download(self) -> bool {
-        matches!(self, Self::Active | Self::Redeemed)
+    pub const fn is_gone(self) -> bool {
+        matches!(self, Self::Cancelled | Self::Expired | Self::Reissued)
     }
 
-    /// Whether the status can no longer change (`Expired`, `Revoked`).
+    /// Whether the status can no longer change: everything except `Created` and
+    /// `Redeemed`.
     #[must_use]
     pub const fn is_terminal(self) -> bool {
-        matches!(self, Self::Expired | Self::Revoked)
+        !self.allows_claim()
     }
 }
 
@@ -427,9 +456,15 @@ pub struct Gift {
     pub locale: Locale,
     /// Creation time, seconds since the Unix epoch (UTC).
     pub created_unix: i64,
-    /// Expiry time, seconds since the Unix epoch (UTC); `None` if the gift never expires.
+    /// Expiry time, seconds since the Unix epoch (UTC); `None` (the default, and the
+    /// recommended setting for a paid title) if the gift never expires.
     #[serde(default)]
     pub expires_unix: Option<i64>,
+    /// Reveal time, seconds since the Unix epoch (UTC): before it, the redemption page
+    /// shows the date and no action (a present wrapped until the day). `None` reveals
+    /// the gift at once.
+    #[serde(default)]
+    pub reveal_unix: Option<i64>,
     /// How the eBook reaches the recipient.
     pub delivery: Delivery,
 }
@@ -455,16 +490,22 @@ impl Gift {
         self.expires_unix.is_some_and(|expires| now_unix >= expires)
     }
 
+    /// Whether the gift may be shown and claimed at `now_unix`: always, unless a reveal
+    /// time is set and has not been reached yet.
+    #[must_use]
+    pub fn is_revealed_at(&self, now_unix: i64) -> bool {
+        self.reveal_unix.is_none_or(|reveal| now_unix >= reveal)
+    }
+
     /// The status to act on at `now_unix`, given the status last `recorded` in storage:
-    /// a `Pending` or `Active` gift past its expiry is `Expired`; everything else is
-    /// returned unchanged (a redeemed gift stays redeemed).
+    /// a gift that could still be claimed (`Created`, `Redeemed`) but is past its expiry
+    /// is `Expired`; every other status is returned unchanged.
     #[must_use]
     pub fn status_at(&self, recorded: GiftStatus, now_unix: i64) -> GiftStatus {
-        match recorded {
-            GiftStatus::Pending | GiftStatus::Active if self.is_expired_at(now_unix) => {
-                GiftStatus::Expired
-            }
-            other => other,
+        if recorded.allows_claim() && self.is_expired_at(now_unix) {
+            GiftStatus::Expired
+        } else {
+            recorded
         }
     }
 
@@ -476,7 +517,7 @@ impl Gift {
     /// * the message is non-blank, at most [`MAX_MESSAGE_CHARS`](Self::MAX_MESSAGE_CHARS)
     ///   characters on at most [`MAX_MESSAGE_LINES`](Self::MAX_MESSAGE_LINES) lines,
     ///   with no control characters other than line breaks;
-    /// * `expires_unix`, when set, is after `created_unix`;
+    /// * `expires_unix`, when set, is after `created_unix` and after `reveal_unix`;
     /// * the delivery passes [`Delivery::validate`].
     ///
     /// Optional fields that are `None` are fine; `Some("")` is not (normalise with
@@ -503,6 +544,11 @@ impl Gift {
         }
         if self.expires_unix.is_some_and(|expires| expires <= self.created_unix) {
             return Err(GiftError::ExpiresBeforeCreation);
+        }
+        if let (Some(expires), Some(reveal)) = (self.expires_unix, self.reveal_unix)
+            && expires <= reveal
+        {
+            return Err(GiftError::ExpiresBeforeReveal);
         }
         self.delivery.validate()
     }
@@ -555,7 +601,7 @@ mod tests {
         book.isbn13 = "9782070360024".parse().ok();
         Gift {
             id: GiftId::from_random_bytes(&[0xab; 16]).expect("16 bytes"),
-            code: GiftCode::from_random_bytes(&[1, 2, 3, 4, 5, 6]).expect("6 bytes"),
+            code: GiftCode::from_random_bytes(&[1, 2, 3, 4, 5, 6, 7, 8]).expect("8 bytes"),
             book,
             giver_name: Some("Mamie Jeanne".into()),
             recipient_name: Some("Léo".into()),
@@ -563,6 +609,7 @@ mod tests {
             locale: Locale::Fr,
             created_unix: 1_794_000_000,
             expires_unix: Some(1_794_000_000 + 365 * 86_400),
+            reveal_unix: None,
             delivery: Delivery::HostedFile {
                 file_name: "l-etranger.epub".into(),
                 media_type: "application/epub+zip".into(),
@@ -581,10 +628,11 @@ mod tests {
         assert_eq!(back, gift);
         // Stable wire format: the pieces other components rely on.
         let value: serde_json::Value = serde_json::from_str(&json).expect("json");
-        assert_eq!(value["id"], "abababababababababababababababab");
+        assert_eq!(value["id"], "g_abababababababababababababababab");
         assert_eq!(value["code"], gift.code.compact());
         assert_eq!(value["locale"], "fr");
-        assert_eq!(value["delivery"]["kind"], "hosted_file");
+        assert_eq!(value["delivery"]["type"], "hosted_file");
+        assert_eq!(value["reveal_unix"], serde_json::Value::Null);
         assert_eq!(value["delivery"]["size_bytes"], 345_678);
         assert_eq!(value["book"]["isbn13"], "9782070360024");
     }
@@ -592,9 +640,9 @@ mod tests {
     #[test]
     fn optional_fields_default_when_absent() {
         let json = r#"{
-            "id": "g1", "code": "0000000000", "book": {"title": "T"},
+            "id": "g1", "code": "bbbb-bbbb-bbbb", "book": {"title": "T"},
             "created_unix": 10,
-            "delivery": {"kind": "reseller_redirect", "url": "https://store.example/r/1"}
+            "delivery": {"type": "reseller_redirect", "url": "https://store.example/r/1"}
         }"#;
         let gift: Gift = serde_json::from_str(json).expect("parses");
         assert_eq!(gift.giver_name, None);
@@ -602,8 +650,11 @@ mod tests {
         assert_eq!(gift.message, None);
         assert_eq!(gift.locale, Locale::Fr);
         assert_eq!(gift.expires_unix, None);
+        assert_eq!(gift.reveal_unix, None);
+        assert_eq!(gift.code.compact(), "BBBBBBBBBBBB");
         assert_eq!(gift.validate(), Ok(()));
         assert!(!gift.is_expired_at(i64::MAX));
+        assert!(gift.is_revealed_at(i64::MIN));
     }
 
     #[test]
@@ -617,10 +668,11 @@ mod tests {
         assert!(mutate("/id", "../../etc/passwd".into()).is_err());
         assert!(mutate("/id", "".into()).is_err());
         assert!(mutate("/id", 12.into()).is_err());
-        assert!(mutate("/code", "0000000001".into()).is_err(), "wrong check symbol");
+        assert!(mutate("/code", "BBBBBBBBBBBC".into()).is_err(), "wrong check symbol");
+        assert!(mutate("/code", "0000000000".into()).is_err(), "digits are not symbols");
         assert!(mutate("/code", "short".into()).is_err());
         assert!(mutate("/locale", "xx".into()).is_err());
-        assert!(mutate("/delivery/kind", "carrier_pigeon".into()).is_err());
+        assert!(mutate("/delivery/type", "carrier_pigeon".into()).is_err());
         assert!(mutate("/delivery/size_bytes", (-1).into()).is_err());
         assert!(mutate("/created_unix", "yesterday".into()).is_err());
         assert!(mutate("/book/isbn13", "9782070360025".into()).is_err());
@@ -654,7 +706,8 @@ mod tests {
             );
         }
         let id = GiftId::from_random_bytes(&(0u8..32).collect::<Vec<_>>()).expect("enough");
-        assert_eq!(id.as_str(), "000102030405060708090a0b0c0d0e0f");
+        assert_eq!(id.as_str(), "g_000102030405060708090a0b0c0d0e0f");
+        assert_eq!(GiftId::new(id.as_str()), Ok(id.clone()), "generated ids are valid ids");
         assert_eq!(id.as_ref(), id.as_str());
         assert_eq!(
             GiftId::from_random_bytes(&[0; 15]),
@@ -662,12 +715,13 @@ mod tests {
         );
         assert_eq!(
             serde_json::to_string(&id).expect("serialises"),
-            "\"000102030405060708090a0b0c0d0e0f\""
+            "\"g_000102030405060708090a0b0c0d0e0f\""
         );
     }
 
     #[test]
-    fn expiry_and_status() {
+    fn expiry_reveal_and_status() {
+        use GiftStatus::{Cancelled, Created, Exhausted, Expired, Fulfilled, Redeemed, Reissued};
         let gift = sample();
         let expires = gift.expires_unix.expect("sample expires");
         assert!(!gift.is_expired_at(gift.created_unix));
@@ -676,39 +730,60 @@ mod tests {
         assert!(gift.is_expired_at(i64::MAX));
         assert!(!gift.is_expired_at(i64::MIN));
 
-        assert_eq!(gift.status_at(GiftStatus::Active, expires - 1), GiftStatus::Active);
-        assert_eq!(gift.status_at(GiftStatus::Active, expires), GiftStatus::Expired);
-        assert_eq!(gift.status_at(GiftStatus::Pending, expires), GiftStatus::Expired);
-        assert_eq!(gift.status_at(GiftStatus::Redeemed, expires + 1), GiftStatus::Redeemed);
-        assert_eq!(gift.status_at(GiftStatus::Revoked, expires + 1), GiftStatus::Revoked);
-        assert_eq!(gift.status_at(GiftStatus::Revoked, 0), GiftStatus::Revoked);
-        assert_eq!(gift.status_at(GiftStatus::Expired, 0), GiftStatus::Expired);
+        assert_eq!(gift.status_at(Created, expires - 1), Created);
+        assert_eq!(gift.status_at(Created, expires), Expired);
+        assert_eq!(gift.status_at(Redeemed, expires - 1), Redeemed);
+        assert_eq!(gift.status_at(Redeemed, expires), Expired);
+        for settled in [Exhausted, Fulfilled, Cancelled, Expired, Reissued] {
+            assert_eq!(gift.status_at(settled, 0), settled);
+            assert_eq!(gift.status_at(settled, expires + 1), settled);
+        }
 
         let mut eternal = sample();
         eternal.expires_unix = None;
-        assert_eq!(eternal.status_at(GiftStatus::Active, i64::MAX), GiftStatus::Active);
+        assert_eq!(eternal.status_at(Created, i64::MAX), Created);
+        assert_eq!(eternal.status_at(Redeemed, i64::MAX), Redeemed);
+
+        let mut wrapped = sample();
+        wrapped.reveal_unix = Some(wrapped.created_unix + 86_400);
+        assert!(!wrapped.is_revealed_at(wrapped.created_unix));
+        assert!(!wrapped.is_revealed_at(wrapped.created_unix + 86_399));
+        assert!(wrapped.is_revealed_at(wrapped.created_unix + 86_400));
+        assert!(sample().is_revealed_at(i64::MIN), "no reveal time: revealed at once");
+        assert_eq!(wrapped.validate(), Ok(()));
+        // A gift that expires before it can be opened is a configuration error.
+        wrapped.reveal_unix = wrapped.expires_unix;
+        assert_eq!(wrapped.validate(), Err(GiftError::ExpiresBeforeReveal));
+        wrapped.expires_unix = None;
+        assert_eq!(wrapped.validate(), Ok(()));
     }
 
     #[test]
     fn status_predicates_and_names() {
-        use GiftStatus::{Active, Expired, Pending, Redeemed, Revoked};
-        assert_eq!(GiftStatus::default(), Active);
-        let redeemable: Vec<_> =
-            GiftStatus::ALL.into_iter().filter(|s| s.is_redeemable()).collect();
-        assert_eq!(redeemable, [Active]);
-        let downloadable: Vec<_> =
-            GiftStatus::ALL.into_iter().filter(|s| s.allows_download()).collect();
-        assert_eq!(downloadable, [Active, Redeemed]);
+        use GiftStatus::{Cancelled, Created, Exhausted, Expired, Fulfilled, Redeemed, Reissued};
+        assert_eq!(GiftStatus::default(), Created);
+        let claimable: Vec<_> = GiftStatus::ALL.into_iter().filter(|s| s.allows_claim()).collect();
+        assert_eq!(claimable, [Created, Redeemed]);
+        let gone: Vec<_> = GiftStatus::ALL.into_iter().filter(|s| s.is_gone()).collect();
+        assert_eq!(gone, [Cancelled, Expired, Reissued]);
         let terminal: Vec<_> = GiftStatus::ALL.into_iter().filter(|s| s.is_terminal()).collect();
-        assert_eq!(terminal, [Expired, Revoked]);
-        assert!(!Pending.is_redeemable() && !Pending.allows_download() && !Pending.is_terminal());
+        assert_eq!(terminal, [Exhausted, Fulfilled, Cancelled, Expired, Reissued]);
+        // The names are the ones of the HTTP contract.
+        let names: Vec<_> = GiftStatus::ALL.into_iter().map(GiftStatus::as_str).collect();
+        assert_eq!(
+            names,
+            ["created", "redeemed", "exhausted", "fulfilled", "cancelled", "expired", "reissued"]
+        );
         for status in GiftStatus::ALL {
             let json = serde_json::to_string(&status).expect("serialises");
             assert_eq!(json, format!("\"{}\"", status.as_str()));
             assert_eq!(status.to_string(), status.as_str());
             assert_eq!(serde_json::from_str::<GiftStatus>(&json).expect("parses"), status);
+            // Nothing is both claimable and gone.
+            assert!(!(status.allows_claim() && status.is_gone()));
         }
-        assert!(serde_json::from_str::<GiftStatus>("\"ACTIVE\"").is_err());
+        assert!(serde_json::from_str::<GiftStatus>("\"CREATED\"").is_err());
+        assert!(serde_json::from_str::<GiftStatus>("\"active\"").is_err());
     }
 
     #[test]
@@ -937,19 +1012,22 @@ mod tests {
         let json = serde_json::to_string(&delivery).expect("serialises");
         assert_eq!(
             json,
-            r#"{"kind":"reseller_licence","format":"lcpl","url":"https://lcp.example/l/1.lcpl"}"#
+            r#"{"type":"reseller_licence","format":"lcpl","url":"https://lcp.example/l/1.lcpl"}"#
         );
         assert_eq!(serde_json::from_str::<Delivery>(&json).expect("parses"), delivery);
         let custom: Delivery = serde_json::from_str(
-            r#"{"kind":"reseller_licence","format":"urms","url":"https://x.example/1"}"#,
+            r#"{"type":"reseller_licence","format":"urms","url":"https://x.example/1"}"#,
         )
         .expect("parses");
-        assert_eq!(custom.kind(), "reseller_licence");
+        assert_eq!(custom.type_name(), "reseller_licence");
         assert!(
             matches!(custom, Delivery::ResellerLicence { format: LicenceFormat::Other(ref t), .. } if t == "urms")
         );
-        assert_eq!(Delivery::ResellerRedirect { url: String::new() }.kind(), "reseller_redirect");
-        assert_eq!(sample().delivery.kind(), "hosted_file");
+        assert_eq!(
+            Delivery::ResellerRedirect { url: String::new() }.type_name(),
+            "reseller_redirect"
+        );
+        assert_eq!(sample().delivery.type_name(), "hosted_file");
     }
 
     #[test]
@@ -966,6 +1044,6 @@ mod tests {
         let debug = format!("{gift:?}");
         assert!(!debug.contains(&gift.code.compact()));
         assert!(!debug.contains(&gift.code.grouped()));
-        assert!(debug.contains("abababab"), "the id is not secret");
+        assert!(debug.contains("g_abababab"), "the id is not secret");
     }
 }

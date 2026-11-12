@@ -3,18 +3,21 @@
 
 use std::collections::BTreeMap;
 
+use lopdf::xref::XrefType;
 use lopdf::{Dictionary, Document, Object};
 
 use crate::codes;
 use crate::colour::parse_icc_header;
-use crate::expect::{Expectations, TRIM_TOLERANCE_MM};
-use crate::pdf::{as_dict, get, get_array, get_int, get_name, get_text, lossy, resolve};
+use crate::expect::{BLEED_TOLERANCE_MM, Expectations, TRIM_TOLERANCE_MM};
+use crate::pdf::{as_dict, clip, get, get_array, get_int, get_name, get_text, lossy, resolve};
 use crate::report::{DocumentSummary, OutputIntentSummary, QrCandidate, Severity};
 use crate::sink::Sink;
 use crate::stream;
 
 /// Largest ICC profile or XMP packet decoded.
 const MAX_METADATA_BYTES: usize = 32 * 1024 * 1024;
+/// Longest title, output condition description … copied into the report, in characters.
+const MAX_TEXT_CHARS: usize = 300;
 /// `EBC.*` keys copied into the report.
 const MAX_EBC_KEYS: usize = 64;
 
@@ -65,6 +68,11 @@ impl PdfxLevel {
         matches!(self, Self::X1a2001 | Self::X1a2003 | Self::X3v2002 | Self::X3v2003)
     }
 
+    /// Whether the level is CMYK-and-spot only.
+    pub(crate) fn forbids_rgb(self) -> bool {
+        matches!(self, Self::X1a2001 | Self::X1a2003)
+    }
+
     /// Whether the output profile must be embedded.
     fn requires_embedded_profile(self) -> bool {
         matches!(self, Self::X4 | Self::X6)
@@ -96,10 +104,11 @@ pub(crate) fn check_metadata(
     check_info(doc, info, level, summary, sink);
     if let Some(info) = info {
         for (key, _) in info {
-            if key.starts_with(b"EBC.") && summary.ebc.len() < MAX_EBC_KEYS {
-                if let Some(value) = info_value(doc, info, key) {
-                    summary.ebc.insert(lossy(key), value.chars().take(200).collect());
-                }
+            if key.starts_with(b"EBC.")
+                && summary.ebc.len() < MAX_EBC_KEYS
+                && let Some(value) = info_value(doc, info, key)
+            {
+                summary.ebc.insert(lossy(key), clip(&value, 200));
             }
         }
     }
@@ -126,27 +135,22 @@ fn check_pdfx_markers(
     summary: &mut DocumentSummary,
     sink: &mut Sink,
 ) -> Option<PdfxLevel> {
-    let from_info = info.and_then(|info| get_text(doc, info, b"GTS_PDFXVersion")).filter(|v| !v.trim().is_empty());
-    let conformance =
-        info.and_then(|info| get_text(doc, info, b"GTS_PDFXConformance")).filter(|v| !v.trim().is_empty());
-    let from_xmp = xmp_packet(doc, catalog).and_then(|xmp| {
-        xmp_property(&xmp, "pdfxid:GTS_PDFXVersion").or_else(|| xmp_property(&xmp, "pdfx:GTS_PDFXVersion"))
-    });
-
-    // PDF/X-1a:2001 files say "PDF/X-1:2001" in the version key and name the exact
-    // conformance level in GTS_PDFXConformance.
-    let info_claim = match (&from_info, &conformance) {
-        (Some(version), Some(conformance)) if version.trim().starts_with("PDF/X-1:") => {
-            Some(conformance.trim().to_string())
-        }
-        (Some(version), _) => Some(version.trim().to_string()),
-        (None, _) => None,
+    let info_text = |key: &[u8]| {
+        info.and_then(|info| get_text(doc, info, key)).filter(|v| !v.trim().is_empty())
     };
+    let xmp = xmp_packet(doc, catalog);
+    let xmp_text = |name: &str| xmp.as_deref().and_then(|xmp| xmp_property(xmp, name));
+    let info_claim = pdfx_claim(info_text(b"GTS_PDFXVersion"), info_text(b"GTS_PDFXConformance"));
+    let from_xmp = pdfx_claim(
+        xmp_text("pdfxid:GTS_PDFXVersion").or_else(|| xmp_text("pdfx:GTS_PDFXVersion")),
+        xmp_text("pdfx:GTS_PDFXConformance"),
+    );
     let claim = from_xmp.clone().or_else(|| info_claim.clone());
     summary.pdfx_version.clone_from(&claim);
 
     let Some(claim) = claim else {
-        let message = "the file does not claim PDF/X conformance (no GTS_PDFXVersion in Info or XMP)";
+        let message =
+            "the file does not claim PDF/X conformance (no GTS_PDFXVersion in Info or XMP)";
         if expect.require_output_intent {
             sink.warning(codes::PDFX_NOT_CLAIMED, None, message);
         } else {
@@ -162,42 +166,66 @@ fn check_pdfx_markers(
             format!("unrecognised PDF/X version marker \"{}\"", lossy(claim.as_bytes())),
         );
     }
-    if let (Some(xmp), Some(info_claim)) = (&from_xmp, &info_claim) {
-        if PdfxLevel::parse(xmp) != PdfxLevel::parse(info_claim) {
-            sink.error(
-                codes::PDFX_VERSION_MISMATCH,
-                None,
-                format!(
-                    "the Info dictionary claims {} but the XMP metadata claims {}",
-                    lossy(info_claim.as_bytes()),
-                    lossy(xmp.as_bytes())
-                ),
-            );
-        }
+    if let (Some(xmp), Some(info_claim)) = (&from_xmp, &info_claim)
+        && PdfxLevel::parse(xmp) != PdfxLevel::parse(info_claim)
+    {
+        sink.error(
+            codes::PDFX_VERSION_MISMATCH,
+            None,
+            format!(
+                "the Info dictionary claims {} but the XMP metadata claims {}",
+                lossy(info_claim.as_bytes()),
+                lossy(xmp.as_bytes())
+            ),
+        );
     }
     // The catalog may raise the version declared in the header.
     let header = parse_version(&doc.version);
-    let catalog_version =
-        get_name(doc, catalog, b"Version").and_then(|v| std::str::from_utf8(v).ok()).and_then(parse_version);
+    let catalog_version = get_name(doc, catalog, b"Version")
+        .and_then(|v| std::str::from_utf8(v).ok())
+        .and_then(parse_version);
     let effective = match (header, catalog_version) {
         (Some(a), Some(b)) => Some(a.max(b)),
         (a, b) => a.or(b),
     };
-    if let (Some(max), Some(actual)) = (level.max_pdf_version(), effective) {
-        if actual > max {
-            sink.error(
-                codes::PDFX_VERSION_MISMATCH,
-                None,
-                format!(
-                    "the file claims {} but is PDF {}.{}; that standard allows PDF {}.{} at most",
-                    lossy(claim.as_bytes()),
-                    actual.0,
-                    actual.1,
-                    max.0,
-                    max.1
-                ),
-            );
-        }
+    if let (Some(max), Some(actual)) = (level.max_pdf_version(), effective)
+        && actual > max
+    {
+        sink.error(
+            codes::PDFX_VERSION_MISMATCH,
+            None,
+            format!(
+                "the file claims {} but is PDF {}.{}; that standard allows PDF {}.{} at most",
+                lossy(claim.as_bytes()),
+                actual.0,
+                actual.1,
+                max.0,
+                max.1
+            ),
+        );
+    }
+    if level.forbids_layers()
+        && matches!(doc.reference_table.cross_reference_type, XrefType::CrossReferenceStream)
+    {
+        sink.error(
+            codes::PDFX_VERSION_MISMATCH,
+            None,
+            format!(
+                "the file claims {} but uses a cross-reference stream, a PDF 1.5 feature",
+                lossy(claim.as_bytes())
+            ),
+        );
+    }
+    let has_date = |info_key: &[u8], xmp_name: &str| {
+        info_text(info_key).is_some() || xmp_text(xmp_name).is_some()
+    };
+    if !has_date(b"CreationDate", "xmp:CreateDate") || !has_date(b"ModDate", "xmp:ModifyDate") {
+        sink.error(
+            codes::NO_DOCUMENT_DATES,
+            None,
+            "the file claims PDF/X but lacks a creation date or a modification date \
+             (Info CreationDate / ModDate, or xmp:CreateDate / xmp:ModifyDate)",
+        );
     }
     if doc.trailer.get(b"ID").ok().and_then(|id| resolve(doc, id)).is_none() {
         sink.warning(
@@ -207,6 +235,17 @@ fn check_pdfx_markers(
         );
     }
     Some(level)
+}
+
+/// Combines a version marker with its conformance marker: PDF/X-1a:2001 files say
+/// "PDF/X-1:2001" in `GTS_PDFXVersion` and name the exact level in `GTS_PDFXConformance`.
+fn pdfx_claim(version: Option<String>, conformance: Option<String>) -> Option<String> {
+    let version = version?;
+    let claim = match conformance {
+        Some(conformance) if version.trim().starts_with("PDF/X-1:") => conformance,
+        _ => version,
+    };
+    Some(clip(&claim, 64))
 }
 
 /// The catalog's XMP metadata packet as text.
@@ -222,7 +261,11 @@ fn decode_xml_text(bytes: &[u8]) -> String {
         let units: Vec<u16> = data
             .chunks_exact(2)
             .map(|pair| {
-                if big_endian { u16::from_be_bytes([pair[0], pair[1]]) } else { u16::from_le_bytes([pair[0], pair[1]]) }
+                if big_endian {
+                    u16::from_be_bytes([pair[0], pair[1]])
+                } else {
+                    u16::from_le_bytes([pair[0], pair[1]])
+                }
             })
             .collect();
         String::from_utf16_lossy(&units)
@@ -302,17 +345,24 @@ fn check_output_intent(
         }
         return;
     }
-    let pdfx: Vec<&Dictionary> =
-        intents.iter().copied().filter(|intent| get_name(doc, intent, b"S") == Some(&b"GTS_PDFX"[..])).collect();
+    let pdfx: Vec<&Dictionary> = intents
+        .iter()
+        .copied()
+        .filter(|intent| get_name(doc, intent, b"S") == Some(&b"GTS_PDFX"[..]))
+        .collect();
     let Some(intent) = pdfx.first().copied() else {
-        let other = intents.first().and_then(|i| get_name(doc, i, b"S")).map_or_else(|| "?".to_string(), lossy);
+        let other = intents
+            .first()
+            .and_then(|i| get_name(doc, i, b"S"))
+            .map_or_else(|| "?".to_string(), lossy);
         sink.push(
             grade,
             codes::OUTPUT_INTENT_INVALID,
             None,
             format!("the document has an output intent of type {other} but none of type GTS_PDFX"),
         );
-        summary.output_intent = intents.first().map(|intent| summarise_intent(doc, intent, other.clone()));
+        summary.output_intent =
+            intents.first().map(|intent| summarise_intent(doc, intent, other.clone()));
         return;
     };
     if pdfx.len() > 1 {
@@ -320,7 +370,10 @@ fn check_output_intent(
             grade,
             codes::OUTPUT_INTENT_INVALID,
             None,
-            format!("the document has {} GTS_PDFX output intents; exactly one is allowed", pdfx.len()),
+            format!(
+                "the document has {} GTS_PDFX output intents; exactly one is allowed",
+                pdfx.len()
+            ),
         );
     }
     let mut intent_summary = summarise_intent(doc, intent, "GTS_PDFX".to_string());
@@ -337,7 +390,11 @@ fn check_output_intent(
             intent_summary.profile_embedded = true;
             let declared = get_int(doc, &profile.dict, b"N").and_then(|n| u8::try_from(n).ok());
             intent_summary.profile_components = declared;
-            match stream::decode(profile, MAX_METADATA_BYTES).ok().as_deref().and_then(parse_icc_header) {
+            match stream::decode(profile, MAX_METADATA_BYTES)
+                .ok()
+                .as_deref()
+                .and_then(parse_icc_header)
+            {
                 Some(header) => {
                     intent_summary.profile_color_space = Some(header.color_space.clone());
                     match (declared, header.components) {
@@ -356,6 +413,30 @@ fn check_output_intent(
                             "the output profile stream has no valid N (number of components)",
                         ),
                         _ => {}
+                    }
+                    if declared == header.components
+                        && header.color_space != "CMYK"
+                        && expect.require_output_intent
+                    {
+                        sink.warning(
+                            codes::OUTPUT_INTENT_INVALID,
+                            None,
+                            format!(
+                                "the output profile describes a {} device, not a CMYK printing condition",
+                                header.color_space
+                            ),
+                        );
+                    }
+                    if header.version_major >= 4 && level.is_some_and(PdfxLevel::forbids_layers) {
+                        sink.warning(
+                            codes::OUTPUT_INTENT_INVALID,
+                            None,
+                            format!(
+                                "the output profile is an ICC version {} profile; PDF/X-1a and \
+                                 PDF/X-3 workflows expect version 2",
+                                header.version_major
+                            ),
+                        );
                     }
                     if header.class != "prtr" {
                         sink.warning(
@@ -404,7 +485,9 @@ fn check_output_intent(
 }
 
 fn summarise_intent(doc: &Document, intent: &Dictionary, subtype: String) -> OutputIntentSummary {
-    let text = |key: &[u8]| get_text(doc, intent, key).map(|t| t.trim().to_string()).filter(|t| !t.is_empty());
+    let text = |key: &[u8]| {
+        get_text(doc, intent, key).map(|t| clip(&t, MAX_TEXT_CHARS)).filter(|t| !t.is_empty())
+    };
     OutputIntentSummary {
         subtype,
         identifier: text(b"OutputConditionIdentifier"),
@@ -427,12 +510,14 @@ fn check_info(
 ) {
     // PDF/X makes Title and Trapped mandatory; elsewhere they are good practice.
     let grade = if level.is_some() { Severity::Error } else { Severity::Warning };
-    summary.title =
-        info.and_then(|info| get_text(doc, info, b"Title")).map(|t| t.trim().to_string()).filter(|t| !t.is_empty());
+    summary.title = info
+        .and_then(|info| get_text(doc, info, b"Title"))
+        .map(|t| clip(&t, MAX_TEXT_CHARS))
+        .filter(|t| !t.is_empty());
     if summary.title.is_none() {
         sink.push(grade, codes::NO_TITLE, None, "the Info dictionary has no Title");
     }
-    summary.trapped = info.and_then(|info| get_text(doc, info, b"Trapped")).map(|t| t.trim().to_string());
+    summary.trapped = info.and_then(|info| get_text(doc, info, b"Trapped")).map(|t| clip(&t, 32));
     match summary.trapped.as_deref() {
         Some("True" | "False") => {}
         Some(other) => sink.push(
@@ -441,7 +526,9 @@ fn check_info(
             None,
             format!("Info Trapped is \"{}\"; it must be True or False", lossy(other.as_bytes())),
         ),
-        None => sink.push(grade, codes::TRAPPED_NOT_SET, None, "the Info dictionary has no Trapped key"),
+        None => {
+            sink.push(grade, codes::TRAPPED_NOT_SET, None, "the Info dictionary has no Trapped key")
+        }
     }
 }
 
@@ -458,6 +545,7 @@ fn parse_mm(text: &str) -> Option<f64> {
 pub(crate) fn check_ebc_geometry(
     ebc: &BTreeMap<String, String>,
     trim_mm: Option<(f64, f64)>,
+    bleed_mm: Option<f64>,
     qr_candidates: &[(u32, QrCandidate)],
     expect: &Expectations,
     sink: &mut Sink,
@@ -478,13 +566,16 @@ pub(crate) fn check_ebc_geometry(
     let cover_w = number("EBC.CoverWidthMm");
     let cover_h = number("EBC.CoverHeightMm");
     let qr_module = number("EBC.QrModuleMm");
+    let declared_bleed = number("EBC.BleedMm");
     let folds: Option<Vec<f64>> = ebc.get("EBC.FoldXMm").and_then(|raw| {
         let parsed: Option<Vec<f64>> = raw.split(',').take(16).map(parse_mm).collect();
         if parsed.is_none() {
             sink.error(
                 codes::EBC_KEY_INVALID,
                 None,
-                format!("Info key EBC.FoldXMm is \"{raw}\", not a comma-separated list of millimetres"),
+                format!(
+                    "Info key EBC.FoldXMm is \"{raw}\", not a comma-separated list of millimetres"
+                ),
             );
         }
         parsed
@@ -493,10 +584,12 @@ pub(crate) fn check_ebc_geometry(
     let mut mismatch = |message: String| sink.error(codes::EBC_GEOMETRY_MISMATCH, None, message);
 
     if let Some((trim_w, trim_h)) = trim_mm {
-        if let Some(height) = cover_h {
-            if !close(height, trim_h) {
-                mismatch(format!("EBC.CoverHeightMm is {height} but the trim box is {trim_h:.2} mm high"));
-            }
+        if let Some(height) = cover_h
+            && !close(height, trim_h)
+        {
+            mismatch(format!(
+                "EBC.CoverHeightMm is {height} but the trim box is {trim_h:.2} mm high"
+            ));
         }
         if let (Some(width), Some(spine)) = (cover_w, spine) {
             let total = 2.0 * width + spine;
@@ -508,7 +601,9 @@ pub(crate) fn check_ebc_geometry(
         }
         if let Some(folds) = &folds {
             if folds.iter().any(|&x| x < -TRIM_TOLERANCE_MM || x > trim_w + TRIM_TOLERANCE_MM) {
-                mismatch(format!("EBC.FoldXMm has a fold outside the trim box (0 to {trim_w:.2} mm)"));
+                mismatch(format!(
+                    "EBC.FoldXMm has a fold outside the trim box (0 to {trim_w:.2} mm)"
+                ));
             } else if let [first, second] = folds.as_slice() {
                 // A card has two folds, symmetric about the middle of the spread.
                 if !close(first + second, trim_w) {
@@ -519,22 +614,27 @@ pub(crate) fn check_ebc_geometry(
             }
         }
     }
-    if let (Some(folds), Some(spine)) = (&folds, spine) {
-        if let [first, second] = folds.as_slice() {
-            if !close((second - first).abs(), spine) {
-                mismatch(format!(
-                    "the folds at {first} and {second} mm are {:.2} mm apart but EBC.SpineWidthMm is {spine}",
-                    (second - first).abs()
-                ));
-            }
-        }
+    if let (Some(declared), Some(actual)) = (declared_bleed, bleed_mm)
+        && actual < declared - BLEED_TOLERANCE_MM
+    {
+        mismatch(format!(
+            "EBC.BleedMm declares {declared} mm of bleed but the first page has {actual:.2} mm"
+        ));
     }
-    if let (Some(folds), Some(width)) = (&folds, cover_w) {
-        if let Some(first) = folds.iter().copied().reduce(f64::min) {
-            if !close(first, width) {
-                mismatch(format!("the first fold is at {first} mm but EBC.CoverWidthMm is {width}"));
-            }
-        }
+    if let (Some(folds), Some(spine)) = (&folds, spine)
+        && let [first, second] = folds.as_slice()
+        && !close((second - first).abs(), spine)
+    {
+        mismatch(format!(
+            "the folds at {first} and {second} mm are {:.2} mm apart but EBC.SpineWidthMm is {spine}",
+            (second - first).abs()
+        ));
+    }
+    if let (Some(folds), Some(width)) = (&folds, cover_w)
+        && let Some(first) = folds.iter().copied().reduce(f64::min)
+        && !close(first, width)
+    {
+        mismatch(format!("the first fold is at {first} mm but EBC.CoverWidthMm is {width}"));
     }
 
     if let Some(expected) = expect.spine_mm {
@@ -565,14 +665,16 @@ pub(crate) fn check_ebc_geometry(
     if let Some(minimum) = expect.min_qr_module_mm {
         // A hundredth of a millimetre of slack for rounding to points.
         let too_small = |module: f64| module < minimum - 0.01;
-        if let Some(module) = qr_module {
-            if too_small(module) {
-                sink.error(
-                    codes::QR_MODULE_TOO_SMALL,
-                    None,
-                    format!("EBC.QrModuleMm declares {module} mm modules, below the minimum of {minimum} mm"),
-                );
-            }
+        if let Some(module) = qr_module
+            && too_small(module)
+        {
+            sink.error(
+                codes::QR_MODULE_TOO_SMALL,
+                None,
+                format!(
+                    "EBC.QrModuleMm declares {module} mm modules, below the minimum of {minimum} mm"
+                ),
+            );
         }
         for (page, candidate) in qr_candidates {
             if too_small(candidate.module_mm) {
@@ -616,6 +718,7 @@ mod tests {
         assert_eq!(PdfxLevel::X1a2001.max_pdf_version(), Some((1, 3)));
         assert_eq!(PdfxLevel::X4.max_pdf_version(), Some((1, 6)));
         assert!(PdfxLevel::X3v2002.forbids_layers() && !PdfxLevel::X4.forbids_layers());
+        assert!(PdfxLevel::X1a2003.forbids_rgb() && !PdfxLevel::X3v2002.forbids_rgb());
         assert_eq!(parse_version("1.6"), Some((1, 6)));
         assert_eq!(parse_version("2.0"), Some((2, 0)));
         assert_eq!(parse_version("1"), None);
@@ -635,9 +738,18 @@ mod tests {
         // The closing tag, a namespace declaration that merely contains the name, an empty
         // element and truncated packets are not values.
         assert_eq!(xmp_property("</pdfxid:GTS_PDFXVersion>", "pdfxid:GTS_PDFXVersion"), None);
-        assert_eq!(xmp_property("<pdfxid:GTS_PDFXVersion></pdfxid:GTS_PDFXVersion>", "pdfxid:GTS_PDFXVersion"), None);
+        assert_eq!(
+            xmp_property(
+                "<pdfxid:GTS_PDFXVersion></pdfxid:GTS_PDFXVersion>",
+                "pdfxid:GTS_PDFXVersion"
+            ),
+            None
+        );
         assert_eq!(xmp_property("<pdfxid:GTS_PDFXVersion>PDF/X-4", "pdfxid:GTS_PDFXVersion"), None);
-        assert_eq!(xmp_property(" pdfxid:GTS_PDFXVersion=\"PDF/X-4", "pdfxid:GTS_PDFXVersion"), None);
+        assert_eq!(
+            xmp_property(" pdfxid:GTS_PDFXVersion=\"PDF/X-4", "pdfxid:GTS_PDFXVersion"),
+            None
+        );
         assert_eq!(xmp_property("", "pdfxid:GTS_PDFXVersion"), None);
         // UTF-16 packets are decoded first.
         let mut utf16 = vec![0xFE, 0xFF];
@@ -662,7 +774,7 @@ mod tests {
         expect: &Expectations,
     ) -> Vec<&'static str> {
         let mut sink = Sink::default();
-        check_ebc_geometry(keys, trim, qr, expect, &mut sink);
+        check_ebc_geometry(keys, trim, Some(3.0), qr, expect, &mut sink);
         sink.into_sorted().into_iter().map(|f| f.code).collect()
     }
 
@@ -704,11 +816,40 @@ mod tests {
     }
 
     #[test]
+    fn declared_bleed_must_be_there() {
+        let expect = Expectations::professional();
+        // The helper measures 3 mm of bleed on the page.
+        assert!(ebc_codes(&ebc(&[("EBC.BleedMm", "3")]), CARD, &[], &expect).is_empty());
+        assert!(ebc_codes(&ebc(&[("EBC.BleedMm", "2")]), CARD, &[], &expect).is_empty());
+        assert_eq!(
+            ebc_codes(&ebc(&[("EBC.BleedMm", "5")]), CARD, &[], &expect),
+            vec![codes::EBC_GEOMETRY_MISMATCH]
+        );
+        // Text keys such as EBC.Profile are carried along, not parsed.
+        let keys = ebc(&[("EBC.Profile", "professional_eu")]);
+        assert!(ebc_codes(&keys, CARD, &[], &expect).is_empty());
+    }
+
+    #[test]
+    fn pdfx_claims_combine_version_and_conformance() {
+        let s = |text: &str| Some(text.to_string());
+        assert_eq!(pdfx_claim(s("PDF/X-1:2001"), s("PDF/X-1a:2001")), s("PDF/X-1a:2001"));
+        assert_eq!(pdfx_claim(s("PDF/X-1:2001"), None), s("PDF/X-1:2001"));
+        assert_eq!(pdfx_claim(s(" PDF/X-4 "), s("ignored")), s("PDF/X-4"));
+        assert_eq!(pdfx_claim(None, s("PDF/X-1a:2001")), None);
+        assert_eq!(pdfx_claim(s(&"x".repeat(500)), None).map(|c| c.chars().count()), Some(65));
+    }
+
+    #[test]
     fn malformed_keys_are_reported_once() {
         let expect = Expectations::professional().with_spine(10.0);
         for bad in ["ten", "", "NaN", "inf", "-3", "1e9", "10,0"] {
             let keys = ebc(&[("EBC.SpineWidthMm", bad)]);
-            assert_eq!(ebc_codes(&keys, CARD, &[], &expect), vec![codes::EBC_KEY_INVALID], "{bad:?}");
+            assert_eq!(
+                ebc_codes(&keys, CARD, &[], &expect),
+                vec![codes::EBC_KEY_INVALID],
+                "{bad:?}"
+            );
         }
         let keys = ebc(&[("EBC.FoldXMm", "110;120")]);
         assert_eq!(

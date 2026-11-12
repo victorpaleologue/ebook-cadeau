@@ -71,7 +71,10 @@ fn nested_transforms_accumulate_and_q_restores_them() {
     ];
     assert_eq!(got.len(), expected.len());
     for (g, e) in got.iter().zip(&expected) {
-        assert!(close(g.0, e.0) && close(g.1, e.1) && close(g.2, e.2) && close(g.3, e.3), "{g:?} vs {e:?}");
+        assert!(
+            close(g.0, e.0) && close(g.1, e.1) && close(g.2, e.2) && close(g.3, e.3),
+            "{g:?} vs {e:?}"
+        );
     }
 }
 
@@ -98,7 +101,10 @@ fn rotation_and_shear_do_not_change_the_measured_size() {
     let mut f = page_with(&content);
     let report = f.check_with(&lenient_ppi());
     let rotated = &images(&report)[0];
-    assert!(close(rotated.width_mm, 2.0 * INCH) && close(rotated.height_mm, 4.0 * INCH), "{rotated:?}");
+    assert!(
+        close(rotated.width_mm, 2.0 * INCH) && close(rotated.height_mm, 4.0 * INCH),
+        "{rotated:?}"
+    );
     assert!(close(rotated.ppi_x, 150.0) && close(rotated.ppi_y, 150.0), "{rotated:?}");
     // Sheared: the vertical edge is hypot(36, 72) pt long.
     let sheared = &images(&report)[1];
@@ -161,13 +167,21 @@ fn forms_inherit_and_do_not_leak_graphics_state() {
     ));
     f.add_resource(f.page1, "XObject", "Fm", form);
     let report = f.check_with(&lenient_ppi());
-    assert_eq!(codes(&report), set(&[c::COLOR_RGB, c::CONTENT_UNBALANCED_Q]), "{:#?}", report.findings);
+    assert_eq!(
+        codes(&report),
+        set(&[c::COLOR_RGB, c::CONTENT_UNBALANCED_Q]),
+        "{:#?}",
+        report.findings
+    );
     let unbalanced = report.findings.iter().find(|f| f.code == c::CONTENT_UNBALANCED_Q).unwrap();
     assert!(unbalanced.message.contains("form XObject /Fm leaves 3"), "{}", unbalanced.message);
     // The image after the form is not scaled by the form's cm.
     assert!(close(images(&report)[0].width_mm, INCH), "{:?}", images(&report)[0]);
     // Only the RGB fills (in the form and after it) paint; the form's K fill colour is never used.
-    assert_eq!(report.pages[0].color_spaces, vec!["DeviceGray".to_string(), "DeviceRGB".to_string()]);
+    assert_eq!(
+        report.pages[0].color_spaces,
+        vec!["DeviceGray".to_string(), "DeviceRGB".to_string()]
+    );
 }
 
 #[test]
@@ -206,7 +220,8 @@ fn user_unit_scales_image_placements() {
 #[test]
 fn single_pixel_rows_have_no_resolution_across_them() {
     // A 1×1 swatch and a 256×1 gradient strip, both stretched over 10 cm.
-    let mut f = page_with("q 283.46 0 0 283.46 0 0 cm /Dot Do Q q 283.46 0 0 283.46 0 0 cm /Strip Do Q");
+    let mut f =
+        page_with("q 283.46 0 0 283.46 0 0 cm /Dot Do Q q 283.46 0 0 283.46 0 0 cm /Strip Do Q");
     let dot = grey_image(&mut f, 1, 1);
     let strip = grey_image(&mut f, 256, 1);
     f.add_resource(f.page1, "XObject", "Dot", dot);
@@ -241,7 +256,9 @@ fn degenerate_and_malformed_images() {
 #[test]
 fn inline_images_are_measured_like_any_other() {
     let pixels = "\u{7f}".repeat(30 * 30);
-    let content = format!("q 72 0 0 72 100 100 cm BI /W 30 /H 30 /BPC 8 /CS /G ID {pixels} EI Q 0 0 0 1 k 0 0 5 5 re f");
+    let content = format!(
+        "q 72 0 0 72 100 100 cm BI /W 30 /H 30 /BPC 8 /CS /G ID {pixels} EI Q 0 0 0 1 k 0 0 5 5 re f"
+    );
     let mut f = page_with(&content);
     let report = f.check();
     assert_eq!(codes(&report), set(&[c::IMAGE_LOW_RES]), "{:#?}", report.findings);
@@ -252,7 +269,10 @@ fn inline_images_are_measured_like_any_other() {
     assert_eq!(image.color_space, "DeviceGray");
     assert!(close(image.ppi_x, 30.0), "{image:?}");
     // The operators after EI are still interpreted.
-    assert_eq!(report.pages[0].color_spaces, vec!["DeviceCMYK".to_string(), "DeviceGray".to_string()]);
+    assert_eq!(
+        report.pages[0].color_spaces,
+        vec!["DeviceCMYK".to_string(), "DeviceGray".to_string()]
+    );
 
     // An RGB inline image, with the abbreviated names.
     let rgb = "\u{20}".repeat(4 * 4 * 3);
@@ -287,7 +307,9 @@ fn colour_spaces_from_resources() {
          /Process cs 0.5 0.5 scn 0 0 10 10 re f\n\
          /Nope cs 0.5 scn 0 0 10 10 re f\n",
     );
-    let cmyk_profile = f.doc.add_object(Stream::new(dictionary! { "N" => 4 }, common::icc_profile(b"prtr", b"CMYK")));
+    let cmyk_profile = f
+        .doc
+        .add_object(Stream::new(dictionary! { "N" => 4 }, common::icc_profile(b"prtr", b"CMYK")));
     let white = vec![Object::Real(0.9505), 1.into(), Object::Real(1.089)];
     f.add_resource(f.page1, "ColorSpace", "Cmyk", vec![name("ICCBased"), cmyk_profile.into()]);
     f.add_resource(
@@ -306,12 +328,21 @@ fn colour_spaces_from_resources() {
         f.page1,
         "ColorSpace",
         "Process",
-        vec![name("DeviceN"), Object::Array(vec![name("Cyan"), name("Black")]), name("DeviceCMYK"), Object::Null],
+        vec![
+            name("DeviceN"),
+            Object::Array(vec![name("Cyan"), name("Black")]),
+            name("DeviceCMYK"),
+            Object::Null,
+        ],
     );
     let report = f.check();
     assert_eq!(codes(&report), set(&[c::COLOR_RGB, c::COLOR_UNKNOWN]), "{:#?}", report.findings);
-    let rgb: Vec<&str> =
-        report.findings.iter().filter(|f| f.code == c::COLOR_RGB).map(|f| f.message.as_str()).collect();
+    let rgb: Vec<&str> = report
+        .findings
+        .iter()
+        .filter(|f| f.code == c::COLOR_RGB)
+        .map(|f| f.message.as_str())
+        .collect();
     assert_eq!(rgb, vec!["a fill uses CalRGB", "a stroke uses Lab"]);
     assert_eq!(
         report.pages[0].color_spaces,
@@ -349,14 +380,20 @@ fn missing_resources_are_reported() {
     assert_eq!(report.findings.len(), 5);
     assert!(report.passed(), "missing resources are warnings");
     let messages: Vec<&str> = report.findings.iter().map(|f| f.message.as_str()).collect();
-    assert!(messages.contains(&"XObject resource /NoImage is used but not defined"), "{messages:?}");
+    assert!(
+        messages.contains(&"XObject resource /NoImage is used but not defined"),
+        "{messages:?}"
+    );
     assert!(messages.contains(&"Font resource /NoFont is used but not defined"), "{messages:?}");
 }
 
 #[test]
 fn postscript_xobjects_are_errors() {
     let mut f = page_with("/Ps Do");
-    let ps = f.doc.add_object(Stream::new(dictionary! { "Type" => "XObject", "Subtype" => "PS" }, b"showpage".to_vec()));
+    let ps = f.doc.add_object(Stream::new(
+        dictionary! { "Type" => "XObject", "Subtype" => "PS" },
+        b"showpage".to_vec(),
+    ));
     f.add_resource(f.page1, "XObject", "Ps", ps);
     let report = f.check();
     assert_eq!(codes(&report), set(&[c::POSTSCRIPT_XOBJECT]));
@@ -369,7 +406,11 @@ fn unbalanced_graphics_state_operators() {
     let report = f.check();
     assert_eq!(codes(&report), set(&[c::CONTENT_UNBALANCED_Q]));
     assert_eq!(report.findings[0].severity, Severity::Warning);
-    assert!(report.findings[0].message.contains("leaves 1 saved"), "{}", report.findings[0].message);
+    assert!(
+        report.findings[0].message.contains("leaves 1 saved"),
+        "{}",
+        report.findings[0].message
+    );
 
     let mut f = page_with("q 0 0 0 1 k 0 0 10 10 re f Q Q");
     let report = f.check();
@@ -380,7 +421,11 @@ fn unbalanced_graphics_state_operators() {
     let mut f = page_with(&"q ".repeat(100_000));
     let report = f.check();
     assert_eq!(codes(&report), set(&[c::CONTENT_UNBALANCED_Q]));
-    assert!(report.findings[0].message.contains("leaves 100000 saved"), "{}", report.findings[0].message);
+    assert!(
+        report.findings[0].message.contains("leaves 100000 saved"),
+        "{}",
+        report.findings[0].message
+    );
 
     // Deep but balanced nesting (beyond the 256 states that are stored) restores the outer
     // state correctly: 1.01^300 ≈ 20 would show in the image size otherwise.
@@ -395,7 +440,8 @@ fn unbalanced_graphics_state_operators() {
 
 #[test]
 fn syntax_errors_stop_the_page_with_an_error_but_keep_what_was_seen() {
-    let content = "1 0 0 rg 0 0 10 10 re f (unterminated string 0 0 1 rg 20 20 5 5 re f";
+    // The open `q` is not reported as unbalanced: the stream was not read to its end.
+    let content = "q 1 0 0 rg 0 0 10 10 re f (unterminated string 0 0 1 rg 20 20 5 5 re f";
     let mut f = page_with(content);
     let report = f.check();
     assert_eq!(codes(&report), set(&[c::COLOR_RGB, c::CONTENT_INVALID]), "{:#?}", report.findings);
@@ -420,7 +466,18 @@ fn syntax_errors_stop_the_page_with_an_error_but_keep_what_was_seen() {
 
 #[test]
 fn operators_with_missing_operands_are_errors() {
-    for content in ["1 0 0 cm", "0.5 0.5 rg", "(text) k", "/Im cm", "10 re", "gs", "Do", "sc", "9 Tr", "1 2 3 4 5 m l"] {
+    for content in [
+        "1 0 0 cm",
+        "0.5 0.5 rg",
+        "(text) k",
+        "/Im cm",
+        "10 re",
+        "gs",
+        "Do",
+        "sc",
+        "9 Tr",
+        "1 2 3 4 5 m l",
+    ] {
         let mut f = page_with(content);
         let report = f.check();
         assert_eq!(codes(&report), set(&[c::CONTENT_INVALID]), "{content}: {:#?}", report.findings);

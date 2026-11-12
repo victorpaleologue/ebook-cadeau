@@ -6,16 +6,22 @@ use std::collections::{HashMap, HashSet};
 use crate::codes;
 use crate::report::{Finding, Severity};
 
-/// At most this many distinct findings are kept per code and page; one more line then says
-/// that the rest were omitted.
+/// At most this many distinct findings are kept per code, page and severity; one more line
+/// then says that the rest were omitted. (The severity is part of the key so that a flood of
+/// warnings can never crowd out an error with the same code.)
 const MAX_PER_CODE_AND_PAGE: u32 = 20;
+
+/// At most this many findings are kept per document; beyond that the report ends with a
+/// [`codes::LIMIT_EXCEEDED`] error.
+const MAX_FINDINGS: usize = 5_000;
 
 /// Accumulates findings.
 #[derive(Debug, Default)]
 pub(crate) struct Sink {
     findings: Vec<Finding>,
     seen: HashSet<(&'static str, Option<u32>, String)>,
-    counts: HashMap<(&'static str, Option<u32>), u32>,
+    counts: HashMap<(&'static str, Option<u32>, Severity), u32>,
+    truncated: bool,
 }
 
 impl Sink {
@@ -26,20 +32,38 @@ impl Sink {
         page: Option<u32>,
         message: impl Into<String>,
     ) {
+        if self.truncated {
+            return;
+        }
+        let slot = (code, page, severity);
+        let count = self.counts.get(&slot).copied().unwrap_or(0);
+        if count > MAX_PER_CODE_AND_PAGE {
+            return;
+        }
         let message = message.into();
         if !self.seen.insert((code, page, message.clone())) {
             return;
         }
-        let count = self.counts.entry((code, page)).or_insert(0);
-        *count += 1;
-        if *count <= MAX_PER_CODE_AND_PAGE {
+        self.counts.insert(slot, count + 1);
+        if count < MAX_PER_CODE_AND_PAGE {
             self.findings.push(Finding { severity, code, page, message });
-        } else if *count == MAX_PER_CODE_AND_PAGE + 1 {
+        } else {
             self.findings.push(Finding {
                 severity,
                 code,
                 page,
                 message: format!("further {code} findings are omitted"),
+            });
+        }
+        if self.findings.len() >= MAX_FINDINGS {
+            self.truncated = true;
+            self.findings.push(Finding {
+                severity: Severity::Error,
+                code: codes::LIMIT_EXCEEDED,
+                page: None,
+                message: format!(
+                    "more than {MAX_FINDINGS} findings; the rest are omitted and the report is partial"
+                ),
             });
         }
     }
@@ -48,7 +72,12 @@ impl Sink {
         self.push(Severity::Error, code, page, msg);
     }
 
-    pub(crate) fn warning(&mut self, code: &'static str, page: Option<u32>, msg: impl Into<String>) {
+    pub(crate) fn warning(
+        &mut self,
+        code: &'static str,
+        page: Option<u32>,
+        msg: impl Into<String>,
+    ) {
         self.push(Severity::Warning, code, page, msg);
     }
 
@@ -168,6 +197,35 @@ mod tests {
         let mut sorted = pages.clone();
         sorted.sort();
         assert_eq!(pages, sorted);
+    }
+
+    #[test]
+    fn a_flood_of_warnings_cannot_hide_an_error_with_the_same_code() {
+        let mut sink = Sink::default();
+        for i in 0..500 {
+            sink.warning(codes::COLOR_REGISTRATION, Some(1), format!("text {i}"));
+        }
+        sink.error(codes::COLOR_REGISTRATION, Some(1), "a fill inside the bleed box");
+        let findings = sink.into_sorted();
+        assert_eq!(findings.len(), 22);
+        assert_eq!(findings.iter().filter(|f| f.severity == Severity::Error).count(), 1);
+        assert_eq!(findings[21].message, "a fill inside the bleed box");
+    }
+
+    #[test]
+    fn the_total_number_of_findings_is_capped_with_an_error() {
+        let mut sink = Sink::default();
+        for page in 0..1_000 {
+            for i in 0..10 {
+                sink.info(codes::FONT_NOT_SUBSET, Some(page), format!("font {i}"));
+            }
+        }
+        sink.error(codes::NO_PAGES, None, "pushed after the cap: dropped");
+        let findings = sink.into_sorted();
+        assert_eq!(findings.len(), MAX_FINDINGS + 1);
+        assert_eq!(findings[0].code, codes::LIMIT_EXCEEDED);
+        assert_eq!(findings[0].severity, Severity::Error);
+        assert!(!findings.iter().any(|f| f.code == codes::NO_PAGES));
     }
 
     #[test]

@@ -86,7 +86,8 @@ fn inflate_strict(input: &[u8], limit: usize) -> Result<Vec<u8>, DecodeError> {
                 return if output.len() > limit { Err(DecodeError::TooLarge) } else { Ok(output) };
             }
             Status::Ok | Status::BufError => {
-                let stalled = inflater.total_in() == before_in && inflater.total_out() == before_out;
+                let stalled =
+                    inflater.total_in() == before_in && inflater.total_out() == before_out;
                 if stalled && output.len() < output.capacity() {
                     return Err(DecodeError::Invalid("truncated FlateDecode data".to_string()));
                 }
@@ -167,10 +168,7 @@ mod tests {
         // Truncated at every eighth: never silently partial.
         for cut in [1, 2, good.len() / 8, good.len() / 2, good.len() - 5, good.len() - 1] {
             let result = decode(&flate_stream(good[..cut].to_vec()), 1 << 20);
-            assert!(
-                matches!(result, Err(DecodeError::Invalid(_))),
-                "cut at {cut}: {result:?}"
-            );
+            assert!(matches!(result, Err(DecodeError::Invalid(_))), "cut at {cut}: {result:?}");
         }
         // A flipped byte in the middle breaks the data or the checksum.
         let mut flipped = good.clone();
@@ -193,6 +191,9 @@ mod tests {
         let unknown = Stream::new(dictionary! { "Filter" => "DCTDecode" }, vec![0xFF, 0xD8]);
         assert!(matches!(decode(&unknown, 100), Err(DecodeError::Invalid(_))));
         let malformed = Stream::new(dictionary! { "Filter" => 12 }, vec![1, 2, 3]);
-        assert_eq!(decode(&malformed, 100), Err(DecodeError::Invalid("malformed Filter entry".into())));
+        assert_eq!(
+            decode(&malformed, 100),
+            Err(DecodeError::Invalid("malformed Filter entry".into()))
+        );
     }
 }

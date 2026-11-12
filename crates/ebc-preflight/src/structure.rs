@@ -37,18 +37,40 @@ pub(crate) fn check_document(doc: &Document, catalog: &Dictionary, sink: &mut Si
                 format!("the document contains an interactive form ({fields} top-level field(s))"),
             );
         } else {
-            sink.warning(codes::ACROFORM, None, "the document declares an (empty) interactive form");
+            sink.warning(
+                codes::ACROFORM,
+                None,
+                "the document declares an (empty) interactive form",
+            );
         }
     }
     if let Some(names) = get_dict(doc, catalog, b"Names") {
-        if get_dict(doc, names, b"JavaScript").is_some_and(|tree| !tree.is_empty()) {
-            sink.error(codes::JAVASCRIPT, None, "the document has document-level JavaScript (Names/JavaScript)");
+        if get_dict(doc, names, b"JavaScript").is_some_and(|tree| name_tree_has_entries(doc, tree))
+        {
+            sink.error(
+                codes::JAVASCRIPT,
+                None,
+                "the document has document-level JavaScript (Names/JavaScript)",
+            );
         }
-        if get_dict(doc, names, b"EmbeddedFiles").is_some_and(|tree| !tree.is_empty()) {
-            sink.error(codes::EMBEDDED_FILE, None, "the document has file attachments (Names/EmbeddedFiles)");
+        if get_dict(doc, names, b"EmbeddedFiles")
+            .is_some_and(|tree| name_tree_has_entries(doc, tree))
+        {
+            sink.error(
+                codes::EMBEDDED_FILE,
+                None,
+                "the document has file attachments (Names/EmbeddedFiles)",
+            );
         }
     }
     scan_objects(doc, sink);
+}
+
+/// Whether the root of a name tree lists any name or has any child node.
+fn name_tree_has_entries(doc: &Document, tree: &Dictionary) -> bool {
+    [&b"Names"[..], b"Kids"]
+        .iter()
+        .any(|key| get_array(doc, tree, key).is_some_and(|entries| !entries.is_empty()))
 }
 
 /// Reports optional content (layers); the severity depends on the PDF/X level claimed.
@@ -92,9 +114,7 @@ fn scan_objects(doc: &Document, sink: &mut Sink) {
                 }
                 _ => continue,
             };
-            let is_name = |key: &[u8], value: &[u8]| {
-                matches!(dict.get(key), Ok(Object::Name(name)) if name == value)
-            };
+            let is_name = |key: &[u8], value: &[u8]| matches!(dict.get(key), Ok(Object::Name(name)) if name == value);
             if dict.has(b"JS") || is_name(b"S", b"JavaScript") {
                 javascript += 1;
             }
@@ -117,13 +137,21 @@ fn scan_objects(doc: &Document, sink: &mut Sink) {
         sink.error(
             codes::EMBEDDED_FILE,
             None,
-            format!("the file contains embedded files ({embedded} file specification(s) or stream(s))"),
+            format!(
+                "the file contains embedded files ({embedded} file specification(s) or stream(s))"
+            ),
         );
     }
 }
 
 /// Page-level checks: additional actions and annotations.
-pub(crate) fn check_page(doc: &Document, node: &PageNode<'_>, boxes: &PageBoxes, page: u32, sink: &mut Sink) {
+pub(crate) fn check_page(
+    doc: &Document,
+    node: &PageNode<'_>,
+    boxes: &PageBoxes,
+    page: u32,
+    sink: &mut Sink,
+) {
     if get(doc, node.dict, b"AA").is_some() {
         sink.error(codes::ACTION, Some(page), "the page has additional actions (AA)");
     }
@@ -136,7 +164,8 @@ pub(crate) fn check_page(doc: &Document, node: &PageNode<'_>, boxes: &PageBoxes,
             inside.push("(malformed)".to_string());
             continue;
         };
-        let subtype = get_name(doc, dict, b"Subtype").map_or_else(|| "(no subtype)".to_string(), lossy);
+        let subtype =
+            get_name(doc, dict, b"Subtype").map_or_else(|| "(no subtype)".to_string(), lossy);
         // Printer's marks and trap networks are the annotations PDF/X expects.
         if subtype == "PrinterMark" || subtype == "TrapNet" {
             continue;
@@ -154,14 +183,22 @@ pub(crate) fn check_page(doc: &Document, node: &PageNode<'_>, boxes: &PageBoxes,
         sink.error(
             codes::ANNOTATION,
             Some(page),
-            format!("the page has {} annotation(s) in the printed area: {}", inside.len(), summarise(&inside)),
+            format!(
+                "the page has {} annotation(s) in the printed area: {}",
+                inside.len(),
+                summarise(&inside)
+            ),
         );
     }
     if !outside.is_empty() {
         sink.warning(
             codes::ANNOTATION,
             Some(page),
-            format!("the page has {} annotation(s) outside the bleed box: {}", outside.len(), summarise(&outside)),
+            format!(
+                "the page has {} annotation(s) outside the bleed box: {}",
+                outside.len(),
+                summarise(&outside)
+            ),
         );
     }
 }
@@ -178,7 +215,11 @@ fn summarise(subtypes: &[String]) -> String {
     let mut parts: Vec<String> = counted
         .iter()
         .take(6)
-        .map(|(name, count)| if *count > 1 { format!("{name} ×{count}") } else { (*name).to_string() })
+        .map(
+            |(name, count)| {
+                if *count > 1 { format!("{name} ×{count}") } else { (*name).to_string() }
+            },
+        )
         .collect();
     if counted.len() > 6 {
         parts.push("…".to_string());
@@ -210,10 +251,27 @@ mod tests {
     }
 
     #[test]
+    fn empty_name_trees_are_not_findings() {
+        let doc = Document::with_version("1.6");
+        let catalog = dictionary! { "Names" => dictionary! {
+            "JavaScript" => dictionary! { "Names" => Vec::<Object>::new() },
+            "EmbeddedFiles" => dictionary! { "Kids" => Vec::<Object>::new(), "Limits" => vec![Object::Null] },
+        } };
+        assert!(findings(&doc, &catalog).is_empty());
+        // A tree that delegates to child nodes does have entries.
+        let catalog = dictionary! { "Names" => dictionary! {
+            "JavaScript" => dictionary! { "Kids" => vec![Object::Reference((5, 0))] },
+        } };
+        assert_eq!(findings(&doc, &catalog), vec![(codes::JAVASCRIPT, Severity::Error)]);
+    }
+
+    #[test]
     fn javascript_is_found_wherever_it_hides() {
         // As an OpenAction.
         let mut doc = Document::with_version("1.6");
-        let action = doc.add_object(dictionary! { "S" => "JavaScript", "JS" => Object::string_literal("app.alert(1)") });
+        let action = doc.add_object(
+            dictionary! { "S" => "JavaScript", "JS" => Object::string_literal("app.alert(1)") },
+        );
         let catalog = dictionary! { "OpenAction" => action };
         assert_eq!(
             findings(&doc, &catalog),
@@ -230,15 +288,21 @@ mod tests {
             "Names" => dictionary! { "JavaScript" => dictionary! { "Names" => vec![Object::string_literal("a")] } },
         };
         let got = findings(&doc, &catalog);
-        assert_eq!(got, vec![(codes::JAVASCRIPT, Severity::Error), (codes::JAVASCRIPT, Severity::Error)]);
+        assert_eq!(
+            got,
+            vec![(codes::JAVASCRIPT, Severity::Error), (codes::JAVASCRIPT, Severity::Error)]
+        );
     }
 
     #[test]
     fn actions_forms_and_attachments() {
         let mut doc = Document::with_version("1.6");
-        let file = doc.add_object(Stream::new(dictionary! { "Type" => "EmbeddedFile" }, b"data".to_vec()));
-        let spec = doc.add_object(dictionary! { "Type" => "Filespec", "EF" => dictionary! { "F" => file } });
-        let field = doc.add_object(dictionary! { "FT" => "Tx", "T" => Object::string_literal("name") });
+        let file =
+            doc.add_object(Stream::new(dictionary! { "Type" => "EmbeddedFile" }, b"data".to_vec()));
+        let spec = doc
+            .add_object(dictionary! { "Type" => "Filespec", "EF" => dictionary! { "F" => file } });
+        let field =
+            doc.add_object(dictionary! { "FT" => "Tx", "T" => Object::string_literal("name") });
         let catalog = dictionary! {
             "OpenAction" => vec![Object::Reference((1, 0)), "Fit".into()],
             "AA" => dictionary! { "WC" => dictionary! { "S" => "Named", "N" => "Print" } },
@@ -256,8 +320,12 @@ mod tests {
             ]
         );
         // An empty form is only a warning.
-        let catalog = dictionary! { "AcroForm" => dictionary! { "Fields" => Vec::<Object>::new() } };
-        assert_eq!(findings(&Document::with_version("1.6"), &catalog), vec![(codes::ACROFORM, Severity::Warning)]);
+        let catalog =
+            dictionary! { "AcroForm" => dictionary! { "Fields" => Vec::<Object>::new() } };
+        assert_eq!(
+            findings(&Document::with_version("1.6"), &catalog),
+            vec![(codes::ACROFORM, Severity::Warning)]
+        );
     }
 
     #[test]
@@ -276,7 +344,8 @@ mod tests {
 
     #[test]
     fn annotation_counts_are_summarised() {
-        let subtypes: Vec<String> = ["Link", "Text", "Link", "Link"].iter().map(|s| (*s).to_string()).collect();
+        let subtypes: Vec<String> =
+            ["Link", "Text", "Link", "Link"].iter().map(|s| (*s).to_string()).collect();
         assert_eq!(summarise(&subtypes), "Link ×3, Text");
         let many: Vec<String> = (0..10).map(|i| format!("T{i}")).collect();
         assert_eq!(summarise(&many), "T0, T1, T2, T3, T4, T5, …");

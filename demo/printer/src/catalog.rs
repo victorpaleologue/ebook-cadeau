@@ -86,7 +86,7 @@ impl Product {
             return None;
         }
         let (rung, total) =
-            self.price_cents.0.iter().copied().filter(|(q, _)| *q > 0 && *q <= quantity).next_back()?;
+            self.price_cents.0.iter().copied().rfind(|(q, _)| *q > 0 && *q <= quantity)?;
         u32::try_from((u64::from(total) * u64::from(quantity)).div_ceil(u64::from(rung))).ok()
     }
 }

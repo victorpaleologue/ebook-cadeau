@@ -9,6 +9,29 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+ebc-scene.workspace = true
+ebc-text.workspace = true
+thiserror.workspace = true
+
+[dev-dependencies]
+# The crate's own optional features, switched on for tests and examples only.
+ebc-fontid = { workspace = true, features = ["synth", "bundled-index"] }
+
+[features]
+default = []
+# `synth`: procedural test covers and image degradations (used by the tests, the `eval`
+# example and demos). Deterministic: every random choice comes from a caller-supplied seed.
+synth = []
+# `bundled_index()`: an index of the seven OFL fonts in `assets/fonts`, embedded in the binary
+# (about 60 KB). Regenerate with `cargo run -p ebc-fontid --example build-index`.
+bundled-index = []
+
+[[example]]
+name = "build-index"
+
+[[example]]
+name = "eval"
+required-features = ["synth"]
 
 [lints]
 workspace = true

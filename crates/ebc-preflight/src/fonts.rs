@@ -15,7 +15,7 @@ use crate::sink::Sink;
 /// Resource dictionaries examined per page (pages, forms, patterns, Type 3 fonts).
 const MAX_RESOURCE_DICTS: usize = 10_000;
 /// Fonts reported per page.
-const MAX_FONTS: usize = 2_000;
+const MAX_FONTS: usize = 500;
 
 /// Finds every font in the page's resource tree, checks it and returns the summaries sorted
 /// by name. `used` marks the fonts a `Tf` operator selected.
@@ -68,10 +68,10 @@ pub(crate) fn check_fonts(
                     ),
                 }
                 // Type 3 glyph procedures have resources of their own.
-                if let Some(own) = get_dict(doc, dict, b"Resources") {
-                    if id.is_none_or(|id| visited.insert(id)) {
-                        queue.push(own);
-                    }
+                if let Some(own) = get_dict(doc, dict, b"Resources")
+                    && id.is_none_or(|id| visited.insert(id))
+                {
+                    queue.push(own);
                 }
             }
         }
@@ -79,11 +79,13 @@ pub(crate) fn check_fonts(
         for category in [&b"XObject"[..], b"Pattern"] {
             let Some(entries) = get_dict(doc, resources, category) else { continue };
             for (_, entry) in entries {
-                let (id, Some(Object::Stream(stream))) = resolve_with_id(doc, entry) else { continue };
-                if let Some(id) = id {
-                    if !visited.insert(id) {
-                        continue;
-                    }
+                let (id, Some(Object::Stream(stream))) = resolve_with_id(doc, entry) else {
+                    continue;
+                };
+                if let Some(id) = id
+                    && !visited.insert(id)
+                {
+                    continue;
                 }
                 if let Some(nested) = get_dict(doc, &stream.dict, b"Resources") {
                     queue.push(nested);
@@ -101,7 +103,10 @@ fn report(font: &FontSummary, page: u32, sink: &mut Sink) {
         sink.warning(
             codes::FONT_TYPE3,
             Some(page),
-            format!("font {} is a Type 3 font: its glyphs are drawings or bitmaps of unknown quality", font.name),
+            format!(
+                "font {} is a Type 3 font: its glyphs are drawings or bitmaps of unknown quality",
+                font.name
+            ),
         );
     } else if !font.embedded {
         sink.error(
@@ -132,15 +137,18 @@ fn analyse(doc: &Document, font: &Dictionary) -> Result<FontSummary, String> {
                 .and_then(<[Object]>::first)
                 .and_then(|d| as_dict(doc, d))
                 .ok_or("the Type0 font has no descendant font")?;
-            let descendant_type = get_name(doc, descendant, b"Subtype").map_or_else(|| "?".to_string(), lossy);
+            let descendant_type =
+                get_name(doc, descendant, b"Subtype").map_or_else(|| "?".to_string(), lossy);
             let name = base_font
                 .or_else(|| get_name(doc, descendant, b"BaseFont").map(lossy))
                 .ok_or("the font has no BaseFont")?;
             (format!("Type0/{descendant_type}"), has_font_program(doc, descendant), name)
         }
-        b"Type1" | b"MMType1" | b"TrueType" => {
-            (lossy(subtype), has_font_program(doc, font), base_font.ok_or("the font has no BaseFont")?)
-        }
+        b"Type1" | b"MMType1" | b"TrueType" => (
+            lossy(subtype),
+            has_font_program(doc, font),
+            base_font.ok_or("the font has no BaseFont")?,
+        ),
         other => return Err(format!("unknown font Subtype {}", lossy(other))),
     };
     let subset_prefix = subset_prefix(&name);
@@ -181,7 +189,11 @@ mod tests {
         doc.add_object(Stream::new(dictionary! {}, vec![0, 1, 0, 0]))
     }
 
-    fn run(doc: &Document, resources: &Dictionary, used: &BTreeSet<FontKey>) -> (Vec<FontSummary>, Vec<(&'static str, Severity)>) {
+    fn run(
+        doc: &Document,
+        resources: &Dictionary,
+        used: &BTreeSet<FontKey>,
+    ) -> (Vec<FontSummary>, Vec<(&'static str, Severity)>) {
         let mut sink = Sink::default();
         let fonts = check_fonts(doc, Some(resources), used, 1, &mut sink);
         (fonts, sink.into_sorted().into_iter().map(|f| (f.code, f.severity)).collect())
@@ -191,7 +203,8 @@ mod tests {
     fn embedded_subset_fonts_pass_and_are_described() {
         let mut doc = Document::with_version("1.6");
         let file = font_file(&mut doc);
-        let descriptor = doc.add_object(dictionary! { "Type" => "FontDescriptor", "FontFile2" => file });
+        let descriptor =
+            doc.add_object(dictionary! { "Type" => "FontDescriptor", "FontFile2" => file });
         let cid = doc.add_object(dictionary! {
             "Type" => "Font", "Subtype" => "CIDFontType2", "BaseFont" => "ABCDEF+Spectral-Regular",
             "FontDescriptor" => descriptor,
@@ -222,7 +235,9 @@ mod tests {
         let mut doc = Document::with_version("1.6");
         let empty_file = doc.add_object(Stream::new(dictionary! {}, Vec::new()));
         // The standard 14: no descriptor at all.
-        let helvetica = doc.add_object(dictionary! { "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica" });
+        let helvetica = doc.add_object(
+            dictionary! { "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Helvetica" },
+        );
         // A descriptor without a font file.
         let arial = doc.add_object(dictionary! {
             "Type" => "Font", "Subtype" => "TrueType", "BaseFont" => "ArialMT",
@@ -240,7 +255,8 @@ mod tests {
             "Subtype" => "Type1", "BaseFont" => "NotStream", "FontDescriptor" => dictionary! { "FontFile" => 5 },
         });
         // A composite font whose descendant is not embedded.
-        let cid = doc.add_object(dictionary! { "Subtype" => "CIDFontType0", "BaseFont" => "Kozuka" });
+        let cid =
+            doc.add_object(dictionary! { "Subtype" => "CIDFontType0", "BaseFont" => "Kozuka" });
         let type0 = doc.add_object(dictionary! {
             "Subtype" => "Type0", "BaseFont" => "Kozuka-Identity-H", "DescendantFonts" => vec![cid.into()],
         });
@@ -272,7 +288,10 @@ mod tests {
         let (fonts, findings) = run(&doc, &resources, &BTreeSet::new());
         assert_eq!(fonts.len(), 2);
         let full_font = fonts.iter().find(|f| f.name == "Courier+Prime").unwrap();
-        assert!(full_font.embedded && !full_font.subset, "a + without a six-letter prefix is not a subset tag");
+        assert!(
+            full_font.embedded && !full_font.subset,
+            "a + without a six-letter prefix is not a subset tag"
+        );
         assert_eq!(
             findings,
             vec![
@@ -290,8 +309,10 @@ mod tests {
     #[test]
     fn fonts_inside_forms_patterns_and_type3_resources_are_found_once() {
         let mut doc = Document::with_version("1.6");
-        let helvetica = doc.add_object(dictionary! { "Subtype" => "Type1", "BaseFont" => "Helvetica" });
-        let times = doc.add_object(dictionary! { "Subtype" => "Type1", "BaseFont" => "Times-Roman" });
+        let helvetica =
+            doc.add_object(dictionary! { "Subtype" => "Type1", "BaseFont" => "Helvetica" });
+        let times =
+            doc.add_object(dictionary! { "Subtype" => "Type1", "BaseFont" => "Times-Roman" });
         let symbol = doc.add_object(dictionary! { "Subtype" => "Type1", "BaseFont" => "Symbol" });
         // Two forms that reference each other, each with a font.
         let form_a = doc.new_object_id();

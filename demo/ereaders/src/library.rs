@@ -132,6 +132,17 @@ impl Library {
         file: IncomingFile<'_>,
         source: ImportSource,
     ) -> Result<LibraryEntry, ImportError> {
+        self.import_with(profile, file, source, |_| {})
+    }
+
+    /// [`Library::import`] with a last adjustment of the entry before it is stored.
+    pub(crate) fn import_with(
+        &mut self,
+        profile: &DeviceProfile,
+        file: IncomingFile<'_>,
+        source: ImportSource,
+        adjust: impl FnOnce(&mut LibraryEntry),
+    ) -> Result<LibraryEntry, ImportError> {
         let (format, info) = examine(file, profile.max_download_bytes)?;
         if !profile.reads(format) {
             return Err(ImportError::UnsupportedFormat { format, device: profile.id });
@@ -149,29 +160,15 @@ impl Library {
         {
             return Err(ImportError::DamagedOnDevice { device: profile.id });
         }
-        let mut notes = info.warnings.clone();
+        let mut notes = Vec::new();
         if matches!(source, ImportSource::BrowserDownload { .. }) {
             if let Some(note) = profile.quirks.download_note {
                 notes.push(note.to_owned());
             }
         }
-        let kepub = format == FileFormat::Epub
-            && format::is_kepub_name(file.file_name)
-            && profile.family == crate::profile::DeviceFamily::Kobo;
-        let entry = LibraryEntry {
-            title: info.title.clone().unwrap_or_else(|| stem(file.file_name)),
-            authors: info.authors.clone(),
-            language: info.language.clone(),
-            format,
-            original_format: format,
-            file_name: file.file_name.to_owned(),
-            size_bytes: file.bytes.len() as u64,
-            sha256: sha256_hex(file.bytes),
-            source,
-            drm: info.drm,
-            kepub,
-            notes,
-        };
+        let mut entry = build_entry(file, format, &info, source, notes);
+        entry.kepub = entry.kepub && profile.family == crate::profile::DeviceFamily::Kobo;
+        adjust(&mut entry);
         Ok(self.push_unique(entry))
     }
 
@@ -185,6 +182,33 @@ impl Library {
         }
         self.entries.push(entry.clone());
         entry
+    }
+}
+
+/// Builds the library record of a validated file. `kepub` is set from the file name alone;
+/// the caller clears it for devices that do not treat `.kepub.epub` specially.
+pub(crate) fn build_entry(
+    file: IncomingFile<'_>,
+    format: FileFormat,
+    info: &format::BookInfo,
+    source: ImportSource,
+    extra_notes: Vec<String>,
+) -> LibraryEntry {
+    let mut notes = info.warnings.clone();
+    notes.extend(extra_notes);
+    LibraryEntry {
+        title: info.title.clone().unwrap_or_else(|| stem(file.file_name)),
+        authors: info.authors.clone(),
+        language: info.language.clone(),
+        format,
+        original_format: format,
+        file_name: file.file_name.to_owned(),
+        size_bytes: file.bytes.len() as u64,
+        sha256: sha256_hex(file.bytes),
+        source,
+        drm: info.drm,
+        kepub: format == FileFormat::Epub && format::is_kepub_name(file.file_name),
+        notes,
     }
 }
 

@@ -26,7 +26,8 @@ fn bounded(pdf: &[u8], expect: &Expectations) -> Result<Report, PreflightError> 
     std::thread::spawn(move || {
         let _ = sender.send(check(&data, &expect));
     });
-    let result = receiver.recv_timeout(WATCHDOG).expect("check() did not finish in time or crashed");
+    let result =
+        receiver.recv_timeout(WATCHDOG).expect("check() did not finish in time or crashed");
     if let Err(PreflightError::Internal(message)) = &result {
         panic!("check() panicked internally: {message}");
     }
@@ -50,12 +51,15 @@ fn raw_pdf(bodies: &[Vec<u8>], trailer: &str) -> Vec<u8> {
         out.extend_from_slice(b"\nendobj\n");
     }
     let xref = out.len();
-    out.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", bodies.len() + 1).as_bytes());
+    out.extend_from_slice(
+        format!("xref\n0 {}\n0000000000 65535 f \n", bodies.len() + 1).as_bytes(),
+    );
     for offset in offsets {
         out.extend_from_slice(format!("{offset:010} 00000 n \n").as_bytes());
     }
     out.extend_from_slice(
-        format!("trailer\n<< /Size {} {trailer} >>\nstartxref\n{xref}\n%%EOF\n", bodies.len() + 1).as_bytes(),
+        format!("trailer\n<< /Size {} {trailer} >>\nstartxref\n{xref}\n%%EOF\n", bodies.len() + 1)
+            .as_bytes(),
     );
     out
 }
@@ -109,15 +113,29 @@ fn things_that_are_not_pdfs_are_errors() {
     for data in [&b""[..], b"%PDF", b"PK\x03\x04 zip", b"<html>%PDF</html>", b"\x00\x00\x00"] {
         assert_eq!(bounded(data, &home()), Err(PreflightError::NotPdf), "{data:?}");
     }
-    for data in [&b"%PDF-"[..], b"%PDF-1.4", b"%PDF-1.7\n%%EOF\n", b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\n"] {
+    for data in
+        [&b"%PDF-"[..], b"%PDF-1.4", b"%PDF-1.7\n%%EOF\n", b"%PDF-1.4\n1 0 obj\n<<>>\nendobj\n"]
+    {
         match bounded(data, &home()) {
             Err(PreflightError::Parse(_) | PreflightError::NoCatalog) => {}
-            other => panic!("{:?} should not be readable: {other:?}", String::from_utf8_lossy(data)),
+            other => {
+                panic!("{:?} should not be readable: {other:?}", String::from_utf8_lossy(data))
+            }
         }
     }
     // The error says something useful.
     let error = bounded(b"%PDF-1.4\nnothing else", &home()).unwrap_err();
     assert!(error.to_string().starts_with("the PDF cannot be parsed"), "{error}");
+}
+
+#[test]
+fn oversized_input_is_refused_without_being_read() {
+    // Zero-filled and never touched: the allocation costs no real memory.
+    let huge = vec![0_u8; ebc_preflight::MAX_PDF_BYTES + 1];
+    assert_eq!(
+        check(&huge, &home()),
+        Err(PreflightError::TooLarge { size: huge.len(), limit: ebc_preflight::MAX_PDF_BYTES })
+    );
 }
 
 #[test]
@@ -268,7 +286,10 @@ fn corrupted_copies_of_a_valid_file_never_panic() {
     }
     // Most corruptions must be noticed one way or the other. (A changed byte inside the
     // dummy image or font data, or a digit replaced by itself, legitimately goes unnoticed.)
-    assert!(reports + errors > 350, "errors {errors}, reports with findings {reports}, clean {clean}");
+    assert!(
+        reports + errors > 350,
+        "errors {errors}, reports with findings {reports}, clean {clean}"
+    );
 }
 
 // ---- broken structure ----------------------------------------------------------------------
@@ -289,7 +310,10 @@ fn documents_without_usable_pages() {
         vec![body("<< /Type /Catalog >>")],
         vec![body("<< /Type /Catalog /Pages 2 0 R >>"), body("42")],
         vec![body("<< /Type /Catalog /Pages 2 0 R >>"), body("<< /Type /Pages /Kids /Oops >>")],
-        vec![body("<< /Type /Catalog /Pages 2 0 R >>"), body("<< /Type /Pages /Kids [5 0 R 6 0 R] >>")],
+        vec![
+            body("<< /Type /Catalog /Pages 2 0 R >>"),
+            body("<< /Type /Pages /Kids [5 0 R 6 0 R] >>"),
+        ],
     ] {
         let report = bounded(&raw_pdf(&bodies, "/Root 1 0 R"), &home()).unwrap();
         assert!(report.has(c::PAGE_TREE_INVALID), "{:#?}", report.findings);
@@ -298,8 +322,14 @@ fn documents_without_usable_pages() {
 
     // No catalog: the root is missing, dangling, or not a dictionary.
     assert!(bounded(&raw_pdf(&[body("<< >>")], ""), &home()).is_err());
-    assert_eq!(bounded(&raw_pdf(&[body("<< >>")], "/Root 7 0 R"), &home()), Err(PreflightError::NoCatalog));
-    assert_eq!(bounded(&raw_pdf(&[body("(catalog)")], "/Root 1 0 R"), &home()), Err(PreflightError::NoCatalog));
+    assert_eq!(
+        bounded(&raw_pdf(&[body("<< >>")], "/Root 7 0 R"), &home()),
+        Err(PreflightError::NoCatalog)
+    );
+    assert_eq!(
+        bounded(&raw_pdf(&[body("(catalog)")], "/Root 1 0 R"), &home()),
+        Err(PreflightError::NoCatalog)
+    );
 }
 
 #[test]
@@ -331,7 +361,9 @@ fn reference_cycles_in_every_corner_terminate() {
                  /AcroForm 9 0 R /OpenAction 9 0 R /OCProperties 9 0 R /Version 9 0 R >>",
             ),
             // 2: page tree with itself among its kids and cyclic inherited attributes.
-            body("<< /Type /Pages /Kids [3 0 R 2 0 R] /Count 2 /MediaBox 9 0 R /Resources 9 0 R /Rotate 9 0 R >>"),
+            body(
+                "<< /Type /Pages /Kids [3 0 R 2 0 R] /Count 2 /MediaBox 9 0 R /Resources 9 0 R /Rotate 9 0 R >>",
+            ),
             // 3: the page.
             body(
                 "<< /Type /Page /Parent 2 0 R /Contents 10 0 R /Resources 4 0 R /MediaBox [0 0 9 0 R 100] \
@@ -344,9 +376,14 @@ fn reference_cycles_in_every_corner_terminate() {
                  /Pattern << /P 9 0 R >> /Shading << /S 9 0 R >> >>",
             ),
             // 5: a composite font that is its own descendant and descriptor.
-            body("<< /Type /Font /Subtype /Type0 /BaseFont /Loop /DescendantFonts [5 0 R] /FontDescriptor 5 0 R >>"),
+            body(
+                "<< /Type /Font /Subtype /Type0 /BaseFont /Loop /DescendantFonts [5 0 R] /FontDescriptor 5 0 R >>",
+            ),
             // 6: a form that draws itself.
-            stream_body("/Type /XObject /Subtype /Form /BBox [0 0 1 1] /Resources 4 0 R", b"/X Do /Y Do"),
+            stream_body(
+                "/Type /XObject /Subtype /Form /BBox [0 0 1 1] /Resources 4 0 R",
+                b"/X Do /Y Do",
+            ),
             // 7: an Indexed colour space based on itself.
             body("[/Indexed 7 0 R 255 <00>]"),
             // 8: a graphics state full of cycles.
@@ -363,7 +400,10 @@ fn reference_cycles_in_every_corner_terminate() {
     assert_eq!(report.pages.len(), 1);
     assert!(!report.passed());
     // The form recursion is named, the font without a program is caught, the rest is noise.
-    let recursion = report.findings.iter().any(|f| f.code == c::CONTENT_INVALID && f.message.contains("draws itself"));
+    let recursion = report
+        .findings
+        .iter()
+        .any(|f| f.code == c::CONTENT_INVALID && f.message.contains("draws itself"));
     assert!(recursion, "{:#?}", report.findings);
     assert!(report.has(c::FONT_NOT_EMBEDDED), "{:#?}", report.findings);
     assert!(report.has(c::PAGE_TREE_INVALID), "{:#?}", report.findings);
@@ -372,11 +412,20 @@ fn reference_cycles_in_every_corner_terminate() {
 #[test]
 fn form_recursion_is_detected() {
     // A draws B, B draws A.
-    let a = stream_body("/Type /XObject /Subtype /Form /BBox [0 0 9 9] /Resources << /XObject << /B 6 0 R >> >>", b"/B Do");
-    let b = stream_body("/Type /XObject /Subtype /Form /BBox [0 0 9 9] /Resources << /XObject << /A 5 0 R >> >>", b"/A Do");
+    let a = stream_body(
+        "/Type /XObject /Subtype /Form /BBox [0 0 9 9] /Resources << /XObject << /B 6 0 R >> >>",
+        b"/B Do",
+    );
+    let b = stream_body(
+        "/Type /XObject /Subtype /Form /BBox [0 0 9 9] /Resources << /XObject << /A 5 0 R >> >>",
+        b"/A Do",
+    );
     let pdf = one_page(b"/A Do 0 0 0 1 k 0 0 9 9 re f", "/XObject << /A 5 0 R >>", &[a, b]);
     let report = bounded(&pdf, &home()).unwrap();
-    assert_eq!(codes(&report), set(&[c::CONTENT_INVALID, c::PDFX_NOT_CLAIMED, c::NO_TITLE, c::TRAPPED_NOT_SET]));
+    assert_eq!(
+        codes(&report),
+        set(&[c::CONTENT_INVALID, c::PDFX_NOT_CLAIMED, c::NO_TITLE, c::TRAPPED_NOT_SET])
+    );
     let cycle = report.findings.iter().find(|f| f.code == c::CONTENT_INVALID).unwrap();
     assert!(cycle.message.contains("form XObject /A draws itself"), "{}", cycle.message);
     // The page content after the recursive form is still analysed.
@@ -399,11 +448,7 @@ fn form_bombs_exhaust_the_budget_not_the_machine() {
     let mut extra = Vec::new();
     for level in 0..15 {
         let next = 5 + level + 1;
-        let content = if level == 14 {
-            b"0 0 1 1 re f ".repeat(10)
-        } else {
-            b"/N Do ".repeat(10)
-        };
+        let content = if level == 14 { b"0 0 1 1 re f ".repeat(10) } else { b"/N Do ".repeat(10) };
         extra.push(stream_body(
             &format!("/Type /XObject /Subtype /Form /BBox [0 0 9 9] /Resources << /XObject << /N {next} 0 R >> >>"),
             &content,
@@ -411,7 +456,8 @@ fn form_bombs_exhaust_the_budget_not_the_machine() {
     }
     let pdf = one_page(b"/N Do", "/XObject << /N 5 0 R >>", &extra);
     let report = bounded(&pdf, &home()).unwrap();
-    let limit = report.findings.iter().find(|f| f.code == c::LIMIT_EXCEEDED).expect("LIMIT_EXCEEDED");
+    let limit =
+        report.findings.iter().find(|f| f.code == c::LIMIT_EXCEEDED).expect("LIMIT_EXCEEDED");
     assert_eq!(limit.severity, Severity::Error);
     assert!(limit.message.contains("too complex"), "{}", limit.message);
     assert!(!report.passed(), "a partially analysed file must not pass");
@@ -443,7 +489,10 @@ fn forms_nested_too_deeply_are_cut_off() {
         } else {
             (format!("/Resources << /XObject << /N {next} 0 R >> >>"), &b"/N Do"[..])
         };
-        extra.push(stream_body(&format!("/Type /XObject /Subtype /Form /BBox [0 0 9 9] {resources}"), content));
+        extra.push(stream_body(
+            &format!("/Type /XObject /Subtype /Form /BBox [0 0 9 9] {resources}"),
+            content,
+        ));
     }
     let pdf = one_page(b"/N Do", "/XObject << /N 5 0 R >>", &extra);
     let report = bounded(&pdf, &Expectations::professional()).unwrap();
@@ -470,7 +519,10 @@ fn decompression_bombs_are_refused() {
     // Doubly compressed.
     let mut twice = Stream::new(dictionary! {}, bomb.content.clone());
     twice.compress().unwrap();
-    twice.dict.set("Filter", vec![Object::Name(b"FlateDecode".to_vec()), Object::Name(b"FlateDecode".to_vec())]);
+    twice.dict.set(
+        "Filter",
+        vec![Object::Name(b"FlateDecode".to_vec()), Object::Name(b"FlateDecode".to_vec())],
+    );
     let mut f = Fixture::reference();
     let id = f.doc.add_object(twice);
     f.dict(f.page1).set("Contents", id);
@@ -522,7 +574,10 @@ fn operator_and_operand_floods_are_linear() {
     content.extend_from_slice(b"\n0 0 0 1 k 0 0 9 9 re f");
     let report = bounded(&one_page(&content, "", &[]), &home()).unwrap();
     // The text is shown in the default black (DeviceGray); the fill after the comment is CMYK.
-    assert_eq!(report.pages[0].color_spaces, vec!["DeviceCMYK".to_string(), "DeviceGray".to_string()]);
+    assert_eq!(
+        report.pages[0].color_spaces,
+        vec!["DeviceCMYK".to_string(), "DeviceGray".to_string()]
+    );
     let missing = report.findings.iter().find(|f| f.code == c::RESOURCE_MISSING).unwrap();
     assert!(missing.message.len() < 400, "long names are abbreviated in messages");
 }
@@ -553,7 +608,11 @@ fn deeply_nested_syntax_in_content_and_in_objects() {
     dicts.extend_from_slice(b" >>");
     for page in [arrays, dicts] {
         let pdf = raw_pdf(
-            &[body("<< /Type /Catalog /Pages 2 0 R >>"), body("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"), page],
+            &[
+                body("<< /Type /Catalog /Pages 2 0 R >>"),
+                body("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
+                page,
+            ],
             "/Root 1 0 R",
         );
         // Either the parser gives up on the file, or the page that could not be read is
@@ -569,7 +628,9 @@ fn deeply_nested_syntax_in_content_and_in_objects() {
 fn page_count_is_capped() {
     let mut bodies = vec![body("<< /Type /Catalog /Pages 2 0 R >>")];
     let kids: String = (0..2_500).map(|i| format!("{} 0 R ", i + 3)).collect();
-    bodies.push(body(&format!("<< /Type /Pages /Kids [{kids}] /Count 2500 /MediaBox [0 0 100 100] >>")));
+    bodies.push(body(&format!(
+        "<< /Type /Pages /Kids [{kids}] /Count 2500 /MediaBox [0 0 100 100] >>"
+    )));
     for _ in 0..2_500 {
         bodies.push(body("<< /Type /Page /Parent 2 0 R /TrimBox [0 0 100 100] >>"));
     }
@@ -578,6 +639,37 @@ fn page_count_is_capped() {
     assert_eq!(report.document.page_count, 2_000);
     let limit = report.findings.iter().find(|f| f.code == c::LIMIT_EXCEEDED).unwrap();
     assert_eq!(limit.severity, Severity::Error);
+}
+
+#[test]
+fn many_pages_sharing_many_fonts_do_not_blow_up_the_report() {
+    // 300 fonts in a resource dictionary inherited by 400 pages: 120 000 font listings and
+    // as many findings if nothing capped them, from a file of about 50 kB.
+    let fonts: String = (0..300).map(|i| format!("/F{i} {} 0 R ", i + 3)).collect();
+    let mut bodies = vec![body("<< /Type /Catalog /Pages 2 0 R >>")];
+    let kids: String = (0..400).map(|i| format!("{} 0 R ", i + 303)).collect();
+    bodies.push(body(&format!(
+        "<< /Type /Pages /Kids [{kids}] /Count 400 /MediaBox [0 0 100 100] /Resources << /Font << {fonts} >> >> >>"
+    )));
+    for i in 0..300 {
+        bodies.push(body(&format!("<< /Type /Font /Subtype /Type1 /BaseFont /Font{i} >>")));
+    }
+    for _ in 0..400 {
+        bodies.push(body("<< /Type /Page /Parent 2 0 R /TrimBox [0 0 100 100] >>"));
+    }
+    let pdf = raw_pdf(&bodies, "/Root 1 0 R");
+    assert!(pdf.len() < 80_000);
+    let report = bounded(&pdf, &home()).unwrap();
+    assert_eq!(report.pages.len(), 400);
+    assert!(!report.passed());
+    let listed: usize = report.pages.iter().map(|p| p.fonts.len()).sum();
+    assert_eq!(listed, 20_000);
+    assert_eq!(report.pages[0].fonts.len(), 300);
+    assert!(report.pages[399].fonts.is_empty());
+    // 21 font findings per page until the report-wide cap of 5 000 (plus its own notice).
+    assert!(report.findings.len() <= 5_001, "{}", report.findings.len());
+    assert!(report.has(c::LIMIT_EXCEEDED) && report.has(c::FONT_NOT_EMBEDDED));
+    assert!(report.to_json().len() < 4_000_000);
 }
 
 #[test]
@@ -593,7 +685,9 @@ fn absurd_numbers_and_binary_names_do_not_break_the_report() {
     );
     let resources = "/XObject << /I 5 0 R >> /Font << /F#00#07#ff 6 0 R >>";
     let image = stream_body(
-        &format!("/Type /XObject /Subtype /Image /Width {max} /Height -1 /ColorSpace /DeviceGray /BitsPerComponent {max}"),
+        &format!(
+            "/Type /XObject /Subtype /Image /Width {max} /Height -1 /ColorSpace /DeviceGray /BitsPerComponent {max}"
+        ),
         b"",
     );
     let font = body("<< /Type /Font /Subtype /Type1 /BaseFont /Bad#00#01#ffName >>");
@@ -609,11 +703,21 @@ fn absurd_numbers_and_binary_names_do_not_break_the_report() {
         image,
         font,
     ];
-    let pdf = raw_pdf(&bodies, &format!("/Root 1 0 R /Info << /Title (\\000\\001\\377) /EBC.SpineWidthMm ({nines}) >>"));
+    let pdf = raw_pdf(
+        &bodies,
+        &format!("/Root 1 0 R /Info << /Title (\\000\\001\\377) /EBC.SpineWidthMm ({nines}) >>"),
+    );
     let report = bounded(&pdf, &Expectations::professional().with_spine(10.0)).unwrap();
     assert_eq!(report.pages.len(), 1, "{:#?}", report.findings);
     assert!(!report.passed());
-    for code in [c::BOX_INVALID, c::BOX_MEDIA_MISSING, c::EBC_KEY_INVALID, c::FONT_NOT_EMBEDDED, c::CONTENT_INVALID, c::IMAGE_INVALID] {
+    for code in [
+        c::BOX_INVALID,
+        c::BOX_MEDIA_MISSING,
+        c::EBC_KEY_INVALID,
+        c::FONT_NOT_EMBEDDED,
+        c::CONTENT_INVALID,
+        c::IMAGE_INVALID,
+    ] {
         assert!(report.has(code), "{code} missing from {:#?}", report.findings);
     }
     // The control characters of the font name are replaced, and every number that made it
@@ -644,7 +748,9 @@ fn wrong_stream_lengths_are_survivable() {
             &[
                 body("<< /Type /Catalog /Pages 2 0 R >>"),
                 body("<< /Type /Pages /Kids [3 0 R] /Count 1 >>"),
-                body("<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /TrimBox [0 0 300 200] /Contents 4 0 R >>"),
+                body(
+                    "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 300 200] /TrimBox [0 0 300 200] /Contents 4 0 R >>",
+                ),
                 content,
             ],
             "/Root 1 0 R",

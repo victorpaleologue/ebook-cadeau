@@ -9,11 +9,14 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use common::{
-    BLEED, COVER_H, Fixture, TRIM_W, card_expectations, codes, icc_profile, name, rect_mm, set, string, xmp,
+    BLEED, COVER_H, Fixture, TRIM_W, card_expectations, codes, icc_profile, name, rect_mm, set,
+    string, xmp,
 };
 use ebc_preflight::{Expectations, PreflightError, Report, Severity, check, codes as c};
 use lopdf::encryption::crypt_filters::{Aes128CryptFilter, CryptFilter};
-use lopdf::{Dictionary, EncryptionState, EncryptionVersion, Object, Permissions, Stream, dictionary};
+use lopdf::{
+    Dictionary, EncryptionState, EncryptionVersion, Object, Permissions, Stream, dictionary,
+};
 
 /// Asserts that the report carries exactly one finding code, at the given severity.
 fn assert_only(report: &Report, code: &'static str, severity: Severity) {
@@ -25,7 +28,11 @@ fn assert_only(report: &Report, code: &'static str, severity: Severity) {
 }
 
 fn finding<'a>(report: &'a Report, code: &str) -> &'a ebc_preflight::Finding {
-    report.findings.iter().find(|f| f.code == code).unwrap_or_else(|| panic!("no {code} in {:#?}", report.findings))
+    report
+        .findings
+        .iter()
+        .find(|f| f.code == code)
+        .unwrap_or_else(|| panic!("no {code} in {:#?}", report.findings))
 }
 
 // ---- page boxes ----------------------------------------------------------------------------
@@ -110,7 +117,12 @@ fn media_box_missing_or_malformed() {
     let mut f = Fixture::reference();
     f.dict(f.page1).set("MediaBox", vec![0.into(), 0.into(), name("wide"), 100.into()]);
     let report = f.check();
-    assert_eq!(codes(&report), set(&[c::BOX_INVALID, c::BOX_MEDIA_MISSING]), "{:#?}", report.findings);
+    assert_eq!(
+        codes(&report),
+        set(&[c::BOX_INVALID, c::BOX_MEDIA_MISSING]),
+        "{:#?}",
+        report.findings
+    );
 }
 
 #[test]
@@ -140,7 +152,8 @@ fn wrong_trim_size() {
 fn pages_of_different_sizes() {
     let mut f = Fixture::reference();
     f.dict(f.page2).set("TrimBox", rect_mm(BLEED, BLEED, BLEED + TRIM_W - 20.0, BLEED + COVER_H));
-    f.dict(f.page2).set("BleedBox", rect_mm(0.0, 0.0, TRIM_W - 20.0 + 2.0 * BLEED, COVER_H + 2.0 * BLEED));
+    f.dict(f.page2)
+        .set("BleedBox", rect_mm(0.0, 0.0, TRIM_W - 20.0 + 2.0 * BLEED, COVER_H + 2.0 * BLEED));
     // No expected trim size here, to isolate the comparison between pages.
     let report = f.check_with(&Expectations { trim_mm: None, ..card_expectations() });
     assert_only(&report, c::PAGE_SIZE_MISMATCH, Severity::Error);
@@ -168,7 +181,12 @@ fn rotated_page_user_unit_crop_box_and_art_box_are_warnings() {
     let report = f.check();
     assert_eq!(
         codes(&report),
-        set(&[c::PAGE_USER_UNIT, c::BOX_TRIM_SIZE, c::PAGE_SIZE_MISMATCH, c::EBC_GEOMETRY_MISMATCH]),
+        set(&[
+            c::PAGE_USER_UNIT,
+            c::BOX_TRIM_SIZE,
+            c::PAGE_SIZE_MISMATCH,
+            c::EBC_GEOMETRY_MISMATCH
+        ]),
         "{:#?}",
         report.findings
     );
@@ -201,7 +219,9 @@ fn helvetica_not_embedded() {
 #[test]
 fn font_listed_but_never_used_must_still_be_embedded() {
     let mut f = Fixture::reference();
-    let times = f.doc.add_object(dictionary! { "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Times-Roman" });
+    let times = f.doc.add_object(
+        dictionary! { "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Times-Roman" },
+    );
     f.add_resource(f.page1, "Font", "Unused", times);
     let report = f.check();
     assert_only(&report, c::FONT_NOT_EMBEDDED, Severity::Error);
@@ -222,7 +242,9 @@ fn descendant_font_program_removed() {
 #[test]
 fn font_inside_a_form_xobject_is_checked() {
     let mut f = Fixture::reference();
-    let courier = f.doc.add_object(dictionary! { "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Courier" });
+    let courier = f.doc.add_object(
+        dictionary! { "Type" => "Font", "Subtype" => "Type1", "BaseFont" => "Courier" },
+    );
     let form = f.doc.add_object(Stream::new(
         dictionary! {
             "Type" => "XObject", "Subtype" => "Form",
@@ -242,7 +264,8 @@ fn font_inside_a_form_xobject_is_checked() {
 #[test]
 fn type3_and_fully_embedded_fonts() {
     let mut f = Fixture::reference();
-    let glyph = f.doc.add_object(Stream::new(dictionary! {}, b"500 0 d0 0 0 400 400 re f".to_vec()));
+    let glyph =
+        f.doc.add_object(Stream::new(dictionary! {}, b"500 0 d0 0 0 400 400 re f".to_vec()));
     let type3 = f.doc.add_object(dictionary! {
         "Type" => "Font", "Subtype" => "Type3", "Name" => "Logo",
         "FontBBox" => vec![0.into(), 0.into(), 500.into(), 500.into()],
@@ -309,7 +332,8 @@ fn rgb_and_icc_rgb_images() {
     assert!(report.pages[0].color_spaces.contains(&"DeviceRGB".to_string()));
 
     // An sRGB-tagged image is still RGB for a CMYK job…
-    let srgb = f.doc.add_object(Stream::new(dictionary! { "N" => 3 }, icc_profile(b"mntr", b"RGB ")));
+    let srgb =
+        f.doc.add_object(Stream::new(dictionary! { "N" => 3 }, icc_profile(b"mntr", b"RGB ")));
     f.dict(f.cover_image).set("ColorSpace", vec![name("ICCBased"), srgb.into()]);
     let report = f.check();
     assert_only(&report, c::COLOR_RGB, Severity::Error);
@@ -346,9 +370,12 @@ fn raw_cmyk_image_over_the_ink_limit() {
     f.append_content(f.content2, "q 4 0 0 4 300 300 cm /Dark Do Q");
     let report = f.check();
     assert_only(&report, c::IMAGE_INK_TOTAL_TOO_HIGH, Severity::Warning);
-    assert!(finding(&report, c::IMAGE_INK_TOTAL_TOO_HIGH).message.starts_with("100 % of the pixels"));
+    assert!(
+        finding(&report, c::IMAGE_INK_TOTAL_TOO_HIGH).message.starts_with("100 % of the pixels")
+    );
     // With a 400 % limit (i.e. none in practice) the image is fine.
-    let report = f.check_with(&Expectations { max_total_ink_percent: Some(400.0), ..card_expectations() });
+    let report =
+        f.check_with(&Expectations { max_total_ink_percent: Some(400.0), ..card_expectations() });
     assert!(report.findings.is_empty());
 }
 
@@ -363,7 +390,10 @@ fn device_rgb_fill() {
     let found = finding(&report, c::COLOR_RGB);
     assert_eq!(found.page, Some(1));
     assert!(found.message.contains("a fill uses DeviceRGB"), "{}", found.message);
-    assert_eq!(report.pages[0].color_spaces, vec!["DeviceCMYK".to_string(), "DeviceRGB".to_string()]);
+    assert_eq!(
+        report.pages[0].color_spaces,
+        vec!["DeviceCMYK".to_string(), "DeviceRGB".to_string()]
+    );
     assert_eq!(report.pages[1].color_spaces, vec!["DeviceCMYK".to_string()]);
     // Allowed when the caller says so.
     let report = f.check_with(&Expectations { allow_rgb: true, ..card_expectations() });
@@ -417,7 +447,12 @@ fn rgb_strokes_text_and_shadings() {
     assert!(finding(&report, c::COLOR_RGB).message.contains("shading /Sh1"));
 
     let mut f = Fixture::reference();
-    f.add_resource(f.page1, "Pattern", "P1", dictionary! { "PatternType" => 2, "Shading" => shading });
+    f.add_resource(
+        f.page1,
+        "Pattern",
+        "P1",
+        dictionary! { "PatternType" => 2, "Shading" => shading },
+    );
     f.append_content(f.content1, "q /Pattern cs /P1 scn 100 100 50 50 re f Q");
     let report = f.check();
     assert_only(&report, c::COLOR_RGB, Severity::Error);
@@ -453,7 +488,12 @@ fn spot_colour_is_a_warning() {
         f.page1,
         "ColorSpace",
         "Red",
-        vec![name("Separation"), name("PANTONE 485 C"), name("DeviceCMYK"), Object::Dictionary(tint)],
+        vec![
+            name("Separation"),
+            name("PANTONE 485 C"),
+            name("DeviceCMYK"),
+            Object::Dictionary(tint),
+        ],
     );
     f.append_content(f.content1, "q /Red cs 1 scn 100 100 50 50 re f Q");
     let report = f.check();
@@ -474,7 +514,12 @@ fn with_slug_and_registration() -> Fixture {
             page,
             "ColorSpace",
             "Reg",
-            vec![name("Separation"), name("All"), name("DeviceCMYK"), Object::Dictionary(tint.clone())],
+            vec![
+                name("Separation"),
+                name("All"),
+                name("DeviceCMYK"),
+                Object::Dictionary(tint.clone()),
+            ],
         );
     }
     f
@@ -501,7 +546,10 @@ fn registration_colour_belongs_in_the_slug() {
 
     // A mark that runs into the bleed box prints on the product.
     let mut f = with_slug_and_registration();
-    f.append_content(f.content1, &format!("q /Reg CS 1 SCN 0.25 w {:.3} 20 m {:.3} 20 l S Q", -8.0 * mm, 4.0 * mm));
+    f.append_content(
+        f.content1,
+        &format!("q /Reg CS 1 SCN 0.25 w {:.3} 20 m {:.3} 20 l S Q", -8.0 * mm, 4.0 * mm),
+    );
     let report = f.check();
     assert_only(&report, c::COLOR_REGISTRATION, Severity::Error);
 
@@ -667,7 +715,9 @@ fn transparency_groups() {
 #[test]
 fn javascript_action() {
     let mut f = Fixture::reference();
-    let script = f.doc.add_object(dictionary! { "S" => "JavaScript", "JS" => string("app.alert('Bonjour');") });
+    let script = f
+        .doc
+        .add_object(dictionary! { "S" => "JavaScript", "JS" => string("app.alert('Bonjour');") });
     f.dict(f.catalog).set(
         "Names",
         dictionary! { "JavaScript" => dictionary! { "Names" => vec![string("init"), script.into()] } },
@@ -678,7 +728,8 @@ fn javascript_action() {
 
     // As an action run on opening, the action itself is reported too.
     let mut f = Fixture::reference();
-    let script = f.doc.add_object(dictionary! { "S" => "JavaScript", "JS" => string("this.print();") });
+    let script =
+        f.doc.add_object(dictionary! { "S" => "JavaScript", "JS" => string("this.print();") });
     f.dict(f.catalog).set("OpenAction", script);
     let report = f.check();
     assert_eq!(codes(&report), set(&[c::ACTION, c::JAVASCRIPT]), "{:#?}", report.findings);
@@ -702,7 +753,8 @@ fn open_action_and_page_actions() {
     assert_only(&f.check(), c::ACTION, Severity::Error);
 
     let mut f = Fixture::reference();
-    f.dict(f.page2).set("AA", dictionary! { "O" => dictionary! { "S" => "GoTo", "D" => vec![Object::Null] } });
+    f.dict(f.page2)
+        .set("AA", dictionary! { "O" => dictionary! { "S" => "GoTo", "D" => vec![Object::Null] } });
     let report = f.check();
     assert_only(&report, c::ACTION, Severity::Error);
     assert_eq!(finding(&report, c::ACTION).page, Some(2));
@@ -754,7 +806,9 @@ fn interactive_form_and_embedded_file() {
     assert_eq!(codes(&report), set(&[c::ACROFORM, c::ANNOTATION]), "{:#?}", report.findings);
 
     let mut f = Fixture::reference();
-    let file = f.doc.add_object(Stream::new(dictionary! { "Type" => "EmbeddedFile" }, b"epub bytes".to_vec()));
+    let file = f
+        .doc
+        .add_object(Stream::new(dictionary! { "Type" => "EmbeddedFile" }, b"epub bytes".to_vec()));
     let spec = f.doc.add_object(dictionary! {
         "Type" => "Filespec", "F" => string("book.epub"), "EF" => dictionary! { "F" => file },
     });
@@ -856,7 +910,8 @@ fn missing_output_intent() {
     // Not required for home printing; an empty array is the same as none.
     f.dict(f.catalog).set("OutputIntents", Vec::<Object>::new());
     assert_only(&f.check(), c::NO_OUTPUT_INTENT, Severity::Error);
-    let report = f.check_with(&Expectations { require_output_intent: false, ..card_expectations() });
+    let report =
+        f.check_with(&Expectations { require_output_intent: false, ..card_expectations() });
     assert!(report.findings.is_empty(), "{:#?}", report.findings);
 }
 
@@ -874,7 +929,9 @@ fn malformed_output_intents() {
     f.dict(f.output_intent).remove(b"OutputConditionIdentifier");
     let report = f.check();
     assert_only(&report, c::OUTPUT_INTENT_INVALID, Severity::Error);
-    assert!(finding(&report, c::OUTPUT_INTENT_INVALID).message.contains("OutputConditionIdentifier"));
+    assert!(
+        finding(&report, c::OUTPUT_INTENT_INVALID).message.contains("OutputConditionIdentifier")
+    );
 
     // Two PDF/X intents.
     let mut f = Fixture::reference();
@@ -896,12 +953,15 @@ fn malformed_output_intents() {
     f.set_content(f.icc, b"definitely not an ICC profile".to_vec());
     let report = f.check();
     assert_only(&report, c::OUTPUT_INTENT_INVALID, Severity::Error);
-    assert!(finding(&report, c::OUTPUT_INTENT_INVALID).message.contains("not a readable ICC profile"));
+    assert!(
+        finding(&report, c::OUTPUT_INTENT_INVALID).message.contains("not a readable ICC profile")
+    );
 
     // The same problems are only warnings when no output intent is required.
     let mut f = Fixture::reference();
     f.dict(f.output_intent).remove(b"OutputConditionIdentifier");
-    let report = f.check_with(&Expectations { require_output_intent: false, ..card_expectations() });
+    let report =
+        f.check_with(&Expectations { require_output_intent: false, ..card_expectations() });
     assert_only(&report, c::OUTPUT_INTENT_INVALID, Severity::Warning);
 }
 
@@ -980,6 +1040,80 @@ fn pdfx_markers_must_agree_with_each_other_and_with_the_header() {
 }
 
 #[test]
+fn content_that_contradicts_the_claimed_pdfx_level() {
+    // A consistent PDF/X-1a:2001 file…
+    let x1a = || {
+        let mut f = Fixture::reference();
+        f.set_info("GTS_PDFXVersion", "PDF/X-1:2001");
+        f.set_info("GTS_PDFXConformance", "PDF/X-1a:2001");
+        f.set_content(f.metadata, xmp("PDF/X-1a:2001"));
+        f.doc.version = "1.3".to_string();
+        f
+    };
+    assert!(x1a().check().findings.is_empty());
+
+    // …with an RGB fill. A caller who accepts RGB still learns that the file breaks its
+    // own promise; a caller who does not gets the ordinary colour finding only.
+    let mut f = x1a();
+    f.append_content(f.content1, "q 1 0 0 rg 100 100 50 50 re f Q");
+    let lenient = f.check_with(&Expectations { allow_rgb: true, ..card_expectations() });
+    assert_only(&lenient, c::PDFX_CONTENT_VIOLATION, Severity::Error);
+    assert!(finding(&lenient, c::PDFX_CONTENT_VIOLATION).message.contains("PDF/X-1a:2001"));
+    assert_only(&f.check(), c::COLOR_RGB, Severity::Error);
+
+    // …with transparency.
+    let mut f = x1a();
+    f.add_resource(f.page2, "ExtGState", "GS1", dictionary! { "ca" => Object::Real(0.5) });
+    f.append_content(f.content2, "q /GS1 gs 0 0 0 1 k 300 300 20 20 re f Q");
+    let lenient = f.check_with(&Expectations { allow_transparency: true, ..card_expectations() });
+    assert_only(&lenient, c::PDFX_CONTENT_VIOLATION, Severity::Error);
+    assert_eq!(finding(&lenient, c::PDFX_CONTENT_VIOLATION).page, Some(2));
+    assert_only(&f.check(), c::TRANSPARENCY, Severity::Error);
+
+    // PDF/X-4 allows both, so nothing is added there.
+    let mut f = Fixture::reference();
+    f.append_content(f.content1, "q 1 0 0 rg 100 100 50 50 re f Q");
+    assert!(
+        f.check_with(&Expectations { allow_rgb: true, ..card_expectations() }).findings.is_empty()
+    );
+}
+
+#[test]
+fn hairline_strokes() {
+    // 0.1 pt, zero width, and 1 pt scaled down to 0.05 pt by the CTM.
+    for (content, expected) in [
+        ("q 0 0 0 1 K 0.1 w 100 100 m 200 100 l S Q", "only 0.10 pt wide"),
+        ("q 0 0 0 1 K 0 w 100 100 m 200 100 l S Q", "zero width"),
+        ("q 0 0 0 1 K 0.05 0 0 0.05 0 0 cm 1 w 2000 2000 m 4000 2000 l S Q", "only 0.05 pt wide"),
+        ("q 0 0 0 1 k 0 0 0 1 K 0.1 w 100 100 50 50 re B Q", "only 0.10 pt wide"),
+    ] {
+        let mut f = Fixture::reference();
+        f.append_content(f.content1, content);
+        let report = f.check();
+        assert_only(&report, c::STROKE_HAIRLINE, Severity::Warning);
+        assert!(
+            finding(&report, c::STROKE_HAIRLINE).message.contains(expected),
+            "{}",
+            report.findings[0].message
+        );
+    }
+    // 0.25 pt is the conventional minimum and is fine; a thin line that is never stroked,
+    // or one that lies in the slug, is not reported.
+    for content in [
+        "q 0 0 0 1 K 0.25 w 100 100 m 200 100 l S Q",
+        "q 0 0 0 1 K 0.01 w 100 100 m 200 100 l n Q",
+        "q 0 0 0 1 k 0.01 w 100 100 50 50 re f Q",
+    ] {
+        let mut f = Fixture::reference();
+        f.append_content(f.content1, content);
+        assert!(f.check().findings.is_empty(), "{content}");
+    }
+    let mut f = with_slug_and_registration();
+    f.append_content(f.content1, "q 0 0 0 1 K 0.05 w -20 -20 m -10 -20 l S Q");
+    assert!(f.check().findings.is_empty());
+}
+
+#[test]
 fn no_pdfx_claim() {
     let mut f = Fixture::reference();
     f.dict(f.info).remove(b"GTS_PDFXVersion");
@@ -987,7 +1121,8 @@ fn no_pdfx_claim() {
     let report = f.check();
     assert_only(&report, c::PDFX_NOT_CLAIMED, Severity::Warning);
     assert_eq!(report.document.pdfx_version, None);
-    let report = f.check_with(&Expectations { require_output_intent: false, ..card_expectations() });
+    let report =
+        f.check_with(&Expectations { require_output_intent: false, ..card_expectations() });
     assert_only(&report, c::PDFX_NOT_CLAIMED, Severity::Info);
 
     // The XMP marker alone is enough (that is where PDF/X-4 puts it).
@@ -1027,7 +1162,8 @@ fn title_trapped_and_file_id() {
     f.dict(f.info).remove(b"GTS_PDFXVersion");
     f.dict(f.catalog).remove(b"Metadata");
     f.dict(f.info).remove(b"Title");
-    let report = f.check_with(&Expectations { require_output_intent: false, ..card_expectations() });
+    let report =
+        f.check_with(&Expectations { require_output_intent: false, ..card_expectations() });
     assert_eq!(codes(&report), set(&[c::PDFX_NOT_CLAIMED, c::NO_TITLE]));
     assert!(report.passed());
 
@@ -1035,7 +1171,12 @@ fn title_trapped_and_file_id() {
     let mut f = Fixture::reference();
     f.doc.trailer.remove(b"Info");
     let report = f.check();
-    assert_eq!(codes(&report), set(&[c::NO_TITLE, c::TRAPPED_NOT_SET, c::EBC_SPINE_MISSING]), "{:#?}", report.findings);
+    assert_eq!(
+        codes(&report),
+        set(&[c::NO_TITLE, c::TRAPPED_NOT_SET, c::EBC_SPINE_MISSING]),
+        "{:#?}",
+        report.findings
+    );
 }
 
 // ---- card geometry -------------------------------------------------------------------------
@@ -1049,7 +1190,9 @@ fn wrong_spine_key() {
     f.set_info("EBC.FoldXMm", "109,121");
     let report = f.check();
     assert_only(&report, c::EBC_SPINE_MISMATCH, Severity::Error);
-    assert!(finding(&report, c::EBC_SPINE_MISMATCH).message.contains("12.00 mm, expected 10.00 mm"));
+    assert!(
+        finding(&report, c::EBC_SPINE_MISMATCH).message.contains("12.00 mm, expected 10.00 mm")
+    );
     // Without an expected spine, the consistent geometry is accepted.
     let report = f.check_with(&Expectations { spine_mm: None, ..card_expectations() });
     assert!(report.findings.is_empty());
@@ -1060,7 +1203,12 @@ fn spine_key_contradicting_the_page_geometry() {
     let mut f = Fixture::reference();
     f.set_info("EBC.SpineWidthMm", "12");
     let report = f.check();
-    assert_eq!(codes(&report), set(&[c::EBC_GEOMETRY_MISMATCH, c::EBC_SPINE_MISMATCH]), "{:#?}", report.findings);
+    assert_eq!(
+        codes(&report),
+        set(&[c::EBC_GEOMETRY_MISMATCH, c::EBC_SPINE_MISMATCH]),
+        "{:#?}",
+        report.findings
+    );
     // 2 × 110 + 12 ≠ 230, and the folds are 10 mm apart, not 12.
     assert_eq!(report.findings.iter().filter(|f| f.code == c::EBC_GEOMETRY_MISMATCH).count(), 2);
 }

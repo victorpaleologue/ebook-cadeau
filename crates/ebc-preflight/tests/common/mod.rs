@@ -78,7 +78,10 @@ pub(crate) fn string(s: &str) -> Object {
 
 /// What the reference card is expected to satisfy.
 pub(crate) fn card_expectations() -> Expectations {
-    Expectations::professional().with_trim(TRIM_W, COVER_H).with_spine(SPINE).with_min_qr_module(0.4)
+    Expectations::professional()
+        .with_trim(TRIM_W, COVER_H)
+        .with_spine(SPINE)
+        .with_min_qr_module(0.4)
 }
 
 /// The distinct finding codes of a report.
@@ -131,20 +134,21 @@ pub(crate) fn qr_matrix() -> Vec<Vec<bool>> {
         }
     }
     let mut state = 0x9E37_79B9_7F4A_7C15_u64;
-    for y in 0..SIZE {
-        for x in 0..SIZE {
-            let in_finder = (x < 8 && y < 8) || (x >= SIZE - 8 && y < 8) || (x < 8 && y >= SIZE - 8);
+    for (y, row) in m.iter_mut().enumerate() {
+        for (x, cell) in row.iter_mut().enumerate() {
+            let in_finder =
+                (x < 8 && y < 8) || (x >= SIZE - 8 && y < 8) || (x < 8 && y >= SIZE - 8);
             if in_finder {
                 continue;
             }
             if y == 6 || x == 6 {
-                m[y][x] = (x + y) % 2 == 0;
+                *cell = (x + y) % 2 == 0;
                 continue;
             }
             state ^= state << 13;
             state ^= state >> 7;
             state ^= state << 17;
-            m[y][x] = state & 1 == 1;
+            *cell = state & 1 == 1;
         }
     }
     m
@@ -209,7 +213,8 @@ impl Fixture {
         doc.reference_table.cross_reference_type = XrefType::CrossReferenceTable;
 
         // -- font: an embedded TrueType subset as a composite font --
-        let font_file = doc.add_object(Stream::new(dictionary! { "Length1" => 64 }, vec![0xA5; 64]));
+        let font_file =
+            doc.add_object(Stream::new(dictionary! { "Length1" => 64 }, vec![0xA5; 64]));
         let font_descriptor = doc.add_object(dictionary! {
             "Type" => "FontDescriptor",
             "FontName" => "EBCAAA+AtkinsonHyperlegible-Regular",
@@ -307,7 +312,8 @@ impl Fixture {
         );
 
         // -- output intent, metadata, catalog, info --
-        let icc = doc.add_object(Stream::new(dictionary! { "N" => 4 }, icc_profile(b"prtr", b"CMYK")));
+        let icc =
+            doc.add_object(Stream::new(dictionary! { "N" => 4 }, icc_profile(b"prtr", b"CMYK")));
         let output_intent = doc.add_object(dictionary! {
             "Type" => "OutputIntent", "S" => "GTS_PDFX",
             "OutputConditionIdentifier" => string("FOGRA39"),
@@ -315,8 +321,10 @@ impl Fixture {
             "Info" => string("Coated FOGRA39 (ISO 12647-2:2004)"),
             "DestOutputProfile" => icc,
         });
-        let metadata =
-            doc.add_object(Stream::new(dictionary! { "Type" => "Metadata", "Subtype" => "XML" }, xmp("PDF/X-4")));
+        let metadata = doc.add_object(Stream::new(
+            dictionary! { "Type" => "Metadata", "Subtype" => "XML" },
+            xmp("PDF/X-4"),
+        ));
         let catalog = doc.add_object(dictionary! {
             "Type" => "Catalog", "Pages" => pages,
             "OutputIntents" => vec![output_intent.into()],
@@ -399,7 +407,13 @@ impl Fixture {
     }
 
     /// Adds `resources[category][name] = object` to a page.
-    pub(crate) fn add_resource(&mut self, page: ObjectId, category: &str, key: &str, object: impl Into<Object>) {
+    pub(crate) fn add_resource(
+        &mut self,
+        page: ObjectId,
+        category: &str,
+        key: &str,
+        object: impl Into<Object>,
+    ) {
         let resources = self.resources(page);
         if !resources.has(category.as_bytes()) {
             resources.set(category, Dictionary::new());

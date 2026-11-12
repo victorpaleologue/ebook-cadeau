@@ -28,7 +28,7 @@ _Status: draft — research date 2026-11-12_
 6. **Minimums agree across printers**: 6 pt type, 0.25 pt positive lines, 0.5 pt reversed lines, 300 ppi images [V2].
 7. **Cover resolution is the main prepress risk.** A retailer thumbnail 500 to 800 px wide gives about 112 to 203 ppi on the front panel [calc]. The cover must be sourced at 1,200 px wide or more, or the card falls back to the typographic layout.
 8. **A 10 mm spine is about twice the threshold for spine text** (consensus 5 mm, range 4 to 6 mm) [V2]. With 2 mm clear on each side the text band is 6 mm. Creases drift by about ±1 mm [V1].
-9. **The poche trim, 110 × 178 mm, is the only common French trim whose spread prints on A4 and on US Letter at 100 % with bleed and cut marks** [calc]. It is the default format.
+9. **Only the pocket formats can be printed at home.** A6, 108 × 177 and 110 × 178 mm are the only trims of §7 whose spread fits A4 at 100 % with bleed and cut ticks; all three also fit US Letter [calc]. The poche 110 × 178 mm, the standard French pocket size [V1], is the default format.
 10. **Cover handling is fixed by document 07**: no crop, no stretch, no artwork in the bleed, spine and other panels built from our own material. This is why the default layout insets the cover on a flat ground, and why the bleed is always a flat colour.
 11. **Unverified and load-bearing**: the ECI profile licence, the exact PDF/X keys, mark geometry and every QR size figure are [M]. They need one verification pass before a profile is bundled or a constant is frozen (§11).
 
@@ -109,6 +109,7 @@ The repository already has these three profiles (`crates/ebc-layout/src/profile.
 | 18 | Default output condition | FOGRA39: Flyeralarm, Exaprint, Pixartprinting | FOGRA51: Onlineprinters, Saxoprint | FOGRA39 | France first: the printer with confirmed production in France (Exaprint) and Pixartprinting name it. FOGRA51 is a per-printer option |
 | 19 | Helloprint safety margin | help centre: 3 mm | blog: 5 mm | 5 mm | Satisfies both |
 | 20 | KDP bleed | prepress note: 3.2 mm | folding note: 0.125 in | 3.175 mm | The same value; 0.125 in is exact |
+| 21 | Which trims print on A4 at 100 % | folding note, summary: only 110 × 178 | folding note, table: A6 and 108 × 177 also fit | A6, 108 × 177 and 110 × 178 fit; 110 × 178 is the default | The table is the arithmetic; the summary overstated it. Recomputed in §7 |
 
 ---
 

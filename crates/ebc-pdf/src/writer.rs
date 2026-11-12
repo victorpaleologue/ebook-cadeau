@@ -8,21 +8,19 @@ use ebc_scene::{
     DocInfo, Document, FontResource, ImageResource, Item, OutputIntent, PT_PER_MM, Page,
     PdfStandard,
 };
-use pdf_writer::types::{OutputIntentSubtype, TrappingStatus};
-use pdf_writer::writers::ColorSpace;
+use pdf_writer::types::{OutputIntentSubtype, OverprintMode, TrappingStatus};
+use pdf_writer::writers::{ColorSpace, ExtGraphicsState};
 use pdf_writer::{Filter, Finish, Name, Pdf, Rect, Ref, Settings, TextStr};
 
 use crate::WriteOptions;
 use crate::content::{
-    ContentContext, MAX_GROUP_DEPTH, PageContent, PageUse, REGISTRATION_SPACE, SRGB_SPACE,
-    layer_resource_name, round_pt,
+    ContentContext, MAX_GROUP_DEPTH, OVERPRINT_OFF, OVERPRINT_ON, PageContent, PageUse,
+    REGISTRATION_SPACE, SRGB_SPACE, layer_resource_name, round_pt,
 };
 use crate::date::DateTime;
 use crate::error::PdfError;
 use crate::font::{EmbeddedFont, FontUsage};
-use crate::image::{
-    IccPool, ImageSpace, PreparedImage, SRGB_PROFILE, allows_transparency, max_icc_version,
-};
+use crate::image::{IccPool, ImageSpace, PreparedImage, SRGB_PROFILE, max_icc_version};
 use crate::{icc, md5, xmp};
 
 /// What the writer calls itself in the Info dictionary and the XMP packet.
@@ -46,6 +44,10 @@ const RESERVED_INFO_KEYS: [&str; 11] = [
 /// Most pages a document may have. The page tree is written flat, and PDF 1.3 consumers
 /// only have to support arrays of 8191 elements.
 const MAX_PAGES: usize = 8_000;
+
+/// Most entries the page-label number tree may have (two array elements each); beyond
+/// that the labels, which are a convenience, are left out.
+const MAX_LABEL_ENTRIES: usize = 4_000;
 
 /// Smallest and largest page side a PDF consumer has to support, in points.
 const MIN_PAGE_PT: f64 = 3.0;
@@ -82,6 +84,11 @@ pub(crate) fn stream_len(len: usize, what: &'static str) -> Result<i32, PdfError
     i32::try_from(len).map_err(|_| PdfError::TooLarge { what })
 }
 
+/// `true` when the standard can carry optional content groups (PDF 1.5 and later).
+fn allows_layers(standard: PdfStandard) -> bool {
+    matches!(standard, PdfStandard::X4 | PdfStandard::Plain)
+}
+
 /// The sanitised document information.
 struct Meta {
     title: String,
@@ -93,14 +100,20 @@ struct Meta {
     date: Option<DateTime>,
 }
 
+/// Text as it goes into the file: without characters XML cannot represent (so that the
+/// Info dictionary and the XMP packet agree) and without surrounding white space.
+fn clean(text: &str) -> String {
+    xmp::sanitize(text).trim().to_owned()
+}
+
 fn non_empty(value: Option<&str>) -> Option<String> {
-    let clean = xmp::sanitize(value?.trim());
+    let clean = clean(value?);
     (!clean.is_empty()).then_some(clean)
 }
 
 fn check_info(info: &DocInfo, standard: PdfStandard) -> Result<Meta, PdfError> {
     let is_x = standard != PdfStandard::Plain;
-    let title = xmp::sanitize(info.title.trim());
+    let title = clean(&info.title);
     if is_x && title.is_empty() {
         return Err(PdfError::MissingTitle { standard });
     }
@@ -333,7 +346,7 @@ pub(crate) fn write(doc: &Document, opts: &WriteOptions) -> Result<Vec<u8>, PdfE
     let image_names: BTreeMap<u32, Vec<u8>> =
         images.iter().map(|(id, image)| (*id, image.resource_name.clone())).collect();
 
-    let keep_layers = opts.keep_layers && allows_transparency(standard);
+    let keep_layers = opts.keep_layers && allows_layers(standard);
 
     // ----- page content ----------------------------------------------------------------
     let ctx = ContentContext {
@@ -404,10 +417,9 @@ pub(crate) fn write(doc: &Document, opts: &WriteOptions) -> Result<Vec<u8>, PdfE
     for (name, index) in layer_names {
         if used.layers.contains(&index) {
             let id = refs.next()?;
-            let clean = xmp::sanitize(name);
             let mut ocg = pdf.indirect(id).dict();
             ocg.pair(Name(b"Type"), Name(b"OCG"));
-            ocg.pair(Name(b"Name"), TextStr(&clean));
+            ocg.pair(Name(b"Name"), TextStr(&xmp::sanitize(name)));
             ocg.finish();
             layer_refs.insert(index, id);
         }
@@ -472,6 +484,20 @@ pub(crate) fn write(doc: &Document, opts: &WriteOptions) -> Result<Vec<u8>, PdfE
             if let (true, Some(srgb_ref)) = (page_use.srgb, profile_ref(srgb_index)) {
                 dict.insert(Name(SRGB_SPACE)).start::<ColorSpace>().icc_based(srgb_ref);
             }
+        }
+        if page_use.overprint {
+            let mut dict = resources.ext_g_states();
+            // Nonzero overprint mode: the zero C, M and Y of pure black leave the inks
+            // beneath untouched.
+            dict.insert(Name(OVERPRINT_ON))
+                .start::<ExtGraphicsState>()
+                .overprint(true)
+                .overprint_fill(true)
+                .overprint_mode(OverprintMode::IgnoreZeroChannel);
+            dict.insert(Name(OVERPRINT_OFF))
+                .start::<ExtGraphicsState>()
+                .overprint(false)
+                .overprint_fill(false);
         }
         if !page_use.layers.is_empty() {
             let mut dict = resources.insert(Name(b"Properties")).dict();
@@ -576,14 +602,12 @@ pub(crate) fn write(doc: &Document, opts: &WriteOptions) -> Result<Vec<u8>, PdfE
         let mut intents = catalog.output_intents();
         let mut dict = intents.push();
         dict.subtype(OutputIntentSubtype::PDFX);
-        dict.output_condition_identifier(TextStr(&xmp::sanitize(
-            intent.condition_identifier.trim(),
-        )));
-        let registry = xmp::sanitize(intent.registry_name.trim());
+        dict.output_condition_identifier(TextStr(&clean(&intent.condition_identifier)));
+        let registry = clean(&intent.registry_name);
         if !registry.is_empty() {
             dict.registry_name(TextStr(&registry));
         }
-        let description = xmp::sanitize(intent.info.trim());
+        let description = clean(&intent.info);
         if !description.is_empty() {
             dict.info(TextStr(&description));
         }
@@ -598,20 +622,31 @@ pub(crate) fn write(doc: &Document, opts: &WriteOptions) -> Result<Vec<u8>, PdfE
         default.pair(Name(b"Name"), TextStr("Layers"));
         default.insert(Name(b"Order")).array().items(layer_refs.values().copied());
     }
-    if doc.pages.iter().any(|p| p.label.as_deref().is_some_and(|l| !l.trim().is_empty())) {
-        let mut labels = catalog.insert(Name(b"PageLabels")).dict();
-        let mut nums = labels.insert(Name(b"Nums")).array();
-        for (i, page) in doc.pages.iter().enumerate() {
-            let Ok(index) = i32::try_from(i) else { break };
+    // Page labels ("outside", "inside"): one number-tree entry per labelled page, and one
+    // per run of unlabelled pages, which are numbered by their position.
+    let labels: Vec<Option<String>> =
+        doc.pages.iter().map(|p| non_empty(p.label.as_deref())).collect();
+    let mut entries: Vec<(i32, Option<&str>)> = Vec::new();
+    for (i, label) in labels.iter().enumerate() {
+        let Ok(index) = i32::try_from(i) else { break };
+        let previous_labelled = i == 0 || labels[i - 1].is_some();
+        if label.is_some() || previous_labelled {
+            entries.push((index, label.as_deref()));
+        }
+    }
+    if labels.iter().any(Option::is_some) && entries.len() <= MAX_LABEL_ENTRIES {
+        let mut tree = catalog.insert(Name(b"PageLabels")).dict();
+        let mut nums = tree.insert(Name(b"Nums")).array();
+        for (index, label) in entries {
             nums.item(index);
-            let mut label = nums.push().dict();
-            match page.label.as_deref().map(str::trim).filter(|l| !l.is_empty()) {
+            let mut dict = nums.push().dict();
+            match label {
                 Some(text) => {
-                    label.pair(Name(b"P"), TextStr(&xmp::sanitize(text)));
+                    dict.pair(Name(b"P"), TextStr(text));
                 }
                 None => {
-                    label.pair(Name(b"S"), Name(b"D"));
-                    label.pair(Name(b"St"), index.saturating_add(1));
+                    dict.pair(Name(b"S"), Name(b"D"));
+                    dict.pair(Name(b"St"), index.saturating_add(1));
                 }
             }
         }
@@ -624,4 +659,57 @@ pub(crate) fn write(doc: &Document, opts: &WriteOptions) -> Result<Vec<u8>, PdfE
     let file_id = hasher.finish().to_vec();
     pdf.set_file_id((file_id.clone(), file_id));
     Ok(pdf.finish())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn page_boxes_are_rounded_consistently() {
+        let page = Page::new(ebc_scene::Size::new(230.0, 178.0), 3.0, 7.0);
+        let [media, bleed, trim] = page_boxes(&page, 1).expect("valid page");
+        assert_eq!((media.x1, media.y1), (0.0, 0.0));
+        assert!((f64::from(media.x2) - 250.0 * PT_PER_MM).abs() < 1.0e-3);
+        assert!(
+            media.x1 <= bleed.x1
+                && bleed.x1 <= trim.x1
+                && trim.x2 <= bleed.x2
+                && bleed.x2 <= media.x2
+        );
+        assert!(
+            media.y1 <= bleed.y1
+                && bleed.y1 <= trim.y1
+                && trim.y2 <= bleed.y2
+                && bleed.y2 <= media.y2
+        );
+        // The trim box is exactly the trim size, wherever it sits on the sheet.
+        assert!((f64::from(trim.x2 - trim.x1) - 230.0 * PT_PER_MM).abs() < 1.0e-3);
+        assert!((f64::from(trim.y2 - trim.y1) - 178.0 * PT_PER_MM).abs() < 1.0e-3);
+    }
+
+    #[test]
+    fn object_numbers_are_consecutive_and_bounded() {
+        let mut refs = RefAllocator::new();
+        assert_eq!(refs.next().map(Ref::get), Ok(1));
+        assert_eq!(refs.next().map(Ref::get), Ok(2));
+        let mut full = RefAllocator { next: i32::MAX };
+        assert_eq!(full.next(), Err(PdfError::TooLarge { what: "the number of objects" }));
+    }
+
+    #[test]
+    fn custom_keys_and_strings_are_sanitised() {
+        let info = DocInfo {
+            title: "  Titre\u{0} propre \u{1f}".into(),
+            author: Some("   ".into()),
+            keywords: vec!["a".into(), String::new(), " b ".into()],
+            created_unix: Some(0),
+            ..DocInfo::default()
+        };
+        let meta = check_info(&info, PdfStandard::X4).expect("valid");
+        assert_eq!(meta.title, "Titre propre");
+        assert_eq!(meta.author, None);
+        assert_eq!(meta.keywords.as_deref(), Some("a, b"));
+        assert_eq!(meta.date.map(DateTime::to_xmp).as_deref(), Some("1970-01-01T00:00:00Z"));
+    }
 }

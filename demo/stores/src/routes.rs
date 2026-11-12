@@ -531,12 +531,12 @@ fn owned_order(
     state: &AppState,
     view: &SessionView,
     reference: &str,
-) -> Result<crate::state::Order, Response> {
+) -> Result<crate::state::Order, Box<Response>> {
     let Some(email) = view.account.as_deref() else {
-        return Err(login_redirect(&format!("/commande/{}", reference_slug(reference))));
+        return Err(Box::new(login_redirect(&format!("/commande/{}", reference_slug(reference)))));
     };
     state.order_of(reference, email).ok_or_else(|| {
-        problem(
+        Box::new(problem(
             state,
             view,
             StatusCode::NOT_FOUND,
@@ -544,7 +544,7 @@ fn owned_order(
             "not_found",
             "Commande introuvable",
             "Cette commande n'existe pas ou n'est pas liée à votre compte.",
-        )
+        ))
     })
 }
 
@@ -561,7 +561,7 @@ async fn order_page(
     let (_, view) = visitor(&state, &headers);
     let order = match owned_order(&state, &view, &reference) {
         Ok(order) => order,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     if order.gift.is_some() {
         gift::refresh_order(&state, &order.reference).await;
@@ -578,7 +578,7 @@ async fn order_retry(
     let (_, view) = visitor(&state, &headers);
     let order = match owned_order(&state, &view, &reference) {
         Ok(order) => order,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     gift::process_order(&state, &order.reference).await;
     see_other(&format!("/commande/{}", order.reference))
@@ -592,7 +592,7 @@ async fn order_cancel(
     let (_, view) = visitor(&state, &headers);
     let order = match owned_order(&state, &view, &reference) {
         Ok(order) => order,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     match gift::cancel_order(&state, &order.reference).await {
         Ok(()) => see_other(&format!("/commande/{}", order.reference)),
@@ -616,7 +616,7 @@ async fn card_pdf(
     let (_, view) = visitor(&state, &headers);
     let order = match owned_order(&state, &view, &reference) {
         Ok(order) => order,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     let index = file
         .strip_prefix("carte-")
@@ -1027,7 +1027,7 @@ async fn device_link(State(state): State<Shared>, body: Bytes) -> Response {
 }
 
 /// The account behind the request's `Authorization: Bearer` device token.
-fn device_account(state: &AppState, headers: &HeaderMap) -> Result<String, Response> {
+fn device_account(state: &AppState, headers: &HeaderMap) -> Result<String, Box<Response>> {
     headers
         .get(AUTHORIZATION)
         .and_then(|v| v.to_str().ok())
@@ -1039,14 +1039,14 @@ fn device_account(state: &AppState, headers: &HeaderMap) -> Result<String, Respo
             response
                 .headers_mut()
                 .insert("www-authenticate", HeaderValue::from_static("Bearer"));
-            response
+            Box::new(response)
         })
 }
 
 async fn device_library(State(state): State<Shared>, headers: HeaderMap) -> Response {
     let email = match device_account(&state, &headers) {
         Ok(email) => email,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     let books: Vec<serde_json::Value> = state
         .library(&email)
@@ -1072,7 +1072,7 @@ async fn device_book(
 ) -> Response {
     let email = match device_account(&state, &headers) {
         Ok(email) => email,
-        Err(response) => return response,
+        Err(response) => return *response,
     };
     let owned = file
         .strip_suffix(".epub")

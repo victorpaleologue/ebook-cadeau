@@ -376,6 +376,9 @@ pub enum LcpError {
     /// The licence cannot be checked by this simulation.
     #[error("this simulation cannot verify the licence: {0}")]
     Unverifiable(String),
+    /// `enter_passphrase` without a licence waiting for one.
+    #[error("no licence is waiting for a passphrase")]
+    NoPendingLicence,
 }
 
 /// Mail-to-device simulation errors.
@@ -396,4 +399,29 @@ pub enum MailError {
     /// No held mail with that id.
     #[error("no held mail with id {0}")]
     UnknownMail(u64),
+    /// The device profile has no mail-to-device service.
+    #[error("{device} has no mail-to-device service")]
+    NoMailService {
+        /// Profile id.
+        device: &'static str,
+    },
+    /// The SMTP server answered with an error (seen by the bundled test client).
+    #[error("SMTP {stage} was refused: {code} {message}")]
+    Smtp {
+        /// Protocol step (`MAIL FROM`, `RCPT TO`, `DATA`…).
+        stage: &'static str,
+        /// Reply code.
+        code: u16,
+        /// Reply text.
+        message: String,
+    },
+    /// The SMTP exchange stalled.
+    #[error("SMTP {stage} timed out")]
+    Timeout {
+        /// Protocol step.
+        stage: &'static str,
+    },
+    /// Socket failure during an SMTP exchange.
+    #[error("SMTP connection failed: {0}")]
+    Io(#[source] std::io::Error),
 }

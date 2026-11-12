@@ -9,6 +9,17 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+ebc-isbn.workspace = true
+ebc-model.workspace = true
+ebc-scene.workspace = true
+md-5 = { version = "0.11", default-features = false }
+serde_json.workspace = true
+thiserror.workspace = true
+url = "2.5"
 
 [lints]
 workspace = true
+
+[dev-dependencies]
+image = { version = "0.25.10", default-features = false, features = ["jpeg", "png", "gif", "webp"] }
+jpeg-encoder = "0.7.1"

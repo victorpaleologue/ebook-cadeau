@@ -225,7 +225,7 @@ pub struct Order {
 }
 
 /// What a client submits, after validation.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct NewOrder {
     /// The product.
     pub product: &'static Product,

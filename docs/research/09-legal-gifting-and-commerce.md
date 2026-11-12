@@ -1,20 +1,26 @@
 # Legal: gifting an eBook, the upload-and-QR scheme, price law, VAT, consumer and data protection
 
-_Status: draft — research date 2026-11-12_
+_Status: fact-checked — research date 2026-11-12_
 
 **Research to brief a lawyer and an accountant. Not legal or tax advice.**
 
 ## How to read this document
 
 - **Scope.** The gifting mechanism itself (copyright, hosting liability), then the commerce layer (fixed book price, VAT, consumer law, payments, GDPR, accessibility, labelling). The cover printed on the card is in `07-legal-covers-and-reseller-rights.md`; fonts and generated spines are in `08-legal-fonts-and-genai.md`.
-- **Inputs.** `notes/legal-gifting-commerce.copyright-distribution.md` (copyright note) and `notes/legal-gifting-commerce.commerce.md` (commerce note), plus facts taken from sibling notes where stated, and the project contract `docs/api.md`.
-- **Verification status — important.** Neither note could run a web search: the shared search budget was already spent and the legal hosts (EUR-Lex, Légifrance) are outside the sandbox allowlist. For this synthesis five more searches were attempted on 2026-11-12 (wording of art. 4 of loi 2011-590; Tom Kabinet; the CJEU case on the French book-shipping floor; CJEU C-68/23; Cass. 23 Oct 2024 *Valve*). All five were refused for the same reason. **No claim was newly verified, no marker was upgraded, and no URL was added that is not already in this repository's notes.**
+- **Inputs.** `docs/research/notes/legal-gifting-commerce.copyright-distribution.md` (copyright note) and `docs/research/notes/legal-gifting-commerce.commerce.md` (commerce note), plus facts taken from sibling notes and documents where stated, and the project contract `docs/api.md` (v0.2).
+- **Verification status — important.** No external claim in this document has been verified on the web at any stage.
+  - Neither input note could run a web search: the shared search budget was already spent and the legal hosts (EUR-Lex, Légifrance) are outside the sandbox allowlist.
+  - For the synthesis five more searches were attempted on 2026-11-12 (wording of art. 4 of loi 2011-590; Tom Kabinet; the CJEU case on the French book-shipping floor; CJEU C-68/23; Cass. 23 Oct 2024 *Valve*). All five were refused.
+  - An adversarial fact-check then reviewed the 20 most load-bearing claims. Its four searches were refused, and so were four arbitration searches by the editor (CJEU C-366/24, Kobo gifting, Danish book VAT, 2026 *franchise en base* thresholds). The fact-check could do two things: recompute the arithmetic and compare the text with the files of this repository, and set the text against the checker's own recollection. Its corrections are applied in place and summarised in "Verification log".
+  - No URL was added that is not already in this repository.
 - **Confidence markers.**
-  - **[V2]** verified in two or more independent sources, **[V1]** in one. In this document these two markers always refer to verification done in the search session of a *sibling* note (the two input notes tag them [S2]/[S1]); the URLs appeared in that agent's results and were not reopened here.
+  - **[V-sib2]** found in two or more sources, **[V-sib1]** in one, by the search session of a *sibling* note (the two input notes tag them [S2]/[S1]). The URLs appeared in that agent's results. They were not reopened for this document or for the fact-check, so these markers mean "a sibling agent saw it", not "verified here".
   - **[M]** from memory, not verified. Where the commerce note graded its recall, the grade is kept: **[M-hi]** (text known well), **[M-med]**, **[M-lo]** (verify before relying on it).
+  - **[FC]** added or corrected by the fact-check from the checker's recollection (knowledge to mid-2026), with its confidence in words. A lead for the next verification pass, not evidence.
+  - **[LOCAL]** recomputed, or checked against files in this repository.
   - **(analysis)** our own reasoning; no authority found or known.
 - **Citations.** Statutes and cases are cited by official number so that they can be looked up on Légifrance, EUR-Lex and Curia. They carry no URL because none appeared in a search result.
-- **Currency.** The law is described as recalled up to mid-2026. Every 2025–2026 development (CJEU ruling on the shipping floor, PSD3, packaging regulation, French VAT thresholds, transposition of the withdrawal-function directive) is unknown and listed in "Could not verify".
+- **Currency.** The law is described as recalled up to mid-2026. Rules that became applicable during 2026 are written as current obligations, with their details unverified: the online withdrawal function (19 June 2026), the Packaging Regulation (12 August 2026), e-invoice reception in France (1 September 2026) and the green-claims rules of Directive (EU) 2024/825 (27 September 2026). Anything decided after mid-2026 (the CJEU ruling on the shipping floor, PSD3, the 2026 Finance Act, French transposition texts, the 2027 postal tariff grid) is unknown and listed in "Could not verify".
 
 ---
 
@@ -37,15 +43,20 @@ It depends entirely on who uploads which file.
 | eBook reseller | Gift entitlement redeemed into the recipient's account | **Lawful — the target model** | First, authorised making-available; needs to fit the publisher/distributor contract |
 | Anyone | Card carrying the store's own gift link or code | Lawful as to copyright | No file, no act on the work; store terms to be checked |
 
-The first two rows are the use case the present scheme invites ("upload your eBook, get a QR"). On the analysis in §2 that use case must be removed from the product, not merely discouraged.
+The first two rows are the use case the present scheme invites ("upload your eBook, get a QR"). On the analysis in §2 that use case must be removed from the product, not merely discouraged. The fact-check knows of no court decision that lets a private buyer pass on an eBook file, so nothing it recalls contradicts this conclusion [FC]. The conclusion is still unverified by search.
 
 ### 1.2 Why, in five sentences
 
 1. Supplying an eBook by download is communication to the public, not distribution, so the right is never exhausted by the first sale (CJEU *Tom Kabinet*, C-263/18) [V2].
 2. French private copy covers copies "strictement réservées à l'usage privé du copiste" made from a "source licite" [V2 for the text]; a copy made for a friend, and a download from a server copy nobody authorised, meet neither condition [M].
-3. Store licences are personal and non-transferable [M]; every store that offers gifting does it by selling a new entitlement redeemed into the recipient's account [V2 for Amazon.fr, Decitre, Thalia/Hugendubel].
-4. A service whose stated purpose is to pass on purchased eBooks is not a neutral host: DSA recital 20 and CJEU *YouTube/Cyando* remove the hosting exemption for services offered to facilitate infringement, and CPI art. L335-2-1 (3 years, EUR 300,000) targets tools "manifestement destinés" to unauthorised sharing [M].
+3. Store licences are personal and non-transferable [M]. Every gifting function identified by this research works by selling a new entitlement redeemed into the recipient's account [V2 for Amazon.fr, Decitre, Thalia/Hugendubel]. No store is known to let a customer move a copy already bought, but the survey is incomplete: Kobo, 7switch, Apple and Google in France are unverified.
+4. A service whose stated purpose is to pass on purchased eBooks is not a neutral host. Under CJEU *YouTube/Cyando* an operator that provides tools specifically intended for illegal sharing, or knowingly promotes it, may itself be communicating to the public. The hosting exemption is a separate test: it is lost through an active role that gives knowledge of or control over the content, and DSA recital 20 denies it to a provider that deliberately collaborates with infringing users [M]. CPI art. L335-2-1 (3 years, EUR 300,000) targets software "manifestement destiné à la mise à disposition du public non autorisée"; applying it to a hosted, token-gated service is our extrapolation (analysis).
 5. The service knows which title each file is, because it builds the card from the title and ISBN; the "no knowledge" defence is therefore weak for in-commerce titles (analysis).
+
+Two facts weaken any "private, one-to-one" defence further:
+
+- **Delivery is to the bearer, not to one named recipient.** `docs/api.md` v0.2 makes a hosted file re-downloadable by whoever holds the card, for up to 10 download sessions, with no expiry by default [LOCAL].
+- **A DRM check does not recognise a store-bought copy.** Since 20 January 2026, as recalled, verified purchasers can download DRM-free Kindle titles as EPUB or PDF [FC, medium-high]. Retail files without any DRM container, and possibly without a visible mark, are in circulation.
 
 ### 1.3 The compliant target model
 
@@ -53,27 +64,29 @@ The first two rows are the use case the present scheme invites ("upload your eBo
 |---|---|---|---|---|
 | Reseller-integrated | R1 `reseller_redirect` | The reseller's redemption page; the title is added to the recipient's account | No | The reseller, under its publisher/distributor contract |
 | Reseller-integrated | R2 `reseller_licence` | A licence file (`.lcpl`, `.acsm`) issued by the reseller for the recipient | No (licence token only) | The reseller |
-| Reseller-integrated | R3 `hosted_file` with basis `licensed_distributor` | A file the reseller is licensed to deliver, watermarked for the recipient by the reseller | Yes, as the reseller's processor | The reseller |
+| Reseller-integrated | R3 `hosted_file` with basis `licensed_distributor` | A file the reseller is licensed to deliver, marked per gift by the reseller | Yes, as the reseller's processor | The reseller |
 | Standalone | S1 gift link | The store's own gift link or code, pasted by the giver | No | The store |
 | Standalone | S2 rights-holder file | A DRM-free file uploaded by its author or publisher | Yes | The uploader |
 | Standalone | S3 public-domain / open-licence file | A file that is public domain in France or openly licensed | Yes | Nobody (public domain) or the open licence |
 
 In standalone mode the service sells the **card service only** — never the eBook. In reseller mode the reseller is the seller of record for both the eBook and the card; eBook Cadeau invoices the reseller.
 
+The hosted-file lanes (R3, S2, S3) are **bearer delivery** under `docs/api.md` v0.2: whoever holds the card can download, up to the session cap, and the recipient is not identified [LOCAL]. The uploader's rights (S2) or the reseller's licence (R3) must cover that. A reseller whose licence requires delivery to one identified account uses R1 or R2.
+
 ### 1.4 Commerce rules that shape the product
 
 | Topic | Rule to build to | Conf. |
 |---|---|---|
 | Fixed price (FR) | The buyer pays the publisher's public price; gifting changes nothing. A **free printed and mailed card** attached to the sale looks like a *prime* (loi 2011-590 art. 4) or an indirect discount. A free print-at-home PDF is low risk | [M-med] |
-| Card pricing | Printed card = optional, unticked, separately priced line, at or above cost. The gift option itself must stay available without it | [M-med] / (analysis) |
-| VAT | eBook at the reduced rate (FR 5.5 %, DE 7 %); card and postage at the standard rate (FR 20 %, DE 19 %). One bundled price risks the highest rate on everything (CGI art. 278-0) | [M-med] |
-| Voucher | A code for one named eBook is a single-purpose voucher (VAT at sale) only if redemption is restricted to one Member State (CJEU C-68/23). Default: France only | [M-med] |
-| Withdrawal | The buyer keeps the 14-day right until the eBook is downloaded, unless the art. 16(m) waiver was collected. The system needs a "revoke unredeemed code" state | [M-hi] rule / [M-lo] third-party redemption |
+| Card pricing | Printed card = optional, unticked, separately priced line, at or above its real landed cost. The gift option itself must stay available without it. The example prices of §6.6 pass this test only for a batch-printed or in-house card; they fail it at single-copy print-on-demand cost | [M-med] / (analysis) / [LOCAL] |
+| VAT | eBook at the reduced rate (FR 5.5 %, DE 7 %); card and postage at the standard rate (FR 20 %, DE 19 %). A compulsory pack that forms a single operation with no ancillary element takes the highest rate on everything (CGI arts 257 ter, 278-0); a single bundled price is an indicator of that, not the test | [M-med] |
+| Voucher | A code for one named eBook can be a single-purpose voucher (VAT at sale) only if both the place of supply and the VAT due are known at issue. Restricting redemption to one Member State fixes the place (CJEU C-68/23, as recalled); for one title at one rate the VAT is then known too (analysis). Default: France only | [M-med] / (analysis) |
+| Withdrawal | The buyer keeps the 14-day right until the eBook is downloaded, unless the art. 16(m) waiver was collected. The system needs a "revoke unredeemed code" state. An online withdrawal function (Directive 2011/83 art. 11a) has been compulsory since 19 June 2026; the French transposition text is not identified | [M-hi] rule / [M-lo] third-party redemption |
 | Expiry | No expiry, or at least 5 years, for a fully paid named title | [M-med] |
 | Payments | A title-specific code is not e-money. eBook Cadeau must not collect eBook money for publishers or authors | [M-hi] |
 | GDPR | The paper card needs no recipient e-mail and no account. Postal fulfilment adds the recipient's address, an Art. 14 notice and a printer DPA | [M-hi] |
 | Accessibility | Redemption site to WCAG 2.1 AA; a typed code and short URL beside every QR | [M-hi] |
-| Printed card (FR) | Triman/Info-tri, EPR registration, printer's name, company identifiers, French language. Envelopes to Germany: LUCID registration, no minimum | [M-med] |
+| Printed card (FR) | Triman/Info-tri, EPR registration, printer's name, company identifiers, French language. Added by the fact-check: manufacturer's name with postal and electronic address plus a batch identifier (General Product Safety Regulation); no generic or offset-based environmental claims (Directive 2024/825, since 27 Sept 2026); inks without mineral oils (AGEC art. 112). Envelopes to Germany: LUCID registration, no minimum | [M-med] / [FC] |
 
 ### 1.5 Risk ranking
 
@@ -81,10 +94,11 @@ In standalone mode the service sells the **card service only** — never the eBo
 |---|---|---|---|---|
 | 1 | Standalone mode used (or described) as a way to pass on purchased eBooks | Criminal and civil exposure; loss of hosting exemption; ends any reseller or publisher relationship | High | Remove the use case; gift-link lane; upload gate (§3) |
 | 2 | Reseller gift entitlement outside the publisher/distributor contract | Breach of contract, *contrefaçon* | Medium | Authorisation checklist (§4) |
-| 3 | Free printed card treated as a *prime* or disguised discount | Fine per offence, action by competitors, trade bodies or the *médiateur du livre* | Medium | Paid optional line (§5) |
+| 3 | Free printed card, or a card priced below its real landed cost, treated as a *prime* or disguised discount | Fine per offence, action by competitors, trade bodies or the *médiateur du livre* | Medium | Paid optional line with a cost floor set from real quotes (§5, §6.6) |
 | 4 | VAT: bundle taxed at 20 %; EU-wide codes; missed OSS registration | Tax reassessment | Medium | Separate lines; FR-only default; written VAT position (§6) |
-| 5 | Refund after redemption (defective waiver) or no way to revoke a code | Double loss per order | Medium | Waiver + state machine (§7) |
-| 6 | Printed cards shipped without Triman, EPR identifier or LUCID registration | Administrative fines, sales ban (DE) | Medium once volume exists | §11 |
+| 5 | Refund after redemption (defective waiver), no way to revoke a code, or no online withdrawal function | Double loss per order; consumer-law sanction | Medium | Waiver + state machine + withdrawal function (§7) |
+| 6 | Printed cards shipped without Triman, EPR identifier, manufacturer and batch identification, or LUCID registration; or carrying a banned environmental claim | Administrative fines, sales ban (DE) | Medium once volume exists | §11 |
+| 7 | Building on figures that were never verified (VAT rates, thresholds, postal tariffs, store gifting functions) | Wrong prices, wrong tests, wrong demo premise | High until a verification pass runs | Dated, flagged configuration; "Could not verify" list |
 
 ---
 
@@ -108,8 +122,9 @@ In standalone mode the service sells the **card service only** — never the eBo
 **Tom Kabinet** — CJEU (Grand Chamber), 19 Dec 2019, C-263/18, *Nederlands Uitgeversverbond and Groep Algemene Uitgevers v Tom Kabinet Internet BV*, ECLI:EU:C:2019:1111.
 
 - Holding: supplying an eBook to the public by download, for permanent use, is **communication to the public** ("making available") under art. 3(1) of Directive 2001/29, not distribution under art. 4(1). The exhaustion rule of art. 4(2) does not apply — [SCL](https://www.scl.org/10768-cjeu-sale-of-second-hand-e-books-via-a-website-is-a-communication-to-the-public/), [Charles Russell Speechlys](https://www.charlesrussellspeechlys.com/en/insights/expert-insights/tmt/2020/can-you-resell-an-e-book-online/) [V2].
-- Reasoning [M]: (i) the WIPO Copyright Treaty confines "distribution" to tangible copies; (ii) recitals 28–29 of the Directive: exhaustion "does not arise in the case of services and on-line services in particular", and art. 3(3): the communication right is never exhausted; (iii) a digital copy does not deteriorate, so a "second-hand" copy is a perfect substitute for a new one; (iv) **new public**: the licence that accompanies an eBook authorises reading only by the user who downloaded it, on that user's equipment, so anyone else is a public the right-holder did not take into account (paras 69–72 as recalled).
+- Reasoning [M]: (i) the WIPO Copyright Treaty confines "distribution" to tangible copies; (ii) recitals 28–29 of the Directive: exhaustion "does not arise in the case of services and on-line services in particular", and art. 3(3): the communication right is never exhausted; (iii) a digital copy does not deteriorate, so a "second-hand" copy is a perfect substitute for a new one; (iv) **new public**: the licence that accompanies an eBook authorises reading only by the user who downloaded it, on that user's equipment, so anyone else is a public the right-holder did not take into account (paras 69–72 as recalled; the paragraph numbers are unchecked).
 - The defendant's "reading club" and its request that sellers delete their copy changed nothing [M].
+- No later CJEU decision reopening digital exhaustion for eBooks is known to the fact-check [FC, high].
 
 **UsedSoft v Oracle** — CJEU (Grand Chamber), 3 July 2012, C-128/11 [M]. Exhaustion applies to a downloaded copy of a **computer program** sold with a perpetual licence, provided the seller makes its own copy unusable. *Tom Kabinet* distinguishes it: Directive 2009/24 is *lex specialis* for software; an eBook is not a computer program.
 
@@ -131,14 +146,16 @@ Current terms could not be opened. The wording is as remembered; each must be re
 
 | Store | Licence wording on transfer | Own gifting function | Conf. |
 |---|---|---|---|
-| Amazon Kindle | Content is "licensed, not sold"; the user may not "sell, rent, lease, distribute, broadcast, sublicense, or otherwise assign any rights" nor circumvent DRM. Since 2025 the US buy button speaks of purchasing a licence. "Download & transfer via USB" was withdrawn in Feb 2025 | Yes: "Acheter pour d'autres personnes" — the buyer receives prepaid redemption links or enters the recipient's e-mail; the recipient must be in the same country; unredeemed copies can be reassigned or refunded — [Amazon.fr help](https://www.amazon.fr/gp/help/customer/display.html?nodeId=GVWGP284MQ6ZRM59), [KDP help](https://kdp.amazon.com/fr_FR/help/topic/G200652260), [IDBoox](https://www.idboox.com/news-livres/amazon-on-peut-enfin-offrir-un-livre-numerique-kindle/) | Terms [M]; gifting [V2] |
-| Kobo / Kobo by Fnac | Limited, non-exclusive, non-transferable, revocable licence for personal non-commercial use | No title-level gift found; users fall back on gift cards — [Dealabs](https://www.dealabs.com/discussions/carte-cadeau-kobo-ou-fnac-2273026), [ebook-enligne.fr](https://ebook-enligne.fr/blog/offrir-ebook-guide-cadeau-numerique/) | Terms [M]; gifting [V1], negative finding only |
+| Amazon Kindle | Content is "licensed, not sold"; the user may not "sell, rent, lease, distribute, broadcast, sublicense, or otherwise assign any rights" nor circumvent DRM. Since 2025 the US buy button speaks of purchasing a licence. "Download & transfer via USB" was withdrawn in Feb 2025. Since 20 Jan 2026, as recalled, verified purchasers can download DRM-free Kindle titles as EPUB or PDF [FC, medium-high] | Yes: "Acheter pour d'autres personnes" — the buyer receives prepaid redemption links or enters the recipient's e-mail; the recipient must be in the same country; unredeemed copies can be reassigned or refunded — [Amazon.fr help](https://www.amazon.fr/gp/help/customer/display.html?nodeId=GVWGP284MQ6ZRM59), [KDP help](https://kdp.amazon.com/fr_FR/help/topic/G200652260), [IDBoox](https://www.idboox.com/news-livres/amazon-on-peut-enfin-offrir-un-livre-numerique-kindle/) | Terms [M]; gifting [V2] |
+| Kobo / Kobo by Fnac | Limited, non-exclusive, non-transferable, revocable licence for personal non-commercial use | **Unverified.** The sibling search found no title-level gift in France; users fall back on gift cards — [Dealabs](https://www.dealabs.com/discussions/carte-cadeau-kobo-ou-fnac-2273026), [ebook-enligne.fr](https://ebook-enligne.fr/blog/offrir-ebook-guide-cadeau-numerique/). That is a weak negative: a forum thread and a low-authority blog. The fact-check recalls that Rakuten Kobo launched title-level eBook and audiobook gifting on kobo.com in late 2024 in several English-speaking markets [FC, medium]; France and Fnac are unknown | Terms [M]; gifting [V1] weak negative, contradicted in part by [FC] |
 | Decitre / Furet du Nord (Vivlio) | Not retrieved | Yes: "Offrir un ebook", gift e-mail on a chosen date — [Decitre](https://www.decitre.fr/offrir-un-ebook), [Liseuses.net](https://www.liseuses.net/offrir-des-ebooks-avec-tea/) | [V2] |
 | Thalia / Hugendubel (tolino) | "Einfaches, nicht übertragbares Nutzungsrecht" is the usual German wording | Yes: "Verschenken" — [Hugendubel](https://www.hugendubel.de/de/shortcut/ebooksverschenken), [heise](https://www.heise.de/tipps-tricks/E-Books-verschenken-so-klappt-s-7476189.html) | Terms [M]; gifting [V2] |
 | Apple Books, Google Play Books | Personal, non-commercial use rules | E-mail gifting of a specific book in some countries, redeemable only in the country of purchase; availability in France not known | [M] |
 | 7switch (Immatériel) | Not retrieved. Sells many titles with watermark or without protection, shown per title | Not verified (unconfirmed recollection of an "offrir" option) | [M] |
 
-Pattern: every store that allows a gift does it by **selling a fresh entitlement redeemed into the recipient's account**. None lets a customer move a copy already in their library. Sanctioned sharing exists only as household features (Amazon Family Library, Apple Family Sharing) [M].
+Pattern: every gifting function identified by this research works by **selling a fresh entitlement redeemed into the recipient's account**. None is known to let a customer move a copy already in their library. The survey covers three confirmed stores and is not exhaustive, so "every store" would overstate it. Sanctioned sharing is known only as household features (Amazon Family Library, Apple Family Sharing) [M].
+
+Consequence of the January 2026 Kindle change [FC]: a retail copy can now be a plain EPUB or PDF with no Adobe or LCP container. The upload gate of §3.3 cannot rely on DRM detection to recognise store purchases; the ISBN and publisher check carries the weight.
 
 ### 2.4 DRM and watermark
 
@@ -180,9 +197,13 @@ Relation to document 07: that document accepts a `user_private_copy` basis for *
 2. knowing "in a general sense" that users infringe, and not deploying the technological measures expected of a reasonably diligent operator;
 3. taking part in selecting content, **providing tools specifically intended for illegal sharing**, or **knowingly promoting such sharing** — which a financial model encouraging it may show.
 
+These indicators answer one question only: whether the operator itself performs an act of communication to the public. The hosting exemption was a second, separate question in the same judgment. The Court answered it with the older test: the exemption is lost when the operator plays an active role that gives it knowledge of or control over the content, or when it knows of a specific infringement and does not act [M; the fact-check agrees on the date, the case numbers and the three indicators]. An earlier draft of this document said that *Cyando* "removes the hosting exemption"; that merged the two questions and is corrected here.
+
 Applied to a service marketed as "give an eBook you bought": indicator 3 is met by the product description itself and indicator 2 by the absence of a rights check (analysis). The earlier line points the same way: *Ziggo / The Pirate Bay* (C-610/15), *Filmspeler* (C-527/15), *GS Media* (C-160/15) [M]; reposting a freely accessible work is a new communication (*Renckhoff*, C-161/17 — [IRIS Merlin](https://merlin.obs.coe.int/article/8373) [V2]).
 
 **The "public" argument.** One buyer sending to one named friend is not an indeterminate, fairly large group; this is the one real argument for a one-recipient design. It is weak for the *service*: *Tom Kabinet* counts persons who access the same work successively, the service is open to anyone, and the reproduction right (server copy, recipient copy) has no "public" threshold at all. Untested; not to be built on (analysis).
+
+The product as specified does not even have a one-recipient design [LOCAL]. `docs/api.md` v0.2 (claim semantics) makes a hosted-file gift "re-downloadable by whoever holds the card" until a limit of 10 download sessions, with no expiry by default; holding the card is the credential and no account is needed. That is bearer delivery to an unidentified holder. Any argument in this document that rests on "one token, one recipient" must be read with that in mind, and it is marked (analysis) below.
 
 **Hosting exemption (DSA) and LCEN.**
 
@@ -193,17 +214,21 @@ Applied to a service marketed as "give an eBook you bought": indicator 3 is met 
 | DSA arts 7, 8 | Voluntary own-initiative checks do not forfeit the exemption; no general monitoring obligation | [M] |
 | DSA art. 16 | Every host needs an electronic notice mechanism; a precise, substantiated notice gives actual knowledge; decisions must be timely, diligent and objective — [Burges Salmon](https://burges-salmon.com/news-and-insight/legal-updates/data-protection/the-eu-digital-services-act-and-the-article-6-hosting-exemption), [art. 16 text](https://www.springlex.eu/fr/packages/dsa/dsa-regulation/article-16/) | [V2] |
 | DSA arts 11–15, 17 | Contact points, terms describing moderation, statement of reasons to the affected user; the transparency report is not required of micro and small enterprises | [M] |
-| DSA art. 3(i), 3(k), recital 14; art. 19 | An "online platform" is a host that **disseminates to the public** (a potentially unlimited number of third parties). A one-token transfer is not dissemination to the public, so only the basic hosting duties apply; micro and small enterprises are in any case exempt from the platform section | [M] |
-| DSM Directive 2019/790 art. 2(6), art. 17 (CPI L137-1 ff.) | Direct liability of services whose main purpose is to give **the public** access to large amounts of user-uploaded works, organised and promoted for profit. No public access → not such a service | [M] |
+| DSA art. 3(i), 3(k), recital 14; art. 19 | An "online platform" is a host that **disseminates to the public** (a potentially unlimited number of third parties). Micro and small enterprises are exempt from the platform section | [M] |
+| — applied here | A token-gated file with no catalogue is arguably not dissemination to the public, so only the basic hosting duties would apply. This is our reading, not an authority, and the bearer design of `docs/api.md` (any card holder, up to 10 sessions) makes it less clear-cut than a strict one-recipient transfer | (analysis) |
+| DSM Directive 2019/790 art. 2(6), art. 17 (CPI L137-1 ff.) | Direct liability of services whose main purpose is to give **the public** access to large amounts of user-uploaded works, organised and promoted for profit | [M] |
+| — applied here | With no public access to the stored files, the service is arguably not such a service | (analysis) |
 | LCEN (loi 2004-575) art. 6 | Aligned on the DSA by the 2024 SREN law; duty to keep data identifying content providers (décret 2021-1362; retention periods to be confirmed); "manifestement illicite" standard from Cons. const. 2004-496 DC | [M] |
 
-File-locker case law [M]: in France, *Nintendo v Dstorage (1fichier)* — CA Paris, 12 Apr 2023, upheld by the Cour de cassation in Feb 2025: a host that leaves notified content online loses the exemption; a proper notice suffices, no court order is needed. In Germany, BGH *Alone in the Dark* (2012) and *File-Hosting-Dienst* (2013) (heightened duties when the business model invites infringement), then the *uploaded* judgments of 2 June 2022 applying *Cyando*.
+File-locker case law [M]: in France, *Nintendo v Dstorage (1fichier)* — CA Paris, 12 Apr 2023, upheld by the Cour de cassation, recalled as the *chambre commerciale* on 26 Feb 2025 [FC, medium-high]: a host that leaves notified content online loses the exemption; a proper notice suffices, no court order is needed. In Germany, BGH *Alone in the Dark* (2012) and *File-Hosting-Dienst* (2013) (heightened duties when the business model invites infringement), then the *uploaded* judgments of 2 June 2022 applying *Cyando*.
 
 **Why the exemption is fragile here (analysis).** The service builds a card from the title, author and ISBN, so it has specific knowledge of *which work* each stored file is. For an in-commerce title uploaded by someone who is not the publisher, it "ought to know" what is going on. That is an active role with knowledge, not passive storage. Document 07 reaches the same conclusion for covers: hosting status can cover a file stored at a user's request, not what the service selects, renders or prints under its own brand.
 
-**French criminal add-ons** [M]:
+**French criminal add-ons** [M for the texts; the fact-check agrees on the amounts]:
 
-- CPI **L335-2-1**: 3 years and EUR 300,000 for knowingly publishing or making available software "manifestement destiné à la mise à disposition du public non autorisée d'œuvres", or inciting its use, advertising included. This matters for the hosted service and for the open-source repository: purpose statements, README and marketing copy are evidence.
+- CPI **L335-2-1**: 3 years and EUR 300,000 for knowingly publishing or making available a "logiciel manifestement destiné à la mise à disposition **du public** non autorisée d'œuvres", or inciting its use, advertising included.
+  - The text is about software for making works available *to the public*. Applying it to a hosted, token-gated transfer service is this document's extrapolation (analysis); whether a one-to-one or bearer transfer reaches a "public" is question 2 for counsel.
+  - The cautious reading is kept for the open-source repository: purpose statements, README and marketing copy would be the evidence of what the software is "manifestly intended" for.
 - Complicity by supplying means (Code pénal art. 121-7); civil measures against such software (CPI L336-1); injunctions against any intermediary, exempt or not (CPI L336-2).
 - Moving the transfer into the browser (WASM / WebRTC, no server copy) does not cure the scheme: the recipient's copy is still unauthorised, and these provisions target the tool and its publisher, not only a host (analysis).
 
@@ -240,7 +265,10 @@ Configuration 1 is §4. The rest of this section covers standalone mode.
 | CC NonCommercial | Free print-at-home only, or manual review | — |
 | US-only public domain | Refuse for FR/EU recipients | Link to the source site |
 
-`docs/api.md` already encodes this with the mandatory header `X-Rights-Basis: own_work | public_domain | open_licence | licensed_distributor` and the refusal `drm_protected`. There is deliberately no value for a purchased copy.
+`docs/api.md` v0.2 encodes this only in part [LOCAL]:
+
+- **In the contract:** the mandatory header `X-Rights-Basis: own_work | public_domain | open_licence | licensed_distributor`, with deliberately no value for a purchased copy; a limit to EPUB and PDF; and the refusal `drm_protected` for an EPUB carrying `META-INF/encryption.xml` with a non-font-obfuscation algorithm, or `META-INF/rights.xml`.
+- **Not in the contract:** refusal of `license.lcpl` and of encrypted PDFs; detection of retailer marks; the ISBN check; the review state; the NonCommercial restriction. These are this document's proposals (see "Implications for the implementation") and have to be added to `docs/api.md`.
 
 ### 3.3 Required safeguards (recommendations of the copyright note; not sourced)
 
@@ -251,8 +279,9 @@ Configuration 1 is §4. The rest of this section covers standalone mode.
    - flag retailer watermarks, ex-libris pages and retailer identifiers in metadata;
    - read `dc:rights` and the ISBN; an ISBN belonging to an in-commerce title whose publisher is not the verified uploader blocks the upload or sends it to review;
    - for "public domain", require the author's year of death; apply life + 70 and the French extensions; check translator and edition.
+   - Absence of DRM clears nothing. Watermark-only stores, and since January 2026 the EPUB/PDF download of DRM-free Kindle titles [FC, medium-high], produce retail files with no DRM container and sometimes no visible mark. The ISBN and publisher check and the declaration are the real gate; DRM and watermark detection only catch the obvious cases.
 4. **DRM-free only; unchanged delivery.** No conversion that would drop rights information; no DRM added to Creative Commons works; no DRM-removal help anywhere.
-5. **One-recipient token.** No catalogue, no search, no public profile, no "share again" button, `noindex`; download URLs carry a 128-bit random token; the short typed code is protected by rate limits (`docs/api.md`, `notes/ereader-ux.ux.md`).
+5. **Bearer token, no public access.** No catalogue, no search, no public profile, no "share again" button, `noindex`; download URLs carry a 128-bit random token; the short typed code is protected by rate limits (`docs/api.md`, `docs/research/notes/ereader-ux.ux.md`). This is not a one-recipient design: under `docs/api.md` whoever holds the card can download, up to the session cap [LOCAL]. It must not be described as one, and the uploader's declaration has to cover delivery to the bearer.
 6. **Notice-and-action** (DSA art. 16): public form and e-mail; acknowledgement; fast decision (target 24 h); token disabled and file deleted; statement of reasons to the uploader with redress; log. The file hash and ISBN go on a blocklist so the same work does not reappear — the measure *Cyando* expects.
 7. **Repeat-infringer policy**: suspension after two upheld notices or one false declaration, ban on recurrence. This is a legal duty only for online platforms (DSA art. 23) and a condition of the US DMCA safe harbour (§ 512(i)) [M], but it is the evidence of diligence a court looks for.
 8. **Business model**: charge for the card and printing, never per download; no reward to uploaders (the *Cyando* "financial model" indicator).
@@ -274,7 +303,7 @@ All conditions below are [M].
 | Source / licence | Usable? | Conditions and traps |
 |---|---|---|
 | Public domain **in France** | Yes | Life + 70 (CPI L123-1); +30 years for authors "morts pour la France" (L123-10); translators, annotators and illustrators have their own terms; moral rights are perpetual (name, integrity); 25-year right in posthumous publications (L123-4). The cover is a separate work |
-| Project Gutenberg | With care | Texts are public domain **in the USA** (works published through 1930, as of 2026), not necessarily in the EU: LG Frankfurt, 9 Feb 2018 (*S. Fischer v PGLAF*) led PG to block German users. "Project Gutenberg" is a registered trade mark: either remove every PG reference from the file, or follow the PG licence — full licence attached and, if any fee is charged, a **royalty of 20 % of gross profits** (licence § 1.E.8) |
+| Project Gutenberg | With care | Texts are public domain **in the USA** (works published through 1930, as of 2026), not necessarily in the EU. LG Frankfurt, 9 Feb 2018 (*S. Fischer v PGLAF*) led PG to block all German users at the time; the fact-check recalls that the case settled in 2021 and that the blanket block was lifted, only the litigated titles staying blocked in Germany until their German terms expire [FC, medium-high]. Either way the case shows that a US-public-domain file can infringe in an EU country. "Project Gutenberg" is a registered trade mark: either remove every PG reference from the file, or follow the PG licence — full licence attached and, if any fee is charged, a **royalty of 20 % of gross profits** (licence § 1.E.8) |
 | Standard Ebooks | Yes for the edition | Its own work (markup, typography, cover) is dedicated under **CC0 1.0**; the underlying texts are US public domain only — same territorial check |
 | Wikisource, Gallica, ebooksgratuits.com, BEQ | Case by case | Site terms may restrict commercial reuse (BnF for Gallica scans; ebooksgratuits non-commercial); BEQ follows Canadian terms |
 | CC0, CC BY, CC BY-SA | Yes | Attribution (title, author, source, licence) on the card or the redemption page; **no DRM or other technical restriction** may be added |
@@ -284,7 +313,8 @@ All conditions below are [M].
 ### 3.6 Codes or links for a store, not files (lane S1)
 
 - **Gift link.** The giver buys the title through the store's own gift function and pastes the redemption link or code; the card's QR encodes it. No file, no copyright act. The link is a bearer secret and is handled client-side.
-- **Where it works, as recorded by sibling notes (not re-checked on 2026-11-12):** Amazon.fr [V2], Decitre / Furet du Nord (Vivlio) [V2], Thalia / Hugendubel in Germany and Austria [V2]. Kobo / Fnac apparently has no title-level gift [V1]. 7switch, Cultura, Apple Books and Google Play Books in France: unknown.
+- **Where it works, as recorded by sibling notes (not re-checked on 2026-11-12):** Amazon.fr [V2], Decitre / Furet du Nord (Vivlio) [V2], Thalia / Hugendubel in Germany and Austria [V2].
+- **Unverified:** Kobo / Fnac. The sibling search found no title-level gift in France [V1, weak negative]; the fact-check recalls a Kobo gifting launch in late 2024 in English-speaking markets [FC, medium]. 7switch, Cultura, Apple Books and Google Play Books in France: unknown.
 - **Store credit + recommendation.** Where no title-level gift exists, the card can carry a store gift-card code bought by the giver and name the suggested title. Vivlio gift cards do not cover eBooks — [Vivlio help](https://help.vivlio.com/hc/fr/articles/11334184838428-Je-souhaite-utiliser-un-code-promotionnel-ou-une-carte-cadeau) [V2].
 - **Limits.** eBook Cadeau must not itself sell stored value redeemable at third parties (§8). A 100 % coupon funded at the full public price respects the fixed-price law; a discount coupon does not [M].
 - **Open points.** Whether a store's terms allow its gift link to be re-wrapped in a third-party card, and whether Amazon.fr exposes a copyable link as Amazon.com does, are not verified. Store names should appear on the card as plain text, without logos (analysis; trade-mark use is outside this document).
@@ -295,10 +325,10 @@ All conditions below are [M].
 | # | Input A | Input B | Kept, and why |
 |---|---|---|---|
 | 1 | Copyright note §9: token with an expiry; file deleted after redemption | Commerce note §3.4: no expiry, or ≥ 5 years; `docs/api.md`: no default expiry | **No default expiry.** A paid card whose file disappears is a consumer-law problem (§7.4). The copyright note's aim — limiting exposure — is met by restricting *who may upload*, not by short retention. Files are deleted on cancellation, takedown, expiry (if set, ≥ 5 years) or when the download cap is reached |
-| 2 | Copyright note: single redemption with a small retry allowance | `docs/api.md` and the UX note: re-downloadable by the card holder, 10 download sessions | **Up to 10 sessions for `hosted_file`** (devices fail; the conformity duty favours re-download), counter visible on the gift page, cap lowerable by the uploader. `reseller_redirect` stays strictly single-recipient |
+| 2 | Copyright note: single redemption with a small retry allowance | `docs/api.md` and the UX note: re-downloadable by the card holder, 10 download sessions | **Up to 10 sessions for `hosted_file`** (devices fail; the conformity duty favours re-download), counter visible on the gift page, cap lowerable by the uploader. `reseller_redirect` stays strictly single-recipient. Cost of this choice: hosted-file delivery is bearer delivery, so the "one recipient" argument of §2.6 is not available, and the lane is defensible only because the gate admits files the uploader may distribute |
 | 3 | Copyright note: deliver files byte-identical, never convert | UX notes: per-device formats (KEPUB for Kobo, AZW3 for Kindle) | **Byte-identical by default.** Conversion only when the rights-holder uploader opts in, and only if rights statements, licence text and attribution survive unchanged. Creative Commons 4.0 licences allow technical format changes [M]; a retailer file never reaches this path |
 | 4 | Commerce note §5: DSA art. 6 shield "if passive" | Copyright note §7: shield fragile because the service knows the title | **The copyright note.** The exemption is a backstop for lanes S2/S3 after the upload gate, not a basis for accepting store-bought files |
-| 5 | Copyright note §10: a code for one eBook *is* a single-purpose voucher | Commerce note §2.3: only if redemption is confined to one Member State | **The commerce note** — it applies the statutory test (place of supply and VAT known at issue) and CJEU C-68/23 |
+| 5 | Copyright note §10: a code for one eBook *is* a single-purpose voucher | Commerce note §2.3: only if redemption is confined to one Member State | **The commerce note** — it applies the statutory test (place of supply and VAT known at issue). CJEU C-68/23, as recalled, supports the first half of that test only (§6.3) |
 | 6 | Copyright note: identity and verified e-mail of every uploader | Commerce note: print-at-home can process no personal data server-side | Both, for different lanes: S1 (gift link) needs no server-side personal data; S2/S3 (hosted file) require the uploader's identity |
 | 7 | Document 07 rule 29: a card line priced at zero is rejected | Commerce note: a free print-at-home PDF is low risk | No conflict once stated precisely: the print-at-home PDF is not a line item; rule 29 applies to printed and mailed cards |
 

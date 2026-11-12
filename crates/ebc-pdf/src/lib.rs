@@ -49,10 +49,24 @@
 //!   in: a scaling group transform scales them too (as in PDF and SVG).
 //! * Groups with a singular transform, an empty clip path or no children draw nothing
 //!   and are skipped.
+//! * **Overprint**: text in pure black (C0 M0 Y0 K100) is set to overprint, so that it
+//!   prints on top of a coloured ground instead of knocking it out (no white halo when
+//!   the plates are slightly out of register). Nothing else overprints — in particular
+//!   never anything white.
 //! * When the same glyph stands for different texts in different runs (say a space and a
 //!   no-break space), the `ToUnicode` map keeps the first one.
 //! * Variable fonts are embedded at their default instance; [`ebc_scene::FontResource`]
 //!   carries no variation coordinates.
+//! * Resources that no page actually paints (unused fonts, images, ICC profiles) are not
+//!   written, and not validated either.
+//!
+//! # What the writer does not check
+//!
+//! The writer enforces what each PDF/X part forbids outright. It does **not** judge print
+//! quality (image resolution, ink coverage, minimum type size, hairlines) — that is the
+//! job of the independent `ebc-preflight` crate — and it embeds the output-intent profile
+//! as given: use [`icc::inspect`] to make sure it is a CMYK *output* (`prtr`) profile
+//! before sending a file to a printer.
 
 #![forbid(unsafe_code)]
 

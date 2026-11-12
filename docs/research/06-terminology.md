@@ -42,7 +42,7 @@ No marker was upgraded in this synthesis. Every link below is either a file the 
 
 ### 1.2 Recommended strings — six primary languages
 
-Short strings. Long strings (help sentence, the three printed steps) are in the TOML block of §5. All [M]; the tag column shows where a sourced string supports the choice.
+Short strings. Long strings (help sentence, the three printed steps) are in the TOML block of §5. All [M]; the second table shows which choices a sourced string supports.
 
 | Key | fr | en | de | es | it | nl |
 |---|---|---|---|---|---|---|
@@ -132,7 +132,7 @@ Regional deltas for the shipped languages:
 | es-419 | "celular" for "móvil"; prefer infinitive forms | [M, medium] |
 | pt-BR | "presente" (already used), "celular" for "telemóvel", "câmera" for "câmara", "e-book" for the noun [V2]; verb "resgatar" [V2] | mixed |
 
-Languages not shipped. The table gives a glossary to hand to a translator; the draft label is a starting point only.
+Languages not shipped. The table gives a glossary to hand to a translator. The draft labels tagged [M, low] were added in this synthesis from memory and are a starting point only.
 
 | Lang | Draft option label | Redeem verb in shipped software | eBook | e-reader | Stored-value nouns to avoid |
 |---|---|---|---|---|---|
@@ -142,7 +142,7 @@ Languages not shipped. The table gives a glossary to hand to a translator; the d
 | da | "Giv som gave" [M, low] | indløse [V2] | e-bog [V1 + dictionary V1] | e-bogslæser (retail [M]); e-boglæser [V1] | gavekort, kupon |
 | nb | "Gi som gave" [M, low] | løse inn [V2] | e-bok [V1 + dictionary V1] | lesebrett (dictionary [V1]; retail [M]); e-bokleser [V1] | gavekort, kupong |
 | fi | "Osta lahjaksi" [M, low] | lunastaa [V2] | e-kirja [V2] | lukulaite [V1] | lahjakortti, kuponki |
-| ro | "Oferă cadou" [M, low] | unstable inside one app: Revendică / răscumpărat [V1] | eBook, E-book, carte electronică [V1 each] | cititor de cărți electronice; e-reader [V1 each] | card cadou, voucher cadou |
+| ro | "Oferă cadou" [M, low] | unstable inside one app: Revendică / răscumpărat [V1] | eBook, E-book, carte electronică [V1 each] | cititor de cărți electronice; e-readere [V1 each] | card cadou, voucher cadou |
 | el | "Κάντε δώρο" [M, low] | εξαργύρωση [V2] | ηλεκτρονικό βιβλίο [V2]; eBook [V1] | αναγνώστης ηλεκτρονικών βιβλίων [V1] | δωροκάρτα, δωροεπιταγή |
 | ca | "Regala aquest ebook" [M, low] | bescanviar [V1] | llibre electrònic [V1] | lector de llibres electrònics [V2] | targeta regal, val regal |
 

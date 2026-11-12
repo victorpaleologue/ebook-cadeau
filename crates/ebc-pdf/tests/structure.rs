@@ -81,6 +81,42 @@ fn page_boxes_follow_trim_bleed_and_slug() {
 }
 
 #[test]
+fn poche_card_boxes_match_the_print_requirements_table() {
+    // docs/research/03-print-requirements.md, section 2.2: the poche spread (230 x 178 mm)
+    // for the upload profile (bleed 3 mm, no slug) and the marks profile (slug 10 mm).
+    let cases: [(f64, f64, [f64; 4], [f64; 4], [f64; 4]); 2] = [
+        (
+            3.0,
+            0.0,
+            [0.0, 0.0, 668.976, 521.575],
+            [0.0, 0.0, 668.976, 521.575],
+            [8.504, 8.504, 660.472, 513.071],
+        ),
+        (
+            3.0,
+            10.0,
+            [0.0, 0.0, 725.669, 578.268],
+            [28.346, 28.346, 697.323, 549.921],
+            [36.850, 36.850, 688.819, 541.417],
+        ),
+    ];
+    for (bleed, slug, media, bleed_box, trim) in cases {
+        let mut doc = base_doc(PdfStandard::X4);
+        doc.pages.push(Page::new(Size::new(230.0, 178.0), bleed, slug));
+        doc.pages.push(Page::new(Size::new(230.0, 178.0), bleed, slug));
+        let pdf = parse(&write(&doc));
+        for n in 1..=2 {
+            let p = page(&pdf, n);
+            assert_close(&get_numbers(&pdf, p, "MediaBox"), &media, 1e-3);
+            assert_close(&get_numbers(&pdf, p, "CropBox"), &media, 1e-3);
+            assert_close(&get_numbers(&pdf, p, "BleedBox"), &bleed_box, 1e-3);
+            assert_close(&get_numbers(&pdf, p, "TrimBox"), &trim, 1e-3);
+            assert!(!p.has(b"ArtBox") && !p.has(b"Rotate") && !p.has(b"UserUnit"));
+        }
+    }
+}
+
+#[test]
 fn content_is_mapped_from_top_left_millimetres_to_bottom_left_points() {
     let doc = simple_doc(PdfStandard::X4);
     let pdf = write_pdf(&doc, &WriteOptions { compress: false, keep_layers: false }).expect("ok");
@@ -355,6 +391,21 @@ fn page_labels_name_the_sides_of_the_card() {
     assert_eq!(get_name(&pdf, unnamed, "S"), "D");
     assert_eq!(get(&pdf, unnamed, "St").as_i64().expect("integer"), 2);
     assert_eq!(get_text(&pdf, nums[5].as_dict().expect("dict"), "P"), "intérieur");
+
+    // A run of unlabelled pages needs a single entry; they count on from its start.
+    let mut doc = simple_doc(PdfStandard::Plain);
+    doc.pages[0].label = Some("  cover  ".into());
+    for _ in 0..5 {
+        doc.pages.push(Page::new(Size::new(100.0, 100.0), 0.0, 0.0));
+    }
+    doc.pages[4].label = Some("\u{1}".into()); // nothing printable: not a label
+    let pdf = parse(&write(&doc));
+    let labels = get_dict(&pdf, catalog(&pdf), "PageLabels");
+    let nums = get(&pdf, labels, "Nums").as_array().expect("array");
+    assert_eq!(nums.len(), 4, "{nums:?}");
+    assert_eq!(get_text(&pdf, nums[1].as_dict().expect("dict"), "P"), "cover");
+    assert_eq!(nums[2].as_i64().expect("index"), 1);
+    assert_eq!(get(&pdf, nums[3].as_dict().expect("dict"), "St").as_i64().expect("integer"), 2);
 }
 
 #[test]

@@ -270,7 +270,8 @@ fn rgb_paint_is_refused_in_pdfx1a_wherever_it_hides() {
     let rect = Rect::new(0.0, 0.0, 10.0, 10.0);
     let spectral = font("Spectral-Regular.ttf");
     let text = |font: FontId| text_item(font, &spectral, "rouge", 12.0, Point::new(5.0, 5.0), rgb);
-    let cases: Vec<(&str, Box<dyn Fn(FontId) -> Item>)> = vec![
+    type MakeItem<'a> = Box<dyn Fn(FontId) -> Item + 'a>;
+    let cases: Vec<(&str, MakeItem<'_>)> = vec![
         ("fill", Box::new(move |_| Item::filled_rect(rect, rgb))),
         ("stroke", Box::new(move |_| Item::stroke(Path::rect(rect), Stroke::solid(rgb, 1.0)))),
         ("text", Box::new(text)),

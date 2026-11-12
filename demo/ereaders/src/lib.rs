@@ -44,12 +44,17 @@ pub mod browser;
 mod css;
 pub mod error;
 pub mod fixtures;
+pub mod flow;
 pub mod format;
+pub mod lcp;
 pub mod library;
 pub mod lint;
+pub mod mail;
 pub mod net;
+pub mod opds;
 pub mod page;
 pub mod profile;
+pub mod sync;
 pub mod typing;
 
 pub use browser::{BrowserConfig, EinkBrowser, LicenceFile, Outcome};
@@ -58,9 +63,13 @@ pub use error::{
     Result, SyncError,
 };
 pub use format::FileFormat;
+pub use lcp::{LcpReader, LicenceStep, SimulatedLcpReader, SimulatedLicence, SimulatedLicenceBuilder};
 pub use library::{ImportSource, IncomingFile, Library, LibraryEntry};
 pub use lint::{LintConfig, LintFinding, LintReport, Severity};
+pub use mail::{MailDevice, MailDeviceConfig, MailOutcome, MailRecord};
 pub use net::{Exchange, NetConfig};
+pub use opds::{OpdsClient, OpdsConfig};
 pub use page::Page;
 pub use profile::{DeviceFamily, DeviceProfile, DrmScheme, MailServiceSpec};
+pub use sync::{SyncDevice, SyncReport};
 pub use typing::{Keyboard, TapLog, TypingCost};

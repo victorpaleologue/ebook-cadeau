@@ -12,8 +12,8 @@ use crate::colour::{ColorClass, ColorSpace};
 use crate::expect::Expectations;
 use crate::lexer::{InlineColorSpace, InlineImage, Lexer, Operand, Token};
 use crate::pdf::{
-    Matrix, RectPt, as_dict, get, get_bool, get_dict, get_int, get_name, get_num, lossy,
-    resolve, resolve_with_id,
+    Matrix, RectPt, as_dict, get, get_bool, get_dict, get_int, get_name, get_num, lossy, resolve,
+    resolve_with_id,
 };
 use crate::qr;
 use crate::report::{ImageSummary, QrCandidate, round1, round3};
@@ -46,6 +46,13 @@ pub(crate) struct PageFacts {
     pub(crate) used_fonts: BTreeSet<FontKey>,
     pub(crate) max_ink_percent: Option<f32>,
     pub(crate) transparency: bool,
+    /// Whether an RGB-like colour space was used to paint (allowed or not).
+    pub(crate) uses_rgb: bool,
+    /// Bounding box, in default user space, of everything painted whose position is known.
+    pub(crate) painted: Option<RectPt>,
+    /// Whether something was painted whose extent is unknown but may be the whole page
+    /// (a shading painted with `sh` fills the clip region).
+    pub(crate) unbounded_paint: bool,
     pub(crate) qr_candidates: Vec<QrCandidate>,
 }
 
@@ -110,7 +117,9 @@ impl PathState {
         }
         self.bbox = Some(match self.bbox {
             None => RectPt { x0: x, y0: y, x1: x, y1: y },
-            Some(b) => RectPt { x0: b.x0.min(x), y0: b.y0.min(y), x1: b.x1.max(x), y1: b.y1.max(y) },
+            Some(b) => {
+                RectPt { x0: b.x0.min(x), y0: b.y0.min(y), x1: b.x1.max(x), y1: b.y1.max(y) }
+            }
         });
     }
 
@@ -221,7 +230,11 @@ impl<'a, 's> Interpreter<'a, 's> {
     }
 
     /// Interprets the page and returns what was found.
-    pub(crate) fn run(mut self, page: &'a Dictionary, resources: Option<&'a Dictionary>) -> PageFacts {
+    pub(crate) fn run(
+        mut self,
+        page: &'a Dictionary,
+        resources: Option<&'a Dictionary>,
+    ) -> PageFacts {
         if self.is_transparency_group(page) {
             self.transparency("the page has a transparency group");
         }
@@ -261,7 +274,11 @@ impl<'a, 's> Interpreter<'a, 's> {
             Some(Object::Stream(stream)) => streams.push(stream),
             Some(Object::Array(items)) => {
                 if items.len() > MAX_CONTENT_STREAMS {
-                    self.budget.report_exhausted(self.sink, Some(self.page), "too many content streams");
+                    self.budget.report_exhausted(
+                        self.sink,
+                        Some(self.page),
+                        "too many content streams",
+                    );
                 }
                 for item in items.iter().take(MAX_CONTENT_STREAMS) {
                     match resolve(self.doc, item) {
@@ -349,11 +366,14 @@ impl<'a, 's> Interpreter<'a, 's> {
         // `q` operators beyond MAX_GSTATE_DEPTH: counted so that their `Q` pops nothing.
         let mut overflow = 0_usize;
         let mut underflow = false;
+        // Set when interpretation stops before the end of the stream.
+        let mut aborted = false;
         let mut path = PathState::default();
         let mut lexer = Lexer::new(data);
         loop {
             if !self.budget.take_operation() {
                 self.budget.report_exhausted(self.sink, Some(self.page), what);
+                aborted = true;
                 break;
             }
             let token = match lexer.next_token() {
@@ -365,6 +385,7 @@ impl<'a, 's> Interpreter<'a, 's> {
                         Some(self.page),
                         format!("syntax error in {what} at byte {}: {}", error.offset, error.what),
                     );
+                    aborted = true;
                     break;
                 }
             };
@@ -418,15 +439,27 @@ impl<'a, 's> Interpreter<'a, 's> {
                 },
                 // -- colour --
                 b"g" | b"G" => match lexer.numbers::<1>() {
-                    Some(v) => self.set_paint(&mut gs, operator == b"g", Paint::new(ColorSpace::DeviceGray, &v)),
+                    Some(v) => self.set_paint(
+                        &mut gs,
+                        operator == b"g",
+                        Paint::new(ColorSpace::DeviceGray, &v),
+                    ),
                     None => self.bad_operands(what, operator),
                 },
                 b"rg" | b"RG" => match lexer.numbers::<3>() {
-                    Some(v) => self.set_paint(&mut gs, operator == b"rg", Paint::new(ColorSpace::DeviceRgb, &v)),
+                    Some(v) => self.set_paint(
+                        &mut gs,
+                        operator == b"rg",
+                        Paint::new(ColorSpace::DeviceRgb, &v),
+                    ),
                     None => self.bad_operands(what, operator),
                 },
                 b"k" | b"K" => match lexer.numbers::<4>() {
-                    Some(v) => self.set_paint(&mut gs, operator == b"k", Paint::new(ColorSpace::DeviceCmyk, &v)),
+                    Some(v) => self.set_paint(
+                        &mut gs,
+                        operator == b"k",
+                        Paint::new(ColorSpace::DeviceCmyk, &v),
+                    ),
                     None => self.bad_operands(what, operator),
                 },
                 b"cs" | b"CS" => match lexer.last_name() {
@@ -436,11 +469,15 @@ impl<'a, 's> Interpreter<'a, 's> {
                             self.sink.warning(
                                 codes::COLOR_UNKNOWN,
                                 Some(self.page),
-                                format!("colour space /{} cannot be resolved ({reason})", lossy(name)),
+                                format!(
+                                    "colour space /{} cannot be resolved ({reason})",
+                                    lossy(name)
+                                ),
                             );
                         }
                         // Initial colour: all components zero, except black for CMYK.
-                        let initial = if space.is_cmyk_ink() { [0.0, 0.0, 0.0, 1.0] } else { [0.0; 4] };
+                        let initial =
+                            if space.is_cmyk_ink() { [0.0, 0.0, 0.0, 1.0] } else { [0.0; 4] };
                         let mut paint = Paint::new(space, &initial);
                         paint.count = 0;
                         self.set_paint(&mut gs, operator == b"cs", paint);
@@ -464,7 +501,8 @@ impl<'a, 's> Interpreter<'a, 's> {
                         self.bad_operands(what, operator);
                     } else {
                         let current = if fill { &gs.fill } else { &gs.stroke };
-                        let paint = Paint { space: Rc::clone(&current.space), components, count, pattern };
+                        let paint =
+                            Paint { space: Rc::clone(&current.space), components, count, pattern };
                         self.set_paint(&mut gs, fill, paint);
                     }
                 }
@@ -508,8 +546,12 @@ impl<'a, 's> Interpreter<'a, 's> {
                     None => self.bad_operands(what, operator),
                 },
                 // -- path painting --
-                b"f" | b"F" | b"f*" => self.paint_path(&mut path, &gs, resources, true, false, depth),
-                b"B" | b"B*" | b"b" | b"b*" => self.paint_path(&mut path, &gs, resources, true, true, depth),
+                b"f" | b"F" | b"f*" => {
+                    self.paint_path(&mut path, &gs, resources, true, false, depth)
+                }
+                b"B" | b"B*" | b"b" | b"b*" => {
+                    self.paint_path(&mut path, &gs, resources, true, true, depth)
+                }
                 b"S" | b"s" => self.paint_path(&mut path, &gs, resources, false, true, depth),
                 b"n" => path.clear(),
                 // -- text --
@@ -526,7 +568,9 @@ impl<'a, 's> Interpreter<'a, 's> {
                 b"Tr" => match lexer.numbers::<1>() {
                     // Whole and tiny by construction of the range check.
                     #[allow(clippy::cast_possible_truncation)]
-                    Some([mode]) if (0.0..=7.0).contains(&mode) => gs.text_render_mode = mode as i64,
+                    Some([mode]) if (0.0..=7.0).contains(&mode) => {
+                        gs.text_render_mode = mode as i64
+                    }
                     _ => self.bad_operands(what, operator),
                 },
                 b"Tj" | b"TJ" | b"'" | b"\"" => {
@@ -564,12 +608,15 @@ impl<'a, 's> Interpreter<'a, 's> {
                 format!("{what} restores a graphics state (Q) that was never saved (q)"),
             );
         }
-        let unclosed = stack.len() + overflow;
+        // A stream that was not read to its end says nothing about its last `Q`s.
+        let unclosed = if aborted { 0 } else { stack.len() + overflow };
         if unclosed > 0 {
             self.sink.warning(
                 codes::CONTENT_UNBALANCED_Q,
                 Some(self.page),
-                format!("{what} leaves {unclosed} saved graphics state(s) (q) without a matching Q"),
+                format!(
+                    "{what} leaves {unclosed} saved graphics state(s) (q) without a matching Q"
+                ),
             );
         }
     }
@@ -609,7 +656,8 @@ impl<'a, 's> Interpreter<'a, 's> {
             path.clear();
             return;
         }
-        let rect_only = fill && !stroke && !path.irregular && !path.rects.is_empty() && self.in_pattern == 0;
+        let rect_only =
+            fill && !stroke && !path.irregular && !path.rects.is_empty() && self.in_pattern == 0;
         if rect_only {
             let room = qr::MAX_RECTS.saturating_sub(self.rect_run.len());
             self.rect_run.extend(path.rects.iter().take(room));
@@ -635,7 +683,41 @@ impl<'a, 's> Interpreter<'a, 's> {
             _ => Geometry::Unknown,
         };
         path.clear();
+        if stroke {
+            self.check_stroke_width(gs, geometry);
+        }
         self.paint(gs, resources, fill, stroke, geometry, depth);
+    }
+
+    /// Flags strokes too thin to print reliably.
+    fn check_stroke_width(&mut self, gs: &GState, geometry: Geometry) {
+        /// Printers ask for 0.25 pt at least; the margin absorbs rounding in transforms.
+        const MIN_STROKE_PT: f64 = 0.24;
+        if self.touches_printed_area(geometry) == Some(false) {
+            return;
+        }
+        let scale = (gs.ctm.a * gs.ctm.d - gs.ctm.b * gs.ctm.c).abs().sqrt();
+        let width_pt = gs.line_width * scale * self.mm_per_unit * 72.0 / 25.4;
+        if !width_pt.is_finite() || width_pt >= MIN_STROKE_PT {
+            return;
+        }
+        if width_pt == 0.0 {
+            self.sink.error(
+                codes::STROKE_HAIRLINE,
+                Some(self.page),
+                "a stroke has zero width, i.e. the thinnest line the device can draw: \
+                 visible on screen, all but invisible on a press",
+            );
+        } else {
+            self.sink.warning(
+                codes::STROKE_HAIRLINE,
+                Some(self.page),
+                format!(
+                    "a stroke is only {width_pt:.2} pt wide; lines thinner than 0.25 pt may \
+                     break up or vanish in print"
+                ),
+            );
+        }
     }
 
     fn paint(
@@ -647,6 +729,11 @@ impl<'a, 's> Interpreter<'a, 's> {
         geometry: Geometry,
         depth: usize,
     ) {
+        if (fill || stroke)
+            && let Geometry::Bbox(bbox) = geometry
+        {
+            self.note_painted(bbox);
+        }
         if fill {
             self.use_paint(&gs.fill, resources, geometry, "fill", depth);
         }
@@ -655,10 +742,25 @@ impl<'a, 's> Interpreter<'a, 's> {
         }
     }
 
+    /// Extends the bounding box of everything painted so far.
+    fn note_painted(&mut self, bbox: RectPt) {
+        self.facts.painted = Some(match self.facts.painted {
+            None => bbox,
+            Some(all) => RectPt {
+                x0: all.x0.min(bbox.x0),
+                y0: all.y0.min(bbox.y0),
+                x1: all.x1.max(bbox.x1),
+                y1: all.y1.max(bbox.y1),
+            },
+        });
+    }
+
     /// Whether a paint operation touches the printed area. Unknown geometry counts as inside.
     fn touches_printed_area(&self, geometry: Geometry) -> Option<bool> {
         match (geometry, self.printed) {
-            (Geometry::Bbox(bbox), Some(printed)) => Some(printed.overlaps(&bbox, TOUCH_TOLERANCE_PT)),
+            (Geometry::Bbox(bbox), Some(printed)) => {
+                Some(printed.overlaps(&bbox, TOUCH_TOLERANCE_PT))
+            }
             _ => None,
         }
     }
@@ -672,10 +774,9 @@ impl<'a, 's> Interpreter<'a, 's> {
         depth: usize,
     ) {
         if let ColorSpace::Pattern(base) = &*paint.space {
-            match &paint.pattern {
-                Some(name) => self.use_pattern(name, base.as_deref(), paint, resources, depth),
-                // `cs /Pattern` without `scn`: nothing is painted with a defined colour.
-                None => {}
+            // After `cs /Pattern` without `scn` there is no pattern, and nothing to check.
+            if let Some(name) = &paint.pattern {
+                self.use_pattern(name, base.as_deref(), paint, resources, depth);
             }
             return;
         }
@@ -693,17 +794,19 @@ impl<'a, 's> Interpreter<'a, 's> {
             ColorClass::Registration => {
                 // A zero tint paints nothing on any plate.
                 if paint.count == 0 || paint.components[0] > 0.0 {
+                    let what =
+                        format!("registration colour (Separation /All) is used for a {role}");
                     match self.touches_printed_area(geometry) {
                         Some(true) => self.sink.error(
                             codes::COLOR_REGISTRATION,
                             Some(self.page),
-                            format!("registration colour (Separation /All) is used for a {role} inside the bleed box"),
+                            format!("{what} inside the bleed box"),
                         ),
                         Some(false) => {}
                         None => self.sink.warning(
                             codes::COLOR_REGISTRATION,
                             Some(self.page),
-                            format!("registration colour (Separation /All) is used for a {role} whose position cannot be determined"),
+                            format!("{what} whose position cannot be determined"),
                         ),
                     }
                 }
@@ -712,23 +815,23 @@ impl<'a, 's> Interpreter<'a, 's> {
                 if self.touches_printed_area(geometry) == Some(false) {
                     return;
                 }
-                let total: f64 = paint.components.iter().map(|c| c.clamp(0.0, 1.0)).sum::<f64>() * 100.0;
+                let total: f64 =
+                    paint.components.iter().map(|c| c.clamp(0.0, 1.0)).sum::<f64>() * 100.0;
                 // At most 400.
                 #[allow(clippy::cast_possible_truncation)]
                 let total = total as f32;
                 self.facts.max_ink_percent =
                     Some(self.facts.max_ink_percent.map_or(total, |max| max.max(total)));
-                if let Some(limit) = self.expect.max_total_ink_percent {
-                    if total > limit + 0.05 {
-                        let [c, m, y, k] = paint.components.map(|v| (v.clamp(0.0, 1.0) * 100.0).round());
-                        self.sink.error(
-                            codes::INK_TOTAL_TOO_HIGH,
-                            Some(self.page),
-                            format!(
-                                "a {role} uses C{c} M{m} Y{y} K{k} = {total:.0} % total ink, above the limit of {limit:.0} %"
-                            ),
-                        );
-                    }
+                if let Some(limit) = self.expect.max_total_ink_percent
+                    && total > limit + 0.05
+                {
+                    let [c, m, y, k] =
+                        paint.components.map(|v| (v.clamp(0.0, 1.0) * 100.0).round());
+                    let message = format!(
+                        "a {role} uses C{c} M{m} Y{y} K{k} = {total:.0} % total ink, \
+                         above the limit of {limit:.0} %"
+                    );
+                    self.sink.error(codes::INK_TOTAL_TOO_HIGH, Some(self.page), message);
                 }
             }
             _ => {}
@@ -738,7 +841,9 @@ impl<'a, 's> Interpreter<'a, 's> {
     /// Records a colour space as used and flags what a CMYK job does not accept.
     fn note_space(&mut self, space: &ColorSpace, context: &str) {
         let description = space.describe();
-        match space.class() {
+        let class = space.class();
+        self.facts.uses_rgb |= class == ColorClass::Rgb;
+        match class {
             ColorClass::Rgb if !self.expect.allow_rgb => self.sink.error(
                 codes::COLOR_RGB,
                 Some(self.page),
@@ -788,24 +893,31 @@ impl<'a, 's> Interpreter<'a, 's> {
             // Tiling pattern.
             Object::Stream(stream) => {
                 let uncoloured = get_int(self.doc, &stream.dict, b"PaintType") == Some(2);
-                if uncoloured {
-                    if let Some(base) = base {
-                        self.note_space(base, &format!("uncoloured pattern /{}", lossy(name)));
-                        self.check_colour_values(paint, Geometry::Unknown, "pattern fill");
-                    }
+                if uncoloured && let Some(base) = base {
+                    self.note_space(base, &format!("uncoloured pattern /{}", lossy(name)));
+                    self.check_colour_values(paint, Geometry::Unknown, "pattern fill");
                 }
-                if let Some(id) = id {
-                    if !self.patterns_done.insert(id) {
-                        return;
-                    }
+                if let Some(id) = id
+                    && !self.patterns_done.insert(id)
+                {
+                    return;
                 }
-                self.run_nested(id, stream, resources, None, depth, &format!("tiling pattern /{}", lossy(name)), true);
+                self.run_nested(
+                    id,
+                    stream,
+                    resources,
+                    None,
+                    depth,
+                    &format!("tiling pattern /{}", lossy(name)),
+                    true,
+                );
             }
             _ => self.missing_resource("Pattern", name),
         }
     }
 
     fn shading(&mut self, name: &[u8], resources: Option<&'a Dictionary>) {
+        self.facts.unbounded_paint = true;
         match self.resource(resources, b"Shading", name) {
             Some(shading) => self.note_shading(shading, &format!("shading /{}", lossy(name))),
             None => self.missing_resource("Shading", name),
@@ -830,7 +942,8 @@ impl<'a, 's> Interpreter<'a, 's> {
     // ---- extended graphics state -------------------------------------------------------
 
     fn ext_gstate(&mut self, name: &[u8], resources: Option<&'a Dictionary>, gs: &mut GState) {
-        let dict = self.resource(resources, b"ExtGState", name).and_then(|entry| as_dict(self.doc, entry));
+        let dict =
+            self.resource(resources, b"ExtGState", name).and_then(|entry| as_dict(self.doc, entry));
         let Some(dict) = dict else {
             self.missing_resource("ExtGState", name);
             return;
@@ -840,28 +953,28 @@ impl<'a, 's> Interpreter<'a, 's> {
             gs.line_width = width.abs();
         }
         // `Font [ref size]` selects a font like Tf does.
-        if let Some(Object::Array(font)) = get(self.doc, dict, b"Font") {
-            if let Some((Some(id), Some(_))) = font.first().map(|f| resolve_with_id(self.doc, f)) {
-                self.facts.used_fonts.insert(FontKey::Id(id));
-            }
+        if let Some(Object::Array(font)) = get(self.doc, dict, b"Font")
+            && let Some((Some(id), Some(_))) = font.first().map(|f| resolve_with_id(self.doc, f))
+        {
+            self.facts.used_fonts.insert(FontKey::Id(id));
         }
     }
 
     fn check_ext_gstate(&mut self, dict: &Dictionary, name: &[u8]) {
         let name = lossy(name);
-        if let Some(mask) = get(self.doc, dict, b"SMask") {
-            if !matches!(mask, Object::Name(none) if none == b"None") {
-                self.transparency(format!("graphics state /{name} sets a soft mask (SMask)"));
-            }
+        if let Some(mask) = get(self.doc, dict, b"SMask")
+            && !matches!(mask, Object::Name(none) if none == b"None")
+        {
+            self.transparency(format!("graphics state /{name} sets a soft mask (SMask)"));
         }
         for key in [&b"ca"[..], b"CA"] {
-            if let Some(alpha) = get_num(self.doc, dict, key) {
-                if alpha < 1.0 - 1.0e-6 {
-                    self.transparency(format!(
-                        "graphics state /{name} sets opacity {} = {alpha:.3}",
-                        lossy(key)
-                    ));
-                }
+            if let Some(alpha) = get_num(self.doc, dict, key)
+                && alpha < 1.0 - 1.0e-6
+            {
+                self.transparency(format!(
+                    "graphics state /{name} sets opacity {} = {alpha:.3}",
+                    lossy(key)
+                ));
             }
         }
         let blend = match get(self.doc, dict, b"BM") {
@@ -872,10 +985,11 @@ impl<'a, 's> Interpreter<'a, 's> {
             }),
             _ => None,
         };
-        if let Some(mode) = blend {
-            if mode != b"Normal" && mode != b"Compatible" {
-                self.transparency(format!("graphics state /{name} sets blend mode {}", lossy(mode)));
-            }
+        if let Some(mode) = blend
+            && mode != b"Normal"
+            && mode != b"Compatible"
+        {
+            self.transparency(format!("graphics state /{name} sets blend mode {}", lossy(mode)));
         }
     }
 
@@ -896,7 +1010,13 @@ impl<'a, 's> Interpreter<'a, 's> {
 
     // ---- XObjects ----------------------------------------------------------------------
 
-    fn do_xobject(&mut self, name: &[u8], resources: Option<&'a Dictionary>, gs: &GState, depth: usize) {
+    fn do_xobject(
+        &mut self,
+        name: &[u8],
+        resources: Option<&'a Dictionary>,
+        gs: &GState,
+        depth: usize,
+    ) {
         let Some(entry) = self.resource(resources, b"XObject", name) else {
             self.missing_resource("XObject", name);
             return;
@@ -909,7 +1029,10 @@ impl<'a, 's> Interpreter<'a, 's> {
             Some(b"Image") => self.image_xobject(name, stream, resources, gs, depth),
             Some(b"Form") => {
                 if self.is_transparency_group(&stream.dict) {
-                    self.transparency(format!("form XObject /{} is a transparency group", lossy(name)));
+                    self.transparency(format!(
+                        "form XObject /{} is a transparency group",
+                        lossy(name)
+                    ));
                 }
                 let what = format!("form XObject /{}", lossy(name));
                 self.run_nested(id, stream, resources, Some(gs), depth, &what, false);
@@ -940,21 +1063,29 @@ impl<'a, 's> Interpreter<'a, 's> {
         is_pattern: bool,
     ) {
         if depth >= MAX_FORM_DEPTH {
-            self.budget.report_exhausted(self.sink, Some(self.page), "form XObjects nested too deeply");
+            self.budget.report_exhausted(
+                self.sink,
+                Some(self.page),
+                "form XObjects nested too deeply",
+            );
             return;
         }
-        if let Some(id) = id {
-            if self.active.contains(&id) {
-                self.sink.error(
-                    codes::CONTENT_INVALID,
-                    Some(self.page),
-                    format!("{what} draws itself (reference cycle)"),
-                );
-                return;
-            }
+        if let Some(id) = id
+            && self.active.contains(&id)
+        {
+            self.sink.error(
+                codes::CONTENT_INVALID,
+                Some(self.page),
+                format!("{what} draws itself (reference cycle)"),
+            );
+            return;
         }
         if !self.budget.take_nested_run() {
-            self.budget.report_exhausted(self.sink, Some(self.page), "too many form XObject or pattern invocations");
+            self.budget.report_exhausted(
+                self.sink,
+                Some(self.page),
+                "too many form XObject or pattern invocations",
+            );
             return;
         }
         let Some(data) = self.decode(stream, what) else { return };
@@ -1033,7 +1164,9 @@ impl<'a, 's> Interpreter<'a, 's> {
             self.transparency(format!("image {display} has a soft mask (alpha channel)"));
         }
         if get_int(self.doc, dict, b"SMaskInData").is_some_and(|v| v > 0) {
-            self.transparency(format!("image {display} carries transparency in its JPEG 2000 data"));
+            self.transparency(format!(
+                "image {display} carries transparency in its JPEG 2000 data"
+            ));
         }
         let bits = if is_mask { Some(1) } else { get_int(self.doc, dict, b"BitsPerComponent") };
         if !is_mask {
@@ -1052,7 +1185,12 @@ impl<'a, 's> Interpreter<'a, 's> {
         });
     }
 
-    fn inline_image(&mut self, image: &InlineImage, resources: Option<&'a Dictionary>, gs: &GState) {
+    fn inline_image(
+        &mut self,
+        image: &InlineImage,
+        resources: Option<&'a Dictionary>,
+        gs: &GState,
+    ) {
         let color_space = if image.image_mask {
             self.paint(gs, resources, true, false, self.image_geometry(gs), 0);
             "ImageMask".to_string()
@@ -1063,7 +1201,9 @@ impl<'a, 's> Interpreter<'a, 's> {
                     ColorSpace::Indexed(Box::new(ColorSpace::from_name(self.doc, base, resources)))
                 }
                 InlineColorSpace::None => ColorSpace::Unknown("missing".to_string()),
-                InlineColorSpace::Other => ColorSpace::Unknown("unsupported inline colour space".to_string()),
+                InlineColorSpace::Other => {
+                    ColorSpace::Unknown("unsupported inline colour space".to_string())
+                }
             };
             self.note_space(&space, "an inline image");
             space.describe()
@@ -1083,22 +1223,39 @@ impl<'a, 's> Interpreter<'a, 's> {
 
     /// The bounding box of the unit square an image is painted into.
     fn image_geometry(&self, gs: &GState) -> Geometry {
+        self.unit_square_geometry(&gs.ctm)
+    }
+
+    /// The bounding box of the unit square under `ctm`.
+    fn unit_square_geometry(&self, ctm: &Matrix) -> Geometry {
         if self.in_pattern > 0 {
             return Geometry::Unknown;
         }
-        let corners = [gs.ctm.apply(0.0, 0.0), gs.ctm.apply(1.0, 0.0), gs.ctm.apply(1.0, 1.0), gs.ctm.apply(0.0, 1.0)];
-        let mut bbox = RectPt { x0: f64::INFINITY, y0: f64::INFINITY, x1: f64::NEG_INFINITY, y1: f64::NEG_INFINITY };
+        let corners =
+            [ctm.apply(0.0, 0.0), ctm.apply(1.0, 0.0), ctm.apply(1.0, 1.0), ctm.apply(0.0, 1.0)];
+        let mut bbox = RectPt {
+            x0: f64::INFINITY,
+            y0: f64::INFINITY,
+            x1: f64::NEG_INFINITY,
+            y1: f64::NEG_INFINITY,
+        };
         for (x, y) in corners {
             if !(x.is_finite() && y.is_finite()) {
                 return Geometry::Unknown;
             }
-            bbox = RectPt { x0: bbox.x0.min(x), y0: bbox.y0.min(y), x1: bbox.x1.max(x), y1: bbox.y1.max(y) };
+            bbox = RectPt {
+                x0: bbox.x0.min(x),
+                y0: bbox.y0.min(y),
+                x1: bbox.x1.max(x),
+                y1: bbox.y1.max(y),
+            };
         }
         Geometry::Bbox(bbox)
     }
 
     fn place_image(&mut self, placement: Placement) {
-        let Placement { name, width, height, bits, color_space, filters, soft_mask, inline, ctm } = placement;
+        let Placement { name, width, height, bits, color_space, filters, soft_mask, inline, ctm } =
+            placement;
         const MAX_SIDE: i64 = 1_000_000;
         let (Some(width_px), Some(height_px)) = (
             width.filter(|w| (1..=MAX_SIDE).contains(w)).and_then(|w| u32::try_from(w).ok()),
@@ -1113,7 +1270,10 @@ impl<'a, 's> Interpreter<'a, 's> {
         };
         let width_mm = ctm.scale_x() * self.mm_per_unit;
         let height_mm = ctm.scale_y() * self.mm_per_unit;
-        if !(width_mm.is_finite() && height_mm.is_finite()) || width_mm < 1.0e-4 || height_mm < 1.0e-4 {
+        if !(width_mm.is_finite() && height_mm.is_finite())
+            || width_mm < 1.0e-4
+            || height_mm < 1.0e-4
+        {
             self.sink.warning(
                 codes::IMAGE_INVALID,
                 Some(self.page),
@@ -1121,8 +1281,24 @@ impl<'a, 's> Interpreter<'a, 's> {
             );
             return;
         }
+        if let Geometry::Bbox(bbox) = self.unit_square_geometry(&ctm) {
+            self.note_painted(bbox);
+        }
         let ppi_x = f64::from(width_px) / (width_mm / 25.4);
         let ppi_y = f64::from(height_px) / (height_mm / 25.4);
+        // Pictures (anything beyond a few pixels a side) must keep their proportions.
+        let stretch = (ppi_x / ppi_y).max(ppi_y / ppi_x);
+        if width_px > 2 && height_px > 2 && stretch > 1.01 {
+            self.sink.warning(
+                codes::IMAGE_DISTORTED,
+                Some(self.page),
+                format!(
+                    "image {name} is scaled unevenly ({ppi_x:.0} × {ppi_y:.0} ppi): \
+                     it is stretched by {:.0} % in one direction",
+                    (stretch - 1.0) * 100.0
+                ),
+            );
+        }
         // A single row or column of pixels has no resolution across it (gradient strips,
         // one-pixel colour swatches).
         let mut effective = f64::INFINITY;
@@ -1147,7 +1323,9 @@ impl<'a, 's> Interpreter<'a, 's> {
             self.sink.warning(
                 codes::LIMIT_EXCEEDED,
                 Some(self.page),
-                format!("more than {MAX_IMAGES_PER_PAGE} image placements; only the first are listed"),
+                format!(
+                    "more than {MAX_IMAGES_PER_PAGE} image placements; only the first are listed"
+                ),
             );
             return;
         }
@@ -1169,9 +1347,15 @@ impl<'a, 's> Interpreter<'a, 's> {
 
     /// For losslessly stored 8-bit CMYK images, measures the share of pixels above the
     /// total ink limit.
-    fn check_image_ink(&mut self, stream: &Stream, display: &str, filters: &[String], bits: Option<i64>) {
+    fn check_image_ink(
+        &mut self,
+        stream: &Stream,
+        display: &str,
+        filters: &[String],
+        bits: Option<i64>,
+    ) {
         /// Share of pixels above the limit that triggers the warning.
-        const MAX_SHARE: f64 = 0.01;
+        const MAX_SHARE: f64 = 0.005;
         /// Largest decoded image examined.
         const MAX_BYTES: usize = 32 * 1024 * 1024;
         let Some(limit) = self.expect.max_total_ink_percent else { return };
@@ -1191,7 +1375,9 @@ impl<'a, 's> Interpreter<'a, 's> {
         ) else {
             return;
         };
-        let Some(expected) = width.checked_mul(height).and_then(|n| n.checked_mul(4)) else { return };
+        let Some(expected) = width.checked_mul(height).and_then(|n| n.checked_mul(4)) else {
+            return;
+        };
         if expected == 0 || expected > MAX_BYTES.min(self.budget.stream_limit()) {
             return;
         }
@@ -1204,7 +1390,9 @@ impl<'a, 's> Interpreter<'a, 's> {
         let limit_units = f64::from(limit) * 255.0 / 100.0;
         let over = data
             .chunks_exact(4)
-            .filter(|px| f64::from(px.iter().map(|&v| u32::from(v)).sum::<u32>()) > limit_units + 0.5)
+            .filter(|px| {
+                f64::from(px.iter().map(|&v| u32::from(v)).sum::<u32>()) > limit_units + 0.5
+            })
             .count();
         // Pixel counts are far below 2^52.
         #[allow(clippy::cast_precision_loss)]
@@ -1224,12 +1412,11 @@ impl<'a, 's> Interpreter<'a, 's> {
     // ---- QR candidates -----------------------------------------------------------------
 
     fn flush_rect_run(&mut self) {
-        if self.rect_run.len() >= qr::MIN_RECTS {
-            if let Some(candidate) = qr::detect(&self.rect_run, self.mm_per_unit) {
-                if self.facts.qr_candidates.len() < 64 {
-                    self.facts.qr_candidates.push(candidate);
-                }
-            }
+        if self.rect_run.len() >= qr::MIN_RECTS
+            && let Some(candidate) = qr::detect(&self.rect_run, self.mm_per_unit)
+            && self.facts.qr_candidates.len() < 64
+        {
+            self.facts.qr_candidates.push(candidate);
         }
         self.rect_run.clear();
     }

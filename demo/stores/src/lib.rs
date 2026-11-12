@@ -28,6 +28,7 @@
 //! # }
 //! ```
 #![forbid(unsafe_code)]
+#![cfg_attr(test, allow(clippy::unwrap_used))]
 
 use std::sync::Arc;
 
@@ -54,14 +55,12 @@ pub use state::AppState;
 ///
 /// Never fails: configuration problems (an unusable collaborator URL, assets that could not
 /// be generated) are reported on the store's home page and disable the affected feature.
-#[must_use]
 pub fn app(config: StoreConfig) -> axum::Router {
     app_with_state(AppState::new(config))
 }
 
 /// Builds the storefront around an existing state, for callers that want to inspect it
 /// ([`AppState::snapshot`]) without going through the HTTP test hook.
-#[must_use]
 pub fn app_with_state(state: Arc<AppState>) -> axum::Router {
     routes::router(state)
 }

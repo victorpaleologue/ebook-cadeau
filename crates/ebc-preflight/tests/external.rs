@@ -78,7 +78,8 @@ fn qpdf_accepts_the_reference_fixture() {
     }
     let scratch = Scratch::new("qpdf-check");
     let mut fixture = Fixture::reference();
-    for (name, bytes) in [("classic.pdf", fixture.bytes()), ("modern.pdf", fixture.bytes_modern())] {
+    for (name, bytes) in [("classic.pdf", fixture.bytes()), ("modern.pdf", fixture.bytes_modern())]
+    {
         let path = scratch.path(name);
         std::fs::write(&path, bytes).unwrap();
         let (ok, output) = run(Command::new("qpdf").arg("--check").arg(&path));
@@ -151,8 +152,11 @@ fn files_encrypted_by_qpdf_are_flagged() {
             // No password needed: the content was read, and nothing else is wrong with it —
             // except that 256-bit encryption makes qpdf raise the file to PDF 1.7, which a
             // PDF/X-4 file must not be.
-            let expected: &[&'static str] =
-                if bits == "256" { &[c::ENCRYPTED, c::PDFX_VERSION_MISMATCH] } else { &[c::ENCRYPTED] };
+            let expected: &[&'static str] = if bits == "256" {
+                &[c::ENCRYPTED, c::PDFX_VERSION_MISMATCH]
+            } else {
+                &[c::ENCRYPTED]
+            };
             assert_eq!(codes(&report), set(expected), "{name}: {:#?}", report.findings);
             assert_eq!(report.pages.len(), 2, "{name}");
             assert_eq!(report.pages[0].images.len(), 1, "{name}");
@@ -177,8 +181,12 @@ fn page_boxes_agree_with_pdfinfo() {
     let report = preflight(&input, &card_expectations());
     let page = &report.pages[0];
     let poppler_box = |label: &str| -> [f64; 4] {
-        let line = text.lines().find(|l| l.starts_with(label)).unwrap_or_else(|| panic!("no {label} in\n{text}"));
-        let numbers: Vec<f64> = line[label.len()..].split_whitespace().map(|n| n.parse().unwrap()).collect();
+        let line = text
+            .lines()
+            .find(|l| l.starts_with(label))
+            .unwrap_or_else(|| panic!("no {label} in\n{text}"));
+        let numbers: Vec<f64> =
+            line[label.len()..].split_whitespace().map(|n| n.parse().unwrap()).collect();
         [numbers[0], numbers[1], numbers[2], numbers[3]]
     };
     let ours = |b: ebc_preflight::BoxMm| [b.x0, b.y0, b.x1, b.y1].map(|mm| mm * common::MM);
@@ -205,7 +213,8 @@ fn pdffonts(path: &Path) -> Vec<(String, bool, bool)> {
             let tokens: Vec<&str> = line.split_whitespace().collect();
             // name … emb sub uni object-number generation
             let n = tokens.len();
-            (n >= 7).then(|| (tokens[0].to_string(), tokens[n - 5] == "yes", tokens[n - 4] == "yes"))
+            (n >= 7)
+                .then(|| (tokens[0].to_string(), tokens[n - 5] == "yes", tokens[n - 4] == "yes"))
         })
         .collect()
 }
@@ -254,17 +263,36 @@ showpage
 
 fn ghostscript(scratch: &Scratch, name: &str, embed_fonts: bool) -> PathBuf {
     let source = scratch.path("input.ps");
-    let gradient = |n: usize| -> String { (0..n).map(|i| format!("{:02x}", (i * 7) % 256)).collect() };
-    let postscript = POSTSCRIPT.replace("IMAGE_SMALL", &gradient(100)).replace("IMAGE_LARGE", &gradient(120 * 90));
+    let gradient =
+        |n: usize| -> String { (0..n).map(|i| format!("{:02x}", (i * 7) % 256)).collect() };
+    let postscript = POSTSCRIPT
+        .replace("IMAGE_SMALL", &gradient(100))
+        .replace("IMAGE_LARGE", &gradient(120 * 90));
     std::fs::write(&source, postscript).unwrap();
     let output = scratch.path(name);
     let mut command = Command::new("gs");
     command
-        .args(["-q", "-dNOPAUSE", "-dBATCH", "-dSAFER", "-sDEVICE=pdfwrite", "-dCompatibilityLevel=1.4"])
-        .args(["-dDownsampleGrayImages=false", "-dAutoFilterGrayImages=false", "-dGrayImageFilter=/FlateEncode"])
+        .args([
+            "-q",
+            "-dNOPAUSE",
+            "-dBATCH",
+            "-dSAFER",
+            "-sDEVICE=pdfwrite",
+            "-dCompatibilityLevel=1.4",
+        ])
+        .args([
+            "-dDownsampleGrayImages=false",
+            "-dAutoFilterGrayImages=false",
+            "-dGrayImageFilter=/FlateEncode",
+        ])
         .arg(format!("-sOutputFile={}", output.display()));
     if embed_fonts {
-        command.args(["-dEmbedAllFonts=true", "-dSubsetFonts=true", "-c", "<< /NeverEmbed [ ] >> setdistillerparams"]);
+        command.args([
+            "-dEmbedAllFonts=true",
+            "-dSubsetFonts=true",
+            "-c",
+            "<< /NeverEmbed [ ] >> setdistillerparams",
+        ]);
     }
     let (ok, text) = run(command.arg("-f").arg(&source));
     assert!(ok, "gs failed:\n{text}");
@@ -291,7 +319,12 @@ fn ghostscript_output_fonts_agree_with_pdffonts() {
         assert_eq!(ours.len(), 2, "{name}");
         assert!(report.pages[0].fonts.iter().all(|f| f.used), "{name}");
         let all_embedded = ours.iter().all(|(_, embedded, _)| *embedded);
-        assert_eq!(report.has(c::FONT_NOT_EMBEDDED), !all_embedded, "{name}: {:#?}", report.findings);
+        assert_eq!(
+            report.has(c::FONT_NOT_EMBEDDED),
+            !all_embedded,
+            "{name}: {:#?}",
+            report.findings
+        );
         saw_embedded |= all_embedded;
         saw_missing |= !all_embedded;
     }
@@ -320,16 +353,32 @@ fn ghostscript_output_images_agree_with_pdfimages() {
         assert_eq!(mine.color_space, "DeviceGray");
     }
     // The numbers themselves: 10 px on one inch; 120 × 90 px on half an inch by one inch.
-    assert!((ours[0].ppi_x - 10.0).abs() < 0.1 && (ours[0].ppi_y - 10.0).abs() < 0.1, "{:?}", ours[0]);
-    assert!((ours[1].ppi_x - 240.0).abs() < 0.5 && (ours[1].ppi_y - 90.0).abs() < 0.5, "{:?}", ours[1]);
-    assert!((ours[1].width_mm - 12.7).abs() < 0.05 && (ours[1].height_mm - 25.4).abs() < 0.05, "{:?}", ours[1]);
+    assert!(
+        (ours[0].ppi_x - 10.0).abs() < 0.1 && (ours[0].ppi_y - 10.0).abs() < 0.1,
+        "{:?}",
+        ours[0]
+    );
+    assert!(
+        (ours[1].ppi_x - 240.0).abs() < 0.5 && (ours[1].ppi_y - 90.0).abs() < 0.5,
+        "{:?}",
+        ours[1]
+    );
+    assert!(
+        (ours[1].width_mm - 12.7).abs() < 0.05 && (ours[1].height_mm - 25.4).abs() < 0.05,
+        "{:?}",
+        ours[1]
+    );
 
     // And the verdicts a printer would reach on this file.
     let low_res: Vec<_> = report.findings.iter().filter(|f| f.code == c::IMAGE_LOW_RES).collect();
     assert_eq!(low_res.len(), 2, "10 ppi and 90 ppi are both below 150: {:#?}", report.findings);
     assert!(report.has(c::COLOR_RGB), "the red text is DeviceRGB: {:#?}", report.findings);
     assert!(report.has(c::NO_OUTPUT_INTENT));
-    assert!(!report.has(c::CONTENT_INVALID) && !report.has(c::XREF_DAMAGED), "{:#?}", report.findings);
+    assert!(
+        !report.has(c::CONTENT_INVALID) && !report.has(c::XREF_DAMAGED),
+        "{:#?}",
+        report.findings
+    );
     let spaces = &report.pages[0].color_spaces;
     for expected in ["DeviceCMYK", "DeviceGray", "DeviceRGB"] {
         assert!(spaces.iter().any(|s| s == expected), "{expected} missing from {spaces:?}");

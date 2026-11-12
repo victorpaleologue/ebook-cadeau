@@ -52,7 +52,7 @@ pub(crate) fn detect(rects: &[Rect], mm_per_unit: f64) -> Option<QrCandidate> {
     // In range, whole and positive: the cast is exact.
     #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
     let modules = modules_f as u32;
-    if (modules - 21) % 4 != 0 {
+    if !(modules - 21).is_multiple_of(4) {
         return None;
     }
     // The module pitch, which may differ slightly from the thinnest rectangle when the
@@ -88,8 +88,10 @@ pub(crate) fn axis_aligned_rect(points: &[(f64, f64)]) -> Option<Rect> {
         _ if points.len() == 4 => points,
         _ => return None,
     };
-    let horizontal = |a: (f64, f64), b: (f64, f64)| (a.1 - b.1).abs() <= EPS && (a.0 - b.0).abs() > EPS;
-    let vertical = |a: (f64, f64), b: (f64, f64)| (a.0 - b.0).abs() <= EPS && (a.1 - b.1).abs() > EPS;
+    let horizontal =
+        |a: (f64, f64), b: (f64, f64)| (a.1 - b.1).abs() <= EPS && (a.0 - b.0).abs() > EPS;
+    let vertical =
+        |a: (f64, f64), b: (f64, f64)| (a.0 - b.0).abs() <= EPS && (a.1 - b.1).abs() > EPS;
     let (p0, p1, p2, p3) = (points[0], points[1], points[2], points[3]);
     let hvhv = horizontal(p0, p1) && vertical(p1, p2) && horizontal(p2, p3) && vertical(p3, p0);
     let vhvh = vertical(p0, p1) && horizontal(p1, p2) && vertical(p2, p3) && horizontal(p3, p0);
@@ -125,20 +127,21 @@ pub(crate) mod tests {
         finder(size - 7, 0);
         finder(0, size - 7);
         let mut state = 0x9E37_79B9_7F4A_7C15_u64;
-        for y in 0..size {
-            for x in 0..size {
-                let in_finder = (x < 8 && y < 8) || (x >= size - 8 && y < 8) || (x < 8 && y >= size - 8);
+        for (y, row) in m.iter_mut().enumerate() {
+            for (x, cell) in row.iter_mut().enumerate() {
+                let in_finder =
+                    (x < 8 && y < 8) || (x >= size - 8 && y < 8) || (x < 8 && y >= size - 8);
                 if in_finder {
                     continue;
                 }
                 if y == 6 || x == 6 {
-                    m[y][x] = (x + y) % 2 == 0;
+                    *cell = (x + y) % 2 == 0;
                     continue;
                 }
                 state ^= state << 13;
                 state ^= state >> 7;
                 state ^= state << 17;
-                m[y][x] = state & 1 == 1;
+                *cell = state & 1 == 1;
             }
         }
         m
@@ -202,11 +205,16 @@ pub(crate) mod tests {
         // Too few rectangles.
         assert!(detect(&[(0.0, 0.0, 1.0, 1.0); 5], 1.0).is_none());
         // A colour bar: a row of squares is not square overall.
-        let bar: Vec<Rect> = (0..30).map(|i| (f64::from(i) * 2.0, 0.0, f64::from(i) * 2.0 + 1.0, 1.0)).collect();
+        let bar: Vec<Rect> =
+            (0..30).map(|i| (f64::from(i) * 2.0, 0.0, f64::from(i) * 2.0 + 1.0, 1.0)).collect();
         assert!(detect(&bar, 1.0).is_none());
         // A square grid with a side that is not 21 + 4n modules.
         let grid: Vec<Rect> = (0..22)
-            .flat_map(|y| (0..22).map(move |x| (f64::from(x), f64::from(y), f64::from(x) + 1.0, f64::from(y) + 1.0)))
+            .flat_map(|y| {
+                (0..22).map(move |x| {
+                    (f64::from(x), f64::from(y), f64::from(x) + 1.0, f64::from(y) + 1.0)
+                })
+            })
             .collect();
         assert!(detect(&grid, 1.0).is_none());
         // Rectangles off the module grid.
@@ -226,10 +234,14 @@ pub(crate) mod tests {
         let r = axis_aligned_rect(&[(0.0, 0.0), (2.0, 0.0), (2.0, 1.0), (0.0, 1.0)]).unwrap();
         assert_eq!(r, (0.0, 0.0, 2.0, 1.0));
         // Clockwise, starting elsewhere, explicitly closed.
-        let r = axis_aligned_rect(&[(2.0, 1.0), (2.0, 0.0), (0.0, 0.0), (0.0, 1.0), (2.0, 1.0)]).unwrap();
+        let r = axis_aligned_rect(&[(2.0, 1.0), (2.0, 0.0), (0.0, 0.0), (0.0, 1.0), (2.0, 1.0)])
+            .unwrap();
         assert_eq!(r, (0.0, 0.0, 2.0, 1.0));
         // Not closed back to the start.
-        assert!(axis_aligned_rect(&[(0.0, 0.0), (2.0, 0.0), (2.0, 1.0), (0.0, 1.0), (0.5, 0.5)]).is_none());
+        assert!(
+            axis_aligned_rect(&[(0.0, 0.0), (2.0, 0.0), (2.0, 1.0), (0.0, 1.0), (0.5, 0.5)])
+                .is_none()
+        );
         // A parallelogram, a triangle, a line, a zero-width rectangle.
         assert!(axis_aligned_rect(&[(0.0, 0.0), (2.0, 0.0), (3.0, 1.0), (1.0, 1.0)]).is_none());
         assert!(axis_aligned_rect(&[(0.0, 0.0), (2.0, 0.0), (2.0, 1.0)]).is_none());

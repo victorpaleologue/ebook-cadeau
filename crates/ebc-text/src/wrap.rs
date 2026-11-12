@@ -3,13 +3,13 @@
 use std::borrow::Cow;
 use std::ops::Range;
 
+use ebc_scene::MM_PER_PT;
 use unicode_linebreak::{BreakOpportunity, linebreaks};
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::font::Font;
 use crate::guard::contain;
 use crate::shape::{ShapeOptions, sane_size, shape_units};
-use ebc_scene::MM_PER_PT;
 
 /// Breaks `text` into lines at most `max_width` millimetres wide when set in `font` at
 /// `size_pt`, and returns the lines ready to be shaped and drawn one below the other.

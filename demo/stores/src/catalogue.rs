@@ -312,7 +312,7 @@ pub fn is_valid_isbn13(digits: &str) -> bool {
         .enumerate()
         .map(|(i, b)| u32::from(b - b'0') * if i % 2 == 0 { 1 } else { 3 })
         .sum();
-    sum % 10 == 0
+    sum.is_multiple_of(10)
 }
 
 #[cfg(test)]

@@ -197,9 +197,12 @@ impl fmt::Debug for Clock {
     }
 }
 
+/// A function that fills a buffer with random bytes.
+type FillFn = dyn Fn(&mut [u8]) -> Result<(), StoreError> + Send + Sync;
+
 /// Injected source of random bytes (session identifiers, salts, device tokens).
 #[derive(Clone)]
-pub struct Entropy(Arc<dyn Fn(&mut [u8]) -> Result<(), StoreError> + Send + Sync>);
+pub struct Entropy(Arc<FillFn>);
 
 impl Entropy {
     /// The operating system's CSPRNG.

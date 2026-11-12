@@ -22,22 +22,31 @@
 //! # Typical use
 //!
 //! ```
-//! use ebc_layout::{CardFormat, Fit, PrintProfile, marks, new_page, place_image, safe_rect};
+//! use ebc_layout::{
+//!     CardFormat, Fit, PrintProfile, check_marks_fit, marks, new_page, place_image,
+//!     place_image_bleed, safe_rect,
+//! };
 //!
 //! let format = CardFormat::poche();                 // 110 x 178 mm covers, 10 mm spine
 //! let profile = PrintProfile::professional_eu();    // 3 mm bleed, marks, PDF/X-4
 //!
 //! let mut outside = new_page(&format, &profile)?;   // TrimBox 230 x 178 mm
 //! assert_eq!(outside.media_box().w, 230.0 + 2.0 * (3.0 + 10.0));
+//! check_marks_fit(&format, &profile)?;              // the cut and fold marks have room
 //!
-//! // Where the cover image goes: the front panel plus bleed on its outer edges.
-//! let front = format.outside().with_bleed(profile.bleed).right;
-//! let image_rect = place_image((1400, 2200), front, Fit::Cover);
-//! assert!(image_rect.contains_rect(&front, 1e-9));
+//! // Where text — and, by default, the cover image — may go: 5 mm inside the panel.
+//! let safe = safe_rect(format.front(), &profile);
+//! assert_eq!((safe.x, safe.w, safe.h), (125.0, 100.0, 168.0));
+//! // The whole cover, uncropped, letterboxed in that box on a flat ground.
+//! let image_rect = place_image((1400, 2200), safe, Fit::Contain);
+//! assert!(safe.contains_rect(&image_rect, 1e-9));
 //!
-//! // Where text may go on the back cover.
-//! let text_area = safe_rect(format.back(), &profile);
-//! assert_eq!(text_area.x, 4.0);
+//! // A full-bleed cover instead (only when the cover may be cropped): centred on the
+//! // panel, clipped to the panel plus bleed on its three outer edges.
+//! let clip = format.outside().with_bleed(profile.bleed).right;
+//! let image_rect = place_image_bleed((1400, 2200), format.front(), profile.bleed);
+//! assert!(image_rect.contains_rect(&clip, 1e-9));
+//! assert_eq!(image_rect.center().x, format.front().center().x);
 //!
 //! // ... add artwork to `outside.items`, then the marks on top:
 //! outside.items.push(marks(&format, &profile));
@@ -46,13 +55,16 @@
 //!
 //! # Profiles
 //!
-//! * [`PrintProfile::professional_eu`] — page = trim + 3 mm bleed + 10 mm slug with crop
-//!   marks, fold marks and registration targets in the registration colour.
-//! * [`PrintProfile::upload_eu`] — the same without marks or slug, for web-to-print
-//!   portals that reject marks.
+//! * [`PrintProfile::upload_eu`] — page = trim + 3 mm bleed, no marks: what web-to-print
+//!   portals want (most of them reject marks).
+//! * [`PrintProfile::professional_eu`] — the same plus a 10 mm slug with solid crop marks
+//!   and dashed fold marks in the registration colour, for printers working from a quote.
 //! * [`PrintProfile::home`] — the spread centred on an A4/Letter/… sheet with light grey
-//!   cut and fold guides kept inside the printable area. See [`new_page`] for the one
-//!   thing [`ebc_scene::Page`] cannot express there.
+//!   cut and fold guides and a scale ruler, all kept inside the printable area. Two
+//!   things the composer must do for it: print the duplex instruction
+//!   ([`SheetPlacement::duplex_flip`] — "flip on the short edge" for every preset), and
+//!   call [`check_marks_fit`]. See [`new_page`] for the one thing [`ebc_scene::Page`]
+//!   cannot express there: the page is not always the whole sheet.
 //!
 //! # Seeing it
 //!
@@ -77,13 +89,14 @@ mod profile;
 pub use error::LayoutError;
 pub use format::{CardFormat, Face, Panels};
 pub use guides::{GUIDES_LAYER, guides, info_entries, safe_panels, safe_rect, spine_safe_rect};
-pub use image::{Fit, effective_ppi, place_image, place_image_aligned};
+pub use image::{Fit, effective_ppi, place_image, place_image_aligned, place_image_bleed};
 pub use marks::{
-    CAPTION_MIN_HEIGHT_MM, COLOR_BAR_PATCHES, FOLD_GUIDE_DASH_MM, FOLD_GUIDE_MAX_MM,
-    FURNITURE_BAND_MAX_MM, MARKS_LAYER, MIN_MARK_LENGTH_MM, ScaleRuler, caption_areas, color_bar,
-    crop_marks, fold_marks, marks, registration_target_centers, registration_targets, scale_ruler,
+    CAPTION_MIN_HEIGHT_MM, COLOR_BAR_PATCHES, FOLD_GUIDE_MAX_MM, FOLD_MARK_DASH_MM,
+    FURNITURE_BAND_MAX_MM, MARKS_LAYER, MIN_MARK_LENGTH_MM, ScaleRuler, caption_areas,
+    check_marks_fit, color_bar, crop_marks, fold_marks, marks, registration_target_centers,
+    registration_targets, scale_ruler,
 };
-pub use page::{PageGeometry, SheetPlacement, new_page, new_page_for, page_geometry};
+pub use page::{DuplexFlip, PageGeometry, SheetPlacement, new_page, new_page_for, page_geometry};
 pub use profile::{
     GUIDE_GRAY_LEVEL, MAX_MARGIN_MM, MAX_MARK_WEIGHT_PT, MAX_SHEET_MM, MarkStyle, Marks,
     PrintProfile, Resolution, Sheet,

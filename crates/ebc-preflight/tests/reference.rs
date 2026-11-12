@@ -154,6 +154,13 @@ fn object_streams_and_xref_streams_give_the_same_report() {
 fn leading_junk_before_the_header_is_tolerated_but_only_a_little() {
     let mut fixture = Fixture::reference();
     let bytes = fixture.bytes();
+    // A few bytes (a mail gateway's banner, a byte-order mark): offsets still count from the
+    // header, so the file reads normally.
+    let mut near = b"\xEF\xBB\xBFX-Scanned: ok\r\n".to_vec();
+    near.extend_from_slice(&bytes);
+    let report = check(&near, &card_expectations()).unwrap();
+    assert!(report.findings.is_empty(), "{:#?}", report.findings);
+    assert_eq!(report.pages.len(), 2);
     // More than a kilobyte of junk: not a PDF any more, as far as printers are concerned.
     let mut far = vec![b'\n'; 2000];
     far.extend_from_slice(&bytes);

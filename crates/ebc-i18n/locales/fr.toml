@@ -1,0 +1,161 @@
+# French (fr-FR; also fr-BE, fr-CH, fr-LU) — eBook Cadeau interface strings.
+#
+# Source: docs/research/06-terminology.md, §5.1 and §5.2 for the keys listed there; the
+# rest was drafted to the same rules. NOT yet reviewed by a native bookseller (§6).
+#
+# Rules for editors (enforced by `cargo test -p ebc-i18n`):
+#   * no stored-value word (carte cadeau, chèque cadeau, bon d'achat…): see src/lint.rs;
+#   * the printed card uses the infinitive and no pronoun; screens address the reader
+#     with "vous"; buttons are in the first person;
+#   * a no-break space, written  , before ? ! : ; — typographic apostrophe ’;
+#   * `{placeholders}` must be the same in every language file;
+#   * the card never says "QR": printed steps say « ce code ».
+
+[meta]
+language = "fr-FR"
+review = "unreviewed"   # unreviewed | provisional | reviewed
+reviewed_by = ""
+
+[strings]
+# --- Product and checkout -------------------------------------------------------------
+product_name = "eBook Cadeau"
+product_tagline = "Un livre numérique à offrir, comme un vrai livre."
+checkout_option = "Offrir cet ebook"
+checkout_option_help = "Une carte en forme de livre, à imprimer chez soi ou envoyée par la poste. La personne qui la reçoit scanne le code et lit le livre sur liseuse, tablette ou téléphone."
+delivery_home = "Carte à imprimer chez moi (gratuit)"
+delivery_post = "Carte imprimée et envoyée par la poste"
+howto_title = "Offrir un ebook"
+
+# --- The printed card -----------------------------------------------------------------
+card_headline = "Ce livre est un cadeau"
+card_headline_formal = "{name} vous offre ce livre"
+card_headline_informal = "{name} t’offre ce livre"
+card_from = "De la part de {name}"
+card_to = "Pour {name}"
+card_how_to = "Pour le lire"
+card_steps_1 = "Scanner ce code avec l’appareil photo d’un téléphone."
+card_steps_2 = "Choisir où lire : liseuse, tablette ou téléphone."
+card_steps_3 = "Le livre arrive. Bonne lecture !"
+card_steps_2_reseller = "Se connecter à son compte {reseller}, ou en créer un."
+card_steps_3_reseller = "Le livre apparaît dans la bibliothèque, sur la liseuse et l’application."
+card_no_phone = "Sans téléphone ? Sur la liseuse ou un ordinateur, ouvrir le navigateur, aller sur {host} et saisir le code de cette carte."
+code_label = "Code"
+card_paid_line = "Ce livre numérique est déjà payé : il ne reste qu’à le lire, sur liseuse, tablette ou téléphone."
+card_legal_line = "{title}, {author}. Un exemplaire numérique, déjà payé : rien à régler."
+card_legal_line_no_author = "{title}. Un exemplaire numérique, déjà payé : rien à régler."
+card_collect_before = "À récupérer avant le {date}."
+card_no_expiry = "Sans date limite."
+card_help = "Une aide ? {url}"
+card_back_default = "Ce livre est numérique. Ouvrir cette carte pour le recevoir sur liseuse, tablette ou téléphone."
+fold_here = "Plier ici"
+cut_here = "Couper ici"
+printed_with = "Carte créée avec {product}"
+ebook_word = "livre numérique"
+ereader_word = "liseuse"
+qr_word = "QR code"
+
+# --- Redemption pages -----------------------------------------------------------------
+redeem_title = "Recevoir votre livre"
+redeem_intro = "Saisissez le code imprimé à l’intérieur de votre carte."
+redeem_cta = "Récupérer mon livre"
+redeem_gift_from = "{name} vous offre ce livre."
+redeem_gift_anonymous = "Ce livre est un cadeau pour vous."
+redeem_reveal_on = "Ce cadeau pourra être ouvert le {date}."
+claimed_once = "Déjà récupéré une fois, le {date}."
+claimed_times = "Déjà récupéré {count} fois, la dernière le {date}."
+choose_device = "Où souhaitez-vous lire ?"
+device_this = "Sur cet appareil"
+device_ereader = "Sur une liseuse"
+device_phone_tablet = "Sur un téléphone ou une tablette"
+device_computer = "Sur un ordinateur"
+download_cta = "Télécharger le livre"
+read_now_cta = "Lire maintenant"
+send_to_ereader_cta = "Envoyer vers ma liseuse"
+add_to_library_cta = "Ajouter à ma bibliothèque"
+continue_at_store = "Continuer sur {reseller}"
+already_in_account = "Ce livre est déjà dans un compte {reseller}."
+ereader_browser_hint = "Sur votre liseuse, ouvrez le navigateur, allez sur {host} et saisissez le code de la carte."
+pair_instructions = "Sur votre liseuse, ouvrez {url} dans le navigateur et saisissez ce code."
+pair_expires = "Ce code fonctionne une seule fois, pendant {minutes} minutes."
+pair_form_intro = "Saisissez le code affiché sur votre téléphone."
+email_label = "Adresse e-mail"
+send_cta = "Envoyer"
+sent_confirmation = "C’est envoyé. Le livre arrivera sur la liseuse d’ici quelques minutes."
+already_redeemed = "Ce livre a déjà été récupéré. Vous pouvez le télécharger à nouveau."
+enjoy_reading = "Bonne lecture !"
+error_code_typo = "Ce code contient une faute de frappe. Vérifiez-le et réessayez."
+error_code_format = "Le code comporte {count} lettres, sans chiffre ni voyelle."
+error_code_unknown = "Ce code est inconnu. Vérifiez-le sur votre carte."
+error_pair_invalid = "Ce code n’est pas reconnu ou n’est plus actif. Demandez-en un nouveau sur votre téléphone."
+error_gift_expired = "Ce cadeau n’est plus disponible : sa date limite est dépassée."
+error_gift_cancelled = "Ce cadeau a été annulé. Contactez la personne qui vous l’a offert."
+error_gift_reissued = "Ce code a été remplacé par un nouveau. Demandez-le à la personne qui vous a offert ce livre."
+error_gift_exhausted = "Ce livre a déjà été téléchargé le nombre maximal de fois."
+error_too_many_attempts = "Trop de tentatives. Réessayez dans quelques minutes."
+attempts_remaining = "Essais restants : {count}."
+retry_after_minutes = "Nouvel essai possible dans {minutes} min."
+error_generic = "Une erreur est survenue. Réessayez plus tard."
+# French has no settled word for "redeem": the plain verb is used everywhere, never « échanger ».
+meta_redeem_title = "Récupérer un livre reçu en cadeau"
+meta_redeem_description = "Vous avez reçu une carte en forme de livre ? Saisissez son code pour récupérer votre livre numérique et le lire sur liseuse, tablette ou téléphone."
+help_redeem_heading = "Comment récupérer mon livre ?"
+
+# --- Card creator -----------------------------------------------------------------------
+create_title = "Créer un eBook Cadeau"
+field_isbn = "ISBN du livre"
+field_title = "Titre"
+field_author = "Auteur"
+field_giver = "De la part de"
+field_recipient = "Pour"
+field_message = "Message personnel"
+field_cover = "Image de couverture"
+field_file = "Fichier du livre (EPUB ou PDF)"
+lookup_cta = "Rechercher"
+generate_cta = "Créer la carte"
+download_pdf_cta = "Télécharger le PDF"
+print_at_home_cta = "Imprimer chez moi"
+order_print_cta = "Commander l’impression"
+preview_label = "Aperçu"
+spine_label = "Dos"
+front_label = "Première de couverture"
+back_label = "Quatrième de couverture"
+inside_label = "Intérieur"
+rights_basis_label = "À quel titre distribuez-vous ce livre ?"
+rights_own_work = "C’est mon propre ouvrage"
+rights_public_domain = "Il est dans le domaine public"
+rights_open_licence = "Il est sous licence libre"
+rights_licensed_distributor = "J’en suis le distributeur autorisé"
+rights_confirm = "Je confirme avoir le droit de distribuer ce fichier et d’utiliser cette image de couverture."
+upload_purchased_notice = "Un livre numérique acheté en boutique est une licence personnelle : il ne peut pas être transmis ici. Pour l’offrir, utilisez la fonction cadeau de la boutique."
+cover_not_found = "Aucune couverture trouvée. Importez une image ou utilisez la couverture typographique."
+isbn_invalid = "Cet ISBN n’est pas valide."
+book_not_found = "Aucun livre trouvé pour cet ISBN."
+loading = "Chargement…"
+language_label = "Langue"
+demo_notice = "Démonstration — boutique fictive, sans lien avec une enseigne réelle."
+
+# Used instead of the plain string when the value of the first placeholder starts with a
+# vowel sound: « De la part d’Élise ».
+[elided]
+card_from = "De la part d’{name}"
+
+# Whole-string variants for a tenant's `noun_style`. The default strings above use the
+# official noun (« livre numérique ») in running text and the trade noun (« ebook ») in
+# the option label.
+[style.trade]
+ebook_word = "ebook"
+product_tagline = "Un ebook à offrir, comme un vrai livre."
+card_paid_line = "Cet ebook est déjà payé : il ne reste qu’à le lire, sur liseuse, tablette ou téléphone."
+meta_redeem_description = "Vous avez reçu une carte en forme de livre ? Saisissez son code pour récupérer votre ebook et le lire sur liseuse, tablette ou téléphone."
+upload_purchased_notice = "Un ebook acheté en boutique est une licence personnelle : il ne peut pas être transmis ici. Pour l’offrir, utilisez la fonction cadeau de la boutique."
+
+[style.official]
+checkout_option = "Offrir ce livre numérique"
+howto_title = "Offrir un livre numérique"
+
+# Regional deltas, applied on top of the strings above for the matching language tag.
+[region.fr-CA]
+qr_word = "code QR"
+email_label = "Adresse courriel"
+checkout_option = "Offrir ce livre numérique"
+howto_title = "Offrir un livre numérique"

@@ -274,9 +274,9 @@ impl EmbeddedFont {
         }
     }
 
-    /// Advance width of `cid` in thousandths of an em, exactly as declared in the PDF.
-    pub(crate) fn width(&self, cid: u16) -> f32 {
-        self.widths.get(&cid).copied().unwrap_or(0.0)
+    /// Advance width of `cid` in thousandths of an em, exactly as declared in `/W`.
+    pub(crate) fn width(&self, cid: u16) -> f64 {
+        self.widths.get(&cid).copied().map_or(0.0, f64::from)
     }
 
     /// Writes the font objects and returns the reference of the Type 0 font dictionary.
@@ -600,7 +600,7 @@ mod tests {
         for glyph in &sorted {
             let cid = font.cid(*glyph).expect("mapped");
             let advance = f32::from(face.glyph_hor_advance(GlyphId(*glyph)).expect("advance"));
-            assert!((font.width(cid) - advance * 1000.0 / upm).abs() < 1e-3);
+            assert!((font.width(cid) - f64::from(advance * 1000.0 / upm)).abs() < 1e-3);
         }
         assert_eq!(font.to_unicode.len(), sorted.len());
 

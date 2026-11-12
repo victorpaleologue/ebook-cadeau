@@ -56,7 +56,23 @@ pub enum LayoutError {
     DoesNotFit {
         /// Area the card needs on the sheet: spread + 2 × (bleed + printable margin).
         needed: Size,
-        /// The sheet, in landscape orientation.
+        /// The sheet, in the orientation of the spread (landscape for a spread at least as
+        /// wide as it is high) — the only orientation in which it could have fitted.
         sheet: Size,
+    },
+    /// The card fits, but the cut or fold marks the profile asks for do not: there is less
+    /// than [`MIN_MARK_LENGTH_MM`](crate::MIN_MARK_LENGTH_MM) between the place where they
+    /// would start and the edge of the slug (or of the printable area of the sheet), so
+    /// [`marks`](crate::marks) leaves them out. Only reported by
+    /// [`check_marks_fit`](crate::check_marks_fit).
+    #[error(
+        "no room for cut and fold marks: they need at least {needed_mm:.1} mm beyond the bleed but only {available_mm:.1} mm is available"
+    )]
+    MarksDoNotFit {
+        /// Room between the start of the marks and the limit of the mark area, in
+        /// millimetres (never negative).
+        available_mm: f64,
+        /// The shortest mark that is drawn, in millimetres.
+        needed_mm: f64,
     },
 }

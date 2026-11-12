@@ -4,13 +4,15 @@
 //! outside the bleed box. The marks are the same for both faces of the card (the spread
 //! is symmetric, so the creases are at the same x on the outside and the inside).
 //!
-//! Conventions used (crop-mark geometry is trade convention — no surveyed online printer
-//! publishes one, see `docs/research/notes/print-requirements.prepress.md` §2):
-//! solid strokes with butt caps; crop marks along the extension of each trim edge; fold
-//! marks along the extension of each crease; nothing closer to the trim than the bleed.
+//! Conventions used (`docs/research/03-print-requirements.md` §2.4; mark geometry is DTP
+//! convention — no surveyed online printer publishes one, most of them refuse marks):
+//! butt caps; crop marks **solid**, along the extension of each trim edge; fold marks
+//! **dashed**, along the extension of each crease, so that a finisher cannot take a crease
+//! for a cut; nothing closer to the trim than the bleed.
 
 use ebc_scene::{Color, Item, Path, Point, Rect, Size, Stroke, pt_to_mm};
 
+use crate::error::LayoutError;
 use crate::format::CardFormat;
 use crate::page::page_geometry;
 use crate::profile::{MarkStyle, Marks, PrintProfile};
@@ -18,14 +20,15 @@ use crate::profile::{MarkStyle, Marks, PrintProfile};
 /// Name of the layer returned by [`marks`].
 pub const MARKS_LAYER: &str = "marks";
 /// Crop and fold marks that would end up shorter than this (because the slug or the
-/// printable area is too small) are omitted rather than drawn as specks.
-pub const MIN_MARK_LENGTH_MM: f64 = 1.0;
-/// Dash pattern (on, off — millimetres) of the fold guide of [`MarkStyle::Guide`] marks.
-pub const FOLD_GUIDE_DASH_MM: [f64; 2] = [1.0, 1.0];
-/// Gap between a fold mark and its dashed extension, in millimetres.
-const FOLD_GUIDE_GAP_MM: f64 = 1.0;
-/// Longest dashed fold guide, in millimetres: on a sheet much larger than the card the
-/// guide stops here instead of running all the way to the printable edge.
+/// printable area is too small) are omitted rather than drawn as specks
+/// ([`check_marks_fit`] reports it).
+pub const MIN_MARK_LENGTH_MM: f64 = 2.0;
+/// Dash pattern (on, off — millimetres) of fold marks. A fold mark shorter than 5 mm uses
+/// the same pattern scaled down so that it still shows three dashes.
+pub const FOLD_MARK_DASH_MM: [f64; 2] = [1.0, 1.0];
+/// Longest fold mark of [`MarkStyle::Guide`], measured from its start, in millimetres: on
+/// a sheet much larger than the card the dashed guide stops here instead of running all
+/// the way to the printable edge.
 pub const FOLD_GUIDE_MAX_MM: f64 = 20.0;
 /// Registration targets, the colour bar, the scale ruler and the caption areas use at most
 /// this much of the margin, measured from the bleed edge, in millimetres — so that they
@@ -76,8 +79,14 @@ const RULER_LENGTHS_MM: [f64; 3] = [100.0, 50.0, 20.0];
 const RULER_TICK_MM: f64 = 2.5;
 /// Scale rulers whose end ticks would be lower than this are omitted.
 const RULER_MIN_TICK_MM: f64 = 1.5;
-/// Width reserved after the ruler for its label (e.g. "100 mm" at 6–7 pt).
+/// Width reserved for the ruler's label (e.g. "100 mm" at 6–7 pt).
 const RULER_LABEL_ROOM_MM: f64 = 14.0;
+/// Gap between the end of the ruler and a label set beside it, in millimetres.
+const RULER_LABEL_SIDE_GAP_MM: f64 = 1.5;
+/// Height reserved for a label set above the ruler: one line of 6 pt type.
+const RULER_LABEL_HEIGHT_MM: f64 = 2.2;
+/// Gap between the top of the ruler's ticks and a label set above them, in millimetres.
+const RULER_LABEL_GAP_MM: f64 = 0.6;
 
 /// The numbers every mark generator needs, or nothing if the page cannot be built.
 struct Ctx {
@@ -154,42 +163,79 @@ pub fn crop_marks(format: &CardFormat, profile: &PrintProfile) -> Vec<Item> {
     vec![Item::stroke(path, cx.marks.stroke())]
 }
 
-/// Fold marks: a short vertical stroke above and below the spread at each of the two
-/// creases ([`CardFormat::fold_x`]), with the same offset and length as the crop marks.
-/// With [`MarkStyle::Guide`] each stroke is continued, after a small gap, by a dashed
-/// guide ([`FOLD_GUIDE_DASH_MM`]) running to the edge of the printable area (at most
-/// [`FOLD_GUIDE_MAX_MM`] long), which tells fold marks apart from cut marks and gives a
-/// ruler more to align with.
+/// The dash pattern of a fold mark `length` millimetres long: [`FOLD_MARK_DASH_MM`], or
+/// the same pattern scaled down so that three dashes fit a shorter mark. A fold mark is
+/// thus always recognisably dashed, and it begins and (up to 5 mm) ends with a dash.
+fn fold_dash_mm(length: f64) -> Vec<f64> {
+    let [on, off] = FOLD_MARK_DASH_MM;
+    let scale = (length / (3.0 * on + 2.0 * off)).min(1.0);
+    vec![on * scale, off * scale]
+}
+
+/// Fold marks: a **dashed** vertical stroke above and below the spread at each of the two
+/// creases ([`CardFormat::fold_x`]), starting where the crop marks start. Crop marks are
+/// solid, so the two cannot be confused — on the default card the top edge carries marks
+/// at x = 0, 110, 120 and 230 mm, and read as cuts the middle two would have the spine
+/// cut out.
 ///
-/// The first item holds the four solid strokes; the second, if present, the dashed
-/// guides. Returns nothing if the page cannot be built or there is no room. Ignores
-/// `marks.fold`.
+/// * [`MarkStyle::Press`] and [`MarkStyle::Black`]: the same length as the crop marks.
+/// * [`MarkStyle::Guide`]: the mark runs on to the edge of the printable area (at most
+///   [`FOLD_GUIDE_MAX_MM`] from its start), which gives a ruler more to align with when
+///   the crease is scored by hand.
+///
+/// The dash pattern is [`FOLD_MARK_DASH_MM`] (1 mm on, 1 mm off), measured from the end
+/// nearest the card; marks shorter than 5 mm use a proportionally finer pattern so that
+/// they still show three dashes.
+///
+/// One stroked [`Item`] with four sub-paths, each running outwards from the card. Returns
+/// nothing if the page cannot be built or there is less than [`MIN_MARK_LENGTH_MM`] of
+/// room. Ignores `marks.fold`.
 #[must_use]
 pub fn fold_marks(format: &CardFormat, profile: &PrintProfile) -> Vec<Item> {
     let Some(cx) = Ctx::new(format, profile) else { return Vec::new() };
-    let Some((a, b)) = cx.tick_span() else { return Vec::new() };
+    let Some((a, tick_end)) = cx.tick_span() else { return Vec::new() };
+    let b = match cx.marks.style {
+        MarkStyle::Press | MarkStyle::Black => tick_end,
+        MarkStyle::Guide => cx.reach.min(a + FOLD_GUIDE_MAX_MM).max(tick_end),
+    };
     let h = cx.spread.h;
-    let mut ticks = Path::new();
+    let mut path = Path::new();
     for x in cx.fold_x {
-        ticks.move_to(x, -a).line_to(x, -b);
-        ticks.move_to(x, h + a).line_to(x, h + b);
+        path.move_to(x, -a).line_to(x, -b);
+        path.move_to(x, h + a).line_to(x, h + b);
     }
-    let mut items = vec![Item::stroke(ticks, cx.marks.stroke())];
-    if cx.marks.style == MarkStyle::Guide {
-        let start = b + FOLD_GUIDE_GAP_MM;
-        let end = cx.reach.min(start + FOLD_GUIDE_MAX_MM);
-        if end - start >= MIN_MARK_LENGTH_MM {
-            let mut guide = Path::new();
-            for x in cx.fold_x {
-                guide.move_to(x, -start).line_to(x, -end);
-                guide.move_to(x, h + start).line_to(x, h + end);
-            }
-            let dashed =
-                Stroke::dashed(cx.marks.color(), cx.marks.weight_pt, FOLD_GUIDE_DASH_MM.to_vec());
-            items.push(Item::stroke(guide, dashed));
-        }
+    let dashed = Stroke::dashed(cx.marks.color(), cx.marks.weight_pt, fold_dash_mm(b - a));
+    vec![Item::stroke(path, dashed)]
+}
+
+/// Checks that the cut and fold marks the profile asks for can actually be drawn.
+///
+/// [`new_page`](crate::new_page) accepts any card whose bleed is printable, and
+/// [`marks`] silently leaves out what does not fit. For a sheet printed at home that is
+/// not good enough: without fold marks nobody can find the two creases. Call this before
+/// composing a card and refuse (or offer another format, sheet or printer) on error.
+///
+/// # Errors
+/// * whatever [`page_geometry`] reports;
+/// * [`LayoutError::MarksDoNotFit`] — `marks.crop` or `marks.fold` is set but the marks
+///   would be left out: fewer than [`MIN_MARK_LENGTH_MM`] lie between
+///   `max(marks.offset, bleed)` and the edge of the mark area (or `marks.length` itself
+///   is shorter than that).
+///
+/// Marks that are merely shortened, and registration targets, colour bar or scale ruler
+/// that are dropped for lack of room, are not errors.
+pub fn check_marks_fit(format: &CardFormat, profile: &PrintProfile) -> Result<(), LayoutError> {
+    let g = page_geometry(format, profile)?;
+    let wanted = &profile.marks;
+    if !(wanted.crop || wanted.fold) {
+        return Ok(());
     }
-    items
+    let start = wanted.offset.max(g.bleed_mm);
+    let available_mm = wanted.length.min(g.mark_reach_mm - start).max(0.0);
+    if available_mm < MIN_MARK_LENGTH_MM {
+        return Err(LayoutError::MarksDoNotFit { available_mm, needed_mm: MIN_MARK_LENGTH_MM });
+    }
+    Ok(())
 }
 
 /// One registration target: its centre and the half-width of its cross.
@@ -298,9 +344,14 @@ pub struct ScaleRuler {
     pub start: Point,
     /// Length of the ruler when printed at 100 %: 100, 50 or 20 mm, the longest that fits.
     pub length_mm: f64,
-    /// Baseline origin for a label such as "100 mm" (this crate sets no text); about
-    /// 14 mm of free width follow it.
+    /// Baseline origin for a label such as "100 mm" (this crate sets no text): the
+    /// bottom-left corner of [`label_area`](Self::label_area).
     pub label_origin: Point,
+    /// The free rectangle reserved for the label: beside the ruler when the panel is wide
+    /// enough, otherwise above its ticks. No mark touches it and it lies inside the mark
+    /// area. It is about 14 mm wide and at least 1.5 mm high (2.2 mm above the ruler):
+    /// room for "100 mm" in 6 pt type.
+    pub label_area: Rect,
     /// The ruler itself: one stroked path (base line plus a tick every 10 mm).
     pub items: Vec<Item>,
 }
@@ -308,6 +359,12 @@ pub struct ScaleRuler {
 /// The scale-check ruler: a horizontal line of known length above the left-hand panel,
 /// between the top-left crop mark and the first fold mark, with ticks every 10 mm (taller
 /// at the ends and, on the 100 mm ruler, at 50 mm). Ignores `marks.scale_ruler`.
+///
+/// The ruler is the longest of 100, 50 and 20 mm that fits the panel together with its
+/// label. The label goes beside the ruler when the panel is wide enough; otherwise it
+/// goes above the ticks if the margin is high enough (about 6.5 mm) — which is how the
+/// default 110 mm panel gets its 100 mm ruler on A4 — and failing that a shorter ruler is
+/// used.
 ///
 /// Returns `None` if the page cannot be built or the mark band is too narrow.
 #[must_use]
@@ -319,11 +376,31 @@ pub fn scale_ruler(format: &CardFormat, profile: &PrintProfile) -> Option<ScaleR
     if tick < RULER_MIN_TICK_MM {
         return None;
     }
-    let available = cx.cover_w - 2.0 * FURNITURE_INSET_MM - RULER_LABEL_ROOM_MM;
-    let length_mm = RULER_LENGTHS_MM.into_iter().find(|l| *l <= available)?;
     let x0 = FURNITURE_INSET_MM;
-    // The base line is the edge nearest the card; ticks point away from it.
-    let y = -(cx.bleed + (band - tick) / 2.0);
+    let panel_room = cx.cover_w - 2.0 * FURNITURE_INSET_MM;
+    // Full-height ticks with a line of type above them.
+    let stacked = RULER_TICK_MM + RULER_LABEL_GAP_MM + RULER_LABEL_HEIGHT_MM;
+    let can_stack = band - 2.0 * keep_clear >= stacked;
+    let (length_mm, label_above) = RULER_LENGTHS_MM.into_iter().find_map(|l| {
+        if l + RULER_LABEL_ROOM_MM <= panel_room {
+            Some((l, false))
+        } else if l <= panel_room && can_stack {
+            Some((l, true))
+        } else {
+            None
+        }
+    })?;
+    // The base line is the edge nearest the card; ticks point away from it. Ruler (and
+    // label, when it sits above) are centred in the band.
+    let (tick, used) = if label_above { (RULER_TICK_MM, stacked) } else { (tick, tick) };
+    let y = -(cx.bleed + (band - used) / 2.0);
+    let label_area = if label_above {
+        let top = y - stacked;
+        Rect::new(x0, top, RULER_LABEL_ROOM_MM, RULER_LABEL_HEIGHT_MM)
+    } else {
+        let x = x0 + length_mm + RULER_LABEL_SIDE_GAP_MM;
+        Rect::new(x, y - tick, RULER_LABEL_ROOM_MM - RULER_LABEL_SIDE_GAP_MM, tick)
+    };
     let mut path = Path::new();
     path.move_to(x0, y).line_to(x0 + length_mm, y);
     let mut at = 0.0;
@@ -336,16 +413,19 @@ pub fn scale_ruler(format: &CardFormat, profile: &PrintProfile) -> Option<ScaleR
     Some(ScaleRuler {
         start: Point::new(x0, y),
         length_mm,
-        label_origin: Point::new(x0 + length_mm + 1.5, y),
+        label_origin: Point::new(label_area.x, label_area.bottom()),
+        label_area,
         items: vec![Item::stroke(path, cx.marks.stroke())],
     })
 }
 
 /// The two rectangles of the margin that no mark ever uses: above and below the
 /// right-hand panel, between the second fold mark and the corner crop marks, as
-/// `[above, below]`. A composer can set small print there — a file name, "print at
-/// 100 %", "cut on the solid marks, fold on the dashed ones" — without checking for
-/// collisions (this crate sets no text).
+/// `[above, below]`. A composer can set small print there — a job line, "print at 100 %,
+/// both sides, flip on the short edge" (see
+/// [`SheetPlacement::duplex_flip`](crate::SheetPlacement::duplex_flip)), "cut on the
+/// solid marks, fold on the dashed ones" — without checking for collisions (this crate
+/// sets no text).
 ///
 /// The rectangles lie inside the mark area (hence inside the printable area of a home
 /// sheet) and outside the bleed box. Returns `None` if the page cannot be built or the
@@ -369,14 +449,15 @@ pub fn caption_areas(format: &CardFormat, profile: &PrintProfile) -> Option<[Rec
 /// All the marks enabled in `profile.marks`, as one layer named [`MARKS_LAYER`]
 /// (`"marks"`), to be appended to both pages **after** the artwork.
 ///
-/// Contents, in order: [`crop_marks`], [`fold_marks`], [`registration_targets`],
-/// [`color_bar`], [`scale_ruler`] — each only if its flag is set. Every point of every
-/// path lies inside the page's media box (inside the printable area for sheet-based
-/// profiles) and outside its bleed box.
+/// Contents, in order: [`crop_marks`] (solid), [`fold_marks`] (dashed),
+/// [`registration_targets`], [`color_bar`], [`scale_ruler`] — each only if its flag is
+/// set. Every point of every path lies inside the page's media box (inside the printable
+/// area for sheet-based profiles) and outside its bleed box.
 ///
 /// The layer is empty when [`new_page`](crate::new_page) would fail for the same
 /// arguments, and marks that do not fit the available margin are shortened or left out,
-/// so the function never panics and never draws over the artwork.
+/// so the function never panics and never draws over the artwork. Use
+/// [`check_marks_fit`] to find out whether the cut and fold marks made it.
 #[must_use]
 pub fn marks(format: &CardFormat, profile: &PrintProfile) -> Item {
     let mut items = Vec::new();
@@ -450,12 +531,33 @@ mod tests {
         assert_eq!(l[7], (Point::new(230.0, 181.0), Point::new(230.0, 186.0)));
     }
 
+    fn close(a: f64, b: f64) -> bool {
+        (a - b).abs() < 1e-9
+    }
+
+    fn point_close(a: Point, b: Point) -> bool {
+        close(a.x, b.x) && close(a.y, b.y)
+    }
+
+    fn rect_close(a: Rect, b: Rect) -> bool {
+        close(a.x, b.x) && close(a.y, b.y) && close(a.w, b.w) && close(a.h, b.h)
+    }
+
     #[test]
-    fn professional_fold_marks_are_solid_strokes_at_both_creases() {
+    fn professional_fold_marks_are_dashed_strokes_at_both_creases() {
         let (f, p) = (CardFormat::poche(), PrintProfile::professional_eu());
         let items = fold_marks(&f, &p);
-        assert_eq!(items.len(), 1, "no dashed guide on a press profile");
-        assert!(stroke_of(&items[0]).dash_mm.is_empty());
+        assert_eq!(items.len(), 1);
+        // Same colour and weight as the crop marks, but dashed 1 mm on, 1 mm off: a 5 mm
+        // mark shows three dashes. A crease must never read as a cut.
+        let fold = stroke_of(&items[0]);
+        let crop_items = crop_marks(&f, &p);
+        let crop = stroke_of(&crop_items[0]);
+        assert_eq!(fold.dash_mm, vec![1.0, 1.0]);
+        assert!(crop.dash_mm.is_empty());
+        assert_eq!((fold.color, fold.width_pt), (crop.color, crop.width_pt));
+        assert_eq!(fold.cap, ebc_scene::StrokeCap::Butt);
+        // Each mark runs outwards from the card, so its first dash is the one nearest it.
         assert_eq!(
             lines(&items[0]),
             vec![
@@ -468,24 +570,123 @@ mod tests {
     }
 
     #[test]
-    fn home_fold_marks_get_a_dashed_grey_guide_to_the_printable_edge() {
+    fn home_fold_marks_are_dashed_grey_guides_running_to_the_printable_edge() {
         let (f, p) = (CardFormat::poche(), PrintProfile::home(Sheet::A4));
         let items = fold_marks(&f, &p);
-        assert_eq!(items.len(), 2);
-        let solid = stroke_of(&items[0]);
-        let dashed = stroke_of(&items[1]);
-        assert!(solid.dash_mm.is_empty());
+        assert_eq!(items.len(), 1, "one dashed stroke, no solid part");
+        let dashed = stroke_of(&items[0]);
         assert_eq!(dashed.dash_mm, vec![1.0, 1.0]);
-        for s in [solid, dashed] {
-            assert_eq!(s.color, Color::Gray(crate::GUIDE_GRAY_LEVEL));
-            assert_eq!(s.width_pt, 0.5);
-        }
-        // Ticks 2..7 mm from the trim, guide 8..11 mm (11 = 16 mm margin - 5 mm unprintable).
-        assert_eq!(lines(&items[0])[0], (Point::new(110.0, -2.0), Point::new(110.0, -7.0)));
-        let g = lines(&items[1]);
+        assert_eq!(dashed.color, Color::Gray(crate::GUIDE_GRAY_LEVEL));
+        assert_eq!(dashed.width_pt, 0.5);
+        // From the bleed edge (2 mm) to the printable edge: 16 mm margin - 6.35 mm
+        // unprintable = 9.65 mm from the trim. The solid cut marks stop at 7 mm.
+        let g = lines(&items[0]);
         assert_eq!(g.len(), 4);
-        assert_eq!(g[0], (Point::new(110.0, -8.0), Point::new(110.0, -11.0)));
-        assert_eq!(g[3], (Point::new(120.0, 186.0), Point::new(120.0, 189.0)));
+        for (got, (x, from, to)) in g.iter().zip([
+            (110.0, -2.0, -9.65),
+            (110.0, 180.0, 187.65),
+            (120.0, -2.0, -9.65),
+            (120.0, 180.0, 187.65),
+        ]) {
+            assert_eq!((got.0.x, got.1.x), (x, x), "exactly on the crease");
+            assert!(close(got.0.y, from) && close(got.1.y, to), "{got:?}");
+        }
+        let crop = lines(&crop_marks(&f, &p)[0]);
+        assert_eq!(crop[1], (Point::new(0.0, -2.0), Point::new(0.0, -7.0)));
+        assert!(stroke_of(&crop_marks(&f, &p)[0]).dash_mm.is_empty());
+    }
+
+    #[test]
+    fn short_fold_marks_keep_three_dashes() {
+        let f = CardFormat::poche();
+        let dash_of = |slug: f64| {
+            let mut p = PrintProfile::professional_eu();
+            p.slug = slug;
+            fold_marks(&f, &p).first().map(|i| stroke_of(i).dash_mm.clone())
+        };
+        // 5 mm or more: the nominal pattern.
+        assert_eq!(dash_of(10.0), Some(vec![1.0, 1.0]));
+        assert_eq!(dash_of(5.0), Some(vec![1.0, 1.0]));
+        // 2.5 mm of slug: a 2.5 mm mark dashed 0.5 / 0.5 — on, off, on, off, on.
+        assert_eq!(dash_of(2.5), Some(vec![0.5, 0.5]));
+        // The shortest mark drawn (2 mm) still has three 0.4 mm dashes.
+        let d = dash_of(MIN_MARK_LENGTH_MM).unwrap();
+        assert!(close(d[0], 0.4) && close(d[1], 0.4), "{d:?}");
+        assert_eq!(dash_of(1.9), None);
+        // A long guide never gets coarser than the nominal pattern.
+        assert_eq!(fold_dash_mm(20.0), FOLD_MARK_DASH_MM.to_vec());
+    }
+
+    #[test]
+    fn black_marks_for_digital_jobs_differ_only_in_colour() {
+        let f = CardFormat::poche();
+        let press = PrintProfile::professional_eu();
+        let mut black = press.clone();
+        black.marks.style = MarkStyle::Black;
+        for (a, b) in [
+            (crop_marks(&f, &press), crop_marks(&f, &black)),
+            (fold_marks(&f, &press), fold_marks(&f, &black)),
+            (registration_targets(&f, &press), registration_targets(&f, &black)),
+        ] {
+            assert_eq!(lines(&a[0]), lines(&b[0]));
+            assert_eq!(stroke_of(&a[0]).dash_mm, stroke_of(&b[0]).dash_mm);
+            assert_eq!(stroke_of(&a[0]).color, Color::Registration);
+            assert_eq!(stroke_of(&b[0]).color, Color::BLACK);
+        }
+    }
+
+    #[test]
+    fn check_marks_fit_reports_marks_that_would_be_left_out() {
+        let f = CardFormat::poche();
+        // The reference cards have room.
+        assert_eq!(check_marks_fit(&f, &PrintProfile::professional_eu()), Ok(()));
+        assert_eq!(check_marks_fit(&f, &PrintProfile::home(Sheet::A4)), Ok(()));
+        assert_eq!(check_marks_fit(&f, &PrintProfile::home(Sheet::Letter)), Ok(()));
+        // No marks wanted: nothing to fit, even without a slug.
+        assert_eq!(check_marks_fit(&f, &PrintProfile::upload_eu()), Ok(()));
+        // A slug too small for the shortest mark.
+        let mut p = PrintProfile::professional_eu();
+        p.slug = 1.5;
+        assert_eq!(
+            check_marks_fit(&f, &p),
+            Err(LayoutError::MarksDoNotFit { available_mm: 1.5, needed_mm: 2.0 })
+        );
+        assert!(crop_marks(&f, &p).is_empty() && fold_marks(&f, &p).is_empty());
+        assert_eq!(
+            check_marks_fit(&f, &p).unwrap_err().to_string(),
+            "no room for cut and fold marks: they need at least 2.0 mm beyond the bleed \
+             but only 1.5 mm is available"
+        );
+        // Shortened marks are fine.
+        p.slug = 2.0;
+        assert_eq!(check_marks_fit(&f, &p), Ok(()));
+        // Only fold marks wanted: still checked. Only a ruler wanted: not.
+        p.slug = 0.0;
+        p.marks = Marks { fold: true, ..Marks::none() };
+        assert!(matches!(check_marks_fit(&f, &p), Err(LayoutError::MarksDoNotFit { .. })));
+        p.marks = Marks { scale_ruler: true, ..Marks::none() };
+        assert_eq!(check_marks_fit(&f, &p), Ok(()));
+        // A 110 x 186 mm cover on A4: 12 mm above and below, 6.35 of it unprintable and
+        // 2 mm bleed leave 3.65 mm, enough for shortened marks.
+        let tight = CardFormat::custom(Size::new(110.0, 186.0), 10.0).unwrap();
+        let home = PrintProfile::home(Sheet::A4);
+        assert_eq!(check_marks_fit(&tight, &home), Ok(()));
+        let l = lines(&crop_marks(&tight, &home)[0]);
+        assert!(point_close(l[1].1, Point::new(0.0, -5.65)), "{l:?}");
+        // Four millimetres taller and the card still fits the sheet, but not its marks.
+        let tighter = CardFormat::custom(Size::new(110.0, 190.0), 10.0).unwrap();
+        assert!(crate::new_page(&tighter, &home).is_ok());
+        assert!(matches!(
+            check_marks_fit(&tighter, &home),
+            Err(LayoutError::MarksDoNotFit { needed_mm: 2.0, .. })
+        ));
+        // A card that does not fit at all reports that, not the marks.
+        assert!(matches!(
+            check_marks_fit(&CardFormat::a5(), &home),
+            Err(LayoutError::DoesNotFit { .. })
+        ));
+        let bad = CardFormat { cover: Size::new(f64::NAN, 1.0), spine_width: 10.0 };
+        assert!(matches!(check_marks_fit(&bad, &home), Err(LayoutError::CoverOutOfRange { .. })));
     }
 
     #[test]
@@ -507,7 +708,10 @@ mod tests {
         p.slug = 2.5; // room for 2.5 mm marks only
         let l = lines(&crop_marks(&f, &p)[0]);
         assert_eq!(l[0], (Point::new(-3.0, 0.0), Point::new(-5.5, 0.0)));
-        p.slug = 0.9; // below MIN_MARK_LENGTH_MM
+        p.slug = 1.9; // below MIN_MARK_LENGTH_MM
+        assert!(crop_marks(&f, &p).is_empty());
+        assert!(fold_marks(&f, &p).is_empty());
+        p.slug = 0.9; // not even room for a registration target or a ruler
         assert!(crop_marks(&f, &p).is_empty());
         assert!(fold_marks(&f, &p).is_empty());
         assert!(registration_targets(&f, &p).is_empty());
@@ -605,26 +809,34 @@ mod tests {
     fn scale_ruler_lengths_and_ticks() {
         let home = PrintProfile::home(Sheet::A4);
         let r = scale_ruler(&CardFormat::poche(), &home).unwrap();
-        // 110 mm panel: 100 mm ruler + label does not fit, 50 mm does.
-        assert_eq!(r.length_mm, 50.0);
+        // The home sheet of the default card carries the 100 mm ruler. A 110 mm panel
+        // has no room for a label beside it, so the label goes above the ticks.
+        assert_eq!(r.length_mm, 100.0);
         assert_eq!(r.start.x, 2.0);
-        // Band is 2..11 mm above the trim, tick 2.5 mm: base line 5.25 mm above the trim.
-        assert!((r.start.y + 5.25).abs() < 1e-9);
+        // Band is 2..9.65 mm above the trim; ticks (2.5) + gap (0.6) + label (2.2) are
+        // centred in it: base line 3.175 mm above the trim.
+        assert!(close(r.start.y, -3.175), "{:?}", r.start);
         let l = lines(&r.items[0]);
-        assert_eq!(l[0], (r.start, Point::new(52.0, r.start.y)));
-        assert_eq!(l.len(), 1 + 6, "base line + ticks at 0, 10, ... 50");
+        assert_eq!(l[0], (r.start, Point::new(102.0, r.start.y)));
+        assert_eq!(l.len(), 1 + 11, "base line + ticks at 0, 10, ... 100");
         let heights: Vec<f64> = l[1..].iter().map(|(a, b)| a.y - b.y).collect();
-        for (got, want) in heights.iter().zip([2.5, 1.5, 1.5, 1.5, 1.5, 2.5]) {
-            assert!((got - want).abs() < 1e-9, "{heights:?}");
+        for (i, got) in heights.iter().enumerate() {
+            let want = if i % 5 == 0 { 2.5 } else { 1.5 };
+            assert!(close(*got, want), "{heights:?}");
         }
         for (i, (a, b)) in l[1..].iter().enumerate() {
             assert_eq!(a.x, 2.0 + 10.0 * i as f64);
             assert_eq!(a.x, b.x);
         }
-        assert_eq!(r.label_origin, Point::new(53.5, r.start.y));
+        assert!(rect_close(r.label_area, Rect::new(2.0, -8.475, 14.0, 2.2)), "{:?}", r.label_area);
+        assert!(point_close(r.label_origin, Point::new(2.0, -6.275)));
+        // The label clears the ticks below it and the printable edge above it.
+        assert!(r.label_area.bottom() < r.start.y - 2.5);
+        assert!(r.label_area.y > -9.65 + 0.5);
         assert_eq!(stroke_of(&r.items[0]).color, Color::Gray(crate::GUIDE_GRAY_LEVEL));
 
-        // A5 on A3 has room for the 100 mm ruler, with a tall tick at 50 mm.
+        // A5 on A3 has room for the 100 mm ruler with its label beside it, and a tall
+        // tick at 50 mm.
         let r = scale_ruler(&CardFormat::a5(), &PrintProfile::home(Sheet::A3)).unwrap();
         assert_eq!(r.length_mm, 100.0);
         let l = lines(&r.items[0]);
@@ -632,10 +844,28 @@ mod tests {
         let tall: Vec<usize> =
             (0..11).filter(|i| (l[1 + i].0.y - l[1 + i].1.y - 2.5).abs() < 1e-9).collect();
         assert_eq!(tall, vec![0, 5, 10]);
+        assert_eq!(r.label_origin, Point::new(103.5, r.start.y));
+        assert!(rect_close(r.label_area, Rect::new(103.5, r.start.y - 2.5, 12.5, 2.5)));
 
-        // The smallest cover gets the 20 mm ruler.
+        // The smallest cover gets the 20 mm ruler, label beside it.
         let small = CardFormat::custom(Size::new(50.0, 80.0), 10.0).unwrap();
-        assert_eq!(scale_ruler(&small, &home).unwrap().length_mm, 20.0);
+        let r = scale_ruler(&small, &home).unwrap();
+        assert_eq!(r.length_mm, 20.0);
+        assert_eq!(r.label_origin.x, 23.5);
+    }
+
+    #[test]
+    fn a_low_margin_gets_a_shorter_ruler_with_its_label_beside_it() {
+        // 110 x 184 mm covers on A4: 13 mm above the card, 4.65 mm of it for marks —
+        // too low to stack a label above the ticks, so the 100 mm ruler does not fit.
+        let f = CardFormat::custom(Size::new(110.0, 184.0), 10.0).unwrap();
+        let r = scale_ruler(&f, &PrintProfile::home(Sheet::A4)).unwrap();
+        assert_eq!(r.length_mm, 50.0);
+        assert_eq!(r.label_origin.x, 53.5);
+        assert!(close(r.label_area.bottom(), r.start.y));
+        // Lower still (1.65 mm): no ruler at all.
+        let f = CardFormat::custom(Size::new(110.0, 190.0), 10.0).unwrap();
+        assert!(scale_ruler(&f, &PrintProfile::home(Sheet::A4)).is_none());
     }
 
     #[test]
@@ -648,27 +878,29 @@ mod tests {
         let c = registration_target_centers(&f, &p);
         assert_eq!(c[0], Point::new(-8.0, 74.0));
         assert_eq!(c[2], Point::new(110.0, -8.0));
-        // So do the ruler, the colour bar and the caption areas.
+        // So do the ruler (100 mm, label above), the colour bar and the caption areas.
         let r = scale_ruler(&f, &p).unwrap();
-        assert!((r.start.y + 6.75).abs() < 1e-9, "{:?}", r.start);
+        assert_eq!(r.length_mm, 100.0);
+        assert!(close(r.start.y, -5.35), "{:?}", r.start);
+        assert!(r.label_area.y > -14.0);
         let Item::Path { path, .. } = &color_bar(&f, &p)[0] else { panic!() };
         assert_eq!(path.control_bounds().unwrap(), Rect::new(2.0, 153.5, 5.0, 5.0));
         let [above, below] = caption_areas(&f, &p).unwrap();
         assert_eq!(above, Rect::new(117.0, -13.5, 101.0, 11.0));
         assert_eq!(below, Rect::new(117.0, 150.5, 101.0, 11.0));
-        // The dashed fold guides stop 20 mm after they start instead of running 60 mm.
-        let g = lines(&fold_marks(&f, &p)[1]);
-        assert_eq!(g[0], (Point::new(105.0, -8.0), Point::new(105.0, -28.0)));
-        assert_eq!(g[1], (Point::new(105.0, 156.0), Point::new(105.0, 176.0)));
+        // The dashed fold guides stop 20 mm after they start instead of running 66 mm.
+        let g = lines(&fold_marks(&f, &p)[0]);
+        assert_eq!(g[0], (Point::new(105.0, -2.0), Point::new(105.0, -22.0)));
+        assert_eq!(g[1], (Point::new(105.0, 150.0), Point::new(105.0, 170.0)));
     }
 
     #[test]
     fn caption_areas_are_the_free_margin_beside_the_right_panel() {
         let f = CardFormat::poche();
-        // Home on A4: the band runs from 2 to 11 mm outside the trim.
+        // Home on A4: the band runs from 2 to 9.65 mm outside the trim.
         let [above, below] = caption_areas(&f, &PrintProfile::home(Sheet::A4)).unwrap();
-        assert_eq!(above, Rect::new(122.0, -10.5, 106.0, 8.0));
-        assert_eq!(below, Rect::new(122.0, 180.5, 106.0, 8.0));
+        assert!(rect_close(above, Rect::new(122.0, -9.15, 106.0, 6.65)), "{above:?}");
+        assert!(rect_close(below, Rect::new(122.0, 180.5, 106.0, 6.65)), "{below:?}");
         // Professional: 3 to 13 mm.
         let [above, below] = caption_areas(&f, &PrintProfile::professional_eu()).unwrap();
         assert_eq!(above, Rect::new(122.0, -12.5, 106.0, 9.0));
@@ -690,8 +922,9 @@ mod tests {
             other => panic!("{other:?}"),
         };
         let pro = PrintProfile::professional_eu();
-        assert_eq!(count(&pro), 3, "crop + fold + registration");
+        assert_eq!(count(&pro), 2, "crop + fold");
         let mut all = pro.clone();
+        all.marks.registration = true;
         all.marks.color_bar = true;
         all.marks.scale_ruler = true;
         assert_eq!(count(&all), 3 + 11 + 1);
@@ -701,8 +934,8 @@ mod tests {
         only_fold.marks.fold = true;
         only_fold.slug = 10.0;
         assert_eq!(count(&only_fold), 1);
-        // Home: crop + fold ticks + fold guides + ruler.
-        assert_eq!(count(&PrintProfile::home(Sheet::A4)), 4);
+        // Home: crop + fold + ruler.
+        assert_eq!(count(&PrintProfile::home(Sheet::A4)), 3);
     }
 
     #[test]

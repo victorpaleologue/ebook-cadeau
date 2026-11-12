@@ -373,18 +373,18 @@ impl<'a> Lexer<'a> {
     /// Positions the lexer after the `EI` that ends the inline image data.
     fn skip_inline_data(&mut self, image: &InlineImage, start: usize) -> Result<(), LexError> {
         // Unfiltered data has a known length: prefer it, since raw samples may contain "EI".
-        if let Some(length) = raw_inline_length(image) {
-            if let Some(end) = self.pos.checked_add(length).filter(|&end| end <= self.data.len()) {
-                let mut after = end;
-                while self.data.get(after).is_some_and(|&b| is_whitespace(b)) {
-                    after += 1;
-                }
-                if self.data[after..].starts_with(b"EI")
-                    && self.data.get(after + 2).is_none_or(|&b| !is_regular(b))
-                {
-                    self.pos = after + 2;
-                    return Ok(());
-                }
+        if let Some(length) = raw_inline_length(image)
+            && let Some(end) = self.pos.checked_add(length).filter(|&end| end <= self.data.len())
+        {
+            let mut after = end;
+            while self.data.get(after).is_some_and(|&b| is_whitespace(b)) {
+                after += 1;
+            }
+            if self.data[after..].starts_with(b"EI")
+                && self.data.get(after + 2).is_none_or(|&b| !is_regular(b))
+            {
+                self.pos = after + 2;
+                return Ok(());
             }
         }
         // Otherwise scan for EI between white space.
@@ -553,15 +553,15 @@ fn decode_name(raw: &[u8]) -> Vec<u8> {
     let mut out = Vec::with_capacity(raw.len());
     let mut i = 0;
     while i < raw.len() {
-        if raw[i] == b'#' {
-            if let (Some(hi), Some(lo)) = (
+        if raw[i] == b'#'
+            && let (Some(hi), Some(lo)) = (
                 raw.get(i + 1).and_then(|&b| hex_value(b)),
                 raw.get(i + 2).and_then(|&b| hex_value(b)),
-            ) {
-                out.push(hi * 16 + lo);
-                i += 3;
-                continue;
-            }
+            )
+        {
+            out.push(hi * 16 + lo);
+            i += 3;
+            continue;
         }
         out.push(raw[i]);
         i += 1;
@@ -727,7 +727,10 @@ mod tests {
         let Some(Token::InlineImage(image)) = lexer.next_token().unwrap() else {
             panic!("expected an inline image");
         };
-        assert_eq!((image.width, image.height, image.bits_per_component), (Some(4), Some(1), Some(8)));
+        assert_eq!(
+            (image.width, image.height, image.bits_per_component),
+            (Some(4), Some(1), Some(8))
+        );
         assert_eq!(image.color_space, InlineColorSpace::Name(b"G".to_vec()));
         assert!(image.filters.is_empty());
         assert_eq!(lexer.next_token().unwrap(), Some(Token::Operator(b"Q")));
@@ -790,11 +793,8 @@ mod tests {
             }
             let mut lexer = Lexer::new(&data);
             let mut steps = 0;
-            loop {
-                match lexer.next_token() {
-                    Ok(Some(_)) => steps += 1,
-                    Ok(None) | Err(_) => break,
-                }
+            while let Ok(Some(_)) = lexer.next_token() {
+                steps += 1;
                 assert!(steps <= data.len(), "lexer must consume input on every token");
             }
         }

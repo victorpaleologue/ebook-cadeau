@@ -2,13 +2,18 @@
 //!
 //! # Where the numbers come from
 //!
-//! `docs/research/03-print-requirements.md` did not exist when this module was written, so
-//! the values are the well-established defaults given in the crate's brief, cross-checked
-//! against the raw research notes in `docs/research/notes/print-requirements.prepress.md`
-//! and `docs/research/notes/print-requirements.folding.md` (search-extract based, largely
-//! unverified — see their "Could not verify" sections). When the consolidated document
-//! lands, its "Implications for the implementation" section takes precedence; every number
-//! lives in this file.
+//! `docs/research/03-print-requirements.md` — §1.2 (the default profile), §1.3 (the three
+//! outputs), §2.4 (marks) and §9 (print at home) — as summarised in its "Implications for
+//! the implementation" (items 2 to 4). That document is itself a synthesis of search
+//! extracts: mark geometry and the home-printing figures are trade convention or house
+//! rules, not printer specifications, and every printer says its product data sheet
+//! overrides its general guide. Every number lives in this file so that it can be changed
+//! in one place.
+//!
+//! Not implemented from that document: per-printer profile records and their stricter
+//! "allowed ranges" (items 5 and 6 — [`PrintProfile::validate`] only rejects values the
+//! layout cannot honour), and a stored warning threshold for image resolution (item 4 is
+//! covered by [`PrintProfile::warn_ppi`], which derives it).
 
 use ebc_scene::{Color, MM_PER_INCH, PdfStandard, Size, Stroke};
 
@@ -27,16 +32,31 @@ pub const MAX_SHEET_MM: f64 = 5080.0;
 /// draft-mode home print.
 pub const GUIDE_GRAY_LEVEL: f32 = 0.55;
 
+/// Image-resolution verdicts within this relative distance of a threshold count as
+/// reaching it, so that a scan made at exactly 300 ppi is not judged "below 300" because
+/// `152.4 / 25.4` is not exactly 6 in binary floating point.
+const PPI_RELATIVE_TOLERANCE: f64 = 1e-9;
+/// How far below `target_ppi` an image may be before it deserves a warning, in pixels per
+/// inch. See [`PrintProfile::warn_ppi`].
+const WARN_BELOW_TARGET_PPI: f64 = 50.0;
+
 /// How printer's marks are drawn.
+///
+/// In every style crop marks are **solid** and fold marks are **dashed**, so that a crease
+/// is never mistaken for a cut.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub enum MarkStyle {
-    /// Solid hairlines in the **registration colour** (100 % on every separation), the
-    /// convention for a press.
+    /// Hairlines in the **registration colour** (100 % on every separation), the
+    /// convention for an offset press.
     #[default]
     Press,
+    /// Hairlines in **100 % black only**, for a job known to be printed digitally (where
+    /// registration colour means four toners on top of each other).
+    Black,
     /// **Light grey, black-only** cut and fold guides for a home printer: no registration
     /// colour (which a home printer would render as a heavy four-colour black), and the
-    /// fold marks get a dashed extension so they are not mistaken for cut marks.
+    /// dashed fold marks run on to the edge of the printable area so that a ruler has
+    /// something to align with.
     Guide,
 }
 
@@ -45,6 +65,10 @@ pub enum MarkStyle {
 /// All marks live strictly outside the bleed box. The flags select what
 /// [`marks`](crate::marks) puts in its layer; the individual generators
 /// ([`crop_marks`](crate::crop_marks), …) ignore the flags.
+///
+/// `style` and `scale_ruler` are additions to the field list of `docs/architecture.md`;
+/// build a value with [`Marks::press`], [`Marks::guides`], [`Marks::none`] or
+/// `..Default::default()` (= [`Marks::press`]) rather than a full literal.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub struct Marks {
     /// Crop (trim) marks at the four corners.
@@ -59,8 +83,9 @@ pub struct Marks {
     /// Marks never enter the bleed, so the effective offset is `max(offset, bleed)`.
     pub offset: f64,
     /// Length of crop and fold marks, in millimetres. Shortened when the slug (or the
-    /// printable area of a home sheet) is too small; marks shorter than
-    /// [`MIN_MARK_LENGTH_MM`](crate::MIN_MARK_LENGTH_MM) are omitted.
+    /// printable area of a home sheet) is too small; marks that would be shorter than
+    /// [`MIN_MARK_LENGTH_MM`](crate::MIN_MARK_LENGTH_MM) are omitted
+    /// ([`check_marks_fit`](crate::check_marks_fit) tells when that happens).
     pub length: f64,
     /// Stroke weight of all marks, in points.
     pub weight_pt: f64,
@@ -71,16 +96,25 @@ pub struct Marks {
     pub scale_ruler: bool,
 }
 
+impl Default for Marks {
+    /// [`Marks::press`].
+    fn default() -> Self {
+        Self::press()
+    }
+}
+
 impl Marks {
-    /// The marks of [`PrintProfile::professional_eu`]: crop marks 5 mm long starting 3 mm
-    /// beyond the trim (i.e. at the bleed edge), fold marks and registration targets,
-    /// 0.25 pt, registration colour; no colour bar.
+    /// The marks of [`PrintProfile::professional_eu`]: solid crop marks and dashed fold
+    /// marks, 5 mm long, starting 3 mm beyond the trim (i.e. at the bleed edge), 0.25 pt,
+    /// registration colour. No registration targets and no colour bar: no surveyed printer
+    /// asks for them (`docs/research/03-print-requirements.md` §2.4); switch them on per
+    /// printer.
     #[must_use]
     pub const fn press() -> Self {
         Self {
             crop: true,
             fold: true,
-            registration: true,
+            registration: false,
             color_bar: false,
             offset: 3.0,
             length: 5.0,
@@ -128,17 +162,20 @@ impl Marks {
     }
 
     /// The colour marks are stroked with: [`Color::Registration`] for
-    /// [`MarkStyle::Press`], a black-only light grey for [`MarkStyle::Guide`].
+    /// [`MarkStyle::Press`], 100 % black for [`MarkStyle::Black`], a black-only light grey
+    /// for [`MarkStyle::Guide`].
     #[must_use]
     pub const fn color(&self) -> Color {
         match self.style {
             MarkStyle::Press => Color::Registration,
+            MarkStyle::Black => Color::BLACK,
             MarkStyle::Guide => Color::Gray(GUIDE_GRAY_LEVEL),
         }
     }
 
-    /// The solid stroke marks are drawn with (butt caps, so a mark ends exactly where its
-    /// path ends).
+    /// The solid stroke crop marks, registration targets and the scale ruler are drawn
+    /// with (butt caps, so a mark ends exactly where its path ends). Fold marks use the
+    /// same colour and weight, dashed.
     #[must_use]
     pub fn stroke(&self) -> Stroke {
         Stroke::solid(self.color(), self.weight_pt)
@@ -232,14 +269,20 @@ impl Sheet {
     }
 }
 
-/// How an image's effective resolution compares with a profile's requirements.
+/// How an image's effective resolution compares with a profile's requirements
+/// ([`PrintProfile::judge_ppi`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Resolution {
     /// At or above the profile's `target_ppi`.
     Good,
-    /// Between `min_ppi` and `target_ppi`: printable, but worth a warning.
+    /// Below `target_ppi` but at or above [`PrintProfile::warn_ppi`]: slightly soft at
+    /// most; no warning.
+    Acceptable,
+    /// Below [`PrintProfile::warn_ppi`] but at or above `min_ppi`: printable, but worth a
+    /// **warning**.
     Low,
-    /// Below `min_ppi` (or not a number): visibly pixelated; a printer may reject it.
+    /// Below `min_ppi` (or not a number): visibly pixelated, an **error**; a printer may
+    /// reject it.
     TooLow,
 }
 
@@ -292,13 +335,13 @@ impl PrintProfile {
     ///
     /// | | |
     /// |---|---|
-    /// | bleed | 3 mm (the most common European value; 2 mm and 5 mm also exist) |
-    /// | safe margin | 4 mm from trim and creases |
-    /// | spine safe margin | 1.5 mm from each crease (a 7 mm text band on a 10 mm spine) |
+    /// | bleed | 3 mm (the most common European value; 1, 2, 3.175 and 5 mm also exist) |
+    /// | safe margin | 5 mm from trim and creases (the largest of the published 3, 4 and 5 mm) |
+    /// | spine safe margin | 2 mm from each crease (a 6 mm text band on a 10 mm spine) |
     /// | slug | 10 mm |
-    /// | marks | crop marks 5 mm long starting at the bleed edge, fold marks, registration targets; 0.25 pt, registration colour |
+    /// | marks | solid crop marks and dashed fold marks, 5 mm long, starting at the bleed edge; 0.25 pt, registration colour; no registration targets, no colour bar |
     /// | PDF | PDF/X-4 |
-    /// | images | 300 ppi target, 150 ppi minimum |
+    /// | images | 300 ppi target, warning below 250 ppi, error below 150 ppi |
     /// | total ink | 300 % |
     ///
     /// Many web-to-print portals (Pixartprinting, Flyeralarm, Printoclock, Bookvault, …)
@@ -308,8 +351,8 @@ impl PrintProfile {
         Self {
             name: "professional_eu".to_owned(),
             bleed: 3.0,
-            safe_margin: 4.0,
-            spine_safe_margin: 1.5,
+            safe_margin: 5.0,
+            spine_safe_margin: 2.0,
             slug: 10.0,
             marks: Marks::press(),
             standard: PdfStandard::X4,
@@ -324,9 +367,9 @@ impl PrintProfile {
     /// [`professional_eu`](Self::professional_eu) without marks and without a slug, for
     /// web-to-print upload portals: `MediaBox = BleedBox = trim + 3 mm`, `TrimBox = trim`.
     ///
-    /// Not part of the original contract; added because the research notes
-    /// (`print-requirements.prepress.md` §1.2 and §5) found that most online printers
-    /// reject files with marks. Unverified against a live printer.
+    /// Not part of the original contract; added because most online printers reject files
+    /// with marks (`docs/research/03-print-requirements.md` §2.3), which makes this the
+    /// default professional output. Unverified against a live printer.
     #[must_use]
     pub fn upload_eu() -> Self {
         let mut p = Self::professional_eu().without_marks();
@@ -334,22 +377,33 @@ impl PrintProfile {
         p
     }
 
-    /// Printing at home: the PDF page is `sheet` (landscape whenever the spread fits that
-    /// way) with the spread centred on it, so that both sides register when the sheet is
-    /// turned over.
+    /// Printing at home: the spread centred on `sheet`, which is used in the orientation of
+    /// the spread (landscape for every preset), so that the trim boxes of the two sides
+    /// coincide when the sheet is turned over.
+    ///
+    /// **Duplex setting.** The inside page is laid out for a sheet turned about the axis
+    /// parallel to the creases. On a landscape sheet that is "flip on the **short** edge";
+    /// the print-dialog default, "flip on long edge", prints the inside upside down behind
+    /// the wrong cover (and nothing looks wrong until the card is opened, because the
+    /// spread is symmetric). [`SheetPlacement::duplex_flip`](crate::SheetPlacement::duplex_flip)
+    /// says which setting a given card needs; the composer must print it on the sheet.
     ///
     /// | | |
     /// |---|---|
     /// | bleed | 2 mm |
     /// | safe margin | 5 mm (hand cutting and home duplex registration are 1–2 mm off) |
     /// | spine safe margin | 2 mm (a 6 mm text band on a 10 mm spine) |
-    /// | marks | light grey black-only cut and fold guides, 0.5 pt, scale ruler; no registration colour, no targets |
-    /// | printable margin | 5 mm (home printers need 3–6.35 mm) |
+    /// | marks | light grey black-only guides, 0.5 pt: solid cut marks, dashed fold marks, a scale ruler; no registration colour, no targets |
+    /// | printable margin | 6.35 mm (0.25 in — the top of the 3 to 6.35 mm range of home printers) |
     /// | PDF | plain PDF (no PDF/X claims, no output intent needed) |
-    /// | images | 200 ppi target, 100 ppi minimum |
+    /// | images | 200 ppi target, warning below 150 ppi, error below 100 ppi |
     ///
-    /// The safe margins, stroke weight, resolution figures and the plain PDF flavour are
-    /// this crate's assumptions (the brief fixes only bleed, guides and printable margin).
+    /// Values from `docs/research/03-print-requirements.md` §9.2; the unprintable margin of
+    /// a given printer may still be larger at the bottom edge (12–15 mm on some old
+    /// inkjets), which would clip the lower marks but not the card.
+    ///
+    /// See [`new_page`](crate::new_page) for the one thing the page cannot express yet:
+    /// its media box is not always the whole sheet.
     #[must_use]
     pub fn home(sheet: Sheet) -> Self {
         Self {
@@ -364,7 +418,7 @@ impl PrintProfile {
             min_ppi: 100.0,
             max_total_ink_percent: 300.0,
             sheet: Some(sheet),
-            printable_margin: 5.0,
+            printable_margin: 6.35,
         }
     }
 
@@ -417,39 +471,83 @@ impl PrintProfile {
         Ok(())
     }
 
-    /// Classifies an effective image resolution against this profile.
+    /// The resolution below which an image deserves a **warning**, in pixels per inch:
+    /// 50 ppi under `target_ppi`, but never under `min_ppi`.
+    ///
+    /// `docs/research/03-print-requirements.md` §1.3 sets three thresholds per profile —
+    /// 300 / 250 / 150 ppi for professional printing and 200 / 150 / 100 ppi at home — as
+    /// house rules. Both warning levels are "target − 50", which is the rule used here so
+    /// that [`PrintProfile`] keeps the field list of `docs/architecture.md`. A profile that
+    /// needs an independent warning level would have to turn this into a field.
+    #[must_use]
+    pub fn warn_ppi(&self) -> f64 {
+        // `f64::max` ignores a NaN operand, so a hostile profile cannot produce NaN here
+        // unless both fields are NaN (and then every comparison below is false).
+        (self.target_ppi - WARN_BELOW_TARGET_PPI).max(self.min_ppi)
+    }
+
+    /// Classifies an effective image resolution (see
+    /// [`effective_ppi`](crate::effective_ppi)) against this profile: at or above
+    /// `target_ppi` is [`Resolution::Good`], then [`Resolution::Acceptable`] down to
+    /// [`warn_ppi`](Self::warn_ppi), [`Resolution::Low`] down to `min_ppi`, and
+    /// [`Resolution::TooLow`] below that or for NaN.
+    ///
+    /// A threshold counts as reached from one part in a billion below it, so that
+    /// floating-point rounding in the pixels-to-ppi conversion never demotes an image
+    /// that has exactly the pixels [`target_px`](Self::target_px) or
+    /// [`min_px`](Self::min_px) ask for.
     #[must_use]
     pub fn judge_ppi(&self, ppi: f64) -> Resolution {
-        if ppi >= self.target_ppi {
+        // Written so that NaN (in `ppi` or in a hostile profile) fails every test.
+        let reaches = |threshold: f64| ppi >= threshold * (1.0 - PPI_RELATIVE_TOLERANCE);
+        if reaches(self.target_ppi) {
             Resolution::Good
-        } else if ppi >= self.min_ppi {
+        } else if reaches(self.warn_ppi()) {
+            Resolution::Acceptable
+        } else if reaches(self.min_ppi) {
             Resolution::Low
         } else {
             Resolution::TooLow
         }
     }
 
-    /// Pixel dimensions an image needs to fill `size` millimetres at `target_ppi`, rounded
-    /// up. For a cover that bleeds, pass the panel **including** its bleed (see
-    /// [`Panels::with_bleed`](crate::Panels::with_bleed)): a 110 × 178 mm poche front with
-    /// 3 mm bleed needs 1335 × 2174 px at 300 ppi.
+    /// The smallest pixel dimensions with which an image filling `size` millimetres
+    /// reaches `target_ppi`. A 6 × 9 in (152.4 × 228.6 mm) panel needs exactly
+    /// 1800 × 2700 px at 300 ppi; the default cover box of the poche card (the front
+    /// panel inset by the 5 mm safe margin, 100 × 168 mm) needs 1182 × 1985 px, and a
+    /// full-bleed poche front (113 × 184 mm with its 3 mm bleed on three sides) needs
+    /// 1335 × 2174 px.
     #[must_use]
     pub fn target_px(&self, size: Size) -> (u32, u32) {
         px_at(size, self.target_ppi)
     }
 
-    /// Pixel dimensions below which an image filling `size` millimetres falls under
-    /// `min_ppi`, rounded up.
+    /// The smallest pixel dimensions with which an image filling `size` millimetres
+    /// reaches `min_ppi`; anything smaller is [`Resolution::TooLow`].
     #[must_use]
     pub fn min_px(&self, size: Size) -> (u32, u32) {
         px_at(size, self.min_ppi)
     }
 }
 
+/// Pixels needed along `mm` millimetres at `ppi`: `mm × ppi / 25.4`, rounded up — unless
+/// the product is a whole number but for floating-point rounding (`152.4 / 25.4 × 300` is
+/// `1800.0000000000002`), in which case it is that whole number.
+fn px_along(mm: f64, ppi: f64) -> u32 {
+    // Multiplying before dividing keeps inch-based sizes exact more often.
+    let exact = mm * ppi / MM_PER_INCH;
+    let nearest = exact.round();
+    let px = if (exact - nearest).abs() <= PPI_RELATIVE_TOLERANCE * nearest.abs().max(1.0) {
+        nearest
+    } else {
+        exact.ceil()
+    };
+    // `f64::max` drops NaN and `as` saturates, so hostile sizes cannot overflow or panic.
+    px.max(0.0) as u32
+}
+
 fn px_at(size: Size, ppi: f64) -> (u32, u32) {
-    // `as` saturates and maps NaN to 0, so hostile sizes cannot overflow or panic.
-    let px = |mm: f64| (mm / MM_PER_INCH * ppi).ceil().max(0.0) as u32;
-    (px(size.w), px(size.h))
+    (px_along(size.w, ppi), px_along(size.h, ppi))
 }
 
 fn check_range(field: &'static str, value: f64, min: f64, max: f64) -> Result<(), LayoutError> {
@@ -471,16 +569,18 @@ mod tests {
         let p = PrintProfile::professional_eu();
         assert_eq!(p.name, "professional_eu");
         assert_eq!(p.bleed, 3.0);
-        assert_eq!(p.safe_margin, 4.0);
-        assert_eq!(p.spine_safe_margin, 1.5);
+        assert_eq!(p.safe_margin, 5.0);
+        assert_eq!(p.spine_safe_margin, 2.0);
         assert_eq!(p.slug, 10.0);
         assert_eq!(p.standard, PdfStandard::X4);
         assert_eq!(p.target_ppi, 300.0);
         assert_eq!(p.min_ppi, 150.0);
         assert_eq!(p.max_total_ink_percent, 300.0);
         assert_eq!(p.sheet, None);
+        assert_eq!(p.warn_ppi(), 250.0);
         let m = p.marks;
-        assert!(m.crop && m.fold && m.registration && !m.color_bar && !m.scale_ruler);
+        // Crop and fold marks only: no surveyed printer asks for targets or a colour bar.
+        assert!(m.crop && m.fold && !m.registration && !m.color_bar && !m.scale_ruler);
         assert_eq!((m.offset, m.length, m.weight_pt), (3.0, 5.0, 0.25));
         // Crop marks start at the bleed edge and fit in the slug.
         assert_eq!(m.offset, p.bleed);
@@ -496,9 +596,15 @@ mod tests {
             let p = PrintProfile::home(sheet);
             assert_eq!(p.name, format!("home_{name}"));
             assert_eq!(p.bleed, 2.0);
-            assert_eq!(p.printable_margin, 5.0);
+            assert_eq!((p.safe_margin, p.spine_safe_margin), (5.0, 2.0));
+            // A quarter of an inch: the largest hardware margin of common home printers.
+            assert_eq!(p.printable_margin, 6.35);
+            assert_eq!((p.target_ppi, p.warn_ppi(), p.min_ppi), (200.0, 150.0, 100.0));
+            assert_eq!(p.standard, PdfStandard::Plain);
             assert_eq!(p.sheet, Some(sheet));
             assert!(p.marks.crop && p.marks.fold && !p.marks.registration && !p.marks.color_bar);
+            assert!(p.marks.scale_ruler);
+            assert_eq!(p.marks.weight_pt, 0.5);
             assert_eq!(p.marks.style, MarkStyle::Guide);
             // Light grey, black only: never the registration colour, never RGB.
             match p.marks.color() {
@@ -637,25 +743,77 @@ mod tests {
 
     #[test]
     fn resolution_verdicts() {
+        // Professional: 300 good, warning below 250, error below 150.
         let p = PrintProfile::professional_eu();
         assert_eq!(p.judge_ppi(300.0), Resolution::Good);
-        assert_eq!(p.judge_ppi(299.9), Resolution::Low);
+        assert_eq!(p.judge_ppi(299.9), Resolution::Acceptable);
+        assert_eq!(p.judge_ppi(250.0), Resolution::Acceptable);
+        assert_eq!(p.judge_ppi(249.9), Resolution::Low);
         assert_eq!(p.judge_ppi(150.0), Resolution::Low);
         assert_eq!(p.judge_ppi(149.9), Resolution::TooLow);
         assert_eq!(p.judge_ppi(f64::NAN), Resolution::TooLow);
         assert_eq!(p.judge_ppi(-1.0), Resolution::TooLow);
         assert_eq!(p.judge_ppi(f64::INFINITY), Resolution::Good);
+        // Home: 200 good, warning below 150, error below 100.
+        let h = PrintProfile::home(Sheet::A4);
+        for (ppi, want) in [
+            (200.0, Resolution::Good),
+            (199.0, Resolution::Acceptable),
+            (150.0, Resolution::Acceptable),
+            (149.0, Resolution::Low),
+            (100.0, Resolution::Low),
+            (99.0, Resolution::TooLow),
+        ] {
+            assert_eq!(h.judge_ppi(ppi), want, "{ppi} ppi at home");
+        }
+    }
+
+    #[test]
+    fn verdicts_tolerate_rounding_but_not_a_real_shortfall() {
+        let p = PrintProfile::professional_eu();
+        // What `1800 px / (152.4 mm / 25.4)` gives in f64: one ulp under 300.
+        assert_eq!(p.judge_ppi(299.999_999_999_999_94), Resolution::Good);
+        assert_eq!(p.judge_ppi(149.999_999_999_999_97), Resolution::Low);
+        // A millionth of a ppi short is short.
+        assert_eq!(p.judge_ppi(299.999_999), Resolution::Acceptable);
+        assert_eq!(p.judge_ppi(149.999_999), Resolution::TooLow);
+    }
+
+    #[test]
+    fn warning_threshold_never_drops_below_the_minimum() {
+        let mut p = PrintProfile::professional_eu();
+        (p.target_ppi, p.min_ppi) = (120.0, 100.0);
+        assert_eq!(p.warn_ppi(), 100.0);
+        // With no room between warning and error there is no `Low` band.
+        assert_eq!(p.judge_ppi(110.0), Resolution::Acceptable);
+        assert_eq!(p.judge_ppi(99.0), Resolution::TooLow);
+        // Hostile profiles: no panic, and NaN never passes for good.
+        (p.target_ppi, p.min_ppi) = (f64::NAN, f64::NAN);
+        assert!(p.warn_ppi().is_nan());
+        assert_eq!(p.judge_ppi(1e9), Resolution::TooLow);
     }
 
     #[test]
     fn pixel_requirements() {
         let p = PrintProfile::professional_eu();
-        // 110 + 3 mm by 178 + 6 mm at 300 ppi.
+        // The figures of docs/research/03-print-requirements.md §4.2: full-bleed poche
+        // front, 110 + 3 mm by 178 + 6 mm, at 300 ppi and at the 150 ppi floor.
         assert_eq!(p.target_px(Size::new(113.0, 184.0)), (1335, 2174));
+        assert_eq!(p.min_px(Size::new(113.0, 184.0)), (668, 1087));
+        // The default inset box, 100 x 168 mm.
+        assert_eq!(p.target_px(Size::new(100.0, 168.0)), (1182, 1985));
+        assert_eq!(p.min_px(Size::new(100.0, 168.0)), (591, 993));
         assert_eq!(p.min_px(Size::new(25.4, 50.8)), (150, 300));
+        // Inch-based sizes are exact: 6 x 9 in is 1800 x 2700 px, not 1801.
+        assert_eq!(p.target_px(Size::new(152.4, 228.6)), (1800, 2700));
+        assert_eq!(p.target_px(Size::new(76.2, 177.8)), (900, 2100));
+        // A hair above a whole number of pixels still rounds up.
+        assert_eq!(p.target_px(Size::new(152.4001, 25.4)), (1801, 300));
+        assert_eq!(p.target_px(Size::new(0.0, 1e-6)), (0, 1));
         // Hostile sizes saturate instead of panicking.
         assert_eq!(p.target_px(Size::new(f64::NAN, -5.0)), (0, 0));
         assert_eq!(p.target_px(Size::new(f64::INFINITY, 1e300)), (u32::MAX, u32::MAX));
+        assert_eq!(p.target_px(Size::new(f64::NEG_INFINITY, f64::MIN)), (0, 0));
     }
 
     #[test]
@@ -668,5 +826,22 @@ mod tests {
         assert!(s.dash_mm.is_empty());
         assert_eq!(s.color, Color::Registration);
         assert_eq!(Marks::guides().stroke().color, Color::Gray(GUIDE_GRAY_LEVEL));
+        // The contract's field list plus `..Default::default()` is enough to build marks.
+        let m = Marks {
+            crop: true,
+            fold: false,
+            registration: false,
+            color_bar: false,
+            offset: 4.0,
+            length: 3.0,
+            weight_pt: 0.3,
+            ..Default::default()
+        };
+        assert_eq!((m.style, m.scale_ruler), (MarkStyle::Press, false));
+        assert_eq!(Marks::default(), Marks::press());
+        // Digital jobs: the same marks in black only, never registration colour.
+        let black = Marks { style: MarkStyle::Black, ..Marks::press() };
+        assert_eq!(black.color(), Color::BLACK);
+        assert_eq!(black.color().total_ink_percent(), Some(100.0));
     }
 }

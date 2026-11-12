@@ -1,9 +1,10 @@
 //! Structural sample PDFs for tests and demos of the print provider API.
 //!
 //! [`SampleCard`] writes a small two-page PDF shaped like an eBook Cadeau card for a given
-//! product — page boxes with bleed, CMYK vector artwork, a PDF/X-4 output intent carrying a
-//! real (CC0) CMYK profile, and the `EBC.*` geometry keys — and can be told to break one
-//! rule at a time, so that tests can check what the printer accepts and what it refuses.
+//! product — page boxes with bleed, CMYK vector artwork, a small CMYK image, a PDF/X-4
+//! output intent (with a placeholder profile) and the `EBC.*` geometry keys — and can be
+//! told to break one rule at a time, so that tests can check what the printer accepts and
+//! what it refuses.
 //!
 //! These files are **fixtures, not artwork**: flat colour panels without text. They exist
 //! so that the printer (and the stores' tests, which need *some* printable PDF from a mock
@@ -18,8 +19,24 @@ use crate::catalog::Product;
 /// Points per millimetre.
 const MM: f64 = 72.0 / 25.4;
 
-/// CC0 CMYK profile from `assets/icc` (CGATS TR 001 / SWOP compatible).
-const CMYK_PROFILE: &[u8] = include_bytes!("../../../assets/icc/CGATS001Compat-v2-micro.icc");
+/// A structurally valid but empty ICC profile: a 128-byte header declaring a version 2.4
+/// output-device (`prtr`) profile for CMYK with a Lab connection space, followed by an
+/// empty tag table. It satisfies structural preflight; it carries no colour data, which is
+/// one more reason these files are fixtures and not artwork.
+///
+/// (The repository's CC0 CMYK profile, `assets/icc/CGATS001Compat-v2-micro.icc`, is not
+/// used here because its header declares the input-device class `scnr`, which
+/// `ebc-preflight` rightly reports as a warning on an output intent.)
+fn output_profile() -> Vec<u8> {
+    let mut data = vec![0u8; 132];
+    data[0..4].copy_from_slice(&132u32.to_be_bytes());
+    data[8..12].copy_from_slice(&[2, 0x40, 0, 0]);
+    data[12..16].copy_from_slice(b"prtr");
+    data[16..20].copy_from_slice(b"CMYK");
+    data[20..24].copy_from_slice(b"Lab ");
+    data[36..40].copy_from_slice(b"acsp");
+    data
+}
 
 /// Side of the sample image, in pixels.
 const IMAGE_PX: u32 = 60;
@@ -46,6 +63,9 @@ pub struct SampleCard {
     pub heavy_ink: bool,
     /// Places a small CMYK image at this effective resolution (pixels per inch).
     pub image_ppi: Option<f64>,
+    /// Draws a QR-like vector symbol on the inside page with modules of this size, in
+    /// millimetres.
+    pub qr_module_mm: Option<f64>,
     /// Info `Title`; `None` omits it.
     pub title: Option<String>,
     /// Whether to write the `EBC.*` geometry keys.
@@ -66,6 +86,7 @@ impl SampleCard {
             transparency: false,
             heavy_ink: false,
             image_ppi: Some(300.0),
+            qr_module_mm: Some(0.5),
             title: Some(format!("Carte de démonstration — {}", product.id)),
             geometry_keys: true,
         }
@@ -114,7 +135,7 @@ impl SampleCard {
             let operators = if index == 0 {
                 self.outside_content(media_w, media_h, bleed)
             } else {
-                Self::inside_content(media_w, media_h)
+                self.inside_content(media_w, media_h, bleed)
             };
             w.stream(content, "", operators.as_bytes());
             w.object(
@@ -148,13 +169,14 @@ impl SampleCard {
         let mut catalog_entries = format!("/Type /Catalog /Pages {pages} 0 R");
         if self.output_intent {
             let profile = w.alloc();
-            w.stream(profile, "/N 4", CMYK_PROFILE);
+            w.stream(profile, "/N 4", &output_profile());
             let intent = w.alloc();
             w.object(
                 intent,
                 &format!(
-                    "<< /Type /OutputIntent /S /GTS_PDFX /OutputConditionIdentifier (CGATS TR 001) \
-                     /RegistryName (http://www.color.org) /Info (CGATS TR 001 \\(SWOP\\), compact profile) \
+                    "<< /Type /OutputIntent /S /GTS_PDFX /OutputConditionIdentifier (FOGRA39) \
+                     /RegistryName (http://www.color.org) \
+                     /Info (Coated FOGRA39 \\(ISO 12647-2:2004\\) - placeholder profile, test fixture) \
                      /DestOutputProfile {profile} 0 R >>"
                 ),
             );
@@ -238,8 +260,9 @@ impl SampleCard {
         c
     }
 
-    /// Other pages: white, with two black rules where instructions would go.
-    fn inside_content(media_w: f64, media_h: f64) -> String {
+    /// Other pages: white, with two black rules where instructions would go and, when
+    /// asked, a QR-like symbol on the right-hand panel.
+    fn inside_content(&self, media_w: f64, media_h: f64, bleed: f64) -> String {
         let mut c = String::new();
         let _ = writeln!(c, "q 0 0 0 0 k 0 0 {media_w:.4} {media_h:.4} re f Q");
         let _ = writeln!(
@@ -247,9 +270,14 @@ impl SampleCard {
             "q 0 0 0 1 K 0.75 w {x0:.4} {y:.4} m {x1:.4} {y:.4} l S {x0:.4} {y2:.4} m {x1:.4} {y2:.4} l S Q",
             x0 = media_w * 0.6,
             x1 = media_w * 0.9,
-            y = media_h * 0.4,
-            y2 = media_h * 0.35,
+            y = media_h * 0.3,
+            y2 = media_h * 0.25,
         );
+        if let Some(module) = self.qr_module_mm {
+            let x = bleed + self.cover_width() + self.spine_mm + 25.0;
+            let y = bleed + self.trim_mm.1 * 0.5;
+            c.push_str(&qr_like(x, y, module.max(0.01)));
+        }
         c
     }
 
@@ -266,6 +294,72 @@ impl SampleCard {
              </rdf:Description>\n</rdf:RDF>\n</x:xmpmeta>\n<?xpacket end=\"w\"?>"
         )
     }
+}
+
+/// Modules per side of the QR-like symbol (a version 2 QR code is 25 × 25).
+const QR_SIZE: usize = 25;
+
+/// Content operators painting a QR-like symbol in K-only black, as merged horizontal runs
+/// of modules, with its lower-left corner at `(x_mm, y_mm)`: three finder patterns, timing
+/// lines and deterministic pseudo-random data modules. It is shaped like a QR code for the
+/// preflight's module-size check; it does not encode anything.
+fn qr_like(x_mm: f64, y_mm: f64, module_mm: f64) -> String {
+    let mut modules = [[false; QR_SIZE]; QR_SIZE];
+    for (ox, oy) in [(0, 0), (QR_SIZE - 7, 0), (0, QR_SIZE - 7)] {
+        for y in 0..7 {
+            for x in 0..7 {
+                let ring = x == 0 || y == 0 || x == 6 || y == 6;
+                let core = (2..=4).contains(&x) && (2..=4).contains(&y);
+                modules[oy + y][ox + x] = ring || core;
+            }
+        }
+    }
+    let mut state = 0x9E37_79B9_7F4A_7C15_u64;
+    for (y, row) in modules.iter_mut().enumerate() {
+        for (x, cell) in row.iter_mut().enumerate() {
+            let in_finder =
+                (x < 8 && y < 8) || (x >= QR_SIZE - 8 && y < 8) || (x < 8 && y >= QR_SIZE - 8);
+            if in_finder {
+                continue;
+            }
+            if y == 6 || x == 6 {
+                *cell = (x + y) % 2 == 0;
+                continue;
+            }
+            state ^= state << 13;
+            state ^= state >> 7;
+            state ^= state << 17;
+            *cell = state & 1 == 1;
+        }
+    }
+    let mut out = String::from("q 0 0 0 1 k\n");
+    for (row_index, row) in modules.iter().enumerate() {
+        let mut x = 0;
+        while x < QR_SIZE {
+            if !row[x] {
+                x += 1;
+                continue;
+            }
+            let start = x;
+            while x < QR_SIZE && row[x] {
+                x += 1;
+            }
+            // Row 0 is the top of the symbol; PDF's y axis points up.
+            #[allow(clippy::cast_precision_loss)]
+            let (left, bottom, run) =
+                (start as f64, (QR_SIZE - 1 - row_index) as f64, (x - start) as f64);
+            let _ = writeln!(
+                out,
+                "{:.4} {:.4} {:.4} {:.4} re",
+                (x_mm + left * module_mm) * MM,
+                (y_mm + bottom * module_mm) * MM,
+                run * module_mm * MM,
+                module_mm * MM,
+            );
+        }
+    }
+    out.push_str("f Q\n");
+    out
 }
 
 /// A 60 × 60 px CMYK gradient with low ink coverage, uncompressed.
@@ -374,7 +468,7 @@ impl Writer {
             // and is recorded as a free entry rather than a bogus offset.
             match offset {
                 Some(offset) => {
-                    let _ = write!(tail, "{offset:010} 00000 n \n");
+                    let _ = writeln!(tail, "{offset:010} 00000 n ");
                 }
                 None => tail.push_str("0000000000 65535 f \n"),
             }

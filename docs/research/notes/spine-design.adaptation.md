@@ -1,6 +1,7 @@
 # Spine design — adapting an existing spine to 10 mm, and synthesising one
 
 Research notes, 2026-11-12. Angle: algorithms and parameter defaults for `ebc-spine`. Companion notes, not repeated here:
+`spine-design.conventions.md` (direction by country, element order, series templates; all from memory),
 `print-requirements.folding.md` (spine rules of printers and POD platforms), `font-id-tech.generation.md` (background models,
 legibility), `cover-sources.sources.md` (where spines can come from), the legal notes. Facts reused from them are tagged **[sib]**.
 
@@ -180,8 +181,8 @@ components over a background model, but it is tracing by another name. Keep it f
 | S7 Text colour | Ratios on the **printed** colours. Background L\* ≤ 46 (45 uncoated): paper white, floor 4.5, target 7. Background L\* ≥ 70 (74 uncoated): K100, floor 4.5, target 7. A coloured text (cover-title colour, palette swatch) only at ≥ 7. On a gradient test the 5th and 95th percentile rows under the text | 4.5 / 7.0; bounds 46 and 70 | 5.2 |
 | S8 Rescue | Background L\* between the bounds, or nothing passes: move its L\* to the nearer bound (to the 7:1 bound if that costs ≤ 25 L\*), keeping hue and chroma; if still failing, use the darkest or lightest palette swatch as a flat background | 25 L\* | [E] |
 | S9 Type | Top open-font match from the identification stage [sib]; else by class: serif → Spectral SemiBold, sans → Atkinson Hyperlegible Bold, condensed caps → Bebas Neue. Reversed text: weight ≥ 600 and ≥ 8 pt [sib] | — | fonts are in `assets/fonts` |
-| S10 Layout | Text band 6 mm (2 mm clear each side) [sib]; ink box ≤ 5.0 mm. Head and foot margins 8 mm (≥ `safe_margin` 4–5 mm of `ebc-layout`). Optional author at the head, ≤ 35 % of the live length, 0.7 × title size, gap ≥ 6 mm. A further 12 mm at the foot only when a licensed publisher mark is supplied | — | [E]; author–title–publisher order is the French habit [M] |
-| S11 Direction | By the **book's** language, not the UI locale. Bottom-to-top for French and most continental languages, top-to-bottom for English [M, sib]. CJK: upright glyphs, top-to-bottom | — | not verified, see below |
+| S10 Layout | Text band 6 mm (2 mm clear each side) [sib]; ink box ≤ 5.0 mm. Head and foot margins 8 mm (≥ `safe_margin` 4–5 mm of `ebc-layout`). Optional author at the head, ≤ 35 % of the live length, 0.7 × title size, gap ≥ 6 mm. A further 12 mm at the foot only when a mark is placed there (a licensed publisher mark, or the service's own [sib]) | — | [E]; author–title–publisher order is the French habit [M] |
+| S11 Direction | By the **book's** language or country, not the UI locale; table in `spine-design.conventions.md`: bottom-to-top for fr, de, it, es, pt; top-to-bottom for en, nl, da, sv, nb [sib, all from memory]. An adapted real spine keeps its own direction. CJK: upright glyphs, top-to-bottom. Always a user toggle | — | only fetched data point: calibre defaults to bottom-to-top, as a preference [V1] |
 | S12 Marks | No publisher logo unless the reseller supplies and licenses it. No fake shading | — | trademark caution [sib] |
 
 Classifier check on synthetic covers (800 × 1,295 px, JPEG 80) [L]:
@@ -342,12 +343,13 @@ Fixtures must be synthetic (generated at build time), so that tests stay offline
 
 - Real-cover statistics: share of covers per background class; how often the eBook cover is a crop of the print front.
 - Whether a publisher's eBook cover and print front are the same artwork often enough for the template match (series redesigns).
-- Spine direction per country, including Dutch, Scandinavian, Arabic and Hebrew practice, and ISO 6357.
+- Spine direction per country, including Dutch, Scandinavian, Arabic and Hebrew practice, and ISO 6357 (the sibling
+  conventions note is also unverified).
 - The ±8 % stretch limit and the 60 % truncation rule need a visual test with readers.
 
 ## Sources
 
-All fetched successfully in this session.
+All fetched successfully in this session, except the two links taken from a sibling note, which are flagged.
 
 - calibre: [bookshelf_view.py](https://raw.githubusercontent.com/kovidgoyal/calibre/master/src/calibre/gui2/library/bookshelf_view.py), [gui2/__init__.py](https://raw.githubusercontent.com/kovidgoyal/calibre/master/src/calibre/gui2/__init__.py), [imageops.cpp](https://raw.githubusercontent.com/kovidgoyal/calibre/master/src/calibre/utils/imageops/imageops.cpp), [covers.py](https://raw.githubusercontent.com/kovidgoyal/calibre/master/src/calibre/ebooks/covers.py), [Changelog.txt](https://raw.githubusercontent.com/kovidgoyal/calibre/master/Changelog.txt)
 - KOReader: [mosaicmenu.lua](https://raw.githubusercontent.com/koreader/koreader/master/plugins/coverbrowser.koplugin/mosaicmenu.lua)

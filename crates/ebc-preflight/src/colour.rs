@@ -78,11 +78,12 @@ impl ColorSpace {
             b"CalRGB" => ColorSpace::CalRgb,
             b"Lab" => ColorSpace::Lab,
             other => {
-                let named = resources
-                    .and_then(|res| get(doc, res, b"ColorSpace"))
-                    .and_then(|spaces| match spaces {
-                        Object::Dictionary(dict) => dict.get(other).ok(),
-                        _ => None,
+                let named =
+                    resources.and_then(|res| get(doc, res, b"ColorSpace")).and_then(|spaces| {
+                        match spaces {
+                            Object::Dictionary(dict) => dict.get(other).ok(),
+                            _ => None,
+                        }
                     });
                 match named {
                     // A named resource must not be another resource name: resolve it without
@@ -231,8 +232,8 @@ pub(crate) struct IccHeader {
     pub(crate) components: Option<u8>,
     /// Profile/device class signature (`prtr`, `mntr`, `scnr` …).
     pub(crate) class: String,
-    /// Profile size declared in the header.
-    pub(crate) declared_size: u32,
+    /// Major version of the ICC specification the profile follows (2 or 4).
+    pub(crate) version_major: u8,
 }
 
 /// Reads the fixed 128-byte ICC header. `None` when the data is not an ICC profile.
@@ -259,8 +260,7 @@ pub(crate) fn parse_icc_header(data: &[u8]) -> Option<IccHeader> {
             .and_then(|n| u8::from_str_radix(n, 16).ok())
             .filter(|n| (2..=15).contains(n)),
     };
-    let declared_size = u32::from_be_bytes([header[0], header[1], header[2], header[3]]);
-    Some(IccHeader { color_space, components, class: signature(12..16)?, declared_size })
+    Some(IccHeader { color_space, components, class: signature(12..16)?, version_major: header[8] })
 }
 
 #[cfg(test)]
@@ -312,7 +312,8 @@ mod tests {
     fn self_referential_arrays_terminate() {
         let mut doc = Document::with_version("1.6");
         let id = doc.new_object_id();
-        doc.objects.insert(id, Object::Array(vec![name("Indexed"), Object::Reference(id), 1.into()]));
+        doc.objects
+            .insert(id, Object::Array(vec![name("Indexed"), Object::Reference(id), 1.into()]));
         let space = ColorSpace::from_object(&doc, &Object::Reference(id), None);
         assert_eq!(space.class(), ColorClass::Unknown);
         assert!(space.describe().starts_with("Indexed(Indexed("));
@@ -329,7 +330,9 @@ mod tests {
         assert_eq!(header.color_space, "CMYK");
         assert_eq!(header.components, Some(4));
         assert_eq!(header.class, "prtr");
-        assert_eq!(header.declared_size, 128);
+        assert_eq!(header.version_major, 0);
+        data[8] = 4;
+        assert_eq!(parse_icc_header(&data).unwrap().version_major, 4);
         data[16..20].copy_from_slice(b"RGB ");
         assert_eq!(parse_icc_header(&data).unwrap().components, Some(3));
         data[16..20].copy_from_slice(b"6CLR");

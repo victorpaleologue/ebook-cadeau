@@ -1,4 +1,20 @@
 //! Fitting a raster image into a rectangle.
+//!
+//! # Placing the cover
+//!
+//! * **Default — the whole cover, uncropped.** Letterbox it in the safe area of its panel
+//!   (5 mm inside the trim and the crease) on a flat ground that fills the bleed:
+//!   `place_image(px, safe_rect(format.front(), &profile), Fit::Contain)`. Nothing of the
+//!   cover is cut off and nothing of it lies in the bleed, which is what
+//!   `docs/research/03-print-requirements.md` (implication 14) asks for unless cropping
+//!   the cover has been authorised.
+//! * **Full bleed — only when the cover may be cropped.** Use [`place_image_bleed`] and
+//!   clip to the panel grown into the bleed on its outer edges
+//!   ([`Panels::with_bleed`](crate::Panels::with_bleed)). The crop is then symmetric about
+//!   the panel. Do **not** pass the `with_bleed` rectangle to [`place_image`]: that
+//!   rectangle is not centred on the panel (it grows on three sides only), so the cover
+//!   would end up half a bleed off-centre, losing next to nothing at the fold and the
+//!   whole bleed at the fore-edge.
 
 use ebc_scene::{MM_PER_INCH, Rect};
 
@@ -22,8 +38,9 @@ pub enum Fit {
 /// `target` and the caller must clip to `target` (e.g. with
 /// [`ebc_scene::Item::clipped`]); with `Fit::Contain` it lies inside `target`.
 ///
-/// For a full-bleed cover pass the panel **with** its bleed
-/// ([`Panels::with_bleed`](crate::Panels::with_bleed)) as `target`.
+/// For a cover that must reach into the bleed use [`place_image_bleed`] instead of
+/// passing a panel grown by [`Panels::with_bleed`](crate::Panels::with_bleed): that
+/// rectangle is not centred on its panel.
 ///
 /// Degenerate input — a zero pixel dimension, or a target that is empty or not finite —
 /// returns `target` unchanged.
@@ -77,20 +94,45 @@ pub fn place_image_aligned(
     )
 }
 
+/// Where to draw a **full-bleed** cover image on a cover panel: scaled without distortion
+/// until it covers `panel` grown by `bleed` on all four sides, and centred on the panel.
+///
+/// The caller must clip the image to the panel grown into the bleed on its *outer* edges
+/// only — `format.outside().with_bleed(bleed).right` for the front cover, `.left` for the
+/// back ([`Panels::with_bleed`](crate::Panels::with_bleed)) — which the returned rectangle
+/// always contains. On the crease side the clip cuts off the same strip that the trim
+/// removes at the fore-edge, so what remains visible is centred on the panel: a frame or
+/// a centred title on the cover stays centred on the finished card.
+///
+/// Every edge of the cover loses at least `bleed` (slightly more after scaling), so this
+/// crops the artwork: use it only when that is allowed, and see the
+/// [module documentation](self) for the uncropped default.
+///
+/// A negative or non-finite `bleed` counts as zero. Degenerate input is handled as by
+/// [`place_image`].
+#[must_use]
+pub fn place_image_bleed(image_px: (u32, u32), panel: Rect, bleed: f64) -> Rect {
+    let bleed = if bleed.is_finite() { bleed.max(0.0) } else { 0.0 };
+    place_image(image_px, panel.inflate(bleed), Fit::Cover)
+}
+
 /// The effective resolution, in pixels per inch, of an image of `image_px` pixels drawn
 /// into `placed` (the rectangle returned by [`place_image`]): the lower of the horizontal
 /// and vertical figures. Returns `0.0` for an empty or non-finite rectangle.
 ///
 /// Compare the result with a profile using
-/// [`PrintProfile::judge_ppi`](crate::PrintProfile::judge_ppi).
+/// [`PrintProfile::judge_ppi`](crate::PrintProfile::judge_ppi), which allows for the
+/// last-bit rounding of this division.
 #[must_use]
 pub fn effective_ppi(image_px: (u32, u32), placed: Rect) -> f64 {
     let usable = |v: f64| v.is_finite() && v > 0.0;
     if !usable(placed.w) || !usable(placed.h) {
         return 0.0;
     }
-    let x = f64::from(image_px.0) / (placed.w / MM_PER_INCH);
-    let y = f64::from(image_px.1) / (placed.h / MM_PER_INCH);
+    // Multiply before dividing: `1800 * 25.4 / 152.4` is closer to 300 than
+    // `1800 / (152.4 / 25.4)`.
+    let x = f64::from(image_px.0) * MM_PER_INCH / placed.w;
+    let y = f64::from(image_px.1) * MM_PER_INCH / placed.h;
     x.min(y)
 }
 
@@ -197,6 +239,34 @@ mod tests {
     }
 
     #[test]
+    fn full_bleed_placement_is_centred_on_the_panel_and_covers_its_bleed() {
+        // The poche front panel and its clip rectangle (bleed on the three outer edges).
+        let panel = Rect::new(120.0, 0.0, 110.0, 178.0);
+        let clip = Rect::new(120.0, -3.0, 113.0, 184.0);
+        // A scan in the panel's own proportions.
+        let r = place_image_bleed((1100, 1780), panel, 3.0);
+        assert!(r.contains_rect(&clip, 1e-9), "{r:?}");
+        assert!(close(r.center().x, panel.center().x) && close(r.center().y, panel.center().y));
+        // Scaled by 116/110 (the width decides), so the same 3 mm strip is hidden behind
+        // the fold as is trimmed off at the fore-edge.
+        assert!(close(r.w, 116.0) && close(r.h, 1780.0 * 116.0 / 1100.0));
+        assert!(close(panel.x - r.x, 3.0) && close(r.right() - panel.right(), 3.0));
+        // The recipe this replaces — centring on the clip rectangle — is 1.5 mm off.
+        let naive = place_image((1100, 1780), clip, Fit::Cover);
+        assert!(close(naive.center().x - panel.center().x, 1.5));
+        // No bleed: plain cover fit on the panel. Hostile bleeds count as zero.
+        for b in [0.0, -3.0, f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
+            assert_eq!(
+                place_image_bleed((600, 900), panel, b),
+                place_image((600, 900), panel, Fit::Cover),
+                "bleed {b}"
+            );
+        }
+        // Degenerate input comes back unchanged, as with `place_image`.
+        assert_eq!(place_image_bleed((0, 0), panel, 3.0), panel.inflate(3.0));
+    }
+
+    #[test]
     fn effective_resolution() {
         // 1299 x 2102 px on 110 x 178 mm is 300 ppi.
         let ppi = effective_ppi((1299, 2102), Rect::new(0.0, 0.0, 110.0, 178.0));
@@ -211,5 +281,10 @@ mod tests {
         assert_eq!(effective_ppi((600, 900), Rect::new(0.0, 0.0, 0.0, 10.0)), 0.0);
         assert_eq!(effective_ppi((600, 900), Rect::new(0.0, 0.0, f64::NAN, 10.0)), 0.0);
         assert_eq!(effective_ppi((0, 0), Rect::new(0.0, 0.0, 10.0, 10.0)), 0.0);
+        // Scans made at exactly 300 ppi on inch-based sizes: 6 x 9 in and 3 x 7 in.
+        for (px, w, h) in [((1800, 2700), 152.4, 228.6), ((900, 2100), 76.2, 177.8)] {
+            let ppi = effective_ppi(px, Rect::new(0.0, 0.0, w, h));
+            assert!((ppi - 300.0).abs() < 1e-9, "{px:?}: {ppi:?}");
+        }
     }
 }

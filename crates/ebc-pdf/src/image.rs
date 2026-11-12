@@ -112,6 +112,10 @@ pub(crate) struct PreparedImage<'a> {
     mask: Option<Encoded>,
 }
 
+/// Above four times this many bytes, whether to PNG-predict an image is decided on a
+/// sample of about this size instead of by compressing the whole image twice.
+const PREDICTION_SAMPLE_BYTES: usize = 256 * 1024;
+
 /// Lossless sample data ready for a stream.
 #[derive(Debug)]
 struct Encoded {
@@ -130,12 +134,29 @@ impl Encoded {
         if !compress {
             return Self { data: raw.to_vec(), deflated: false, predicted: false };
         }
-        let plain = deflate(raw);
-        let predicted = deflate(&png_predict(raw, row_len, channels));
-        if predicted.len() < plain.len() {
-            Self { data: predicted, deflated: true, predicted: true }
+        if raw.len() <= PREDICTION_SAMPLE_BYTES * 4 || row_len == 0 {
+            // Small enough to simply try both.
+            let plain = deflate(raw);
+            let predicted = deflate(&png_predict(raw, row_len, channels));
+            return if predicted.len() < plain.len() {
+                Self { data: predicted, deflated: true, predicted: true }
+            } else {
+                Self { data: plain, deflated: true, predicted: false }
+            };
+        }
+        // Large image: decide on a band of rows from the middle, then compress once.
+        let rows = raw.len() / row_len;
+        let sample_rows = (PREDICTION_SAMPLE_BYTES / row_len).clamp(2, rows);
+        let first = (rows - sample_rows) / 2;
+        let sample = &raw[first * row_len..(first + sample_rows) * row_len];
+        if deflate(&png_predict(sample, row_len, channels)).len() < deflate(sample).len() {
+            Self {
+                data: deflate(&png_predict(raw, row_len, channels)),
+                deflated: true,
+                predicted: true,
+            }
         } else {
-            Self { data: plain, deflated: true, predicted: false }
+            Self { data: deflate(raw), deflated: true, predicted: false }
         }
     }
 }
@@ -524,6 +545,98 @@ mod tests {
                 "{format:?} {w}x{h} with {len} bytes"
             );
         }
+    }
+
+    /// Reverses [`png_predict`] the way a PDF consumer does.
+    fn png_unpredict(data: &[u8], row_len: usize, bpp: usize) -> Vec<u8> {
+        let mut out: Vec<u8> = Vec::new();
+        for (index, line) in data.chunks_exact(row_len + 1).enumerate() {
+            let (kind, line) = (line[0], &line[1..]);
+            let start = index * row_len;
+            for i in 0..row_len {
+                let a = if i >= bpp { out[start + i - bpp] } else { 0 };
+                let b = if index > 0 { out[start - row_len + i] } else { 0 };
+                let c = if index > 0 && i >= bpp { out[start - row_len + i - bpp] } else { 0 };
+                let predictor = match kind {
+                    0 => 0,
+                    1 => a,
+                    2 => b,
+                    3 => ((u16::from(a) + u16::from(b)) / 2) as u8,
+                    4 => paeth(a, b, c),
+                    other => panic!("invalid PNG filter type {other}"),
+                };
+                out.push(line[i].wrapping_add(predictor));
+            }
+        }
+        out
+    }
+
+    #[test]
+    fn png_prediction_round_trips_and_picks_sensible_filters() {
+        // Pseudo-random data, gradients in both directions, flat data, odd sizes.
+        let mut state = 7u32;
+        let mut noise = || {
+            state = state.wrapping_mul(1_664_525).wrapping_add(1_013_904_223);
+            (state >> 24) as u8
+        };
+        for (width, height, bpp) in [(1, 1, 1), (7, 5, 3), (16, 16, 4), (33, 2, 1), (5, 40, 3)] {
+            let row_len = width * bpp;
+            let images: [Vec<u8>; 4] = [
+                (0..row_len * height).map(|_| noise()).collect(),
+                (0..row_len * height).map(|i| ((i % row_len) / bpp * 3) as u8).collect(),
+                (0..row_len * height).map(|i| (i / row_len * 5) as u8).collect(),
+                vec![200; row_len * height],
+            ];
+            for raw in &images {
+                let predicted = png_predict(raw, row_len, bpp);
+                assert_eq!(predicted.len(), raw.len() + height);
+                assert_eq!(&png_unpredict(&predicted, row_len, bpp), raw, "{width}x{height}x{bpp}");
+            }
+            if width > 4 && height > 4 {
+                // Identical rows vanish under "Up"; rows of one value are never cheapest
+                // unfiltered ("Sub" leaves only the first pixel).
+                let filters = |raw: &[u8]| -> Vec<u8> {
+                    png_predict(raw, row_len, bpp).chunks(row_len + 1).map(|r| r[0]).collect()
+                };
+                assert!(filters(&images[1])[1..].iter().all(|f| *f == 2), "repeated rows: Up");
+                assert!(
+                    filters(&images[2])[1..].iter().all(|f| *f != 0),
+                    "vertical ramp: filtered"
+                );
+                assert_eq!(filters(&images[1])[0], 1, "first row of a ramp: Sub");
+            }
+        }
+        assert_eq!(paeth(10, 20, 5), 20);
+        assert_eq!(paeth(10, 20, 30), 10);
+        assert_eq!(paeth(100, 100, 100), 100);
+    }
+
+    #[test]
+    fn large_images_are_predicted_from_a_sample_with_the_same_outcome() {
+        // 2 MiB of gradient: beyond the "try both" threshold.
+        let (width, height) = (1024usize, 700usize);
+        let smooth: Vec<u8> = (0..width * height * 3)
+            .map(|i| {
+                let (x, y) = ((i / 3) % width, (i / 3) / width);
+                ((x + 2 * y) / 8 + i % 3) as u8
+            })
+            .collect();
+        let encoded = Encoded::new(&smooth, width * 3, 3, true);
+        assert!(encoded.deflated && encoded.predicted);
+        let inflated =
+            miniz_oxide::inflate::decompress_to_vec_zlib(&encoded.data).expect("inflates");
+        assert_eq!(png_unpredict(&inflated, width * 3, 3), smooth);
+
+        let flat = vec![128u8; width * height * 3];
+        let encoded = Encoded::new(&flat, width * 3, 3, true);
+        assert!(encoded.deflated && !encoded.predicted);
+        let inflated =
+            miniz_oxide::inflate::decompress_to_vec_zlib(&encoded.data).expect("inflates");
+        assert_eq!(inflated, flat);
+
+        let stored = Encoded::new(&flat[..300], 30, 3, false);
+        assert!(!stored.deflated && !stored.predicted);
+        assert_eq!(stored.data, &flat[..300]);
     }
 
     #[test]

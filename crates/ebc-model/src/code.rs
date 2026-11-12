@@ -1,139 +1,115 @@
-//! The redemption code printed on the card and encoded in its QR code.
+//! The codes people type: the redemption code printed on the card ([`GiftCode`]) and the
+//! short-lived code that pairs a phone with an e-reader's browser ([`PairCode`]).
 //!
-//! A [`GiftCode`] is ten symbols of Crockford's base 32 alphabet: nine random data symbols
-//! (45 bits) followed by one check symbol. It is what the recipient types on an e-reader
-//! when no camera is at hand, so it is short, case-insensitive, free of look-alike
-//! characters, and protected against typing mistakes.
+//! Both use the same alphabet of **20 consonants**, `BCDFGHJKLMNPQRSTVWXZ`: letters only,
+//! so that no keyboard layer switch is needed on e-ink and phone keyboards (nor Shift on
+//! AZERTY), no digit/letter look-alikes exist (0/O, 1/I/L, 5/S, 8/B), and no vowel can
+//! spell a word on a gift. Input is case-insensitive and ignores separators.
 //!
-//! # Check symbol
+//! # The check symbol of a gift code
 //!
-//! The check symbol is computed with the **Damm algorithm**: starting from 0, each symbol
-//! `s` updates an interim value `i ← i ∘ s`, where `∘` is a quasigroup operation on the 32
-//! symbol values; the check symbol is the value that brings the interim back to 0.
+//! A [`GiftCode`] is eleven random data symbols followed by one check symbol, computed
+//! with a **Damm-style scheme**: a running state starts at 0, each symbol `s` updates it
+//! as `state ← state ∘ s`, and the check symbol is the one symbol that brings the state
+//! back to 0.
 //!
-//! The quasigroup used here is built from the finite field GF(2⁵) (polynomial
-//! x⁵ + x² + 1): `a ∘ b = α·(a ⊕ b)`, where `⊕` is XOR (field addition) and `α` is the
-//! field element `x` (the value 2). It has the three properties Damm's scheme needs:
+//! `∘` is a quasigroup operation on the 20 symbol values. A value `v` is read as the pair
+//! `(h, l)` with `v = 5·h + l`, `h` in the field GF(4) (polynomials over GF(2) modulo
+//! x² + x + 1) and `l` in ℤ/5, and the operation works on each component separately:
 //!
-//! 1. it is a **Latin square** — `c ∘ x = c ∘ y ⇒ x = y` and `x ∘ c = y ∘ c ⇒ x = y`,
-//!    because XOR with a constant and multiplication by `α ≠ 0` are bijections — so a
-//!    wrong symbol always changes the interim value and the change is never undone:
+//! ```text
+//! (h₁, l₁) ∘ (h₂, l₂) = (α·h₁ + h₂ ,  2·l₁ + l₂ mod 5)        α = the element x of GF(4)
+//! ```
+//!
+//! In both components this is `a·x + y` with `a` invertible and `a − 1` invertible too
+//! (`2 − 1 = 1` in ℤ/5; `α + 1 ≠ 0` in GF(4)). Hence:
+//!
+//! 1. it is a **Latin square** — `c ∘ x = c ∘ y ⇒ x = y` and `x ∘ c = y ∘ c ⇒ x = y` — so
+//!    a wrong symbol always changes the state and later symbols never undo the change:
 //!    **every single-symbol substitution is detected**;
-//! 2. it is **weakly totally anti-symmetric** — `(c ∘ x) ∘ y = (c ∘ y) ∘ x ⇒ x = y`,
-//!    because the two sides differ by `(α² ⊕ α)·(x ⊕ y)` and `α² ⊕ α = α·(α ⊕ 1) ≠ 0` — so
-//!    **every transposition of two adjacent symbols is detected**;
-//! 3. its **diagonal is zero** — `x ∘ x = 0` — so the check symbol is simply the interim
-//!    value after the data symbols, and a valid code folds to 0.
+//! 2. it is **totally anti-symmetric** — `(c ∘ x) ∘ y = (c ∘ y) ∘ x ⇒ x = y` (the two
+//!    sides differ by `(a − 1)·(x − y)`), and also `x ∘ y = y ∘ x ⇒ x = y` — so **every
+//!    transposition of two adjacent symbols is detected**.
 //!
-//! These are the properties of the quasigroups Damm calls *weak totally anti-symmetric*
-//! (the form with a zero diagonal that his check equation uses; it is necessarily
-//! commutative here, which is irrelevant to error detection). All three are verified
-//! exhaustively over the 32 × 32 table in this module's tests.
+//! The same algebra gives two more guarantees: transpositions of symbols **two places
+//! apart** (`abc → cba`, the difference is `(a² − 1)·(x − z)`) and adjacent **twin errors**
+//! (`aa → bb`, the difference is `(a + 1)·(x − y)`) are always detected. All four
+//! properties are verified exhaustively over the quasigroup in this module's tests, and
+//! on every position of many random codes in `tests/gift_code.rs`.
 //!
-//! Because the operation is linear over GF(2⁵), the check is also a weighted checksum
-//! `Σ αⁿ⁻ⁱ⁺¹·sᵢ = 0` whose ten weights are distinct powers of a primitive element. That
-//! gives more than the two guarantees above: transpositions of **any** two symbols (not
-//! just adjacent ones), twin errors (`aa → bb`) and jump twin errors (`aca → bcb`) are
-//! all detected as well. The tests check this for every position of many random codes.
+//! What is **not** guaranteed: swaps of symbols three or more places apart and jump twin
+//! errors (`aca → bcb`) are detected most of the time but not always (the weights of the
+//! ℤ/5 component repeat every four positions, those of the GF(4) component every three).
+//! Any other random corruption passes with probability 1/20.
 //!
 //! # Security
 //!
-//! The check symbol is **not** a secret and adds no entropy: anyone can compute it. A code
-//! carries 45 bits of entropy; it is a bearer token and must be protected by rate
-//! limiting on the server. The value of the check symbol for the server is that it tells
-//! a *typo* ([`CodeError::Check`], [`CodeError::Length`], [`CodeError::InvalidChar`] —
-//! none of which can match a stored code, so they need not count as guessing attempts)
-//! from a *well-formed* code that must be looked up (and counted if it is unknown).
+//! The check symbol is public arithmetic and adds no entropy. A gift code carries
+//! log₂(20¹¹) ≈ 47.5 bits; it is a bearer secret and must be protected by rate limiting
+//! on the server — per client **and globally**, because a guess is a guess against every
+//! live code. The check symbol lets the server tell a *typo* ([`CodeError::Check`],
+//! [`CodeError::Length`], [`CodeError::InvalidChar`]: none of these can match an issued
+//! code, so they need not count as guessing attempts) from a *well-formed* code that must
+//! be looked up, and counted if it is unknown.
 
 use std::fmt;
 use std::str::FromStr;
 
 use serde::{Deserialize, Serialize};
 
-/// Why a string is not a gift code.
+/// Why a string is not a code.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
 pub enum CodeError {
     /// Fewer random bytes were supplied than a code needs.
-    #[error("a gift code needs at least {needed} random bytes, got {got}")]
+    #[error("a code needs at least {needed} random bytes, got {got}")]
     NotEnoughRandomness {
-        /// Bytes required ([`GiftCode::MIN_RANDOM_BYTES`]).
+        /// Bytes required.
         needed: usize,
         /// Bytes supplied.
         got: usize,
     },
-    /// A payload that does not fit in 45 bits.
-    #[error("gift code payload does not fit in 45 bits")]
+    /// A payload outside the range a code can encode.
+    #[error("payload is too large for a code")]
     PayloadTooLarge,
-    /// The input does not have ten symbols once separators are removed.
-    #[error("a gift code has {expected} characters, found {found}", expected = GiftCode::LEN)]
+    /// The input does not have the right number of symbols once separators are removed.
+    #[error("the code has {expected} letters, found {found}")]
     Length {
-        /// Number of symbols found.
+        /// Symbols a code of this kind has.
+        expected: usize,
+        /// Symbols found.
         found: usize,
     },
-    /// The input contains a character that is neither a symbol nor an ignored separator.
-    #[error("character {0:?} cannot appear in a gift code")]
+    /// The input contains a character that is neither a symbol nor an ignored separator
+    /// (a digit, a vowel, punctuation…).
+    #[error("character {0:?} cannot appear in a code (letters {alphabet} only)", alphabet = GiftCode::ALPHABET)]
     InvalidChar(char),
-    /// Ten valid symbols whose check symbol does not match: almost certainly a typo.
-    /// Servers should *not* count this as an attempt to guess a code.
-    #[error("the gift code is mistyped (check character does not match)")]
+    /// The right number of valid symbols, but the check symbol does not match: almost
+    /// certainly a typo. Servers should *not* count this as an attempt to guess a code.
+    #[error("the code is mistyped (check letter does not match)")]
     Check,
     /// The URL does not contain a `/k/<code>` path.
     #[error("not a claim URL: no /k/<code> path found")]
     NotAClaimUrl,
 }
 
-/// GF(2⁵) reduction polynomial x⁵ + x² + 1.
-const GF32_POLY: u8 = 0b10_0101;
+// ---- Alphabet -------------------------------------------------------------------------
 
-/// Multiplies a GF(2⁵) element by `α` (the element `x`, value 2).
-const fn gf32_mul_alpha(v: u8) -> u8 {
-    let shifted = (v & 0x1f) << 1;
-    if shifted & 0x20 != 0 { shifted ^ GF32_POLY } else { shifted }
+/// The symbol alphabet as bytes. The index of a letter is its symbol value.
+const ALPHABET_BYTES: &[u8; 20] = b"BCDFGHJKLMNPQRSTVWXZ";
+
+/// Number of symbols in the alphabet.
+const RADIX: u64 = 20;
+
+/// The letter for a symbol value (`0..20`).
+fn symbol_char(value: u8) -> char {
+    char::from(ALPHABET_BYTES[usize::from(value) % ALPHABET_BYTES.len()])
 }
 
-/// The quasigroup operation `a ∘ b = α·(a ⊕ b)`.
-const fn quasigroup_op(a: u8, b: u8) -> u8 {
-    gf32_mul_alpha(a ^ b)
-}
-
-/// Builds the 32 × 32 operation table at compile time.
-const fn build_quasigroup() -> [[u8; 32]; 32] {
-    let mut table = [[0u8; 32]; 32];
-    let mut a = 0usize;
-    while a < 32 {
-        let mut b = 0usize;
-        while b < 32 {
-            table[a][b] = quasigroup_op(a as u8, b as u8);
-            b += 1;
-        }
-        a += 1;
-    }
-    table
-}
-
-/// `QUASIGROUP[a][b] = a ∘ b`. See the module documentation for its properties.
-const QUASIGROUP: [[u8; 32]; 32] = build_quasigroup();
-
-/// Folds symbol values with the Damm recurrence, starting from 0.
-fn damm(symbols: &[u8]) -> u8 {
-    symbols.iter().fold(0u8, |interim, symbol| {
-        QUASIGROUP[usize::from(interim & 0x1f)][usize::from(symbol & 0x1f)]
-    })
-}
-
-/// The symbol alphabet as bytes.
-const ALPHABET_BYTES: &[u8; 32] = b"0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-
-/// Decodes one character to its symbol value, applying Crockford's lenient reading.
+/// Decodes one character to its symbol value, ignoring case.
 fn symbol_value(c: char) -> Option<u8> {
     let upper = c.to_ascii_uppercase();
-    let canonical = match upper {
-        'I' | 'L' => '1',
-        'O' => '0',
-        other => other,
-    };
-    ALPHABET_BYTES.iter().position(|b| char::from(*b) == canonical).map(|i| i as u8)
+    ALPHABET_BYTES.iter().position(|b| char::from(*b) == upper).map(|i| i as u8)
 }
 
 /// Characters that are skipped when parsing: the separators people add when copying a code
@@ -152,132 +128,236 @@ fn is_ignored(c: char) -> bool {
         )
 }
 
+/// Reads exactly `N` symbols from text typed or pasted by a person.
+fn parse_symbols<const N: usize>(input: &str) -> Result<[u8; N], CodeError> {
+    let mut symbols = [0u8; N];
+    let mut found = 0usize;
+    for c in input.chars() {
+        if is_ignored(c) {
+            continue;
+        }
+        let value = symbol_value(c).ok_or(CodeError::InvalidChar(c))?;
+        if let Some(slot) = symbols.get_mut(found) {
+            *slot = value;
+        }
+        found = found.saturating_add(1);
+    }
+    if found == N { Ok(symbols) } else { Err(CodeError::Length { expected: N, found }) }
+}
+
+/// Writes symbols as letters, with a hyphen before every `group`-th symbol (`0`: none).
+fn format_symbols(symbols: &[u8], group: usize) -> String {
+    let mut out = String::with_capacity(symbols.len() + 3);
+    for (i, symbol) in symbols.iter().enumerate() {
+        if group != 0 && i != 0 && i % group == 0 {
+            out.push('-');
+        }
+        out.push(symbol_char(*symbol));
+    }
+    out
+}
+
+/// Writes `value` as `N` base-20 digits, most significant first. `value` must be below
+/// `20^N`; higher digits are dropped.
+fn digits_of<const N: usize>(mut value: u64) -> [u8; N] {
+    let mut digits = [0u8; N];
+    for slot in digits.iter_mut().rev() {
+        *slot = (value % RADIX) as u8;
+        value /= RADIX;
+    }
+    digits
+}
+
+/// Reads base-20 digits, most significant first.
+fn value_of(digits: &[u8]) -> u64 {
+    digits.iter().fold(0u64, |acc, d| acc * RADIX + u64::from(*d))
+}
+
+/// Random bytes consumed per sampling attempt.
+const CHUNK: usize = 8;
+
+/// Draws a number in `0..modulus` from caller-supplied random bytes.
+///
+/// The bytes are read in 8-byte chunks. A chunk is accepted when its value falls below the
+/// largest multiple of `modulus` that fits in 64 bits (rejection sampling): the result is
+/// then exactly uniform. If every complete chunk is rejected — probability `modulus / 2⁶⁴`
+/// per chunk, about 10⁻⁵ for a gift code — the last chunk is reduced modulo `modulus`
+/// instead of failing, which is biased by at most that same amount.
+fn sample_below(bytes: &[u8], modulus: u64) -> Result<u64, CodeError> {
+    let mut last: Option<u64> = None;
+    let limit = u64::MAX - u64::MAX % modulus; // a multiple of `modulus`
+    for chunk in bytes.chunks_exact(CHUNK) {
+        let value = chunk.iter().fold(0u64, |acc, b| (acc << 8) | u64::from(*b));
+        if value < limit {
+            return Ok(value % modulus);
+        }
+        last = Some(value);
+    }
+    last.map(|value| value % modulus)
+        .ok_or(CodeError::NotEnoughRandomness { needed: CHUNK, got: bytes.len() })
+}
+
+// ---- The quasigroup -------------------------------------------------------------------
+
+/// Multiplication by `α` (the element `x`) in GF(4) = GF(2)[x] / (x² + x + 1):
+/// `α·0 = 0`, `α·1 = α`, `α·α = α + 1`, `α·(α + 1) = 1`.
+const GF4_MUL_ALPHA: [u8; 4] = [0, 2, 3, 1];
+
+/// The quasigroup operation `a ∘ b` on symbol values (see the module documentation).
+const fn quasigroup_op(a: u8, b: u8) -> u8 {
+    let (ah, al) = (a / 5 % 4, a % 5);
+    let (bh, bl) = (b / 5 % 4, b % 5);
+    let h = GF4_MUL_ALPHA[ah as usize] ^ bh;
+    let l = (2 * al + bl) % 5;
+    5 * h + l
+}
+
+/// Builds the 20 × 20 operation table at compile time.
+const fn build_quasigroup() -> [[u8; 20]; 20] {
+    let mut table = [[0u8; 20]; 20];
+    let mut a = 0usize;
+    while a < 20 {
+        let mut b = 0usize;
+        while b < 20 {
+            table[a][b] = quasigroup_op(a as u8, b as u8);
+            b += 1;
+        }
+        a += 1;
+    }
+    table
+}
+
+/// `QUASIGROUP[a][b] = a ∘ b`.
+const QUASIGROUP: [[u8; 20]; 20] = build_quasigroup();
+
+/// Folds symbol values with the Damm recurrence, starting from state 0.
+fn damm(symbols: &[u8]) -> u8 {
+    symbols
+        .iter()
+        .fold(0u8, |state, symbol| QUASIGROUP[usize::from(state) % 20][usize::from(*symbol) % 20])
+}
+
+/// The one symbol `s` with `state ∘ s = 0`.
+fn check_symbol_for(state: u8) -> u8 {
+    let row = &QUASIGROUP[usize::from(state) % 20];
+    // Each row is a permutation of 0..20, so exactly one column holds 0.
+    row.iter().position(|v| *v == 0).unwrap_or(0) as u8
+}
+
+// ---- GiftCode -------------------------------------------------------------------------
+
 /// The human-typed redemption code printed on the card.
 ///
-/// Ten symbols: nine random data symbols and a check symbol (see the [module
+/// Twelve consonants: eleven random data symbols and a check symbol (see the [module
 /// documentation](self) for the error-detection guarantees). The canonical forms are
-/// [`compact`](Self::compact) (`"7ZK3M9QXRT"`, used in URLs and storage) and
-/// [`grouped`](Self::grouped) (`"7ZK3M-9QXRT"`, used in print and by `Display`).
+/// [`compact`](Self::compact) (`"BCDFGHJKLMNP"`, used in URLs and storage) and
+/// [`grouped`](Self::grouped) (`"BCDF-GHJK-LMNP"`, used in print and by `Display`).
 ///
 /// The code is a bearer secret. To keep it out of logs, `Debug` shows only the first two
-/// symbols; use `Display`, [`compact`](Self::compact) or [`grouped`](Self::grouped) when
+/// letters; use `Display`, [`compact`](Self::compact) or [`grouped`](Self::grouped) when
 /// the full code is really wanted. It serialises (serde) as its compact string and
 /// deserialises with the same leniency as [`parse`](Self::parse).
 ///
 /// ```
 /// use ebc_model::{CodeError, GiftCode};
 ///
-/// let code = GiftCode::from_random_bytes(&[0x3a, 0x91, 0x07, 0xee, 0x52, 0xc4])?;
-/// assert_eq!(code.grouped().len(), 11);
-/// // What people type is accepted: lower case, separators, O for 0, I or L for 1.
-/// let typed = code.grouped().to_lowercase().replace('0', "o").replace('1', "l");
+/// let random = [0x3a, 0x91, 0x07, 0xee, 0x52, 0xc4, 0x1b, 0x60]; // from a CSPRNG
+/// let code = GiftCode::from_random_bytes(&random)?;
+/// assert_eq!(code.grouped().len(), 14);
+/// // What people type is accepted: lower case, spaces, dots…
+/// let typed = code.grouped().to_lowercase().replace('-', " ");
 /// assert_eq!(GiftCode::parse(&typed)?, code);
-/// // A typo is reported as such.
+/// // Swapping two neighbouring letters is reported as a typo.
 /// let mut typo = code.compact().into_bytes();
-/// typo[4] = if typo[4] == b'7' { b'8' } else { b'7' };
-/// assert_eq!(GiftCode::parse(std::str::from_utf8(&typo).unwrap()), Err(CodeError::Check));
+/// if typo[4] != typo[5] {
+///     typo.swap(4, 5);
+///     assert_eq!(GiftCode::parse(&String::from_utf8_lossy(&typo)), Err(CodeError::Check));
+/// }
 /// # Ok::<(), CodeError>(())
 /// ```
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub struct GiftCode([u8; GiftCode::LEN]);
 
 impl GiftCode {
-    /// The symbol alphabet: Crockford's base 32 (no `I`, `L`, `O`, `U`).
-    pub const ALPHABET: &'static str = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-    /// Number of random data symbols (5 bits each: 45 bits of entropy).
-    pub const DATA_SYMBOLS: usize = 9;
+    /// The symbol alphabet: 20 consonants, letters only, no vowels (and no `Y`).
+    pub const ALPHABET: &'static str = "BCDFGHJKLMNPQRSTVWXZ";
+    /// Number of random data symbols: 20¹¹ ≈ 2⁴⁷·⁵ possible codes.
+    pub const DATA_SYMBOLS: usize = 11;
     /// Total number of symbols: data symbols plus one check symbol.
-    pub const LEN: usize = Self::DATA_SYMBOLS + 1;
-    /// Bits of entropy carried by a code.
-    pub const ENTROPY_BITS: u32 = 5 * Self::DATA_SYMBOLS as u32;
+    pub const LEN: usize = 12;
+    /// Number of distinct codes: 20¹¹.
+    pub const SPACE: u64 = RADIX.pow(Self::DATA_SYMBOLS as u32);
     /// Random bytes [`from_random_bytes`](Self::from_random_bytes) needs.
-    pub const MIN_RANDOM_BYTES: usize = 6;
-    /// Position of the separator in the grouped form (`"XXXXX-XXXXX"`).
-    const GROUP: usize = 5;
+    pub const MIN_RANDOM_BYTES: usize = CHUNK;
+    /// Symbols per printed group (`"XXXX-XXXX-XXXX"`).
+    pub const GROUP: usize = 4;
 
     /// Builds a code from random bytes supplied by the caller, who must take them from a
-    /// cryptographically secure generator. The first six bytes are used (their 45 most
-    /// significant bits); any further bytes are ignored.
+    /// cryptographically secure generator.
     ///
-    /// The mapping is uniform: uniformly random bytes give uniformly random codes.
+    /// At least eight bytes are needed; **sixteen or more are recommended**. The bytes are
+    /// consumed in 8-byte chunks by rejection sampling, which makes the code exactly
+    /// uniform over the 20¹¹ possibilities. Should every chunk be rejected (probability
+    /// about 10⁻⁵ per chunk, so 10⁻¹⁰ with sixteen bytes), the last chunk is reduced
+    /// modulo 20¹¹ rather than failing; that fallback is biased by at most 10⁻⁵ in
+    /// relative terms. The function is deterministic: the same bytes give the same code.
     ///
     /// # Errors
-    /// [`CodeError::NotEnoughRandomness`] if fewer than six bytes are supplied.
+    /// [`CodeError::NotEnoughRandomness`] if fewer than eight bytes are supplied.
     pub fn from_random_bytes(bytes: &[u8]) -> Result<Self, CodeError> {
-        let Some(head) = bytes.get(..Self::MIN_RANDOM_BYTES) else {
-            return Err(CodeError::NotEnoughRandomness {
-                needed: Self::MIN_RANDOM_BYTES,
-                got: bytes.len(),
-            });
-        };
-        let value = head.iter().fold(0u64, |acc, b| (acc << 8) | u64::from(*b));
-        Ok(Self::from_payload_unchecked(value >> (48 - Self::ENTROPY_BITS)))
+        sample_below(bytes, Self::SPACE).map(Self::from_payload_unchecked)
     }
 
-    /// Builds the code whose data symbols encode `payload` (most significant symbol
-    /// first). Meant for tests, fixtures and migrations; real codes come from
+    /// Builds the code whose data symbols encode `payload` in base 20 (most significant
+    /// symbol first). Meant for tests, fixtures and migrations; real codes come from
     /// [`from_random_bytes`](Self::from_random_bytes).
     ///
     /// # Errors
-    /// [`CodeError::PayloadTooLarge`] if `payload` needs more than 45 bits.
+    /// [`CodeError::PayloadTooLarge`] if `payload` is not below [`SPACE`](Self::SPACE).
     pub fn from_payload(payload: u64) -> Result<Self, CodeError> {
-        if payload >> Self::ENTROPY_BITS != 0 {
+        if payload >= Self::SPACE {
             return Err(CodeError::PayloadTooLarge);
         }
         Ok(Self::from_payload_unchecked(payload))
     }
 
     fn from_payload_unchecked(payload: u64) -> Self {
+        let data: [u8; Self::DATA_SYMBOLS] = digits_of(payload);
         let mut symbols = [0u8; Self::LEN];
-        for (i, slot) in symbols.iter_mut().take(Self::DATA_SYMBOLS).enumerate() {
-            let shift = 5 * (Self::DATA_SYMBOLS - 1 - i) as u32;
-            *slot = ((payload >> shift) & 0x1f) as u8;
+        for (slot, digit) in symbols.iter_mut().zip(data) {
+            *slot = digit;
         }
-        symbols[Self::DATA_SYMBOLS] = damm(&symbols[..Self::DATA_SYMBOLS]);
+        symbols[Self::DATA_SYMBOLS] = check_symbol_for(damm(&data));
         Self(symbols)
     }
 
     /// Parses a code as typed or pasted by a person.
     ///
-    /// Lenient on purpose: case-insensitive; `I` and `L` read as `1`, `O` as `0`;
-    /// hyphens, dots, underscores, any whitespace, typographic dashes and invisible
-    /// formatting characters are ignored wherever they appear.
+    /// Lenient on purpose: case-insensitive; hyphens, dots, underscores, any whitespace,
+    /// typographic dashes and invisible formatting characters are ignored wherever they
+    /// appear.
     ///
     /// # Errors
-    /// * [`CodeError::InvalidChar`] — a character that can never be part of a code
-    ///   (including `U`, which the alphabet omits);
-    /// * [`CodeError::Length`] — not ten symbols;
-    /// * [`CodeError::Check`] — ten symbols, wrong check symbol: a typo.
+    /// * [`CodeError::InvalidChar`] — a character that can never be part of a code (a
+    ///   digit, a vowel, punctuation);
+    /// * [`CodeError::Length`] — not twelve symbols;
+    /// * [`CodeError::Check`] — twelve symbols, wrong check symbol: a typo.
     ///
     /// None of these inputs can match an issued code, so a server may answer them without
     /// a lookup and without counting them against a rate limit. `Ok` means *well-formed*,
     /// not *issued*.
     pub fn parse(input: &str) -> Result<Self, CodeError> {
-        let mut symbols = [0u8; Self::LEN];
-        let mut found = 0usize;
-        for c in input.chars() {
-            if is_ignored(c) {
-                continue;
-            }
-            let value = symbol_value(c).ok_or(CodeError::InvalidChar(c))?;
-            if let Some(slot) = symbols.get_mut(found) {
-                *slot = value;
-            }
-            found = found.saturating_add(1);
-        }
-        if found != Self::LEN {
-            return Err(CodeError::Length { found });
-        }
+        let symbols: [u8; Self::LEN] = parse_symbols(input)?;
         if damm(&symbols) != 0 {
             return Err(CodeError::Check);
         }
         Ok(Self(symbols))
     }
 
-    /// Extracts the code from a claim URL built by [`claim_url`], e.g. what a QR scanner
-    /// returns or what a recipient pastes into the code field. The `/k/` path segment is
-    /// matched case-insensitively (QR codes may carry the URL in upper case); a query
-    /// string or fragment after the code is ignored.
+    /// Extracts the code from a claim URL built by [`claim_url`] or [`claim_url_qr`], e.g.
+    /// what a QR scanner returns or what a recipient pastes into the code field. The
+    /// `/k/` path segment is matched case-insensitively; a query string, a fragment or a
+    /// further path segment after the code is ignored.
     ///
     /// # Errors
     /// [`CodeError::NotAClaimUrl`] if there is no `/k/<code>` path; otherwise the errors
@@ -290,48 +370,48 @@ impl GiftCode {
         Self::parse(code)
     }
 
-    /// The ten symbol values (`0..32`), check symbol last.
+    /// The twelve symbol values (`0..20`), check symbol last.
     #[must_use]
     pub fn symbols(&self) -> [u8; Self::LEN] {
         self.0
     }
 
-    /// The 45-bit payload encoded by the nine data symbols.
+    /// The number below [`SPACE`](Self::SPACE) encoded by the eleven data symbols.
     #[must_use]
     pub fn payload(&self) -> u64 {
-        self.0.iter().take(Self::DATA_SYMBOLS).fold(0u64, |acc, s| (acc << 5) | u64::from(*s))
+        value_of(&self.0[..Self::DATA_SYMBOLS])
     }
 
-    /// The check symbol as a character of [`ALPHABET`](Self::ALPHABET).
+    /// The check symbol as a letter of [`ALPHABET`](Self::ALPHABET).
     #[must_use]
     pub fn check_symbol(&self) -> char {
         symbol_char(self.0[Self::DATA_SYMBOLS])
     }
 
-    /// The ten symbols without separator, e.g. `"7ZK3M9QXRT"`: nine data symbols and the
-    /// check symbol. This is the form used in URLs and storage.
+    /// The twelve letters without separator, e.g. `"BCDFGHJKLMNP"`. This is the form used
+    /// in URLs and storage.
     #[must_use]
     pub fn compact(&self) -> String {
-        self.0.iter().map(|s| symbol_char(*s)).collect()
+        format_symbols(&self.0, 0)
     }
 
-    /// The printed form, two groups of five: `"7ZK3M-9QXRT"`.
+    /// The printed form, three groups of four: `"BCDF-GHJK-LMNP"`.
     #[must_use]
     pub fn grouped(&self) -> String {
-        let mut out = String::with_capacity(Self::LEN + 1);
-        for (i, s) in self.0.iter().enumerate() {
-            if i == Self::GROUP {
-                out.push('-');
-            }
-            out.push(symbol_char(*s));
-        }
-        out
+        format_symbols(&self.0, Self::GROUP)
     }
-}
 
-/// The character for a symbol value.
-fn symbol_char(value: u8) -> char {
-    char::from(ALPHABET_BYTES[usize::from(value & 0x1f)])
+    /// Whether the code happens to contain a letter sequence best not printed on a gift
+    /// (a handful of well-known abbreviations such as `KKK` or `WTF`). Consonants cannot
+    /// spell words, but they can spell these. An issuer may simply draw another code:
+    /// about 1.4 % of codes are flagged.
+    #[must_use]
+    pub fn has_unfortunate_letters(&self) -> bool {
+        const AVOID: [&str; 12] =
+            ["KKK", "WTF", "FCK", "FKN", "SHT", "CNT", "DCK", "NGR", "NZS", "BTCH", "PRN", "SLT"];
+        let compact = self.compact();
+        AVOID.iter().any(|letters| compact.contains(letters))
+    }
 }
 
 impl fmt::Display for GiftCode {
@@ -340,11 +420,11 @@ impl fmt::Display for GiftCode {
     }
 }
 
-/// Redacted: only the first two symbols are shown, so that codes do not leak through
+/// Redacted: only the first two letters are shown, so that codes do not leak through
 /// `{:?}` in logs and panic messages.
 impl fmt::Debug for GiftCode {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "GiftCode({}{}***-*****)", symbol_char(self.0[0]), symbol_char(self.0[1]))
+        write!(f, "GiftCode({}{}**-****-****)", symbol_char(self.0[0]), symbol_char(self.0[1]))
     }
 }
 
@@ -368,77 +448,196 @@ impl<'de> Deserialize<'de> for GiftCode {
     }
 }
 
+// ---- PairCode -------------------------------------------------------------------------
+
+/// The short code that pairs a phone with an e-reader's browser: the phone shows it, the
+/// recipient types it on the e-reader.
+///
+/// Six letters of the [`GiftCode`] alphabet, printed `"XXX-XXX"`; 20⁶ = 64 million
+/// possibilities and **no check symbol**. It is only safe as a single-use, short-lived
+/// secret behind per-client and global failure budgets; that policy belongs to the
+/// server. `Debug` is redacted like [`GiftCode`]'s.
+///
+/// ```
+/// use ebc_model::PairCode;
+/// let pair = PairCode::from_random_bytes(&[7, 200, 13, 99, 1, 2, 3, 4])?;
+/// assert_eq!(pair.grouped().len(), 7);
+/// assert_eq!(PairCode::parse(&pair.grouped().to_lowercase())?, pair);
+/// # Ok::<(), ebc_model::CodeError>(())
+/// ```
+#[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
+pub struct PairCode([u8; PairCode::LEN]);
+
+impl PairCode {
+    /// Number of symbols.
+    pub const LEN: usize = 6;
+    /// Number of distinct pair codes: 20⁶ = 64 000 000.
+    pub const SPACE: u64 = RADIX.pow(Self::LEN as u32);
+    /// Random bytes [`from_random_bytes`](Self::from_random_bytes) needs.
+    pub const MIN_RANDOM_BYTES: usize = CHUNK;
+    /// Symbols per printed group (`"XXX-XXX"`).
+    pub const GROUP: usize = 3;
+
+    /// Builds a pair code from caller-supplied random bytes (at least eight, from a
+    /// cryptographically secure generator), sampled as in
+    /// [`GiftCode::from_random_bytes`]; a chunk is rejected with probability below 10⁻¹¹.
+    ///
+    /// # Errors
+    /// [`CodeError::NotEnoughRandomness`] if fewer than eight bytes are supplied.
+    pub fn from_random_bytes(bytes: &[u8]) -> Result<Self, CodeError> {
+        sample_below(bytes, Self::SPACE).map(|value| Self(digits_of(value)))
+    }
+
+    /// Parses a pair code as typed: case-insensitive, separators ignored (see
+    /// [`GiftCode::parse`]).
+    ///
+    /// # Errors
+    /// [`CodeError::InvalidChar`] or [`CodeError::Length`]. There is no check symbol, so
+    /// every six-letter input is well-formed and must be counted as an attempt.
+    pub fn parse(input: &str) -> Result<Self, CodeError> {
+        parse_symbols(input).map(Self)
+    }
+
+    /// The six symbol values (`0..20`).
+    #[must_use]
+    pub fn symbols(&self) -> [u8; Self::LEN] {
+        self.0
+    }
+
+    /// The six letters without separator, e.g. `"BCDFGH"`.
+    #[must_use]
+    pub fn compact(&self) -> String {
+        format_symbols(&self.0, 0)
+    }
+
+    /// The displayed form, two groups of three: `"BCD-FGH"`.
+    #[must_use]
+    pub fn grouped(&self) -> String {
+        format_symbols(&self.0, Self::GROUP)
+    }
+}
+
+impl fmt::Display for PairCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(&self.grouped())
+    }
+}
+
+/// Redacted: only the first letter is shown.
+impl fmt::Debug for PairCode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "PairCode({}**-***)", symbol_char(self.0[0]))
+    }
+}
+
+impl FromStr for PairCode {
+    type Err = CodeError;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        Self::parse(s)
+    }
+}
+
+impl Serialize for PairCode {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        serializer.serialize_str(&self.compact())
+    }
+}
+
+impl<'de> Deserialize<'de> for PairCode {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let s = <std::borrow::Cow<'de, str>>::deserialize(deserializer)?;
+        Self::parse(&s).map_err(serde::de::Error::custom)
+    }
+}
+
+// ---- Claim URLs -----------------------------------------------------------------------
+
 /// Path prefix of claim URLs: `<base>/k/<code>`.
 pub const CLAIM_PATH: &str = "/k/";
 
-/// Builds the URL encoded in the QR code and printed as the fallback: base
-/// `"https://ebk.example"` gives `"https://ebk.example/k/7ZK3M9QXRT"`.
+/// Builds the URL printed in clear on the card: base `"https://ebk.example"` gives
+/// `"https://ebk.example/k/BCDFGHJKLMNP"`.
 ///
 /// Trailing slashes of `base_url` are dropped. The base is otherwise used as given (it is
-/// configuration, not user input). The path is short and uses only upper-case letters and
-/// digits after `/k/`, so that a QR encoder can upper-case the whole URL and use the
-/// compact alphanumeric mode; servers must therefore route `/k/` and `/K/` alike
-/// ([`GiftCode::from_claim_url`] does).
+/// configuration, not user input).
 #[must_use]
 pub fn claim_url(base_url: &str, code: &GiftCode) -> String {
     format!("{}{CLAIM_PATH}{}", base_url.trim_end_matches('/'), code.compact())
+}
+
+/// Builds the same URL fully upper-cased, for the QR code:
+/// `"HTTPS://EBK.EXAMPLE/K/BCDFGHJKLMNP"`.
+///
+/// Upper case keeps the QR code in *alphanumeric mode* (digits, `A–Z` and
+/// ``space $ % * + - . / :``), which needs a smaller symbol than byte mode. That only
+/// works — and only gives a URL equivalent to [`claim_url`]'s — when the base is a plain
+/// scheme and host without a case-sensitive path or query, and when the server routes
+/// `/K/` like `/k/` ([`GiftCode::from_claim_url`] accepts both). Only ASCII letters are
+/// changed.
+#[must_use]
+pub fn claim_url_qr(base_url: &str, code: &GiftCode) -> String {
+    claim_url(base_url, code).to_ascii_uppercase()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    // ---- Exhaustive proofs over the quasigroup table --------------------------------
+    fn op(a: u8, b: u8) -> u8 {
+        QUASIGROUP[usize::from(a)][usize::from(b)]
+    }
+
+    // ---- Exhaustive proofs over the quasigroup ----------------------------------------
 
     #[test]
-    fn table_is_the_documented_field_operation() {
-        // Independent bit-by-bit GF(2^5) multiplication, to cross-check the shortcut.
-        fn gf_mul(mut a: u8, mut b: u8) -> u8 {
+    fn table_is_the_documented_product_of_gf4_and_z5() {
+        // Independent GF(4) multiplication: carry-less product reduced by x² + x + 1.
+        fn gf4_mul(a: u8, b: u8) -> u8 {
             let mut product = 0u8;
-            while b != 0 {
-                if b & 1 != 0 {
-                    product ^= a;
+            for bit in 0..2 {
+                if b >> bit & 1 == 1 {
+                    product ^= a << bit;
                 }
-                a <<= 1;
-                if a & 0x20 != 0 {
-                    a ^= GF32_POLY;
-                }
-                b >>= 1;
+            }
+            if product & 0b100 != 0 {
+                product ^= 0b111;
             }
             product
         }
-        // The polynomial is irreducible, hence GF(2^5) is a field: every non-zero element
-        // has an inverse, and α generates all 31 non-zero elements.
-        for a in 1..32u8 {
-            assert_eq!((1..32u8).filter(|b| gf_mul(a, *b) == 1).count(), 1, "inverse of {a}");
+        // x² + x + 1 is irreducible: every non-zero element has an inverse, and α = x
+        // generates the three non-zero elements.
+        for a in 1..4u8 {
+            assert_eq!((1..4u8).filter(|b| gf4_mul(a, *b) == 1).count(), 1, "inverse of {a}");
         }
-        let mut power = 1u8;
-        let mut seen = [false; 32];
-        for _ in 0..31 {
-            power = gf_mul(power, 2);
-            assert!(!seen[usize::from(power)], "α is not primitive");
-            seen[usize::from(power)] = true;
+        assert_eq!(
+            [gf4_mul(2, 1), gf4_mul(2, 2), gf4_mul(2, 3)],
+            [2, 3, 1],
+            "α, α², α³ = 1 must be the three non-zero elements"
+        );
+        for v in 0..4u8 {
+            assert_eq!(GF4_MUL_ALPHA[usize::from(v)], gf4_mul(2, v));
         }
-        assert_eq!(power, 1);
-        for a in 0..32u8 {
-            for b in 0..32u8 {
-                assert_eq!(QUASIGROUP[usize::from(a)][usize::from(b)], gf_mul(2, a ^ b));
-                assert!(QUASIGROUP[usize::from(a)][usize::from(b)] < 32);
+        for a in 0..20u8 {
+            for b in 0..20u8 {
+                let h = gf4_mul(2, a / 5) ^ (b / 5);
+                let l = (2 * (a % 5) + b % 5) % 5;
+                assert_eq!(op(a, b), 5 * h + l, "{a} ∘ {b}");
+                assert!(op(a, b) < 20);
             }
         }
     }
 
     #[test]
     fn quasigroup_is_a_latin_square() {
-        // Every row and every column is a permutation of 0..32. This is what makes a
-        // single wrong symbol change the interim value (rows) and keeps two different
-        // interim values different after any further symbol (columns).
-        for fixed in 0..32usize {
-            let mut row = [false; 32];
-            let mut column = [false; 32];
-            for other in 0..32usize {
-                row[usize::from(QUASIGROUP[fixed][other])] = true;
-                column[usize::from(QUASIGROUP[other][fixed])] = true;
+        // Every row and every column is a permutation of 0..20. Rows: a wrong symbol
+        // changes the state. Columns: two different states stay different after any
+        // further symbol.
+        for fixed in 0..20u8 {
+            let mut row = [false; 20];
+            let mut column = [false; 20];
+            for other in 0..20u8 {
+                row[usize::from(op(fixed, other))] = true;
+                column[usize::from(op(other, fixed))] = true;
             }
             assert!(row.iter().all(|seen| *seen), "row {fixed} is not a permutation");
             assert!(column.iter().all(|seen| *seen), "column {fixed} is not a permutation");
@@ -446,14 +645,13 @@ mod tests {
     }
 
     #[test]
-    fn quasigroup_is_weakly_totally_anti_symmetric() {
-        // (c ∘ x) ∘ y = (c ∘ y) ∘ x  ⇒  x = y, for all 32³ triples. This is what makes
-        // swapping two different adjacent symbols change the interim value.
-        let op = |a: u8, b: u8| QUASIGROUP[usize::from(a)][usize::from(b)];
+    fn quasigroup_is_totally_anti_symmetric() {
+        // (c ∘ x) ∘ y = (c ∘ y) ∘ x  ⇒  x = y, for all 20³ triples: swapping two
+        // different adjacent symbols always changes the state.
         let mut checked = 0u32;
-        for c in 0..32u8 {
-            for x in 0..32u8 {
-                for y in 0..32u8 {
+        for c in 0..20u8 {
+            for x in 0..20u8 {
+                for y in 0..20u8 {
                     if x != y {
                         assert_ne!(op(op(c, x), y), op(op(c, y), x), "c={c} x={x} y={y}");
                         checked += 1;
@@ -461,131 +659,227 @@ mod tests {
                 }
             }
         }
-        assert_eq!(checked, 32 * 32 * 31);
-    }
-
-    #[test]
-    fn quasigroup_has_a_zero_diagonal() {
-        // x ∘ x = 0: the check symbol is the interim value itself.
-        for (x, row) in QUASIGROUP.iter().enumerate() {
-            assert_eq!(row[x], 0, "{x} ∘ {x}");
+        assert_eq!(checked, 20 * 20 * 19);
+        // …and x ∘ y = y ∘ x ⇒ x = y (anti-symmetry proper).
+        for x in 0..20u8 {
+            for y in 0..20u8 {
+                if x != y {
+                    assert_ne!(op(x, y), op(y, x), "x={x} y={y}");
+                }
+            }
         }
     }
 
     #[test]
-    fn single_substitutions_and_adjacent_transpositions_change_the_fold_for_every_state() {
-        // The two guarantees, proved at the level of the Damm recurrence rather than of
-        // whole codes: whatever the interim value `c` before the error and whatever
-        // symbols follow, the final interim value differs.
-        let op = |a: u8, b: u8| QUASIGROUP[usize::from(a)][usize::from(b)];
-        for c in 0..32u8 {
-            for x in 0..32u8 {
-                for y in 0..32u8 {
+    fn substitutions_and_adjacent_transpositions_survive_any_continuation() {
+        // The two required guarantees at the level of the recurrence: whatever the state
+        // `c` before the error and whatever symbol follows, the states stay different —
+        // and so, by induction on the remaining symbols, does the final state.
+        for c in 0..20u8 {
+            for x in 0..20u8 {
+                for y in 0..20u8 {
                     if x == y {
                         continue;
                     }
-                    // Substitution x -> y right after state c, then any one more symbol.
                     let (good, bad) = (op(c, x), op(c, y));
-                    assert_ne!(good, bad);
-                    for next in 0..32u8 {
+                    assert_ne!(good, bad, "substitution");
+                    let (good2, bad2) = (op(op(c, x), y), op(op(c, y), x));
+                    assert_ne!(good2, bad2, "transposition");
+                    for next in 0..20u8 {
                         assert_ne!(op(good, next), op(bad, next));
-                    }
-                    // Transposition xy -> yx right after state c, then any one more symbol.
-                    let (good, bad) = (op(op(c, x), y), op(op(c, y), x));
-                    assert_ne!(good, bad);
-                    for next in 0..32u8 {
-                        assert_ne!(op(good, next), op(bad, next));
+                        assert_ne!(op(good2, next), op(bad2, next));
                     }
                 }
             }
         }
     }
 
-    // ---- Alphabet and parsing ---------------------------------------------------------
+    #[test]
+    fn jump_transpositions_and_twin_errors_change_the_state() {
+        // abc -> cba for every state, every middle symbol and every a ≠ c (20⁴ cases).
+        for c in 0..20u8 {
+            for x in 0..20u8 {
+                for y in 0..20u8 {
+                    for z in 0..20u8 {
+                        if x != z {
+                            assert_ne!(op(op(op(c, x), y), z), op(op(op(c, z), y), x));
+                        }
+                    }
+                }
+            }
+        }
+        // aa -> bb for every state and every a ≠ b.
+        for c in 0..20u8 {
+            for x in 0..20u8 {
+                for y in 0..20u8 {
+                    if x != y {
+                        assert_ne!(op(op(c, x), x), op(op(c, y), y), "c={c} {x}{x}->{y}{y}");
+                    }
+                }
+            }
+        }
+    }
 
     #[test]
-    fn alphabet_is_crockford_base32() {
-        assert_eq!(GiftCode::ALPHABET.len(), 32);
-        assert_eq!(GiftCode::ALPHABET.as_bytes(), ALPHABET_BYTES);
-        for excluded in ['I', 'L', 'O', 'U'] {
-            assert!(!GiftCode::ALPHABET.contains(excluded));
+    fn documented_limits_of_the_check_are_real() {
+        // Honesty check on the module documentation: jump twin errors (aca -> bcb) and
+        // swaps three places apart are NOT always detected. If this ever fails, the
+        // documentation undersells the scheme and should be updated.
+        let mut undetected_jump_twins = 0u32;
+        let mut undetected_distance_3 = 0u32;
+        for c in 0..20u8 {
+            for x in 0..20u8 {
+                for y in 0..20u8 {
+                    if x == y {
+                        continue;
+                    }
+                    for m in 0..20u8 {
+                        if op(op(op(c, x), m), x) == op(op(op(c, y), m), y) {
+                            undetected_jump_twins += 1;
+                        }
+                        let straight = op(op(op(op(c, x), m), m), y);
+                        let swapped = op(op(op(op(c, y), m), m), x);
+                        if straight == swapped {
+                            undetected_distance_3 += 1;
+                        }
+                    }
+                }
+            }
         }
-        let mut sorted: Vec<char> = GiftCode::ALPHABET.chars().collect();
-        sorted.dedup();
-        assert_eq!(sorted.len(), 32, "symbols must be distinct");
-        assert!(sorted.windows(2).all(|w| w[0] < w[1]), "alphabet must be in ASCII order");
+        assert!(undetected_jump_twins > 0);
+        assert!(undetected_distance_3 > 0);
+    }
+
+    #[test]
+    fn every_state_has_exactly_one_check_symbol() {
+        let mut used = [false; 20];
+        for state in 0..20u8 {
+            let check = check_symbol_for(state);
+            assert_eq!(op(state, check), 0, "state {state}");
+            assert_eq!((0..20u8).filter(|s| op(state, *s) == 0).count(), 1);
+            used[usize::from(check)] = true;
+        }
+        // Different states need different check symbols: the check symbol is as
+        // unpredictable as the state.
+        assert!(used.iter().all(|seen| *seen));
+    }
+
+    // ---- Alphabet and sampling --------------------------------------------------------
+
+    #[test]
+    fn alphabet_is_twenty_consonants() {
+        assert_eq!(GiftCode::ALPHABET, "BCDFGHJKLMNPQRSTVWXZ");
+        assert_eq!(GiftCode::ALPHABET.as_bytes(), ALPHABET_BYTES);
+        for excluded in "AEIOUY0123456789".chars() {
+            assert!(!GiftCode::ALPHABET.contains(excluded), "{excluded}");
+            assert_eq!(symbol_value(excluded), None);
+            assert_eq!(symbol_value(excluded.to_ascii_lowercase()), None);
+        }
+        let letters: Vec<char> = GiftCode::ALPHABET.chars().collect();
+        assert!(letters.windows(2).all(|w| w[0] < w[1]), "alphabetical and without repeats");
         for (value, c) in GiftCode::ALPHABET.chars().enumerate() {
             assert_eq!(symbol_value(c), Some(value as u8));
             assert_eq!(symbol_value(c.to_ascii_lowercase()), Some(value as u8));
             assert_eq!(symbol_char(value as u8), c);
         }
-        assert_eq!(
-            (symbol_value('I'), symbol_value('l'), symbol_value('o')),
-            (Some(1), Some(1), Some(0))
-        );
-        assert_eq!(symbol_value('U'), None);
-        assert_eq!(symbol_value('u'), None);
         assert_eq!(symbol_value('É'), None);
-        assert_eq!((GiftCode::LEN, GiftCode::DATA_SYMBOLS, GiftCode::ENTROPY_BITS), (10, 9, 45));
+        assert_eq!(symbol_value('Ｂ'), None, "full-width letters are not accepted");
+        assert_eq!((GiftCode::LEN, GiftCode::DATA_SYMBOLS, PairCode::LEN), (12, 11, 6));
+        assert_eq!(GiftCode::SPACE, 204_800_000_000_000);
+        assert_eq!(PairCode::SPACE, 64_000_000);
+        // About 47.5 bits.
+        assert!(GiftCode::SPACE > 1 << 47 && GiftCode::SPACE < 1 << 48);
     }
 
     #[test]
     fn known_vectors() {
-        // All-zero payload: every interim value is 0.
-        let zero = GiftCode::from_payload(0).expect("fits");
-        assert_eq!(zero.compact(), "0000000000");
-        assert_eq!(zero.grouped(), "00000-00000");
-        // Payload 1: the last data symbol is 1, the check symbol is 1 ∘-folded: α·1 = 2.
-        assert_eq!(GiftCode::from_payload(1).expect("fits").compact(), "0000000012");
-        // 0x10 = x⁴; α·x⁴ = x⁵ = x² + 1 = 5.
-        assert_eq!(GiftCode::from_payload(0x10).expect("fits").compact(), "00000000G5");
-        // The largest payload.
-        let max = GiftCode::from_payload((1 << 45) - 1).expect("fits");
-        assert_eq!(&max.compact()[..9], "ZZZZZZZZZ");
-        assert_eq!(max.payload(), (1 << 45) - 1);
-        assert_eq!(GiftCode::from_payload(1 << 45), Err(CodeError::PayloadTooLarge));
+        // Payload 0: all data symbols are B, every state is 0, the check symbol is B.
+        let zero = GiftCode::from_payload(0).expect("in range");
+        assert_eq!(zero.compact(), "BBBBBBBBBBBB");
+        assert_eq!(zero.grouped(), "BBBB-BBBB-BBBB");
+        // Payload 1: last data symbol C = (h 0, l 1). State (0, 1); the check symbol must
+        // have l with 2·1 + l ≡ 0 (mod 5), i.e. l = 3, h = 0: the letter F.
+        assert_eq!(GiftCode::from_payload(1).expect("in range").compact(), "BBBBBBBBBBCF");
+        // Payload 5: last data symbol H = (h 1, l 0). State (1, 0); the check symbol
+        // needs h = α·1 = 2, l = 0: value 10, the letter N.
+        assert_eq!(GiftCode::from_payload(5).expect("in range").compact(), "BBBBBBBBBBHN");
+        // The largest payload: eleven Z.
+        let max = GiftCode::from_payload(GiftCode::SPACE - 1).expect("in range");
+        assert_eq!(&max.compact()[..11], "ZZZZZZZZZZZ");
+        assert_eq!(max.payload(), GiftCode::SPACE - 1);
+        assert_eq!(GiftCode::from_payload(GiftCode::SPACE), Err(CodeError::PayloadTooLarge));
         assert_eq!(GiftCode::from_payload(u64::MAX), Err(CodeError::PayloadTooLarge));
     }
 
     #[test]
-    fn random_bytes_map_to_the_top_45_bits() {
-        let code =
-            GiftCode::from_random_bytes(&[0xff, 0xff, 0xff, 0xff, 0xff, 0xf8]).expect("6 bytes");
-        assert_eq!(code.payload(), (1 << 45) - 1);
-        // The three low bits of the sixth byte and any further byte are ignored.
-        let a = GiftCode::from_random_bytes(&[1, 2, 3, 4, 5, 0b1010_1000]).expect("6 bytes");
-        let b =
-            GiftCode::from_random_bytes(&[1, 2, 3, 4, 5, 0b1010_1111, 99, 100]).expect("8 bytes");
-        assert_eq!(a, b);
-        assert_eq!(a.payload(), 0x0102_0304_05a8 >> 3);
-        // Every bit of the first 45 matters.
-        for bit in 0..45u32 {
-            let mut bytes = [0u8; 6];
-            bytes[(bit / 8) as usize] = 0x80 >> (bit % 8);
-            let code = GiftCode::from_random_bytes(&bytes).expect("6 bytes");
-            assert_eq!(code.payload(), 1u64 << (44 - bit), "bit {bit}");
-        }
-        for len in 0..6 {
+    fn sampling_is_rejection_then_reduction() {
+        // An accepted chunk: the value itself, reduced.
+        assert_eq!(sample_below(&[0, 0, 0, 0, 0, 0, 0, 7], 20), Ok(7));
+        assert_eq!(sample_below(&[0, 0, 0, 0, 0, 0, 1, 0], 20), Ok(256 % 20));
+        // Bytes beyond the first accepted chunk are ignored, as is an incomplete tail.
+        assert_eq!(sample_below(&[0, 0, 0, 0, 0, 0, 0, 7, 9, 9, 9], 20), Ok(7));
+        assert_eq!(sample_below(&[0, 0, 0, 0, 0, 0, 0, 7, 1, 1, 1, 1, 1, 1, 1, 1], 20), Ok(7));
+        // A rejected chunk (above the largest multiple of the modulus) falls through to
+        // the next one…
+        let modulus = GiftCode::SPACE;
+        let limit = u64::MAX - u64::MAX % modulus;
+        let rejected = limit.to_be_bytes();
+        let mut two_chunks = rejected.to_vec();
+        two_chunks.extend_from_slice(&42u64.to_be_bytes());
+        assert_eq!(sample_below(&two_chunks, modulus), Ok(42));
+        // …and, when there is none, is reduced rather than refused.
+        assert_eq!(sample_below(&rejected, modulus), Ok(limit % modulus));
+        assert_eq!(sample_below(&u64::MAX.to_be_bytes(), modulus), Ok(u64::MAX % modulus));
+        // The acceptance region is a whole number of copies of 0..modulus.
+        assert_eq!(limit % modulus, 0);
+        assert!(u64::MAX - limit < modulus);
+        for len in 0..8 {
             assert_eq!(
-                GiftCode::from_random_bytes(&vec![7u8; len]),
-                Err(CodeError::NotEnoughRandomness { needed: 6, got: len })
+                sample_below(&vec![1u8; len], modulus),
+                Err(CodeError::NotEnoughRandomness { needed: 8, got: len })
             );
         }
     }
 
     #[test]
+    fn random_bytes_give_the_documented_code() {
+        let bytes = 123_456_789_012_345u64.to_be_bytes();
+        let code = GiftCode::from_random_bytes(&bytes).expect("8 bytes");
+        assert_eq!(code.payload(), 123_456_789_012_345);
+        assert_eq!(GiftCode::from_payload(123_456_789_012_345), Ok(code));
+        // Values above 20¹¹ wrap around.
+        let wrapped = (GiftCode::SPACE + 5).to_be_bytes();
+        assert_eq!(GiftCode::from_random_bytes(&wrapped).expect("8 bytes").payload(), 5);
+        // Deterministic, and insensitive to extra bytes once a chunk is accepted.
+        let mut longer = bytes.to_vec();
+        longer.extend_from_slice(&[0xff; 9]);
+        assert_eq!(GiftCode::from_random_bytes(&longer), Ok(code));
+        assert_eq!(
+            GiftCode::from_random_bytes(&[1, 2, 3, 4, 5, 6, 7]),
+            Err(CodeError::NotEnoughRandomness { needed: 8, got: 7 })
+        );
+        assert_eq!(
+            GiftCode::from_random_bytes(&[]),
+            Err(CodeError::NotEnoughRandomness { needed: 8, got: 0 })
+        );
+    }
+
+    // ---- Text forms and parsing -------------------------------------------------------
+
+    #[test]
     fn display_debug_and_string_forms() {
-        let code = GiftCode::from_payload(0x1234_5678_9abc >> 3).expect("fits");
+        let code = GiftCode::from_payload(98_765_432_109_876).expect("in range");
         let compact = code.compact();
         let grouped = code.grouped();
-        assert_eq!(compact.len(), 10);
-        assert_eq!(grouped.len(), 11);
+        assert_eq!(compact.len(), 12);
+        assert_eq!(grouped.len(), 14);
         assert_eq!(grouped.replace('-', ""), compact);
-        assert_eq!(grouped.find('-'), Some(5));
+        assert_eq!(grouped.match_indices('-').map(|(i, _)| i).collect::<Vec<_>>(), [4, 9]);
         assert_eq!(code.to_string(), grouped);
         assert!(compact.chars().all(|c| GiftCode::ALPHABET.contains(c)));
         assert_eq!(compact.chars().last(), Some(code.check_symbol()));
         assert_eq!(compact.parse::<GiftCode>(), Ok(code));
+        assert_eq!(code.symbols().len(), 12);
         // Debug must not reveal the code.
         let debug = format!("{code:?}");
         assert!(debug.starts_with(&format!("GiftCode({}", &compact[..2])));
@@ -595,7 +889,7 @@ mod tests {
 
     #[test]
     fn lenient_parsing() {
-        let code = GiftCode::from_payload(0x0f0f_1e2d_3c4b >> 3).expect("fits");
+        let code = GiftCode::from_payload(11_223_344_556_677).expect("in range");
         let compact = code.compact();
         let grouped = code.grouped();
         for typed in [
@@ -604,108 +898,97 @@ mod tests {
             compact.to_lowercase(),
             grouped.to_lowercase(),
             format!("  {grouped}\n"),
-            format!("{} {}", &compact[..5], &compact[5..]),
-            format!("{}.{}", &compact[..5], &compact[5..]),
-            format!("{}_{}", &compact[..5], &compact[5..]),
-            format!("{}\u{2013}{}", &compact[..5], &compact[5..]),
-            format!("{}\u{2011}{}", &compact[..5], &compact[5..]),
-            format!("{}\u{a0}{}", &compact[..5], &compact[5..]),
+            grouped.replace('-', " "),
+            grouped.replace('-', "."),
+            grouped.replace('-', "_"),
+            grouped.replace('-', "\u{2013}"),
+            grouped.replace('-', "\u{2011}"),
+            grouped.replace('-', "\u{a0}"),
             compact.chars().map(|c| format!("{c}-")).collect::<String>(),
             compact.chars().map(|c| format!(" {c} ")).collect::<String>(),
             format!("\u{feff}{compact}\u{200b}"),
-            compact.replace('0', "O").replace('1', "I"),
-            compact.replace('0', "o").replace('1', "l"),
-            compact.replace('1', "L"),
+            format!("{}\t{}", &compact[..6], &compact[6..]),
         ] {
             assert_eq!(GiftCode::parse(&typed), Ok(code), "typed {typed:?}");
         }
     }
 
     #[test]
-    fn look_alike_letters_decode_to_digits() {
-        // Data symbols "011000000": "OIL…" and "oil…" must read the same.
-        let code = GiftCode::from_payload((1u64 << 35) | (1u64 << 30)).expect("fits");
-        let compact = code.compact();
-        assert_eq!(&compact[..3], "011");
-        assert_eq!(GiftCode::parse(&format!("OIL{}", &compact[3..])), Ok(code));
-        assert_eq!(GiftCode::parse(&format!("oil{}", &compact[3..])), Ok(code));
-        assert_eq!(GiftCode::parse(&format!("OLI{}", &compact[3..])), Ok(code));
-        // …and the canonical output never contains the look-alikes.
-        for payload in [0u64, 1, 0x7fff, (1 << 45) - 1, 0x1234_5678_9abc >> 3] {
-            let text = GiftCode::from_payload(payload).expect("fits").grouped();
-            assert!(!text.contains(['I', 'L', 'O', 'U']), "{text}");
-            assert_eq!(text, text.to_uppercase());
-        }
-    }
-
-    #[test]
     fn parse_errors_are_specific() {
-        let code = GiftCode::from_payload(123_456_789).expect("fits");
+        let code = GiftCode::from_payload(123_456_789).expect("in range");
         let compact = code.compact();
-        assert_eq!(GiftCode::parse(""), Err(CodeError::Length { found: 0 }));
-        assert_eq!(GiftCode::parse(" - . _ "), Err(CodeError::Length { found: 0 }));
-        assert_eq!(GiftCode::parse(&compact[..9]), Err(CodeError::Length { found: 9 }));
-        assert_eq!(GiftCode::parse(&format!("{compact}0")), Err(CodeError::Length { found: 11 }));
+        let length = |found| Err(CodeError::Length { expected: 12, found });
+        assert_eq!(GiftCode::parse(""), length(0));
+        assert_eq!(GiftCode::parse(" - . _ "), length(0));
+        assert_eq!(GiftCode::parse(&compact[..11]), length(11));
+        assert_eq!(GiftCode::parse(&format!("{compact}B")), length(13));
+        assert_eq!(GiftCode::parse(&format!("{compact}{compact}")), length(24));
+        // Vowels, digits and anything else are named.
+        assert_eq!(GiftCode::parse("BCDF-GHJK-LMNA"), Err(CodeError::InvalidChar('A')));
+        assert_eq!(GiftCode::parse("bcdf-ghjk-lmny"), Err(CodeError::InvalidChar('y')));
+        assert_eq!(GiftCode::parse("BCDF-GHJK-LMN0"), Err(CodeError::InvalidChar('0')));
+        assert_eq!(GiftCode::parse("BCDF/GHJK/LMNP"), Err(CodeError::InvalidChar('/')));
+        assert_eq!(GiftCode::parse("BCDÉ-GHJK-LMNP"), Err(CodeError::InvalidChar('É')));
+        assert_eq!(GiftCode::parse("ＢCDF-GHJK-LMNP"), Err(CodeError::InvalidChar('Ｂ')));
+        assert_eq!(GiftCode::parse("BCDF\u{0}GHJKLMNP"), Err(CodeError::InvalidChar('\u{0}')));
         assert_eq!(
-            GiftCode::parse(&format!("{compact}{compact}")),
-            Err(CodeError::Length { found: 20 })
-        );
-        assert_eq!(GiftCode::parse("ABCDEFGHJU"), Err(CodeError::InvalidChar('U')));
-        assert_eq!(GiftCode::parse("ABCDE/FGHJK"), Err(CodeError::InvalidChar('/')));
-        assert_eq!(GiftCode::parse("ABCDÉ-FGHJK"), Err(CodeError::InvalidChar('É')));
-        assert_eq!(GiftCode::parse("ＡBCDE-FGHJK"), Err(CodeError::InvalidChar('Ａ')));
-        assert_eq!(GiftCode::parse("ABCDE\u{0}FGHJK"), Err(CodeError::InvalidChar('\u{0}')));
-        assert_eq!(
-            GiftCode::parse("https://ebk.example/k/ABCDEFGHJK"),
+            GiftCode::parse("https://ebk.example/k/BCDFGHJKLMNP"),
             Err(CodeError::InvalidChar(':'))
         );
         // Invalid characters are reported even when the length is wrong too.
-        assert_eq!(GiftCode::parse("AB!"), Err(CodeError::InvalidChar('!')));
+        assert_eq!(GiftCode::parse("BC!"), Err(CodeError::InvalidChar('!')));
         // Hostile sizes.
-        assert_eq!(
-            GiftCode::parse(&"0".repeat(1_000_000)),
-            Err(CodeError::Length { found: 1_000_000 })
-        );
-        assert_eq!(GiftCode::parse(&"-".repeat(1_000_000)), Err(CodeError::Length { found: 0 }));
+        assert_eq!(GiftCode::parse(&"B".repeat(1_000_000)), length(1_000_000));
+        assert_eq!(GiftCode::parse(&"-".repeat(1_000_000)), length(0));
         // A wrong check symbol is a typo, and says so.
-        let wrong_check = if code.check_symbol() == 'Z' { 'Y' } else { 'Z' };
-        let typo = format!("{}{wrong_check}", &compact[..9]);
+        let wrong_check = if code.check_symbol() == 'Z' { 'X' } else { 'Z' };
+        let typo = format!("{}{wrong_check}", &compact[..11]);
         assert_eq!(GiftCode::parse(&typo), Err(CodeError::Check));
         assert!(CodeError::Check.to_string().contains("mistyped"));
-        assert!(CodeError::Length { found: 3 }.to_string().contains("10 characters, found 3"));
+        assert_eq!(
+            CodeError::Length { expected: 12, found: 3 }.to_string(),
+            "the code has 12 letters, found 3"
+        );
+        assert!(CodeError::InvalidChar('0').to_string().contains("BCDFGHJKLMNPQRSTVWXZ"));
     }
 
     #[test]
     fn claim_urls() {
-        let code = GiftCode::from_payload(987_654_321).expect("fits");
+        let code = GiftCode::from_payload(987_654_321).expect("in range");
         let compact = code.compact();
-        assert_eq!(
-            claim_url("https://ebk.example", &code),
-            format!("https://ebk.example/k/{compact}")
-        );
-        assert_eq!(
-            claim_url("https://ebk.example/", &code),
-            format!("https://ebk.example/k/{compact}")
-        );
-        assert_eq!(
-            claim_url("https://ebk.example///", &code),
-            format!("https://ebk.example/k/{compact}")
-        );
+        let expected = format!("https://ebk.example/k/{compact}");
+        assert_eq!(claim_url("https://ebk.example", &code), expected);
+        assert_eq!(claim_url("https://ebk.example/", &code), expected);
+        assert_eq!(claim_url("https://ebk.example///", &code), expected);
         assert_eq!(
             claim_url("http://localhost:8080/base", &code),
             format!("http://localhost:8080/base/k/{compact}")
         );
         assert_eq!(claim_url("", &code), format!("/k/{compact}"));
-        // The URL only uses characters of the QR alphanumeric set once upper-cased.
-        let upper = claim_url("https://ebk.example", &code).to_uppercase();
-        assert!(upper.chars().all(|c| "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:".contains(c)));
+
+        // The QR form is the same URL in upper case, entirely within the QR alphanumeric
+        // character set.
+        let qr = claim_url_qr("https://ebk.example", &code);
+        assert_eq!(qr, format!("HTTPS://EBK.EXAMPLE/K/{compact}"));
+        assert_eq!(qr.to_lowercase(), expected.to_lowercase());
+        assert!(qr.chars().all(|c| "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:".contains(c)));
+        assert_eq!(
+            claim_url_qr("http://localhost:8080/", &code),
+            format!("HTTP://LOCALHOST:8080/K/{compact}")
+        );
+        // Only ASCII is upper-cased.
+        assert_eq!(
+            claim_url_qr("https://é.example", &code),
+            format!("HTTPS://é.EXAMPLE/K/{compact}")
+        );
 
         for url in [
-            claim_url("https://ebk.example", &code),
-            upper,
+            expected.clone(),
+            qr,
             format!("https://ebk.example/k/{compact}?utm=1"),
             format!("https://ebk.example/k/{compact}#top"),
             format!("https://ebk.example/k/{compact}/"),
+            format!("https://ebk.example/k/{compact}?device=kobo"),
             format!("https://ebk.example/k/{}", code.grouped()),
             format!("ebk.example/k/{}", compact.to_lowercase()),
             format!("/k/{compact}"),
@@ -718,21 +1001,17 @@ mod tests {
         assert_eq!(GiftCode::from_claim_url(&compact), Err(CodeError::NotAClaimUrl));
         assert_eq!(
             GiftCode::from_claim_url("https://ebk.example/k/"),
-            Err(CodeError::Length { found: 0 })
+            Err(CodeError::Length { expected: 12, found: 0 })
         );
         assert_eq!(
             GiftCode::from_claim_url("https://ebk.example/k/é"),
             Err(CodeError::InvalidChar('é'))
         );
-        assert_eq!(
-            GiftCode::from_claim_url(&format!("https://ebk.example/k/{}Z", &compact[..9])).is_err(),
-            code.check_symbol() != 'Z'
-        );
     }
 
     #[test]
-    fn serialises_as_the_compact_string() {
-        let code = GiftCode::from_payload(0x1f_ffff_ffff).expect("fits");
+    fn gift_code_serialises_as_the_compact_string() {
+        let code = GiftCode::from_payload(55_555_555_555).expect("in range");
         let json = serde_json::to_string(&code).expect("serialises");
         assert_eq!(json, format!("\"{}\"", code.compact()));
         assert_eq!(serde_json::from_str::<GiftCode>(&json).expect("parses"), code);
@@ -740,10 +1019,76 @@ mod tests {
         let grouped = format!("\"{}\"", code.grouped().to_lowercase());
         assert_eq!(serde_json::from_str::<GiftCode>(&grouped).expect("parses"), code);
         // …and as strict about the check symbol.
-        let wrong_check = if code.check_symbol() == '0' { '1' } else { '0' };
-        let bad = format!("\"{}{wrong_check}\"", &code.compact()[..9]);
+        let wrong_check = if code.check_symbol() == 'B' { 'C' } else { 'B' };
+        let bad = format!("\"{}{wrong_check}\"", &code.compact()[..11]);
         assert!(serde_json::from_str::<GiftCode>(&bad).is_err());
         assert!(serde_json::from_str::<GiftCode>("12345").is_err());
         assert!(serde_json::from_str::<GiftCode>("null").is_err());
+    }
+
+    #[test]
+    fn unfortunate_letters_are_flagged() {
+        // Build codes around a given data prefix; the check symbol follows automatically.
+        let with_prefix = |prefix: &str| {
+            let mut payload = 0u64;
+            for i in 0..GiftCode::DATA_SYMBOLS {
+                let c = prefix.chars().nth(i).unwrap_or('B');
+                payload = payload * 20 + u64::from(symbol_value(c).expect("alphabet letter"));
+            }
+            GiftCode::from_payload(payload).expect("in range")
+        };
+        assert!(with_prefix("KKK").has_unfortunate_letters());
+        assert!(with_prefix("BBWTF").has_unfortunate_letters());
+        assert!(with_prefix("BBBBBBBBTCH").has_unfortunate_letters());
+        assert!(!with_prefix("BCDFGHJKLMN").has_unfortunate_letters());
+        assert!(!GiftCode::from_payload(0).expect("in range").has_unfortunate_letters());
+    }
+
+    // ---- PairCode ---------------------------------------------------------------------
+
+    #[test]
+    fn pair_code_forms_and_parsing() {
+        let pair = PairCode::from_random_bytes(&12_345_678u64.to_be_bytes()).expect("8 bytes");
+        let compact = pair.compact();
+        let grouped = pair.grouped();
+        assert_eq!(compact.len(), 6);
+        assert_eq!(grouped.len(), 7);
+        assert_eq!(grouped.find('-'), Some(3));
+        assert_eq!(pair.to_string(), grouped);
+        assert!(compact.chars().all(|c| GiftCode::ALPHABET.contains(c)));
+        assert_eq!(value_of(&pair.symbols()), 12_345_678);
+        for typed in [
+            compact.clone(),
+            grouped.clone(),
+            grouped.to_lowercase(),
+            format!(" {} {} ", &compact[..3], &compact[3..]),
+            compact.chars().map(|c| format!("{c}.")).collect::<String>(),
+        ] {
+            assert_eq!(PairCode::parse(&typed), Ok(pair), "typed {typed:?}");
+            assert_eq!(typed.parse::<PairCode>(), Ok(pair));
+        }
+        // No check symbol: every six-letter string is a pair code.
+        assert!(PairCode::parse("BBBBBB").is_ok());
+        assert!(PairCode::parse("zzz-zzz").is_ok());
+        assert_eq!(PairCode::parse("BBBBB"), Err(CodeError::Length { expected: 6, found: 5 }));
+        assert_eq!(PairCode::parse("BBBBBBB"), Err(CodeError::Length { expected: 6, found: 7 }));
+        assert_eq!(PairCode::parse("BBB-BB1"), Err(CodeError::InvalidChar('1')));
+        assert_eq!(PairCode::parse("BBB-BBA"), Err(CodeError::InvalidChar('A')));
+        assert_eq!(PairCode::parse(""), Err(CodeError::Length { expected: 6, found: 0 }));
+        assert_eq!(
+            PairCode::from_random_bytes(&[0; 7]),
+            Err(CodeError::NotEnoughRandomness { needed: 8, got: 7 })
+        );
+        // Smallest and largest.
+        assert_eq!(PairCode::from_random_bytes(&[0; 8]).expect("8 bytes").compact(), "BBBBBB");
+        let last = (PairCode::SPACE - 1).to_be_bytes();
+        assert_eq!(PairCode::from_random_bytes(&last).expect("8 bytes").compact(), "ZZZZZZ");
+        // Debug is redacted; serde uses the compact string.
+        let debug = format!("{pair:?}");
+        assert!(debug.starts_with("PairCode(") && !debug.contains(&compact[1..]));
+        let json = serde_json::to_string(&pair).expect("serialises");
+        assert_eq!(json, format!("\"{compact}\""));
+        assert_eq!(serde_json::from_str::<PairCode>(&json).expect("parses"), pair);
+        assert!(serde_json::from_str::<PairCode>("\"BBB\"").is_err());
     }
 }

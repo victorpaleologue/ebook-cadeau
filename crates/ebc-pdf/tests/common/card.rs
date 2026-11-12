@@ -63,7 +63,7 @@ pub(crate) fn qr_module(x: u32, y: u32) -> bool {
     finder(0, 0)
         .or_else(|| finder(QR_SIZE - 7, 0))
         .or_else(|| finder(0, QR_SIZE - 7))
-        .unwrap_or_else(|| (x * 7 + y * 13 + x * y) % 3 == 0)
+        .unwrap_or_else(|| (x * 7 + y * 13 + x * y).is_multiple_of(3))
 }
 
 /// The dark modules as one path of merged horizontal runs.

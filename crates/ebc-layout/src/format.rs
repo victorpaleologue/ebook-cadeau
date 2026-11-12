@@ -71,8 +71,11 @@ impl Panels {
     /// rectangles still tile (to within floating-point rounding of the grown left panel's
     /// width), now covering the whole bleed box.
     ///
-    /// This is the rectangle a full-bleed background or cover image must fill (and be
-    /// clipped to). A negative or non-finite `bleed` is treated as zero.
+    /// This is the rectangle a full-bleed background must fill and a full-bleed cover
+    /// image must be **clipped** to. It is not centred on its panel, so do not centre an
+    /// image in it: place the image with
+    /// [`place_image_bleed`](crate::place_image_bleed). A negative or non-finite `bleed`
+    /// is treated as zero.
     #[must_use]
     pub fn with_bleed(&self, bleed: f64) -> Self {
         let b = if bleed.is_finite() { bleed.max(0.0) } else { 0.0 };
@@ -265,9 +268,15 @@ impl CardFormat {
     }
 
     /// Panels of the **inside** face (page 2), i.e. the reverse of the sheet after it has
-    /// been flipped about its vertical axis:
+    /// been flipped about its vertical axis (the axis parallel to the creases):
     /// `left` = **inside-front** (the back of the front cover), `spine` = inside of the
     /// spine, `right` = **inside-back** (the back of the back cover).
+    ///
+    /// That flip is "flip on the **short** edge" in a duplex print dialog whenever the
+    /// sheet is used in landscape, which is the case of every preset; with the dialog's
+    /// usual default (long edge) the inside comes out upside down behind the wrong cover.
+    /// [`SheetPlacement::duplex_flip`](crate::SheetPlacement::duplex_flip) gives the
+    /// setting for a given card.
     ///
     /// Because the spread is symmetric the rectangles are numerically those of
     /// [`outside`](Self::outside), but each one sits behind the *mirrored* outside panel:

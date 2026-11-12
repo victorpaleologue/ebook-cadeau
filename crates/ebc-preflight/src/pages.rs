@@ -74,15 +74,18 @@ pub(crate) fn collect<'a>(
             sink.error(codes::PAGE_TREE_INVALID, None, "a page tree node is not a dictionary");
             continue;
         };
-        if let Some(id) = id {
-            if !visited.insert(id) {
-                sink.error(
-                    codes::PAGE_TREE_INVALID,
-                    None,
-                    format!("page tree node {} {} is reachable more than once (cycle or shared node)", id.0, id.1),
-                );
-                continue;
-            }
+        if let Some(id) = id
+            && !visited.insert(id)
+        {
+            sink.error(
+                codes::PAGE_TREE_INVALID,
+                None,
+                format!(
+                    "page tree node {} {} is reachable more than once (cycle or shared node)",
+                    id.0, id.1
+                ),
+            );
+            continue;
         }
         let inherited = inherited.updated(doc, dict);
         let kids_entry = dict.get(b"Kids").ok().and_then(|kids| resolve(doc, kids));
@@ -106,7 +109,9 @@ pub(crate) fn collect<'a>(
                 sink.error(
                     codes::LIMIT_EXCEEDED,
                     None,
-                    format!("the document has more than {MAX_PAGES} pages; the rest are not analysed"),
+                    format!(
+                        "the document has more than {MAX_PAGES} pages; the rest are not analysed"
+                    ),
                 );
                 break;
             }
@@ -136,7 +141,7 @@ pub(crate) struct PageBoxes {
 
 impl PageBoxes {
     /// Converts a box to millimetres.
-    pub(crate) fn to_mm(&self, rect: RectPt) -> BoxMm {
+    pub(crate) fn to_mm(self, rect: RectPt) -> BoxMm {
         let k = self.user_unit / PT_PER_MM;
         BoxMm { x0: rect.x0 * k, y0: rect.y0 * k, x1: rect.x1 * k, y1: rect.y1 * k }
     }
@@ -165,14 +170,23 @@ impl PageBoxes {
 }
 
 /// Reads the boxes of a page, reporting malformed ones.
-pub(crate) fn read_boxes(doc: &Document, node: &PageNode<'_>, page: u32, sink: &mut Sink) -> PageBoxes {
+pub(crate) fn read_boxes(
+    doc: &Document,
+    node: &PageNode<'_>,
+    page: u32,
+    sink: &mut Sink,
+) -> PageBoxes {
     let mut read = |name: &str, object: Option<&Object>| -> Option<RectPt> {
         let object = object?;
         resolve(doc, object)?;
         match RectPt::from_object(doc, object) {
             Some(rect) if rect.width() > 0.0 && rect.height() > 0.0 => Some(rect),
             Some(_) => {
-                sink.error(codes::BOX_INVALID, Some(page), format!("{name} is empty (zero width or height)"));
+                sink.error(
+                    codes::BOX_INVALID,
+                    Some(page),
+                    format!("{name} is empty (zero width or height)"),
+                );
                 None
             }
             None => {
@@ -231,7 +245,12 @@ pub(crate) struct BoxMeasures {
 }
 
 /// Checks presence, nesting, bleed and trim size.
-pub(crate) fn check_boxes(boxes: &PageBoxes, expect: &Expectations, page: u32, sink: &mut Sink) -> BoxMeasures {
+pub(crate) fn check_boxes(
+    boxes: &PageBoxes,
+    expect: &Expectations,
+    page: u32,
+    sink: &mut Sink,
+) -> BoxMeasures {
     let mut measures = BoxMeasures::default();
     let Some(media) = boxes.media else {
         sink.error(codes::BOX_MEDIA_MISSING, Some(page), "the page has no valid MediaBox");
@@ -239,7 +258,11 @@ pub(crate) fn check_boxes(boxes: &PageBoxes, expect: &Expectations, page: u32, s
     };
     let media_mm = boxes.to_mm(media);
     let Some(trim) = boxes.trim else {
-        let hint = if boxes.art.is_some() { " (it has an ArtBox, which printers do not use for cutting)" } else { "" };
+        let hint = if boxes.art.is_some() {
+            " (it has an ArtBox, which printers do not use for cutting)"
+        } else {
+            ""
+        };
         sink.error(
             codes::BOX_TRIM_MISSING,
             Some(page),
@@ -288,14 +311,14 @@ pub(crate) fn check_boxes(boxes: &PageBoxes, expect: &Expectations, page: u32, s
             format!("the {bleed_source} extends beyond the MediaBox"),
         );
     }
-    if let (Some(crop), Some(bleed)) = (boxes.crop, boxes.bleed) {
-        if !boxes.to_mm(crop).contains(&boxes.to_mm(bleed), NESTING_TOLERANCE_MM) {
-            sink.warning(
-                codes::BOX_CROP_CLIPS_BLEED,
-                Some(page),
-                "the CropBox is smaller than the BleedBox: viewers and some RIPs clip the bleed",
-            );
-        }
+    if let (Some(crop), Some(bleed)) = (boxes.crop, boxes.bleed)
+        && !boxes.to_mm(crop).contains(&boxes.to_mm(bleed), NESTING_TOLERANCE_MM)
+    {
+        sink.warning(
+            codes::BOX_CROP_CLIPS_BLEED,
+            Some(page),
+            "the CropBox is smaller than the BleedBox: viewers and some RIPs clip the bleed",
+        );
     }
 
     let margins = BleedMm {
@@ -318,8 +341,10 @@ pub(crate) fn check_boxes(boxes: &PageBoxes, expect: &Expectations, page: u32, s
 
     if let Some((expected_w, expected_h)) = expect.trim_mm {
         let (w, h) = (trim_mm.width(), trim_mm.height());
-        if (w - expected_w).abs() > TRIM_TOLERANCE_MM || (h - expected_h).abs() > TRIM_TOLERANCE_MM {
-            let swapped = (w - expected_h).abs() <= TRIM_TOLERANCE_MM && (h - expected_w).abs() <= TRIM_TOLERANCE_MM;
+        if (w - expected_w).abs() > TRIM_TOLERANCE_MM || (h - expected_h).abs() > TRIM_TOLERANCE_MM
+        {
+            let swapped = (w - expected_h).abs() <= TRIM_TOLERANCE_MM
+                && (h - expected_w).abs() <= TRIM_TOLERANCE_MM;
             let hint = if swapped { " (width and height are swapped)" } else { "" };
             sink.error(
                 codes::BOX_TRIM_SIZE,
@@ -329,6 +354,59 @@ pub(crate) fn check_boxes(boxes: &PageBoxes, expect: &Expectations, page: u32, s
         }
     }
     measures
+}
+
+/// Warns when artwork reaches the trim edge without extending into the bleed.
+///
+/// `painted` is the bounding box of everything painted on the page (in points), so this is
+/// a coarse test: it cannot see an object that stops at the trim line next to another one
+/// that bleeds properly, nor artwork that is clipped at the trim line.
+pub(crate) fn check_bleed_painted(
+    boxes: &PageBoxes,
+    painted: Option<RectPt>,
+    expect: &Expectations,
+    page: u32,
+    sink: &mut Sink,
+) {
+    /// How close to the trim line artwork must come to count as reaching it, in millimetres.
+    const REACH_MM: f64 = 0.1;
+    /// Shortfall of bleed that is tolerated, in millimetres.
+    const SLACK_MM: f64 = 0.2;
+    let (Some(trim), Some(painted), Some(media)) = (boxes.trim, painted, boxes.media) else {
+        return;
+    };
+    if expect.bleed_mm <= 0.0 {
+        return;
+    }
+    let outer = boxes.bleed.or(boxes.crop).unwrap_or(media);
+    let pt_per_mm = PT_PER_MM / boxes.user_unit;
+    // Per side: how far the artwork extends beyond the trim line (negative: it stops short
+    // of it), and how much bleed the page offers there.
+    let sides = [
+        ("left", trim.x0 - painted.x0, trim.x0 - outer.x0),
+        ("right", painted.x1 - trim.x1, outer.x1 - trim.x1),
+        ("bottom", trim.y0 - painted.y0, trim.y0 - outer.y0),
+        ("top", painted.y1 - trim.y1, outer.y1 - trim.y1),
+    ];
+    let mut short: Vec<String> = Vec::new();
+    for (side, extends_pt, available_pt) in sides {
+        let extends = extends_pt / pt_per_mm;
+        let needed = expect.bleed_mm.min(available_pt / pt_per_mm) - SLACK_MM;
+        if extends >= -REACH_MM && extends < needed {
+            short.push(format!("{side} ({:.1} mm)", extends.max(0.0)));
+        }
+    }
+    if !short.is_empty() {
+        sink.warning(
+            codes::BLEED_NOT_PAINTED,
+            Some(page),
+            format!(
+                "artwork reaches the trim edge but does not fill the bleed at the {}: \
+                 a white sliver may show after cutting",
+                short.join(", ")
+            ),
+        );
+    }
 }
 
 /// Checks that all pages have the same trim size and the same media size. Each box is
@@ -342,8 +420,10 @@ pub(crate) fn check_same_size(all: &[PageBoxes], sink: &mut Sink) {
     let kinds: [(&str, SizeOf); 2] =
         [("trim", PageBoxes::trim_size_mm), ("media", PageBoxes::media_size_mm)];
     for (kind, size_of) in kinds {
-        let Some((reference_index, reference)) =
-            all.iter().enumerate().find_map(|(index, boxes)| size_of(boxes).map(|size| (index, size)))
+        let Some((reference_index, reference)) = all
+            .iter()
+            .enumerate()
+            .find_map(|(index, boxes)| size_of(boxes).map(|size| (index, size)))
         else {
             continue;
         };
@@ -444,7 +524,10 @@ mod tests {
         boxes.media = Some(rect(2.0, 2.0, 234.0, 182.0));
         assert_eq!(
             codes_of(&boxes, &expect),
-            vec![(codes::BOX_BLEED_MISSING, Severity::Warning), (codes::BOX_BLEED_TOO_SMALL, Severity::Error)]
+            vec![
+                (codes::BOX_BLEED_MISSING, Severity::Warning),
+                (codes::BOX_BLEED_TOO_SMALL, Severity::Error)
+            ]
         );
     }
 
@@ -462,7 +545,10 @@ mod tests {
         // A crop box that cuts into the bleed.
         let mut boxes = card_boxes();
         boxes.crop = Some(rect(3.0, 3.0, 233.0, 181.0));
-        assert_eq!(codes_of(&boxes, &expect), vec![(codes::BOX_CROP_CLIPS_BLEED, Severity::Warning)]);
+        assert_eq!(
+            codes_of(&boxes, &expect),
+            vec![(codes::BOX_CROP_CLIPS_BLEED, Severity::Warning)]
+        );
         // Trim and art box together.
         let mut boxes = card_boxes();
         boxes.art = boxes.trim;
@@ -490,7 +576,8 @@ mod tests {
         assert_eq!(findings.len(), 1);
         assert!(findings[0].message.contains("swapped"), "{}", findings[0].message);
         // UserUnit scales everything: half-size boxes with UserUnit 2 are the same card.
-        let half = |r: RectPt| RectPt { x0: r.x0 / 2.0, y0: r.y0 / 2.0, x1: r.x1 / 2.0, y1: r.y1 / 2.0 };
+        let half =
+            |r: RectPt| RectPt { x0: r.x0 / 2.0, y0: r.y0 / 2.0, x1: r.x1 / 2.0, y1: r.y1 / 2.0 };
         let base = card_boxes();
         let scaled = PageBoxes {
             media: base.media.map(half),
@@ -500,6 +587,57 @@ mod tests {
             ..base
         };
         assert!(codes_of(&scaled, &expect).is_empty());
+    }
+
+    #[test]
+    fn artwork_must_fill_the_bleed_where_it_reaches_the_trim() {
+        let expect = Expectations::professional();
+        let boxes = card_boxes();
+        let warn = |painted: RectPt| {
+            let mut sink = Sink::default();
+            check_bleed_painted(&boxes, Some(painted), &expect, 1, &mut sink);
+            sink.into_sorted()
+                .into_iter()
+                .map(|f| (f.code, f.severity, f.message))
+                .collect::<Vec<_>>()
+        };
+        // Full bleed, and artwork with a white margin all round: fine.
+        assert!(warn(rect(0.0, 0.0, 236.0, 184.0)).is_empty());
+        assert!(warn(rect(20.0, 20.0, 200.0, 150.0)).is_empty());
+        // Exactly to the trim line on every side.
+        let got = warn(rect(3.0, 3.0, 233.0, 181.0));
+        assert_eq!(got.len(), 1);
+        assert_eq!((got[0].0, got[0].1), (codes::BLEED_NOT_PAINTED, Severity::Warning));
+        for side in ["left (0.0 mm)", "right (0.0 mm)", "bottom (0.0 mm)", "top (0.0 mm)"] {
+            assert!(got[0].2.contains(side), "{}", got[0].2);
+        }
+        // One millimetre into the bleed on the right only.
+        let got = warn(rect(0.0, 0.0, 234.0, 184.0));
+        assert_eq!(got.len(), 1);
+        assert!(got[0].2.contains("right (1.0 mm)") && !got[0].2.contains("left"), "{}", got[0].2);
+        // 2.9 mm is within the slack.
+        assert!(warn(rect(0.1, 0.1, 235.9, 183.9)).is_empty());
+        // When the page offers less bleed than expected (reported elsewhere), filling what
+        // there is suffices.
+        let mut narrow = card_boxes();
+        narrow.bleed = Some(rect(2.0, 2.0, 234.0, 182.0));
+        let mut sink = Sink::default();
+        check_bleed_painted(&narrow, Some(rect(2.0, 2.0, 234.0, 182.0)), &expect, 1, &mut sink);
+        assert!(sink.into_sorted().is_empty());
+        // No bleed expected, nothing painted, or no trim box: nothing to say.
+        let mut sink = Sink::default();
+        check_bleed_painted(
+            &boxes,
+            Some(rect(3.0, 3.0, 233.0, 181.0)),
+            &Expectations::home(),
+            1,
+            &mut sink,
+        );
+        check_bleed_painted(&boxes, None, &expect, 1, &mut sink);
+        let mut no_trim = card_boxes();
+        no_trim.trim = None;
+        check_bleed_painted(&no_trim, Some(rect(3.0, 3.0, 233.0, 181.0)), &expect, 1, &mut sink);
+        assert!(sink.into_sorted().is_empty());
     }
 
     #[test]
@@ -618,18 +756,30 @@ mod tests {
             "UserUnit" => -3,
             "Rotate" => 450,
         });
-        let pages_id = doc.add_object(dictionary! { "Type" => "Pages", "Kids" => vec![page.into()] });
+        let pages_id =
+            doc.add_object(dictionary! { "Type" => "Pages", "Kids" => vec![page.into()] });
         let catalog = dictionary! { "Pages" => pages_id };
         let mut sink = Sink::default();
         let pages = collect(&doc, &catalog, &mut sink);
         let boxes = read_boxes(&doc, &pages[0], 1, &mut sink);
-        assert!(boxes.media.is_some() && boxes.trim.is_none() && boxes.bleed.is_none() && boxes.art.is_none());
+        assert!(
+            boxes.media.is_some()
+                && boxes.trim.is_none()
+                && boxes.bleed.is_none()
+                && boxes.art.is_none()
+        );
         assert_eq!(boxes.user_unit, 1.0);
         assert_eq!(boxes.rotate, 90);
         let codes: Vec<_> = sink.into_sorted().into_iter().map(|f| f.code).collect();
         assert_eq!(
             codes,
-            vec![codes::BOX_INVALID, codes::BOX_INVALID, codes::BOX_INVALID, codes::BOX_INVALID, codes::PAGE_ROTATED]
+            vec![
+                codes::BOX_INVALID,
+                codes::BOX_INVALID,
+                codes::BOX_INVALID,
+                codes::BOX_INVALID,
+                codes::PAGE_ROTATED
+            ]
         );
     }
 }

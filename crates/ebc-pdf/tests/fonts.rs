@@ -55,7 +55,7 @@ fn truetype_fonts_become_identity_h_cidfonttype2_subsets() {
             let subset = Face::parse(&info.program, 0).expect("subset parses");
             let distinct: BTreeSet<char> = text.chars().collect();
             assert!(info.program.len() < data.len() / 8, "{} bytes", info.program.len());
-            assert!(usize::from(subset.number_of_glyphs()) >= distinct.len() + 1);
+            assert!(usize::from(subset.number_of_glyphs()) > distinct.len(), "glyphs + .notdef");
             assert!(usize::from(subset.number_of_glyphs()) <= distinct.len() + 6);
             assert_eq!(subset.units_per_em(), original.units_per_em());
 
@@ -527,6 +527,10 @@ fn very_long_runs_are_split_into_arrays_and_strings_old_readers_accept() {
     // `placed_glyphs` asserts the array and string limits while it walks the stream.
     let placed = placed_glyphs(&content, &|_, cid| info.widths[&cid]);
     assert_eq!(placed.len(), 60_000);
+    // Each run is cut into short segments that start at an absolute position.
+    let text = String::from_utf8_lossy(&content);
+    assert_eq!(text.matches("Tm").count(), 60, "1000 glyphs per segment");
+    assert_eq!(text.matches("TJ").count(), 60);
     for (got, want) in placed.iter().zip(kerned.iter().chain(&natural)) {
         // Absolute positions are single-precision numbers in the file, so the tolerance
         // grows with the distance from the origin (these runs are up to 12 m long).

@@ -28,8 +28,8 @@ pub(crate) const MAX_GROUP_DEPTH: usize = 24;
 /// to support (about ±32767).
 const MAX_COORDINATE: f64 = 30_000.0;
 
-/// Longest array the writer puts into a content stream. PDF 1.3 consumers only have to
-/// support 8191 elements.
+/// Longest dash array the writer accepts. PDF 1.3 consumers only have to support arrays
+/// of 8191 elements.
 const MAX_ARRAY_LEN: usize = 8_000;
 
 /// Smallest glyph displacement worth a `TJ` adjustment, in thousandths of an em:
@@ -37,13 +37,18 @@ const MAX_ARRAY_LEN: usize = 8_000;
 /// to absorb floating-point noise so that naturally spaced text stays one string.
 const MIN_ADJUSTMENT: f64 = 0.05;
 
-/// Longest string the writer puts into a content stream, in bytes.
-const MAX_STRING_LEN: usize = 16_000;
+/// Most glyphs shown by one `TJ` operator. Longer runs continue with a new text matrix:
+/// this keeps arrays and strings far below what PDF 1.3 consumers have to support (8191
+/// elements, 32767 bytes) and re-anchors the pen at an absolute position.
+const MAX_SEGMENT_GLYPHS: usize = 1_000;
 
 /// Resource name of the ICC-based sRGB colour space.
 pub(crate) const SRGB_SPACE: &[u8] = b"sRGB";
 /// Resource name of the `/Separation /All` (registration) colour space.
 pub(crate) const REGISTRATION_SPACE: &[u8] = b"Registration";
+/// Resource names of the graphics state dictionaries that switch overprint on and off.
+pub(crate) const OVERPRINT_ON: &[u8] = b"OverprintOn";
+pub(crate) const OVERPRINT_OFF: &[u8] = b"OverprintOff";
 
 /// What a page's content stream needs from the page's resource dictionary.
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
@@ -58,6 +63,8 @@ pub(crate) struct PageUse {
     pub(crate) srgb: bool,
     /// The registration colour space is used.
     pub(crate) registration: bool,
+    /// The overprint graphics states are used.
+    pub(crate) overprint: bool,
 }
 
 /// Document-wide lookup tables shared by all pages.
@@ -99,6 +106,8 @@ struct GraphicsState {
     cap: Option<StrokeCap>,
     join: Option<StrokeJoin>,
     dash: Option<Vec<f32>>,
+    /// Whether overprint is switched on. Off is the PDF default, so this is always known.
+    overprint: bool,
 }
 
 /// One element of a `TJ` array.
@@ -198,6 +207,23 @@ impl<'a> PageContent<'a> {
             Item::Group { transform, clip, layer, items } => {
                 self.group(transform, clip.as_ref(), layer.as_deref(), items, depth)
             }
+        }
+    }
+
+    // ----- overprint ------------------------------------------------------------------
+
+    /// Switches overprint on or off for what is painted next.
+    ///
+    /// The writer sets overprint for exactly one kind of object: text in 100 % black
+    /// (C0 M0 Y0 K100). Such text then prints on top of the colours beneath it instead of
+    /// knocking them out, so that a slight misregistration on press cannot open a white
+    /// halo around small type. Everything else — in particular anything white — must
+    /// knock out, hence the explicit switch back before any other object is painted.
+    fn set_overprint(&mut self, on: bool) {
+        if self.state.overprint != on {
+            self.content.set_parameters(Name(if on { OVERPRINT_ON } else { OVERPRINT_OFF }));
+            self.state.overprint = on;
+            self.used.overprint = true;
         }
     }
 
@@ -431,6 +457,7 @@ impl<'a> PageContent<'a> {
             return Ok(());
         }
         // Graphics state operators must precede path construction.
+        self.set_overprint(false);
         if let Some((color, _)) = fill {
             self.set_fill(*color)?;
         }
@@ -464,6 +491,7 @@ impl<'a> PageContent<'a> {
             return Ok(());
         }
         self.used.images.insert(image.0);
+        self.set_overprint(false);
         self.save();
         // Image space is the unit square with the first sample row at the top (y = 1);
         // the page's y axis points down, hence the negative height.
@@ -505,8 +533,9 @@ impl<'a> PageContent<'a> {
 
         // Split the run into segments of glyphs on one baseline. Within a segment glyphs
         // are positioned with TJ adjustments relative to the advance widths declared in
-        // the PDF, so every glyph lands on its requested x (to 1/20000 em, see
-        // `MIN_ADJUSTMENT`) and errors never accumulate.
+        // the PDF: `pen` follows the arithmetic of a PDF consumer, so every glyph lands on
+        // its requested x (to 1/20000 em, see `MIN_ADJUSTMENT`). Segments are kept short
+        // and each starts at an absolute position, so rounding cannot accumulate.
         let mut segments: Vec<(f32, f32, Vec<TextItem>)> = Vec::new();
         let mut index = 0;
         while index < glyphs.len() {
@@ -517,9 +546,8 @@ impl<'a> PageContent<'a> {
             let mut items = Vec::new();
             let mut pending: Vec<u8> = Vec::new();
 
-            // Long runs are split so that no array or string exceeds what old consumers
-            // are required to read.
-            while index < glyphs.len() && items.len() < MAX_ARRAY_LEN {
+            let segment_end = index.saturating_add(MAX_SEGMENT_GLYPHS).min(glyphs.len());
+            while index < segment_end {
                 let glyph = glyphs[index];
                 if self.coord(origin.y + glyph.y)? != start_y {
                     break;
@@ -548,10 +576,7 @@ impl<'a> PageContent<'a> {
                     return Err(self.invalid("internal error: a glyph is missing from its font"));
                 };
                 pending.extend_from_slice(&cid.to_be_bytes());
-                if pending.len() >= MAX_STRING_LEN {
-                    items.push(TextItem::Show(std::mem::take(&mut pending)));
-                }
-                pen += f64::from(font.width(cid)) / 1000.0 * size_mm;
+                pen += font.width(cid) / 1000.0 * size_mm;
                 index += 1;
             }
             if !pending.is_empty() {
@@ -562,6 +587,7 @@ impl<'a> PageContent<'a> {
 
         self.used.fonts.insert(font_id.0);
         self.set_fill(color)?;
+        self.set_overprint(self.state.fill == Some(Paint::Cmyk([0.0, 0.0, 0.0, 1.0])));
         self.content.begin_text();
         self.content.set_font(font.resource_name(), size);
         for (x, y, items) in &segments {

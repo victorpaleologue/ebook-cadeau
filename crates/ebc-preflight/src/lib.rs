@@ -59,26 +59,37 @@
 //! # What is checked
 //!
 //! * **Structure** — the file parses with an intact cross-reference table, is not encrypted,
-//!   and contains no JavaScript, actions, annotations, interactive forms or embedded files.
+//!   was not saved incrementally, and contains no JavaScript, actions, annotations,
+//!   interactive forms or embedded files.
 //! * **Page boxes** — `MediaBox` and `TrimBox` present, `TrimBox ⊆ BleedBox ⊆ MediaBox`,
 //!   bleed at least the expected width on all four sides, expected trim size, all pages the
-//!   same size.
+//!   same size; artwork that reaches the trim edge must continue into the bleed.
 //! * **Fonts** — every font in the page's resource tree (forms and patterns included) has an
 //!   embedded font program; subset prefixes are reported; Type 3 fonts are flagged.
 //! * **Images** — every placement of every image is located by interpreting the content
 //!   stream (graphics state stack, `cm`, nested form XObjects), which gives its printed size
-//!   and thus its effective resolution.
+//!   and thus its effective resolution; stretched images are flagged.
 //! * **Colour** — the colour spaces actually used to paint; RGB-like spaces, spot colours and
 //!   registration colour inside the bleed box are flagged.
 //! * **Transparency** — soft masks, opacity below 1, blend modes, transparency groups.
-//! * **Ink** — total ink of CMYK fills and strokes, and of losslessly stored CMYK images.
+//! * **Ink** — total ink of CMYK fills and strokes, and of losslessly stored CMYK images;
+//!   hairline strokes.
 //! * **Output intent and PDF/X** — a `GTS_PDFX` output intent with identifier and a profile
-//!   whose component count matches; version markers consistent with the file header;
-//!   Info `Title` and `Trapped`.
+//!   whose component count matches; version markers consistent with each other, with the
+//!   file header and with the features used; `Title`, `Trapped`, dates and file identifier.
 //! * **Card geometry** — the `EBC.*` Info keys written by the card composer
 //!   (`EBC.SpineWidthMm`, `EBC.FoldXMm` as a comma-separated list of x positions measured
 //!   from the left edge of the trim box, `EBC.CoverWidthMm`, `EBC.CoverHeightMm`, and the
-//!   optional `EBC.QrModuleMm`) agree with the trim box and with the expected spine.
+//!   optional `EBC.BleedMm` and `EBC.QrModuleMm`) agree with the page boxes and with the
+//!   expected spine; a vector QR code is recognised and its module size measured.
+//!
+//! # What is not checked
+//!
+//! Text size and safety margins (they need glyph metrics), overprint settings, the ink
+//! coverage of JPEG-compressed images (they would have to be decoded), the content of
+//! Type 3 glyph procedures and annotation appearances, and whether the QR code actually
+//! decodes (that needs a renderer — the end-to-end tests do it). Clipping paths are ignored
+//! when deciding where something is painted.
 //!
 //! # Limits
 //!
@@ -121,8 +132,12 @@ use crate::content::Interpreter;
 use crate::report::round3;
 use crate::sink::{Budget, Sink};
 
-/// Largest input accepted by [`check`], in bytes (512 MiB). A card PDF is a few megabytes.
-pub const MAX_PDF_BYTES: usize = 512 * 1024 * 1024;
+/// Largest input accepted by [`check`], in bytes (256 MiB). A card PDF is a few megabytes.
+pub const MAX_PDF_BYTES: usize = 256 * 1024 * 1024;
+
+/// Image placements and fonts listed in the page summaries of one report. Everything is
+/// still checked beyond these numbers; only the listing stops.
+const MAX_LISTED_ITEMS: usize = 20_000;
 
 /// Limit for object streams and cross-reference streams while loading the file.
 const MAX_OBJECT_STREAM_BYTES: usize = 64 * 1024 * 1024;
@@ -165,27 +180,36 @@ pub fn check(pdf: &[u8], expect: &Expectations) -> Result<Report, PreflightError
 }
 
 fn check_parsed(pdf: &[u8], expect: &Expectations) -> Result<Report, PreflightError> {
-    let options =
-        LoadOptions { max_decompressed_size: Some(MAX_OBJECT_STREAM_BYTES), ..LoadOptions::default() };
+    let options = LoadOptions {
+        max_decompressed_size: Some(MAX_OBJECT_STREAM_BYTES),
+        ..LoadOptions::default()
+    };
     let doc = match Document::load_mem_with_options(pdf, options) {
         Ok(doc) => doc,
         Err(
             lopdf::Error::Decryption(_)
             | lopdf::Error::InvalidPassword
             | lopdf::Error::UnsupportedSecurityHandler(_),
-        ) => return Ok(encrypted_report("the file is encrypted and cannot be read without a password")),
+        ) => {
+            return Ok(encrypted_report(
+                "the file is encrypted and cannot be read without a password",
+            ));
+        }
         Err(error) => return Err(PreflightError::Parse(stream::describe(&error))),
     };
 
     let mut sink = Sink::default();
-    let mut summary = DocumentSummary { pdf_version: doc.version.clone(), ..DocumentSummary::default() };
+    let mut summary =
+        DocumentSummary { pdf_version: doc.version.clone(), ..DocumentSummary::default() };
 
     let encrypted = doc.trailer.has(b"Encrypt") || doc.encryption_state.is_some();
     let catalog = doc.trailer.get(b"Root").ok().and_then(|root| pdf::as_dict(&doc, root));
     if encrypted {
         summary.encrypted = true;
         if catalog.is_none() {
-            return Ok(encrypted_report("the file is encrypted and cannot be read without a password"));
+            return Ok(encrypted_report(
+                "the file is encrypted and cannot be read without a password",
+            ));
         }
         sink.error(
             codes::ENCRYPTED,
@@ -195,20 +219,44 @@ fn check_parsed(pdf: &[u8], expect: &Expectations) -> Result<Report, PreflightEr
     }
     let Some(catalog) = catalog else { return Err(PreflightError::NoCatalog) };
 
-    if let Some(recovery) = doc.xref_recovery {
-        sink.error(
+    match doc.xref_recovery {
+        None => {}
+        // The table itself is intact; only the pointer to it was off (viewers cope).
+        Some(lopdf::xref::XrefRecovery::OffsetCorrected) => sink.warning(
             codes::XREF_DAMAGED,
             None,
+            "a cross-reference offset is wrong; the table was found nearby, but strict \
+             readers may reject the file",
+        ),
+        // Rebuilt by scanning for objects (or any repair lopdf may add later).
+        Some(_) => sink.error(
+            codes::XREF_DAMAGED,
+            None,
+            "the cross-reference table is damaged and had to be rebuilt by scanning the file; \
+             the file is probably truncated or corrupt",
+        ),
+    }
+
+    let revisions = doc.revision_count();
+    if revisions > 1 {
+        sink.warning(
+            codes::INCREMENTAL_UPDATE,
+            None,
             format!(
-                "the cross-reference table is damaged and had to be repaired to read the file ({recovery:?}); \
-                 the file may be truncated or corrupt"
+                "the file was saved incrementally and holds {revisions} revisions; \
+                 earlier versions of its content are still inside it"
             ),
         );
     }
 
     structure::check_document(&doc, catalog, &mut sink);
     let level = meta::check_metadata(&doc, catalog, expect, &mut summary, &mut sink);
-    structure::check_optional_content(&doc, catalog, level.is_some_and(meta::PdfxLevel::forbids_layers), &mut sink);
+    structure::check_optional_content(
+        &doc,
+        catalog,
+        level.is_some_and(meta::PdfxLevel::forbids_layers),
+        &mut sink,
+    );
 
     let nodes = pages::collect(&doc, catalog, &mut sink);
     summary.page_count = u32::try_from(nodes.len()).unwrap_or(u32::MAX);
@@ -220,6 +268,7 @@ fn check_parsed(pdf: &[u8], expect: &Expectations) -> Result<Report, PreflightEr
     let mut page_summaries = Vec::with_capacity(nodes.len());
     let mut all_boxes = Vec::with_capacity(nodes.len());
     let mut qr_candidates: Vec<(u32, QrCandidate)> = Vec::new();
+    let mut listed = 0_usize;
     for (index, node) in nodes.iter().enumerate() {
         let number = u32::try_from(index + 1).unwrap_or(u32::MAX);
         let boxes = pages::read_boxes(&doc, node, number, &mut sink);
@@ -236,8 +285,47 @@ fn check_parsed(pdf: &[u8], expect: &Expectations) -> Result<Report, PreflightEr
             &mut budget,
         );
         let facts = interpreter.run(node.dict, node.resources);
-        let fonts = fonts::check_fonts(&doc, node.resources, &facts.used_fonts, number, &mut sink);
-        qr_candidates.extend(facts.qr_candidates.iter().cloned().map(|candidate| (number, candidate)));
+        if !facts.unbounded_paint {
+            pages::check_bleed_painted(&boxes, facts.painted, expect, number, &mut sink);
+        }
+        let mut fonts =
+            fonts::check_fonts(&doc, node.resources, &facts.used_fonts, number, &mut sink);
+        let mut images = facts.images;
+        // Many pages sharing many fonts or images must not blow the report up.
+        let room = MAX_LISTED_ITEMS.saturating_sub(listed);
+        if fonts.len() + images.len() > room {
+            images.truncate(room);
+            fonts.truncate(room - images.len());
+            sink.warning(
+                codes::LIMIT_EXCEEDED,
+                None,
+                format!(
+                    "the report lists the first {MAX_LISTED_ITEMS} fonts and image placements only \
+                     (everything was still checked)"
+                ),
+            );
+        }
+        listed += fonts.len() + images.len();
+        // What the expectations let through may still contradict the file's own PDF/X claim.
+        if let Some(level) = level {
+            let claim = summary.pdfx_version.as_deref().unwrap_or("PDF/X");
+            if level.forbids_rgb() && facts.uses_rgb && expect.allow_rgb {
+                sink.error(
+                    codes::PDFX_CONTENT_VIOLATION,
+                    Some(number),
+                    format!("the file claims {claim}, which allows CMYK, grey and spot colours only, but the page uses RGB colour"),
+                );
+            }
+            if level.forbids_layers() && facts.transparency && expect.allow_transparency {
+                sink.error(
+                    codes::PDFX_CONTENT_VIOLATION,
+                    Some(number),
+                    format!("the file claims {claim}, which does not allow transparency, but the page uses it"),
+                );
+            }
+        }
+        qr_candidates
+            .extend(facts.qr_candidates.iter().cloned().map(|candidate| (number, candidate)));
 
         let to_mm = |rect: Option<pdf::RectPt>| {
             rect.map(|rect| {
@@ -256,7 +344,7 @@ fn check_parsed(pdf: &[u8], expect: &Expectations) -> Result<Report, PreflightEr
             bleed_mm: measures.bleed_mm,
             rotate: boxes.rotate,
             fonts,
-            images: facts.images,
+            images,
             color_spaces: facts.color_spaces.into_iter().collect(),
             max_total_ink_percent: facts.max_ink_percent.map(|v| (v * 10.0).round() / 10.0),
             transparency: facts.transparency,
@@ -268,6 +356,7 @@ fn check_parsed(pdf: &[u8], expect: &Expectations) -> Result<Report, PreflightEr
     meta::check_ebc_geometry(
         &summary.ebc,
         all_boxes.first().and_then(pages::PageBoxes::trim_size_mm),
+        page_summaries.first().and_then(|page| page.bleed_mm).map(|bleed| bleed.min()),
         &qr_candidates,
         expect,
         &mut sink,

@@ -34,6 +34,7 @@
 //! | `link-new-window` | warning | `target="_blank"` on a single-window browser |
 //! | `sets-cookie` | warning | the response sets a cookie (api.md §2: none are needed) |
 //! | `too-many-elements` | warning | the page has more elements than the simulator indexes |
+//! | `nesting-too-deep` | error | elements nest deeper than browsers allow (or a tag has hundreds of attributes); shown as an empty page |
 
 use url::Url;
 
@@ -475,6 +476,17 @@ impl Page {
             report.warn(
                 "sets-cookie",
                 "the response sets a cookie; gift pages must not depend on cookies (docs/api.md §2)",
+                None,
+            );
+        }
+        if let Some((depth, attributes)) = self.facts.pathological {
+            report.error(
+                "nesting-too-deep",
+                format!(
+                    "the markup nests about {depth} levels deep (most attributes on one tag: {attributes}); \
+                     browsers cap the tree at {} levels and the page is shown empty",
+                    crate::page::MAX_NESTING
+                ),
                 None,
             );
         }

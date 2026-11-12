@@ -1,12 +1,16 @@
 [package]
 name = "ebc-demo-ereaders"
-description = "Demo: simulated e-readers (limited browsers, OPDS client, mail-to-device sink) for integration tests."
+description = "Demo: simulated e-readers (limited browsers, OPDS client, mail-to-device sink, account sync) for integration tests."
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true
+
+[[bin]]
+name = "ebc-ereader"
+path = "src/bin/ebc-ereader.rs"
 
 [dependencies]
 clap = { version = "4.6.7", features = ["derive"] }
@@ -30,4 +34,3 @@ workspace = true
 
 [dev-dependencies]
 axum = "0.8.9"
-base64 = "0.23.1"

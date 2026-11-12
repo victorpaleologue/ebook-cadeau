@@ -74,7 +74,11 @@ pub(crate) fn get_array<'a>(
 }
 
 /// `dict[key]` as a name.
-pub(crate) fn get_name<'a>(doc: &'a Document, dict: &'a Dictionary, key: &[u8]) -> Option<&'a [u8]> {
+pub(crate) fn get_name<'a>(
+    doc: &'a Document,
+    dict: &'a Dictionary,
+    key: &[u8],
+) -> Option<&'a [u8]> {
     match get(doc, dict, key)? {
         Object::Name(name) => Some(name.as_slice()),
         _ => None,
@@ -153,15 +157,22 @@ pub(crate) fn lossy(bytes: &[u8]) -> String {
         Ok(text) => text.to_string(),
         Err(_) => latin1(bytes),
     };
-    let mut out: String = text
-        .chars()
-        .take(MAX_CHARS)
-        .map(|c| if c.is_control() { '\u{FFFD}' } else { c })
-        .collect();
+    let mut out: String =
+        text.chars().take(MAX_CHARS).map(|c| if c.is_control() { '\u{FFFD}' } else { c }).collect();
     if text.chars().count() > MAX_CHARS {
         out.push('…');
     }
     out
+}
+
+/// Trims a text value and cuts it to at most `max_chars` characters (with an ellipsis), so
+/// that hostile metadata cannot bloat the report.
+pub(crate) fn clip(text: &str, max_chars: usize) -> String {
+    let text = text.trim();
+    match text.char_indices().nth(max_chars) {
+        Some((end, _)) => format!("{}…", &text[..end]),
+        None => text.to_string(),
+    }
 }
 
 /// A rectangle in PDF default user space, in points, normalised so that `x0 <= x1`, `y0 <= y1`.
@@ -334,6 +345,15 @@ mod tests {
         assert!(RectPt::from_object(&doc, &huge).is_none());
         let nan = Object::Array(vec![0.into(), 0.into(), Object::Real(f32::NAN), 1.into()]);
         assert!(RectPt::from_object(&doc, &nan).is_none());
+    }
+
+    #[test]
+    fn clipped_text() {
+        assert_eq!(clip("  Le Petit Prince \n", 100), "Le Petit Prince");
+        assert_eq!(clip("abcdef", 3), "abc…");
+        assert_eq!(clip("abc", 3), "abc");
+        assert_eq!(clip("ééééé", 2), "éé…");
+        assert_eq!(clip("", 5), "");
     }
 
     #[test]

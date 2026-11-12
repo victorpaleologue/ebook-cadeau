@@ -182,7 +182,8 @@ mod tests {
         assert_eq!(pro, Expectations::professional());
         assert!(pro.require_output_intent && !pro.allow_rgb && !pro.allow_transparency);
         assert_eq!(pro.max_total_ink_percent, Some(300.0));
-        let home = Expectations::home().with_trim(230.0, 178.0).with_spine(10.0).with_min_qr_module(0.4);
+        let home =
+            Expectations::home().with_trim(230.0, 178.0).with_spine(10.0).with_min_qr_module(0.4);
         assert!(home.allow_rgb && home.allow_transparency && !home.require_output_intent);
         assert_eq!(home.trim_mm, Some((230.0, 178.0)));
         assert_eq!(home.spine_mm, Some(10.0));
@@ -213,7 +214,8 @@ mod tests {
     #[test]
     fn json_round_trip_with_defaults() {
         let expect: Expectations =
-            serde_json::from_str(r#"{"bleed_mm": 2, "trim_mm": [230, 178], "allow_rgb": true}"#).unwrap();
+            serde_json::from_str(r#"{"bleed_mm": 2, "trim_mm": [230, 178], "allow_rgb": true}"#)
+                .unwrap();
         assert_eq!(expect.bleed_mm, 2.0);
         assert_eq!(expect.trim_mm, Some((230.0, 178.0)));
         assert!(expect.allow_rgb);

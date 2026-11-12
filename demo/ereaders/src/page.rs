@@ -22,6 +22,12 @@ const MAX_INDEXED: usize = 20_000;
 const MAX_FACTS: usize = 200;
 /// Most text kept from one `<style>` block or attribute for the lint.
 const MAX_STYLE_BYTES: usize = 64 * 1024;
+/// Deepest element nesting the simulator builds a DOM for. Blink and modern WebKit cap the
+/// parser's tree depth at 512; beyond it this simulator shows an empty page rather than spend
+/// quadratic time in the HTML tree builder.
+pub const MAX_NESTING: usize = 512;
+/// Most attributes on one tag before the markup is treated as pathological.
+pub const MAX_ATTRIBUTES: usize = 512;
 
 /// Parses HTML the way a browser without JavaScript does.
 pub(crate) fn parse_html(text: &str) -> Html {
@@ -30,6 +36,119 @@ pub(crate) fn parse_html(text: &str) -> Html {
         ..Default::default()
     };
     driver::parse_document(HtmlTreeSink::new(Html::new_document()), opts).one(text)
+}
+
+/// Elements that never contain other elements, or whose end tag is optional (the tree builder
+/// closes them implicitly, so counting them would overstate the depth of ordinary pages).
+const NOT_NESTING: [&str; 33] = [
+    "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "param", "source",
+    "track", "wbr", "p", "li", "dt", "dd", "tr", "td", "th", "thead", "tbody", "tfoot", "option",
+    "optgroup", "colgroup", "rb", "rt", "rp", "html", "head", "body",
+];
+
+/// Elements whose content is text, not markup.
+const RAW_TEXT: [&str; 7] = ["script", "style", "textarea", "title", "xmp", "noembed", "noframes"];
+
+/// What a linear pre-scan of the markup found.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) struct Shape {
+    /// Estimated deepest nesting of elements.
+    pub(crate) depth: usize,
+    /// Largest number of attributes on a single tag (estimated).
+    pub(crate) attributes: usize,
+}
+
+/// Estimates nesting depth and attribute counts without building a tree.
+///
+/// html5ever's tree builder is quadratic in nesting depth and in attributes per tag; a 1 MiB
+/// page of `<div><div><div>…` would keep it busy for minutes. This scan is linear and only has
+/// to be right about *pathological* input, so it is deliberately simple: it ignores comments
+/// and raw-text elements, counts start tags of elements that really nest and subtracts their
+/// end tags.
+pub(crate) fn scan_shape(html: &str) -> Shape {
+    let bytes = html.as_bytes();
+    let mut shape = Shape { depth: 0, attributes: 0 };
+    let mut depth = 0usize;
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] != b'<' {
+            i += 1;
+            continue;
+        }
+        if bytes[i..].starts_with(b"<!--") {
+            i = find_from(bytes, i + 4, b"-->").map_or(bytes.len(), |end| end + 3);
+            continue;
+        }
+        let closing = bytes.get(i + 1) == Some(&b'/');
+        let name_start = if closing { i + 2 } else { i + 1 };
+        if !bytes.get(name_start).is_some_and(u8::is_ascii_alphabetic) {
+            i += 1;
+            continue;
+        }
+        let mut name_end = name_start;
+        while name_end < bytes.len()
+            && !bytes[name_end].is_ascii_whitespace()
+            && !matches!(bytes[name_end], b'>' | b'/')
+            && name_end - name_start < 32
+        {
+            name_end += 1;
+        }
+        let name = String::from_utf8_lossy(&bytes[name_start..name_end]).to_ascii_lowercase();
+        // Walk to the end of the tag, honouring quoted attribute values.
+        let mut j = name_end;
+        let mut quote: Option<u8> = None;
+        let mut attributes = 0usize;
+        let mut in_space = false;
+        while j < bytes.len() {
+            let b = bytes[j];
+            match quote {
+                Some(q) if b == q => quote = None,
+                Some(_) => {}
+                None if b == b'"' || b == b'\'' => quote = Some(b),
+                None if b == b'>' => break,
+                None => {
+                    let space = b.is_ascii_whitespace();
+                    if in_space && !space && b != b'/' {
+                        attributes += 1;
+                    }
+                    in_space = space;
+                }
+            }
+            j += 1;
+        }
+        shape.attributes = shape.attributes.max(attributes);
+        let self_closing = j > 0 && bytes.get(j.wrapping_sub(1)) == Some(&b'/');
+        i = (j + 1).min(bytes.len());
+        let name = name.as_str();
+        if NOT_NESTING.contains(&name) {
+            continue;
+        }
+        if closing {
+            depth = depth.saturating_sub(1);
+        } else if RAW_TEXT.contains(&name) {
+            // Skip the raw text up to the matching end tag.
+            let mut needle = Vec::with_capacity(name.len() + 2);
+            needle.extend_from_slice(b"</");
+            needle.extend_from_slice(name.as_bytes());
+            i = find_ci(bytes, i, &needle).unwrap_or(bytes.len());
+        } else if !self_closing {
+            depth += 1;
+            shape.depth = shape.depth.max(depth);
+        }
+    }
+    shape
+}
+
+fn find_from(haystack: &[u8], from: usize, needle: &[u8]) -> Option<usize> {
+    haystack.get(from..)?.windows(needle.len()).position(|w| w == needle).map(|p| p + from)
+}
+
+fn find_ci(haystack: &[u8], from: usize, needle: &[u8]) -> Option<usize> {
+    haystack
+        .get(from..)?
+        .windows(needle.len())
+        .position(|w| w.eq_ignore_ascii_case(needle))
+        .map(|p| p + from)
 }
 
 /// `method` of a form.
@@ -254,6 +373,9 @@ pub(crate) struct LintFacts {
     pub(crate) has_doctype: bool,
     pub(crate) meta_charset: bool,
     pub(crate) truncated_index: bool,
+    /// Set when the markup is too deeply nested (or otherwise pathological) to build a DOM:
+    /// `(estimated depth, most attributes on one tag)`.
+    pub(crate) pathological: Option<(usize, usize)>,
 }
 
 /// A page displayed by a simulated browser.
@@ -314,7 +436,13 @@ impl Page {
             .unwrap_or_default();
         let html = decode(body, &content_type);
         let mut builder = Builder::new(&url);
-        builder.run(&parse_html(&html));
+        let shape = scan_shape(&html);
+        if shape.depth > MAX_NESTING || shape.attributes > MAX_ATTRIBUTES {
+            // Shown as an empty page: see `MAX_NESTING`.
+            builder.facts.pathological = Some((shape.depth, shape.attributes));
+        } else {
+            builder.run(&parse_html(&html));
+        }
         let mut page = builder.finish(url, status, headers, html, body.len());
         page.non_ascii = !body.is_ascii();
         page
@@ -439,6 +567,9 @@ impl Page {
     pub fn select_text(&self, selector: &str) -> Result<Vec<String>, crate::error::BrowserError> {
         let parsed = scraper::Selector::parse(selector)
             .map_err(|_| crate::error::BrowserError::BadSelector { selector: selector.to_owned() })?;
+        if self.facts.pathological.is_some() {
+            return Ok(Vec::new());
+        }
         let html = parse_html(&self.html);
         Ok(html
             .select(&parsed)
@@ -1112,18 +1243,19 @@ impl Builder {
                 self.forms[form].fields[index].label = Some(text);
             }
         }
-        let explicit: Vec<(String, String)> = self
-            .labels
-            .iter()
-            .filter_map(|l| l.for_id.clone().map(|id| (id, slice(&l.text))))
-            .filter(|(_, text)| !text.is_empty())
-            .collect();
+        let mut explicit: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+        for label in &self.labels {
+            if let Some(id) = &label.for_id {
+                let text = slice(&label.text);
+                if !text.is_empty() {
+                    explicit.entry(id.clone()).or_insert(text);
+                }
+            }
+        }
         for form in &mut self.forms {
             for field in &mut form.fields {
-                if let Some(id) = &field.id {
-                    if let Some((_, text)) = explicit.iter().find(|(for_id, _)| for_id == id) {
-                        field.label = Some(text.clone());
-                    }
+                if let Some(text) = field.id.as_ref().and_then(|id| explicit.get(id)) {
+                    field.label = Some(text.clone());
                 }
             }
         }
@@ -1389,15 +1521,54 @@ world</textarea>
     }
 
     #[test]
-    fn deep_nesting_and_many_elements_stay_fast_and_bounded() {
+    fn pathological_markup_is_refused_in_linear_time() {
         let started = std::time::Instant::now();
-        let deep = "<div id=d>".repeat(20_000) + "x";
+        let mib = 1024 * 1024;
+        // Deep nesting: 200 000 levels would take the tree builder minutes.
+        let deep = "<div id=d>".repeat(mib / 10) + "x";
         let p = page(&deep);
-        assert!(p.text().contains('x'));
+        assert!(matches!(p.facts.pathological, Some((depth, _)) if depth > 100_000));
+        assert_eq!(p.text(), "");
+        assert!(p.forms().is_empty());
+        assert!(p.select_text("div").unwrap().is_empty());
+        let report = p.lint(&crate::lint::LintConfig { weight_budget_bytes: 2 * mib, ..Default::default() });
+        assert!(report.errors().any(|f| f.code == "nesting-too-deep"), "{report}");
+        // One tag with 100 000 attributes.
+        let attrs = format!("<p {}>x</p>", (0..100_000).map(|i| format!("a{i}=1 ")).collect::<String>());
+        assert!(matches!(page(&attrs).facts.pathological, Some((_, n)) if n > 50_000));
+        // The cap is on real nesting: long flat documents and unclosed paragraphs are fine.
+        let flat = "<p>paragraphe<li>item".repeat(20_000);
+        let p = page(&flat);
+        assert_eq!(p.facts.pathological, None);
+        assert!(p.text().starts_with("paragraphe item paragraphe"));
+        let nested_ok = "<div>".repeat(MAX_NESTING) + "ok" + &"</div>".repeat(MAX_NESTING);
+        assert_eq!(page(&nested_ok).text(), "ok");
+        assert!(page(&("<div>".repeat(MAX_NESTING + 1) + "no")).facts.pathological.is_some());
+        // Many indexed elements: the index is capped.
         let wide = "<a href=/x id=l>y</a>".repeat(40_000);
         let p = page(&wide);
         assert_eq!(p.nodes.len(), MAX_INDEXED);
         assert!(p.facts.truncated_index);
         assert!(started.elapsed() < std::time::Duration::from_secs(20), "{:?}", started.elapsed());
     }
+
+    #[test]
+    fn shape_scan_ignores_comments_raw_text_and_quoted_markup() {
+        let shape = |html: &str| scan_shape(html);
+        assert_eq!(shape("").depth, 0);
+        assert_eq!(shape("<div><span>x</span></div>").depth, 2);
+        assert_eq!(shape("<!-- <div><div><div> --><b>x</b>").depth, 1);
+        assert_eq!(shape("<script>if (a<b) { x = '<div><div><div>'; }</script><i>").depth, 1);
+        assert_eq!(shape("<a title=\"<div><div>\" href='>'>x</a>").depth, 1);
+        assert_eq!(shape("<br><br/><img src=x><p><p><p><li><li>").depth, 0);
+        assert_eq!(shape("</div></div><div>").depth, 1);
+        assert_eq!(shape("<svg/><svg/><svg/>").depth, 0);
+        assert_eq!(shape("<div a=1 b=2 c>").attributes, 3);
+        assert_eq!(shape("< div><3 <é> <").depth, 0);
+        assert_eq!(shape("<textarea><div><div></textarea><em>").depth, 1);
+        assert_eq!(shape("<script><div>").depth, 0);
+        assert_eq!(shape("<!--").depth, 0);
+        assert_eq!(shape("<div").depth, 1);
+    }
+
 }

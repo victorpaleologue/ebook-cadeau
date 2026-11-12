@@ -510,3 +510,104 @@ fn every_page_gets_its_own_content_and_resources() {
     assert_eq!(get(&pdf, tree, "Count").as_i64().expect("int"), 3);
     assert_eq!(get(&pdf, tree, "Kids").as_array().expect("array").len(), 3);
 }
+
+#[test]
+fn only_pure_black_text_overprints() {
+    let data = font("AtkinsonHyperlegible-Regular.ttf");
+    let text = |doc: &mut Document, color: Color| {
+        let id = if doc.fonts.is_empty() { doc.add_font(data.clone(), 0) } else { doc.fonts[0].id };
+        text_item(id, &data, "Noir", 10.0, Point::new(10.0, 20.0), color)
+    };
+    let rect = || Item::filled_rect(Rect::new(0.0, 0.0, 5.0, 5.0), Color::BLACK);
+    let render_items = |standard: PdfStandard, build: &dyn Fn(&mut Document) -> Vec<Item>| {
+        let mut doc = base_doc(standard);
+        let mut page = Page::new(Size::new(100.0, 80.0), 0.0, 0.0);
+        page.items = build(&mut doc);
+        doc.pages.push(page);
+        let pdf = parse(&write_pdf(&doc, &READABLE).expect("writable"));
+        let content = page_content(&pdf, 1);
+        (pdf, content)
+    };
+    let switches = |content: &str| -> Vec<String> {
+        content.lines().filter(|l| l.ends_with(" gs")).map(str::to_owned).collect()
+    };
+
+    for standard in
+        [PdfStandard::Plain, PdfStandard::X1a2001, PdfStandard::X3_2002, PdfStandard::X4]
+    {
+        // K100 text between other objects: on for the text, off again before anything else.
+        let (pdf, content) = render_items(standard, &|doc| {
+            vec![
+                Item::filled_rect(
+                    Rect::new(0.0, 0.0, 100.0, 80.0),
+                    Color::cmyk(0.1, 0.4, 0.9, 0.0),
+                ),
+                text(doc, Color::BLACK),
+                text(doc, Color::cmyk(0.0, 0.0, 0.0, 1.0)),
+                text(doc, Color::WHITE),
+                text(doc, Color::BLACK),
+                rect(),
+            ]
+        });
+        assert_eq!(
+            switches(&content),
+            ["/OverprintOn gs", "/OverprintOff gs", "/OverprintOn gs", "/OverprintOff gs"],
+            "{standard:?}: {content}"
+        );
+        // The switch comes before the text object and the white text is knocked out.
+        assert!(content.contains("/OverprintOn gs\nBT\n"), "{content}");
+        assert!(content.contains("0 0 0 0 k\n/OverprintOff gs\nBT\n"), "{content}");
+
+        let states = get_dict(&pdf, get_dict(&pdf, page(&pdf, 1), "Resources"), "ExtGState");
+        let on = get_dict(&pdf, states, "OverprintOn");
+        assert_eq!(get_name(&pdf, on, "Type"), "ExtGState");
+        assert!(get(&pdf, on, "OP").as_bool().expect("bool"));
+        assert!(get(&pdf, on, "op").as_bool().expect("bool"));
+        assert_eq!(
+            get(&pdf, on, "OPM").as_i64().expect("int"),
+            1,
+            "zero channels do not knock out"
+        );
+        let off = get_dict(&pdf, states, "OverprintOff");
+        assert!(!get(&pdf, off, "OP").as_bool().expect("bool"));
+        assert!(!get(&pdf, off, "op").as_bool().expect("bool"));
+        // Overprint is not transparency: no alpha, blend mode or soft mask keys.
+        for dict in [on, off] {
+            for key in ["CA", "ca", "BM", "SMask"] {
+                assert!(!dict.has(key.as_bytes()), "/{key}");
+            }
+        }
+    }
+
+    // Text in any other colour never switches overprint on, nor do black paths or images.
+    let others = [
+        Color::WHITE,
+        Color::gray(0.0),
+        Color::cmyk(0.0, 0.0, 0.0, 0.99),
+        Color::cmyk(0.3, 0.3, 0.3, 1.0),
+        Color::Registration,
+    ];
+    for color in others {
+        let (pdf, content) =
+            render_items(PdfStandard::X4, &|doc| vec![rect(), text(doc, color), rect()]);
+        assert!(switches(&content).is_empty(), "{color:?}: {content}");
+        assert!(!get_dict(&pdf, page(&pdf, 1), "Resources").has(b"ExtGState"), "{color:?}");
+    }
+    let (_, content) = render_items(PdfStandard::X4, &|doc| vec![text(doc, Color::rgb8(0, 0, 0))]);
+    assert!(switches(&content).is_empty(), "RGB black is not K100: {content}");
+
+    // The state is part of q/Q: text inside a group does not leave overprint on outside.
+    let (_, content) = render_items(PdfStandard::X4, &|doc| {
+        vec![
+            Item::group(Transform::translate(1.0, 1.0), vec![text(doc, Color::BLACK)]),
+            Item::filled_rect(Rect::new(0.0, 0.0, 5.0, 5.0), Color::WHITE),
+            text(doc, Color::BLACK),
+            Item::group(Transform::translate(1.0, 1.0), vec![rect()]),
+        ]
+    });
+    assert_eq!(
+        switches(&content),
+        ["/OverprintOn gs", "/OverprintOn gs", "/OverprintOff gs"],
+        "{content}"
+    );
+}

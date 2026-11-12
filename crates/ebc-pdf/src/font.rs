@@ -447,7 +447,7 @@ fn postscript_name(face: &Face<'_>) -> String {
         if best.as_ref().is_some_and(|(r, _)| *r <= rank) {
             continue;
         }
-        let text = name.to_string().or_else(|| {
+        let text = name.unicode_text().or_else(|| {
             // Macintosh Roman names: accept the ASCII subset.
             (name.platform_id == NameRecord::MACINTOSH && name.bytes.is_ascii())
                 .then(|| String::from_utf8_lossy(name.bytes).into_owned())

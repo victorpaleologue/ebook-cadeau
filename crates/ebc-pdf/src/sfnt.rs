@@ -51,7 +51,7 @@ impl NameRecord<'_> {
     /// The string of a UTF-16BE record (the Unicode platform, or the Windows platform
     /// with the symbol or Unicode BMP encoding); `None` for other encodings and for
     /// ill-formed UTF-16.
-    pub(crate) fn to_string(&self) -> Option<String> {
+    pub(crate) fn unicode_text(self) -> Option<String> {
         let unicode = match self.platform_id {
             0 => true,
             3 => matches!(self.encoding_id, 0 | 1),
@@ -533,9 +533,9 @@ mod tests {
         );
         let names: Vec<_> = face.names().collect();
         assert_eq!(names.len(), 2, "the listing stops at the record that is out of bounds");
-        assert_eq!((names[0].name_id, names[0].to_string().as_deref()), (6, Some("Ab")));
+        assert_eq!((names[0].name_id, names[0].unicode_text().as_deref()), (6, Some("Ab")));
         assert_eq!(
-            (names[1].platform_id, names[1].bytes, names[1].to_string()),
+            (names[1].platform_id, names[1].bytes, names[1].unicode_text()),
             (1, &b"Cd"[..], None)
         );
 

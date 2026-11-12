@@ -4,10 +4,10 @@ mod common;
 
 use std::collections::BTreeSet;
 
+use common::reference::{self, Face, GlyphId};
 use common::*;
 use ebc_pdf::{WriteOptions, write_pdf};
 use ebc_scene::{Color, Document, FontId, Glyph, Item, MM_PER_PT, Page, PdfStandard, Point, Size};
-use common::reference::{self, Face, GlyphId};
 
 const READABLE: WriteOptions = WriteOptions { compress: false, keep_layers: false };
 
@@ -503,9 +503,7 @@ fn very_long_runs_are_split_into_arrays_and_strings_old_readers_accept() {
         .map(|i| Glyph { id: if i % 2 == 0 { a } else { b }, x: f64::from(i) * 0.001, y: 0.0 })
         .collect();
     // 30 000 glyphs at their natural advance: far more than one string may hold.
-    let advance = f64::from(face.glyph_hor_advance(GlyphId(a)).expect("advance"))
-        * 2.0
-        * MM_PER_PT
+    let advance = f64::from(face.glyph_hor_advance(GlyphId(a)).expect("advance")) * 2.0 * MM_PER_PT
         / f64::from(face.units_per_em());
     let natural: Vec<Glyph> =
         (0..30_000u32).map(|i| Glyph { id: a, x: f64::from(i) * advance, y: 0.0 }).collect();

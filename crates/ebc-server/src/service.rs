@@ -178,6 +178,18 @@ impl ClaimError {
     }
 }
 
+/// A sending to a device address counted before the mail is sent
+/// ([`AppState::reserve_send`]).
+#[derive(Debug)]
+pub(crate) struct SendReservation {
+    /// The gift as updated by the reservation.
+    record: GiftRecord,
+    /// When the sending was counted.
+    at: i64,
+    /// Whether it was the first claim of the gift.
+    first: bool,
+}
+
 /// A freshly minted download session.
 pub(crate) struct Ticket {
     /// The URL token (128 random bits, hexadecimal).
@@ -258,6 +270,22 @@ impl AppState {
         })?;
         let sha256 = codes::sha256_hex(&bytes);
         let size_bytes = bytes.len() as u64;
+        let quota = self.config.anonymous_storage_quota_bytes;
+        let over_quota = move |db: &crate::store::Db| {
+            partner.is_none()
+                && quota > 0
+                && db.anonymous_upload_bytes().saturating_add(size_bytes) > quota
+        };
+        let storage_full = || {
+            ApiError::new(
+                StatusCode::INSUFFICIENT_STORAGE,
+                "storage_quota_exceeded",
+                "the storage reserved for uploads is full; try again later",
+            )
+        };
+        if self.db.view(over_quota) {
+            return Err(storage_full());
+        }
         self.put_blob(&sha256, bytes.clone()).await?;
         let record = UploadRecord {
             id: format!("u_{}", codes::random_hex(self.entropy.as_ref(), 16)?),
@@ -270,15 +298,20 @@ impl AppState {
             created_at: self.now(),
             gift_id: None,
         };
-        let stale = self.db.update(|db| {
-            let stale = db.purge(
-                self.now(),
-                self.config.idempotency_ttl_secs,
-                self.config.upload_orphan_ttl_secs,
-            );
+        let (stored, mut stale) = self.db.update(|db| {
+            let stale = db.purge(self.now(), &self.config.purge_policy());
+            // Checked again under the lock: concurrent uploads cannot overshoot the quota.
+            if over_quota(db) {
+                return (false, stale);
+            }
             db.uploads.insert(record.id.clone(), record.clone());
-            stale
+            (true, stale)
         })?;
+        if !stored {
+            stale.push(record.sha256);
+            self.db.delete_unused_blobs(&stale);
+            return Err(storage_full());
+        }
         // Again, now that the record protects the file (see `delete_unused_blobs`).
         self.put_blob(&record.sha256, bytes).await?;
         self.db.delete_unused_blobs(&stale);
@@ -447,6 +480,8 @@ impl AppState {
                 card_pdf: None,
                 print_orders: Vec::new(),
                 sends: Vec::new(),
+                ended_at: None,
+                anonymised_at: None,
             };
             let inserted = self.db.update(|db| -> Result<Option<GiftRecord>, ApiError> {
                 if db.codes.contains_key(&record.code_hash)
@@ -493,15 +528,19 @@ impl AppState {
         (codes::gift_code_hash(&self.config.code_secret, &code) == gift.code_hash).then_some(code)
     }
 
-    /// Cancels a gift: the code stops working, sessions and pair codes are dropped and a
-    /// hosted file is deleted. Idempotent.
+    /// Cancels a gift: the code stops working, sessions and pair codes are dropped, a
+    /// hosted file is deleted and the names and message are forgotten at once (the rest
+    /// of the record is anonymised after `EBC_RETENTION_DAYS`). Idempotent.
     pub(crate) fn cancel_gift(&self, id: &str) -> Result<GiftRecord, ApiError> {
+        let now = self.now();
         let (record, newly, files) = self
             .db
             .update(|db| {
                 let gift = db.gifts.get_mut(id)?;
                 let newly = gift.status != GiftStatus::Cancelled;
                 gift.status = GiftStatus::Cancelled;
+                gift.ended_at.get_or_insert(now);
+                gift.forget_personal_data();
                 let record = gift.clone();
                 let mut files: Vec<String> = Vec::new();
                 if let Delivery::HostedFile { sha256, .. } = &record.delivery {
@@ -608,22 +647,22 @@ impl AppState {
     }
 
     /// Counts one claim on `gift_id` and applies `change` in the same transaction.
+    /// With `send`, the claim is also a sending to a device address: refused with
+    /// [`ClaimError::SendLimit`] when [`MAX_SENDS_PER_DAY`] are already recorded, and
+    /// recorded in the same transaction (so that concurrent requests cannot both pass).
     /// Returns the updated gift and whether this was the first claim.
     fn record_claim(
         &self,
         gift_id: &str,
         capped: bool,
+        send: bool,
         change: impl FnOnce(&mut crate::store::Db, &GiftRecord),
     ) -> Result<(GiftRecord, bool, Vec<String>), ClaimError> {
         let now = self.now();
         let cap = self.config.max_download_sessions;
         self.db
             .update(|db| -> Result<(GiftRecord, bool, Vec<String>), ClaimError> {
-                let stale = db.purge(
-                    now,
-                    self.config.idempotency_ttl_secs,
-                    self.config.upload_orphan_ttl_secs,
-                );
+                let stale = db.purge(now, &self.config.purge_policy());
                 let gift =
                     db.gifts.get_mut(gift_id).ok_or(ClaimError::Gone(GiftStatus::Cancelled))?;
                 match gift.status_at(now) {
@@ -636,6 +675,13 @@ impl AppState {
                 if capped && cap > 0 && gift.claims >= cap {
                     gift.status = GiftStatus::Exhausted;
                     return Err(ClaimError::Exhausted);
+                }
+                if send {
+                    gift.sends.retain(|at| now.saturating_sub(*at) < 86_400);
+                    if gift.sends.len() >= MAX_SENDS_PER_DAY {
+                        return Err(ClaimError::SendLimit);
+                    }
+                    gift.sends.push(now);
                 }
                 let first = gift.redeemed_at.is_none();
                 gift.claims = gift.claims.saturating_add(1);
@@ -767,7 +813,7 @@ impl AppState {
             licence: payload.licence,
         };
         let key = codes::token_hash(&token);
-        let outcome = self.record_claim(gift_id, true, |db, _| {
+        let outcome = self.record_claim(gift_id, true, false, |db, _| {
             db.sessions.insert(key, session);
         });
         let (record, first, stale) = match outcome {
@@ -799,7 +845,7 @@ impl AppState {
         };
         self.check_claimable(gift)?;
         let target = self.signed_store_url(gift, url).ok_or(ClaimError::StoreUnavailable)?;
-        let (record, first, stale) = self.record_claim(&gift.id, false, |_, _| {})?;
+        let (record, first, stale) = self.record_claim(&gift.id, false, false, |_, _| {})?;
         self.db.delete_unused_blobs(&stale);
         if first {
             self.emit(&record, "gift.redeemed");
@@ -849,40 +895,61 @@ impl AppState {
         })
     }
 
-    /// Whether the hosted file of `gift` may be sent to a device address now: the gift
-    /// is claimable, below its claim limit, and was sent fewer than
-    /// [`MAX_SENDS_PER_DAY`] times in the last 24 hours.
-    pub(crate) fn can_send(&self, gift: &GiftRecord) -> Result<(), ClaimError> {
-        if !matches!(gift.delivery, Delivery::HostedFile { .. }) {
+    /// Reserves one sending of the hosted file of `gift_id` to a device address: the gift
+    /// must be claimable, below its claim limit and sent fewer than [`MAX_SENDS_PER_DAY`]
+    /// times in the last 24 hours. The claim and the sending are counted **now**, in one
+    /// transaction, before any mail is sent; a failed delivery hands them back with
+    /// [`release_send`](Self::release_send), a successful one is announced with
+    /// [`confirm_send`](Self::confirm_send). The address itself is never kept.
+    pub(crate) fn reserve_send(&self, gift_id: &str) -> Result<SendReservation, ClaimError> {
+        let before = self.gift(gift_id).ok_or(ClaimError::Gone(GiftStatus::Cancelled))?;
+        if !matches!(before.delivery, Delivery::HostedFile { .. }) {
             return Err(ClaimError::NotAvailable);
         }
-        self.check_claimable(gift)?;
-        let now = self.now();
-        let cap = self.config.max_download_sessions;
-        if cap > 0 && gift.claims >= cap {
-            return Err(ClaimError::Exhausted);
-        }
-        if gift.sends.iter().filter(|at| now - **at < 86_400).count() >= MAX_SENDS_PER_DAY {
-            return Err(ClaimError::SendLimit);
-        }
-        Ok(())
+        let (record, first, stale) = self.record_claim(gift_id, true, true, |_, _| {})?;
+        self.db.delete_unused_blobs(&stale);
+        Ok(SendReservation {
+            at: record.last_claim_at.unwrap_or_else(|| self.now()),
+            first,
+            record,
+        })
     }
 
-    /// Counts a sending of the hosted file to a device address (the address is not kept).
-    pub(crate) fn record_send(&self, gift_id: &str) -> Result<(), ClaimError> {
-        let now = self.now();
-        let (record, first, stale) = self.record_claim(gift_id, true, |db, record| {
-            if let Some(gift) = db.gifts.get_mut(&record.id) {
-                gift.sends.retain(|at| now - *at < 86_400);
-                gift.sends.push(now);
+    /// Hands back a reservation whose mail could not be sent: the claim and the sending
+    /// no longer count.
+    pub(crate) fn release_send(&self, reservation: SendReservation) {
+        let cap = self.config.max_download_sessions;
+        let outcome = self.db.update(|db| {
+            let Some(gift) = db.gifts.get_mut(&reservation.record.id) else { return };
+            if let Some(index) = gift.sends.iter().rposition(|at| *at == reservation.at) {
+                gift.sends.remove(index);
             }
-        })?;
-        self.db.delete_unused_blobs(&stale);
-        if first {
-            self.emit(&record, "gift.redeemed");
+            gift.claims = gift.claims.saturating_sub(1);
+            match gift.status {
+                GiftStatus::Redeemed | GiftStatus::Exhausted
+                    if reservation.first && gift.claims == 0 =>
+                {
+                    gift.status = GiftStatus::Created;
+                    gift.redeemed_at = None;
+                    gift.last_claim_at = None;
+                }
+                GiftStatus::Exhausted if cap == 0 || gift.claims < cap => {
+                    gift.status = GiftStatus::Redeemed;
+                }
+                _ => {}
+            }
+        });
+        if let Err(error) = outcome {
+            tracing::warn!(gift = %reservation.record.id, %error, "a failed sending could not be handed back");
         }
-        self.emit(&record, "gift.downloaded");
-        Ok(())
+    }
+
+    /// Announces a sending that was delivered to the mail server (webhooks).
+    pub(crate) fn confirm_send(&self, reservation: &SendReservation) {
+        if reservation.first {
+            self.emit(&reservation.record, "gift.redeemed");
+        }
+        self.emit(&reservation.record, "gift.downloaded");
     }
 
     /// Attaches a stored file (cover, card PDF) to a gift; the previous one is deleted.

@@ -28,14 +28,20 @@ pub struct Inner {
     pub entropy: Arc<dyn Entropy>,
     /// Budgets for unknown gift codes and pair codes (per client and global).
     pub code_limiter: RateLimiter,
-    /// Budget for uploads and gift creations on the open creator API (per client).
+    /// Budget for uploads and gift creations on the open creator API (per client and
+    /// global).
     pub create_limiter: RateLimiter,
+    /// Budget for failed partner authentications (per client network).
+    pub partner_limiter: RateLimiter,
     /// Outbound HTTP client (webhooks, licences, print provider). Never follows redirects.
     pub http: reqwest::Client,
     /// Renders `card.pdf` for partners.
     pub card_renderer: Arc<dyn CardRenderer>,
     /// Idempotency keys of requests being processed right now.
     pub(crate) in_flight: Mutex<HashSet<String>>,
+    /// Request-body bytes all requests together may hold in memory
+    /// (`EBC_MAX_INFLIGHT_BODY_MB`), one permit per byte.
+    pub(crate) body_budget: Arc<tokio::sync::Semaphore>,
 }
 
 impl std::ops::Deref for AppState {
@@ -112,7 +118,12 @@ impl AppStateBuilder {
                 self.config.rate_unknown_per_10min,
                 self.config.rate_unknown_global_per_10min,
             ),
-            create_limiter: RateLimiter::new(self.config.rate_create_per_10min, 0),
+            create_limiter: RateLimiter::new(
+                self.config.rate_create_per_10min,
+                self.config.rate_create_global_per_10min,
+            ),
+            partner_limiter: RateLimiter::new(self.config.rate_partner_fail_per_10min, 0),
+            body_budget: Arc::new(tokio::sync::Semaphore::new(body_budget(&self.config))),
             config: self.config,
             db,
             clock: self.clock,
@@ -122,6 +133,13 @@ impl AppStateBuilder {
             in_flight: Mutex::new(HashSet::new()),
         })))
     }
+}
+
+/// Permits of the in-flight body budget: the configured bytes, but never less than the
+/// largest single body the service accepts (so that one such request always fits).
+fn body_budget(config: &Config) -> usize {
+    let largest = config.max_upload_bytes.max(config.max_cover_bytes).max(config.max_card_pdf_bytes);
+    config.max_inflight_body_bytes.max(largest).min(tokio::sync::Semaphore::MAX_PERMITS)
 }
 
 impl AppState {

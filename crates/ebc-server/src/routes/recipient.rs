@@ -439,6 +439,12 @@ pub(crate) async fn pair_submit(
         let errors = [s(locale, S::PairFormat).to_owned(), s(locale, S::NotCounted).to_owned()];
         return html(StatusCode::BAD_REQUEST, pages::pair_form(chrome, &errors), None);
     };
+    // Pair codes are 6 letters (about 26 bits) against 47.5 bits for gift codes: while
+    // the global budget is spent, nobody's pair code is looked up, not even from a
+    // network that never failed (the gift code typed on the e-reader still works).
+    if let Some(retry_after_secs) = state.code_limiter.global_exhausted(now) {
+        return too_many(chrome, retry_after_secs, true);
+    }
     let gift_id = match state.take_pair(&code) {
         Ok(Some(gift_id)) => gift_id,
         Ok(None) => {
@@ -519,17 +525,22 @@ pub(crate) async fn send(
             false,
         );
     };
-    if let Err(error) = state.can_send(&gift) {
-        return claim_failed(&state, &visitor, &gift.id, &code, device, &error);
-    }
+    // The sending is counted before anything is awaited: concurrent requests cannot all
+    // pass the daily limit. It is handed back if the mail does not leave.
+    let reservation = match state.reserve_send(&gift.id) {
+        Ok(reservation) => reservation,
+        Err(error) => return claim_failed(&state, &visitor, &gift.id, &code, device, &error),
+    };
     let bytes = match state.read_blob(sha256).await {
         Ok(Some(bytes)) => bytes,
         other => {
             tracing::error!(gift = %gift.id, missing = other.is_ok(), "the hosted file cannot be read");
+            state.release_send(reservation);
             return result(StatusCode::INTERNAL_SERVER_ERROR, t(locale, Msg::ErrorGeneric), false);
         }
     };
     let Ok(message_token) = crate::codes::random_hex(state.entropy.as_ref(), 16) else {
+        state.release_send(reservation);
         return result(StatusCode::INTERNAL_SERVER_ERROR, t(locale, Msg::ErrorGeneric), false);
     };
     // Send-to-PocketBook only takes short ASCII names without commas; a Kindle shows the
@@ -555,10 +566,9 @@ pub(crate) async fn send(
     if let Err(error) = mail::send(outgoing, timeout).await {
         // Only the kind of failure is logged: SMTP error texts may quote the address.
         tracing::warn!(gift = %gift.id, kind = error.kind(), "send-to-device failed");
+        state.release_send(reservation);
         return result(StatusCode::BAD_GATEWAY, s(locale, S::SendFailed), false);
     }
-    if let Err(error) = state.record_send(&gift.id) {
-        tracing::warn!(gift = %gift.id, ?error, "a sent file could not be counted");
-    }
+    state.confirm_send(&reservation);
     result(StatusCode::OK, t(locale, Msg::SentConfirmation), true)
 }

@@ -50,11 +50,23 @@ fn exercise(font: &Font, label: &str) {
         assert_eq!(ranges.first().map(|r| r.start), Some(0), "{label}");
         assert_eq!(ranges.last().map(|r| r.end), Some(TEXT.len()), "{label}");
 
+        // The letters the synthetic fonts have outlines for.
+        let letters = shape(&candidate, "AxH OHO", 300.0, &opts);
+        let outline = letters.to_outline(&candidate, Point::new(0.0, 0.0));
+        if let Some(bounds) = outline_bounds(&outline) {
+            assert!(bounds.w.is_finite() && bounds.h.is_finite(), "{label}");
+        }
+
         #[cfg(feature = "raster")]
-        if let Ok(raster) = ebc_text::try_rasterize(&candidate, "Été fi AV", 24.0, &opts) {
-            let mask = raster.mask;
-            assert_eq!(mask.data.len(), mask.width as usize * mask.height as usize, "{label}");
-            assert!(raster.advance.is_finite(), "{label}");
+        for text in ["Été fi AV", "AxH OHO"] {
+            if let Ok(raster) = ebc_text::try_rasterize(&candidate, text, 24.0, &opts) {
+                let mask = raster.mask;
+                assert_eq!(mask.data.len(), mask.width as usize * mask.height as usize, "{label}");
+                assert!(
+                    mask.width <= ebc_text::MAX_MASK_SIDE && mask.height <= ebc_text::MAX_MASK_SIDE
+                );
+                assert!(raster.advance.is_finite(), "{label}");
+            }
         }
     }
 }
@@ -82,7 +94,7 @@ fn truncated_fonts_are_rejected_or_degrade_gracefully() {
 }
 
 #[test]
-fn the_synthetic_font_survives_every_truncation() {
+fn the_synthetic_fonts_survive_every_truncation() {
     let bytes = common::SyntheticFont {
         variable: true,
         os2: Some((4, 0, true)),
@@ -96,6 +108,14 @@ fn the_synthetic_font_survives_every_truncation() {
         }
     }
     exercise(&Font::from_bytes(bytes, 0).expect("whole font"), "synthetic");
+
+    let postscript = common::synthetic_cff_font();
+    for cut in 0..postscript.len() {
+        if let Ok(font) = Font::from_bytes(&postscript[..cut], 0) {
+            exercise(&font, &format!("synthetic CFF cut at {cut}"));
+        }
+    }
+    exercise(&Font::from_bytes(postscript, 0).expect("whole font"), "synthetic CFF");
 }
 
 /// Overwrites a few bytes of `font`, preferably inside one table, with values that
@@ -144,11 +164,13 @@ fn corrupted_fonts_never_panic() {
         ..common::SyntheticFont::new()
     }
     .build();
-    let sources: [(&str, &[u8], usize); 4] = [
+    let postscript = common::synthetic_cff_font();
+    let sources: [(&str, &[u8], usize); 5] = [
         ("Atkinson", common::ATKINSON, 150),
         ("Spectral", common::SPECTRAL, 100),
         ("Bebas", common::BEBAS, 100),
-        ("synthetic", &synthetic, 400),
+        ("synthetic TrueType", &synthetic, 400),
+        ("synthetic CFF", &postscript, 400),
     ];
     let mut rng = Rng(0x00C0_FFEE_D15E_A5E5);
     let (mut parsed, mut rejected) = (0, 0);
@@ -167,7 +189,7 @@ fn corrupted_fonts_never_panic() {
     }
     // The corruption is mild enough that most fonts still load — which is the
     // interesting case — and harsh enough that some do not.
-    assert!(parsed > 400 && rejected > 0, "{parsed} parsed, {rejected} rejected");
+    assert!(parsed > 600 && rejected > 0, "{parsed} parsed, {rejected} rejected");
 }
 
 #[test]

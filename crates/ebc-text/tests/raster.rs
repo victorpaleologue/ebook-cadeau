@@ -128,6 +128,27 @@ fn coverage_equals_the_area_of_the_outline() {
 }
 
 #[test]
+fn cubic_outlines_are_rasterised() {
+    // The synthetic CFF "O" is a disc of radius 0.3 em: at 100 px per em, 60 x 60 px
+    // with an area of pi x 30^2 px.
+    let font = Font::from_bytes(common::synthetic_cff_font(), 0).expect("CFF font");
+    let r = raster(&font, "O", 100.0, &opts());
+    assert_eq!((r.mask.width, r.mask.height), (60, 60));
+    assert_eq!((r.left, r.top), (0, -65));
+    let disc = std::f64::consts::PI * 30.0 * 30.0;
+    assert!(close(ink_area(&r.mask), disc, 0.005 * disc), "{} vs {disc}", ink_area(&r.mask));
+    assert_eq!(r.mask.get(30, 30), 255, "solid centre");
+    assert_eq!(r.mask.get(0, 0), 0, "empty corner");
+    assert_eq!(r.mask.get(59, 59), 0, "empty corner");
+    // The disc is symmetric: so is its mask, up to rounding of the edge coverage.
+    let near = |a: u8, b: u8| a.abs_diff(b) <= 2;
+    for (x, y) in [(3, 20), (10, 7), (29, 0), (45, 52)] {
+        assert!(near(r.mask.get(x, y), r.mask.get(59 - x, y)), "mirror of ({x}, {y})");
+        assert!(near(r.mask.get(x, y), r.mask.get(x, 59 - y)), "flip of ({x}, {y})");
+    }
+}
+
+#[test]
 fn glyphs_are_drawn_where_shaping_puts_them() {
     let font = synthetic();
     // "AA": rectangles at 10..50 and 70..110 px, with a 20 px gap between them.

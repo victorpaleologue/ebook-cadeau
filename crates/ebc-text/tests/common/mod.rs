@@ -423,3 +423,158 @@ pub fn build_sfnt_at(mut tables: Vec<(&[u8; 4], Vec<u8>)>, base: usize) -> Vec<u
     }
     out
 }
+
+// ---------------------------------------------------------------------------------------
+// Synthetic OpenType/CFF font (cubic outlines)
+// ---------------------------------------------------------------------------------------
+
+/// Builds a tiny OpenType font with PostScript (`CFF `) outlines, 1000 units per em:
+///
+/// * glyph 1, "O": a circle of radius 300 centred on (300, 350), made of four cubic
+///   Bézier curves (control distance 166), advance 700;
+/// * glyph 2, "H": the rectangle 100..500 x 0..700 drawn with straight lines, advance 600;
+/// * glyph 3, space: empty, advance 300.
+///
+/// It has no `OS/2` and no `name` table.
+pub fn synthetic_cff_font() -> Vec<u8> {
+    fn number(out: &mut Vec<u8>, v: i16) {
+        out.push(28); // 16-bit integer operand
+        out.extend_from_slice(&v.to_be_bytes());
+    }
+    fn index(items: &[Vec<u8>]) -> Vec<u8> {
+        let mut out = Vec::new();
+        push_u16(&mut out, items.len() as u16);
+        if items.is_empty() {
+            return out;
+        }
+        out.push(1); // one-byte offsets
+        let mut offset = 1usize;
+        out.push(offset as u8);
+        for item in items {
+            offset += item.len();
+            out.push(u8::try_from(offset).expect("INDEX data fits one-byte offsets"));
+        }
+        for item in items {
+            out.extend_from_slice(item);
+        }
+        out
+    }
+
+    const RMOVETO: u8 = 21;
+    const RLINETO: u8 = 5;
+    const RRCURVETO: u8 = 8;
+    const ENDCHAR: u8 = 14;
+
+    // "O": counter-clockwise from the rightmost point (600, 350).
+    let mut circle = Vec::new();
+    number(&mut circle, 600);
+    number(&mut circle, 350);
+    circle.push(RMOVETO);
+    let k = 166;
+    let (a, b) = (300 - k, k); // 134, 166
+    #[rustfmt::skip]
+    let deltas: [i16; 24] = [
+        0, b, -a, a, -b, 0, // to the top (300, 650)
+        -b, 0, -a, -a, 0, -b, // to the left (0, 350)
+        0, -b, a, -a, b, 0, // to the bottom (300, 50)
+        b, 0, a, a, 0, b, // back to the right
+    ];
+    for delta in deltas {
+        number(&mut circle, delta);
+    }
+    circle.push(RRCURVETO);
+    circle.push(ENDCHAR);
+
+    // "H": a rectangle, counter-clockwise from (100, 0).
+    let mut rectangle = Vec::new();
+    number(&mut rectangle, 100);
+    number(&mut rectangle, 0);
+    rectangle.push(RMOVETO);
+    for (dx, dy) in [(400, 0), (0, 700), (-400, 0)] {
+        number(&mut rectangle, dx);
+        number(&mut rectangle, dy);
+        rectangle.push(RLINETO);
+    }
+    rectangle.push(ENDCHAR);
+
+    let char_strings = index(&[vec![ENDCHAR], circle, rectangle, vec![ENDCHAR]]);
+
+    // CFF table: header, Name INDEX, Top DICT INDEX, String INDEX, Global Subr INDEX,
+    // then the CharStrings INDEX the Top DICT points to.
+    let mut cff = vec![1, 0, 4, 1];
+    cff.extend_from_slice(&index(&[b"Syn".to_vec()]));
+    let top_dict_index_len = 2 + 1 + 2 + 6;
+    let char_strings_offset = cff.len() + top_dict_index_len + 2 + 2;
+    let mut top_dict = vec![29]; // 32-bit integer operand
+    top_dict.extend_from_slice(&(char_strings_offset as u32).to_be_bytes());
+    top_dict.push(17); // CharStrings
+    cff.extend_from_slice(&index(&[top_dict]));
+    cff.extend_from_slice(&index(&[])); // strings
+    cff.extend_from_slice(&index(&[])); // global subroutines
+    assert_eq!(cff.len(), char_strings_offset);
+    cff.extend_from_slice(&char_strings);
+
+    let advances = [500u16, 700, 600, 300];
+
+    let mut head = Vec::new();
+    push_u32(&mut head, 0x0001_0000);
+    push_u32(&mut head, 0x0001_0000);
+    push_u32(&mut head, 0);
+    push_u32(&mut head, 0x5F0F_3CF5);
+    push_u16(&mut head, 0);
+    push_u16(&mut head, 1000);
+    head.extend_from_slice(&[0; 16]);
+    for v in [0i16, -200, 700, 800] {
+        push_i16(&mut head, v);
+    }
+    push_u16(&mut head, 0);
+    push_u16(&mut head, 8);
+    push_i16(&mut head, 2);
+    push_i16(&mut head, 0);
+    push_i16(&mut head, 0);
+
+    let mut hhea = Vec::new();
+    push_u32(&mut hhea, 0x0001_0000);
+    push_i16(&mut hhea, 800);
+    push_i16(&mut hhea, -200);
+    push_i16(&mut hhea, 0);
+    push_u16(&mut hhea, 700);
+    hhea.extend_from_slice(&[0; 22]);
+    push_u16(&mut hhea, advances.len() as u16);
+
+    let mut maxp = Vec::new();
+    push_u32(&mut maxp, 0x0000_5000); // version 0.5: CFF fonts
+    push_u16(&mut maxp, advances.len() as u16);
+
+    let mut hmtx = Vec::new();
+    for advance in advances {
+        push_u16(&mut hmtx, advance);
+        push_i16(&mut hmtx, 0);
+    }
+
+    let mut cmap = Vec::new();
+    push_u16(&mut cmap, 0);
+    push_u16(&mut cmap, 1);
+    push_u16(&mut cmap, 3);
+    push_u16(&mut cmap, 1);
+    push_u32(&mut cmap, 12);
+    push_u16(&mut cmap, 0);
+    push_u16(&mut cmap, 262);
+    push_u16(&mut cmap, 0);
+    let mut map = [0u8; 256];
+    map[b'O' as usize] = 1;
+    map[b'H' as usize] = 2;
+    map[b' ' as usize] = 3;
+    cmap.extend_from_slice(&map);
+
+    let mut font = build_sfnt(vec![
+        (b"CFF ", cff),
+        (b"cmap", cmap),
+        (b"head", head),
+        (b"hhea", hhea),
+        (b"hmtx", hmtx),
+        (b"maxp", maxp),
+    ]);
+    font[..4].copy_from_slice(b"OTTO");
+    font
+}

@@ -76,7 +76,7 @@ fn random_bit_patterns_never_panic_and_never_yield_a_broken_page() {
             cover: Size::new(rng.wild(110.0), rng.wild(178.0)),
             spine_width: rng.wild(10.0),
         };
-        let mut profile = if rng.next() % 2 == 0 {
+        let mut profile = if rng.next() & 1 == 0 {
             PrintProfile::professional_eu()
         } else {
             PrintProfile::home(Sheet::Custom(Size::new(rng.wild(297.0), rng.wild(210.0))))
@@ -92,7 +92,7 @@ fn random_bit_patterns_never_panic_and_never_yield_a_broken_page() {
         profile.target_ppi = rng.wild(300.0);
         profile.min_ppi = rng.wild(150.0);
         profile.max_total_ink_percent = rng.wild(300.0) as f32;
-        profile.marks.style = if rng.next() % 2 == 0 { MarkStyle::Press } else { MarkStyle::Guide };
+        profile.marks.style = if rng.next() & 1 == 0 { MarkStyle::Press } else { MarkStyle::Guide };
         profile.marks.color_bar = true;
         profile.marks.scale_ruler = true;
         profile.marks.registration = true;
@@ -113,12 +113,14 @@ fn random_bit_patterns_never_panic_and_never_yield_a_broken_page() {
         let _ = profile.judge_ppi(rng.wild(300.0));
         let hostile = Rect::new(rng.wild(0.0), rng.wild(0.0), rng.wild(110.0), rng.wild(178.0));
         let safe = safe_rect(hostile, &profile);
-        assert!(!(safe.w < 0.0) && !(safe.h < 0.0), "{ctx}: negative safe area {safe:?}");
+        // NaN in, NaN out is tolerated for a hostile panel; a negative size never is.
+        let non_negative = |v: f64| v.is_nan() || v >= 0.0;
+        assert!(non_negative(safe.w) && non_negative(safe.h), "{ctx}: safe area {safe:?}");
         let px = (rng.next() as u32, rng.next() as u32);
         for fit in [Fit::Cover, Fit::Contain] {
             let placed = place_image_aligned(px, hostile, fit, rng.wild(0.5), rng.wild(0.5));
             let ppi = effective_ppi(px, placed);
-            assert!(!(ppi < 0.0), "{ctx}: negative resolution {ppi}");
+            assert!(non_negative(ppi), "{ctx}: negative resolution {ppi}");
         }
 
         match page_geometry(&format, &profile) {

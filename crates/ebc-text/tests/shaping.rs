@@ -4,7 +4,9 @@ mod common;
 
 use common::close;
 use ebc_scene::{Color, FontId, Item, MM_PER_PT, PathSeg, Point, Transform};
-use ebc_text::{Font, MAX_SIZE_PT, ShapeOptions, ShapedGlyph, ShapedText, outline_bounds, shape};
+use ebc_text::{
+    Font, MAX_SIZE_PT, OutlineFormat, ShapeOptions, ShapedGlyph, ShapedText, outline_bounds, shape,
+};
 
 const FRENCH: &str = "L'Étranger — efficace œuvre";
 
@@ -525,6 +527,60 @@ fn outline_of_a_rectangular_glyph_is_exact() {
         }
     }
     assert!(close(run.width, 1200.0 * pt, 1e-9));
+}
+
+#[test]
+fn postscript_outlines_stay_cubic() {
+    // A synthetic OpenType/CFF font: "O" is a circle of radius 300 units centred on
+    // (300, 350), drawn with four cubic Béziers; "H" is a rectangle of straight lines.
+    let font = Font::from_bytes(common::synthetic_cff_font(), 0).expect("CFF font parses");
+    assert_eq!(font.outline_format(), OutlineFormat::Cff);
+    assert_eq!(font.glyph_count(), 4);
+
+    // At 1000 pt one font unit is one point.
+    let pt = MM_PER_PT;
+    let run = shape(&font, "O", 1000.0, &default_opts());
+    assert!(close(run.width, 700.0 * pt, 1e-9));
+    let path = run.to_outline(&font, Point::new(0.0, 0.0));
+    let cubics: Vec<_> = path
+        .segs
+        .iter()
+        .filter_map(|s| match s {
+            PathSeg::CubicTo(c1, c2, end) => Some((*c1, *c2, *end)),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(cubics.len(), 4, "{:?}", path.segs);
+    assert!(!path.segs.iter().any(|s| matches!(s, PathSeg::QuadTo(..))), "no conversion");
+    assert!(matches!(path.segs.first(), Some(PathSeg::MoveTo(p))
+        if close(p.x, 600.0 * pt, 1e-9) && close(p.y, -350.0 * pt, 1e-9)));
+    assert!(matches!(path.segs.last(), Some(PathSeg::Close)));
+    // First curve: from the rightmost point up to the top, y flipped for the page.
+    let (c1, c2, end) = cubics[0];
+    assert!(close(c1.x, 600.0 * pt, 1e-9) && close(c1.y, -516.0 * pt, 1e-9), "{c1:?}");
+    assert!(close(c2.x, 466.0 * pt, 1e-9) && close(c2.y, -650.0 * pt, 1e-9), "{c2:?}");
+    assert!(close(end.x, 300.0 * pt, 1e-9) && close(end.y, -650.0 * pt, 1e-9), "{end:?}");
+    // The exact bounds are the circle's square.
+    let ink = outline_bounds(&path).expect("ink");
+    assert!(close(ink.x, 0.0, 1e-9) && close(ink.w, 600.0 * pt, 1e-9), "{ink:?}");
+    assert!(close(ink.y, -650.0 * pt, 1e-9) && close(ink.h, 600.0 * pt, 1e-9), "{ink:?}");
+
+    // Straight-line glyphs stay straight, and the two glyphs sit side by side.
+    let both = shape(&font, "HO", 1000.0, &default_opts());
+    let path = both.to_outline(&font, Point::new(0.0, 0.0));
+    let lines = path.segs.iter().filter(|s| matches!(s, PathSeg::LineTo(_))).count();
+    let cubics = path.segs.iter().filter(|s| matches!(s, PathSeg::CubicTo(..))).count();
+    assert!(lines >= 3, "{:?}", path.segs);
+    assert_eq!(cubics, 4);
+    let ink = outline_bounds(&path).expect("ink");
+    assert!(close(ink.x, 100.0 * pt, 1e-9), "{ink:?}");
+    assert!(close(ink.right(), (600.0 + 600.0) * pt, 1e-9), "{ink:?}");
+
+    // No OS/2 table: cap height is measured on "H"; there is no "x", so the x-height
+    // falls back to half an em. Unknown embedding permission is refused.
+    let m = font.metrics();
+    assert_eq!((m.cap_height, m.x_height), (700, 500));
+    assert!(!font.allows_outlines() && font.fs_type().is_none());
 }
 
 #[test]

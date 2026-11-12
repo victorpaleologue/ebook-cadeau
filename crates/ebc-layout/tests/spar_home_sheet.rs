@@ -18,7 +18,7 @@ use ebc_scene::{Item, Size};
 fn band(spread: Size, sheet: Size, profile: &PrintProfile) -> Option<f64> {
     let reserved = profile.bleed + profile.printable_margin;
     let tight = ((sheet.w - spread.w) / 2.0).min((sheet.h - spread.h) / 2.0);
-    (tight >= reserved - 1e-9).then(|| tight - reserved)
+    (tight >= reserved - 1e-9).then_some(tight - reserved)
 }
 
 /// A 50 x 195 mm cover with a 10 mm spine: spread 110 x 195 mm. On A4 portrait it has

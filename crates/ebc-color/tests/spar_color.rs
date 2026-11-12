@@ -39,9 +39,10 @@ fn lattice(step: usize) -> impl Iterator<Item = Rgb8> {
     let axis3 = axis.clone();
     axis.into_iter().flat_map(move |r| {
         let axis3 = axis3.clone();
-        axis2.clone().into_iter().flat_map(move |g| {
-            axis3.clone().into_iter().map(move |b| Rgb8::new(r, g, b))
-        })
+        axis2
+            .clone()
+            .into_iter()
+            .flat_map(move |g| axis3.clone().into_iter().map(move |b| Rgb8::new(r, g, b)))
     })
 }
 
@@ -400,12 +401,8 @@ fn hostile_gcr_values_are_clamped() {
 fn ink_limit_holds_for_random_cmyk_and_never_adds_ink() {
     let mut rng = Rng(400);
     for _ in 0..50_000 {
-        let color = Color::cmyk(
-            rng.unit() as f32,
-            rng.unit() as f32,
-            rng.unit() as f32,
-            rng.unit() as f32,
-        );
+        let color =
+            Color::cmyk(rng.unit() as f32, rng.unit() as f32, rng.unit() as f32, rng.unit() as f32);
         let limit = (rng.unit() * 420.0 - 10.0) as f32;
         let limited = limit_total_ink(color, limit);
         let (c0, m0, y0, k0) = parts(color);
@@ -452,8 +449,8 @@ fn scene_colour_conversion_is_total() {
 #[test]
 fn hex_parser_survives_arbitrary_unicode() {
     let pieces = [
-        "#", "f", "F", "0", "9", "g", " ", "\t", "\u{a0}", "é", "€", "𝔣", "\u{feff}", "\0",
-        "+", "-", "x", "#ff", "\u{200b}", "Ａ", "０",
+        "#", "f", "F", "0", "9", "g", " ", "\t", "\u{a0}", "é", "€", "𝔣", "\u{feff}", "\0", "+",
+        "-", "x", "#ff", "\u{200b}", "Ａ", "０",
     ];
     let mut rng = Rng(16);
     for _ in 0..50_000 {

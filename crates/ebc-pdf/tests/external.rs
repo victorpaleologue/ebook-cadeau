@@ -179,6 +179,49 @@ fn images_are_upright_and_keep_their_colours() {
 }
 
 #[test]
+fn predicted_gradients_decode_to_the_right_pixels() {
+    // Smooth raw images are PNG-predicted before compression; renderers must get the
+    // original samples back. 64 x 64 px on 64 x 64 pt: one pixel per rendered pixel.
+    let (w, h) = (64u32, 64u32);
+    let pixel = |x: u32, y: u32| -> [u8; 3] { [(x * 4) as u8, (y * 4) as u8, ((x + y) * 2) as u8] };
+    let mut rgb = Vec::new();
+    let mut rgba = Vec::new();
+    for y in 0..h {
+        for x in 0..w {
+            rgb.extend_from_slice(&pixel(x, y));
+            rgba.extend_from_slice(&pixel(x, y));
+            // Opaque except for a transparent top-left corner.
+            rgba.push(if x < 16 && y < 16 { 0 } else { 255 });
+        }
+    }
+    let side = 64.0 * MM_PER_PT;
+    for standard in [PdfStandard::Plain, PdfStandard::X4] {
+        let mut doc = base_doc(standard);
+        let opaque = doc.add_image(raw(PixelFormat::Rgb8, w, h, rgb.clone()), None);
+        let masked = doc.add_image(raw(PixelFormat::Rgba8, w, h, rgba.clone()), None);
+        let mut page = Page::new(Size::new(3.0 * side, side), 0.0, 0.0);
+        page.items.push(Item::Image { image: opaque, rect: Rect::new(0.0, 0.0, side, side) });
+        page.items
+            .push(Item::Image { image: masked, rect: Rect::new(2.0 * side, 0.0, side, side) });
+        doc.pages.push(page);
+        let name = format!("gradient-{}", name_of(standard));
+        let Some(img) = rasterize("external-images", &name, &doc) else { return };
+        assert_eq!((img.width(), img.height()), (192, 64));
+        for (x, y) in [(2, 2), (10, 50), (33, 7), (40, 40), (61, 61), (5, 30), (60, 3)] {
+            let expected = pixel(x, y);
+            let got = img.get_pixel(x, y).0;
+            assert!(close(got, expected, 6), "{name}: pixel ({x}, {y}): {got:?} vs {expected:?}");
+            let got = img.get_pixel(128 + x, y).0;
+            let expected = if x < 16 && y < 16 { [255, 255, 255] } else { expected };
+            assert!(
+                close(got, expected, 6),
+                "{name}: masked pixel ({x}, {y}): {got:?} vs {expected:?}"
+            );
+        }
+    }
+}
+
+#[test]
 fn grey_and_cmyk_images_are_not_inverted() {
     for standard in ALL {
         let mut doc = base_doc(standard);

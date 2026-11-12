@@ -10,7 +10,7 @@ legibility), `cover-sources.sources.md` (where spines can come from), the legal 
   not route around it through search engines, readers or archives. `arxiv.org` does not resolve from the sandbox.
 - What I did instead: (a) read **primary documents** on the two hosts the sandbox allows (`raw.githubusercontent.com`, `crates.io`):
   31 files, all listed under Sources, each fetched successfully in this session; (b) read dependency sources already in the local
-  cargo cache; (c) ran **four throwaway prototypes** (Python, PIL + numpy) on synthetic images and on the repo's bundled fonts.
+  cargo cache; (c) ran **five throwaway scripts** (Python, PIL + numpy) on synthetic images and on the repo's bundled fonts.
 - Consequence: the brief asked for 25+ searches and two independent sources per fact. That was not possible. Most sourced facts
   are single-source. Everything about commercial tools, academic papers and national conventions is from memory.
 - Markers: **[V2]** two independent documents read this session · **[V1]** one · **[M]** memory, not verified · **[L]** measured or
@@ -27,17 +27,19 @@ legibility), `cover-sources.sources.md` (where spines can come from), the legal 
    twice the asymmetry (4.2 mm crop gave about 8 mm error) [L]. The result must be shown with two draggable guides.
 3. **Geometry alone is not enough**: a 2.4 % difference between the eBook cover's aspect ratio and the print trim's moved the
    estimate by 6.7 mm [L].
-4. **Adapt by scale, pad and crop; avoid warping.** A real spine fits unchanged only inside a narrow window (9.3–10.8 mm after
-   scaling). Outside it, pad with the spine's own background (narrower) or crop background (wider). Seam carving adds little on a
-   spine and has three costs: licence, no mask support in the MIT crate, and a deeper alteration of the artwork.
+4. **Adapt by scale, pad and crop; avoid warping.** A real spine fits almost unchanged only inside a narrow window (9.3–10.9 mm
+   after scaling). Outside it, pad with the spine's own background (narrower) or crop background (wider). Seam carving adds
+   little on a spine and has three costs: licence, no mask support in the MIT crate, and a deeper alteration of the artwork.
 5. **"Not compatible" is common and cheap to detect**: scaled spine under 5 mm, content wider than 7 mm, text under 1.7 mm cap
    height, or under 150 ppi. Then re-typeset and keep only the colours.
 6. **Background synthesis needs four classes and one pre-step.** Frame or padding detection must run before the edge strip is
    sampled; otherwise a white-framed cover is read as "busy" [L].
 7. **Contrast limits are set by print, not by sRGB.** With printed black and paper white, 7:1 is reachable only on backgrounds
-   of L\* 34 or less, or 73 or more, on coated stock; on uncoated stock dark text reaches 7:1 only on near-white (L\* 90+) [calc].
+   of L\* 34 or less, or 73 or more, on coated stock; on uncoated stock dark text reaches 7:1 only on near-white (L\* 90+).
+   Between L\* 46 and 59 neither reaches even 4.5:1 on coated stock: the background itself must move [calc].
 8. **Do not implement APCA.** The `apca-w3` licence limits use to web content and bans commercial use without a signed
-   agreement [V1]. Use the WCAG 2 ratio plus a lightness-difference guard.
+   agreement [V1]. Use the WCAG 2 ratio with a polarity rule: white text on mid-tones and darks, dark text only on light
+   backgrounds. A separate lightness guard is redundant: 4.5:1 already implies at least 42 L\* of difference [calc].
 9. **Size text by the ink box of the actual string.** Accented capitals (É, Ç) take 1.0–1.1 em, not the 0.66–0.70 em cap
    height: the true all-caps maximum in a 5 mm band is 13–14 pt, not 24 pt [L].
 10. **All four bundled fonts lack U+202F** (narrow no-break space, standard in French titles), and none covers Greek, Hebrew,
@@ -47,9 +49,9 @@ legibility), `cover-sources.sources.md` (where spines can come from), the legal 
 
 ## 2. Where a real spine comes from, and how wide it is
 
-Sources [sib]: ONIX List 158 has `29 FullCover` and `51 CoverFlap` (I re-read the code list: no entry mentions a spine)
-[V1, [im_onix](https://raw.githubusercontent.com/immateriel/im_onix/master/data/codelists/codelist-158.yml)]; a self-publisher's
-own wraparound PDF; a scan. No public source serves spines by ISBN [sib].
+Inputs [sib]: a full cover from a reseller feed (ONIX List 158 has `29 FullCover` and `51 CoverFlap`; I re-read the code list
+and no entry mentions a spine) [V1, [im_onix](https://raw.githubusercontent.com/immateriel/im_onix/master/data/codelists/codelist-158.yml)];
+a self-publisher's own wraparound PDF; a scan. No public source serves spines by ISBN [sib].
 
 Width formulas:
 
@@ -73,7 +75,7 @@ Width formulas:
 | Coated 115 g/m², bulk 0.85 | 98 µm | 0.049 mm | 205 | 4.9 / 9.8 / 14.7 / 24.4 mm |
 
 All rows [calc]. Use the formula as a **prior window** (0.8 to 1.25 × the estimate) for the image-based detector, never as the
-final value: paper is rarely known, and the same page count spans 10 to 16 mm between offset and bouffant.
+final value: paper is rarely known, and 200 pages span 10 to 16 mm between offset and bouffant.
 
 ## 3. Locating the spine in a flat wraparound image
 
@@ -110,8 +112,8 @@ final value: paper is rarely known, and the same page count spans 10 to 16 mm be
 | Band edges, continuous artwork | none, or false hits of −10.7 and −25.1 mm | must be gated by agreement |
 | Rotated-text extent | −3.9 to −25.6 mm vs the spine | text extent only; meaningless at 3 mm (no text) |
 
-Styles: distinct colour band; one photograph across the whole wrap; plain cream throughout. All [L]. Runtime in unoptimised
-Python: 1.2 s per wrap; the search is a few million multiply-adds, so milliseconds in wasm [E].
+Styles: distinct colour band; one photograph across the whole wrap; plain cream throughout. All [L]. One match took about
+0.4 s in unoptimised Python; the search is about 10⁸ multiply-adds, so on the order of 0.1 s in wasm [E].
 
 Crates: `imageproc` 0.27.0 (MIT, 2026-06-02) has `match_template` with normalised methods, grey images only
 [V1, [source](https://raw.githubusercontent.com/image-rs/imageproc/master/src/template_matching.rs),
@@ -126,9 +128,9 @@ percentile of columns holding foreground, section 3.1), `t'` = k × cap height o
 | Order | Condition | Action | Why |
 |---|---|---|---|
 | 0 | effective resolution < 150 ppi at final size, or t' < 1.7 mm, or w' < 5 mm, or no text found | **incompatible**: synthesise, reuse the spine's colour | 1.7 mm is the cap height of 7 pt, the positive-text floor [sib]; below 5 mm spines carry no text [sib] |
-| 1 | 9.3 ≤ w' ≤ 10.8 | scale across the spine only, by 10 / w' (at most ±8 %) | below the level at which type looks condensed or expanded [E, M] |
+| 1 | 9.3 ≤ w' ≤ 10.9 | scale across the spine only, by 10 / w' (at most ±8 %) | below the level at which type looks condensed or expanded [E, M] |
 | 2 | 5 ≤ w' < 9.3 | scale by k, centre, pad both sides per row with the spine's edge colour; only if the spine's outer 0.5 mm columns are flat or a gradient | no pixel of the artwork is altered |
-| 3 | w' > 10.8 and c' ≤ 7.0 | scale by k, crop 10 mm centred on the content | crop removes background only; keeps 1.5 mm to each fold [sib] |
+| 3 | w' > 10.9 and c' ≤ 7.0 | scale by k, crop 10 mm centred on the content | crop removes background only; keeps 1.5 mm to each fold [sib] |
 | 4 | 7.0 < c' ≤ 8.2 | as 3, plus a squeeze across the spine of at most 15 % | last resort before re-typesetting |
 | 5 | c' > 8.2 | **incompatible** | typical of spines over about 25 mm with the title set across or stacked |
 
@@ -175,10 +177,10 @@ components over a background model, but it is tracing by another name. Keep it f
 | S5 Class | **flat**: σ ≤ 3, or span ≤ 3 and resid ≤ 6 · **gradient**: resid ≤ 4 and wiggle ≤ 1.5 · **texture**: resid ≤ 10, edge ≤ 3 %, span ≤ 10 · **busy**: otherwise | as stated | [L], table below; σ ≤ 3 matches `UNIFORM_EDGE_THRESHOLD` 0.9 |
 | S6 Background | flat: strip median · gradient: the low-pass profile, up to 64 stops, as a shading · texture: its mean, no grain in print · busy: among the cover's five largest swatches, the one nearest the strip mean; if a known title colour gives < 4.5:1 on it, the next one | — | ladder from [sib], thresholds [E] |
 | S6b Blurred mirror (opt-in) | Mirror a strip as wide as the spine; blur σ 2.5 mm across and 1 mm along; pull 35 % toward its mean. Only when edge ≤ 2 % and no text lies within 6 % of the edge | off | [E], not prototyped |
-| S7 Text colour | Candidates in order: measured cover-title colour; lightest and darkest palette swatches; K100; paper white. Take the first with ratio ≥ 7.0; else the best ≥ 4.5; and \|ΔL\*\| ≥ 40. On a gradient test the 5th and 95th percentile rows under the text | 7.0 / 4.5 / 40 | 5.2 |
-| S8 Rescue | No candidate passes: move the background L\* out of the dead zone by the smaller move, at most 25 L\*, keeping hue and chroma; if still failing, use the darkest or lightest palette swatch as a flat background | 25 L\* | [E] |
+| S7 Text colour | Ratios on the **printed** colours. Background L\* ≤ 46 (45 uncoated): paper white, floor 4.5, target 7. Background L\* ≥ 70 (74 uncoated): K100, floor 4.5, target 7. A coloured text (cover-title colour, palette swatch) only at ≥ 7. On a gradient test the 5th and 95th percentile rows under the text | 4.5 / 7.0; bounds 46 and 70 | 5.2 |
+| S8 Rescue | Background L\* between the bounds, or nothing passes: move its L\* to the nearer bound (to the 7:1 bound if that costs ≤ 25 L\*), keeping hue and chroma; if still failing, use the darkest or lightest palette swatch as a flat background | 25 L\* | [E] |
 | S9 Type | Top open-font match from the identification stage [sib]; else by class: serif → Spectral SemiBold, sans → Atkinson Hyperlegible Bold, condensed caps → Bebas Neue. Reversed text: weight ≥ 600 and ≥ 8 pt [sib] | — | fonts are in `assets/fonts` |
-| S10 Layout | Text band 6 mm (2 mm clear each side) [sib]; ink box ≤ 5.0 mm. Head and foot margins 8 mm (≥ `safe_margin` 4–5 mm of `ebc-layout`). Optional author at the head, ≤ 35 % of the live length, 0.7 × title size, gap ≥ 6 mm. Keep 12 mm free at the foot | — | [E]; author–title–publisher order is the French habit [M] |
+| S10 Layout | Text band 6 mm (2 mm clear each side) [sib]; ink box ≤ 5.0 mm. Head and foot margins 8 mm (≥ `safe_margin` 4–5 mm of `ebc-layout`). Optional author at the head, ≤ 35 % of the live length, 0.7 × title size, gap ≥ 6 mm. A further 12 mm at the foot only when a licensed publisher mark is supplied | — | [E]; author–title–publisher order is the French habit [M] |
 | S11 Direction | By the **book's** language, not the UI locale. Bottom-to-top for French and most continental languages, top-to-bottom for English [M, sib]. CJK: upright glyphs, top-to-bottom | — | not verified, see below |
 | S12 Marks | No publisher logo unless the reseller supplies and licenses it. No fake shading | — | trademark caution [sib] |
 
@@ -211,9 +213,29 @@ Without the `wiggle` test all three photographs were classed "gradient" and woul
   compliant, up-to-date code [V1, [LICENSE](https://raw.githubusercontent.com/Myndex/apca-w3/master/LICENSE.md)]. Its guidance
   is still a useful reading aid: Lc 75 minimum for body text, Lc 60 for other content text, Lc 90 preferred
   [V1, [intro](https://raw.githubusercontent.com/Myndex/SAPC-APCA/master/documentation/APCAeasyIntro.md)]. Do not ship its code,
-  constants or name. The |ΔL\*| ≥ 40 guard covers the known WCAG weakness on dark pairs, which the same document describes
-  ("can be functionally unreadable when a color is near black").
-- Limits by stock [calc; the L\* values of paper and K100 are from memory, as in the sibling note]:
+  constants or name.
+- **What APCA teaches, without using it.** The same document says the WCAG ratio "can be functionally unreadable when a color
+  is near black". Evaluated once with the published constants (formula structure from memory) [calc]:
+
+  | Pair | WCAG 2 | APCA Lc |
+  |---|---|---|
+  | White on mid-grey #767676 | 4.54:1 | −77 |
+  | White on #595959 | 7.00:1 | −89 |
+  | Black on mid-grey #767676 | 4.62:1 | 33 |
+  | Black on #959595 | 7.01:1 | 47 |
+  | Mid-grey #777 on white | 4.48:1 | 71 |
+  | Mid-grey #777 on black | 4.69:1 | −31 |
+  | Orange #F28C28 on navy #14213D | 6.51:1 | −52 |
+
+  At equal WCAG ratio, white text on a mid-tone reads far better than black text on it, and a mid-tone text on a dark
+  background is weak. Hence the polarity rule of S7: paper-white text below L\* 46, black text only above L\* 70, coloured
+  text only at 7:1. AndroidX Palette applies the same preference (white first, black only if white fails) [V1].
+- A lightness-difference guard would add nothing: any pair at 4.5:1 is at least 42 L\* apart, at 7:1 at least 57 [calc].
+- Viewing distance [calc]: 10 pt at 40 cm subtends what 23.7 CSS px do at the reference distance; at 1 m, 9.5 px. A shelf at
+  1 m is below any body-text guidance: only maximum contrast and caps of 12 pt or more read there.
+- Print caveat for white text: it is knocked out of the background, so keep it at 8 pt or more in a weight of 600 or more [sib].
+
+Limits by stock [calc; the L\* values of paper and K100 are from memory, as in the sibling note]:
 
 | Condition | Best possible | Light text needs background L\* | Dark text needs background L\* | Dead zone for 7:1 |
 |---|---|---|---|---|
@@ -221,11 +243,8 @@ Without the `wiggle` test all three photographs were classed "gradient" and woul
 | Coated print (paper 95, K100 16) | 13.0:1 | ≤ 46 · ≤ 34 | ≥ 59 · ≥ 73 | 34–73 |
 | Uncoated print (paper 93, K100 31) | 7.5:1 | ≤ 45 · ≤ 33 | ≥ 74 · ≥ 90 | 33–90 |
 
-  So thresholds must come from the print profile. On uncoated home prints target 4.5:1; 7:1 exists only for black on near-white.
-- Viewing distance [calc]: 10 pt at 40 cm subtends what 23.7 CSS px do at the reference distance; at 1 m, 9.5 px. A shelf at
-  1 m is below any body-text guidance: only maximum contrast and caps of 12 pt or more read there.
-- When both polarities pass, prefer **dark on light**: reversed type under 8 pt is a registration risk [sib]. AndroidX does the
-  opposite (white first), which suits screens, not print [V1].
+So thresholds must come from the print profile. On coated stock a background between L\* 46 and 59 passes 4.5:1 with neither
+ink; on uncoated stock the gap is 45–74. On uncoated home prints target 4.5:1; 7:1 exists only for black on near-white.
 
 ### 5.3 Fitting the title (measured on the bundled fonts) [L]
 
@@ -246,9 +265,10 @@ characters; (7) below 7 pt (8 pt reversed): report failure. Never drop words sil
 | Le Comte de Monte-Cristo (24) | 42.1 mm | 14.5 / 17.1 / 20.2 pt | 14.5 pt |
 | Le Vieux qui ne voulait pas fêter son anniversaire (50) | 76.8 mm | 14.5 / 17.1 / 20.2 pt | 13.0 pt |
 | L'Extraordinaire Voyage du fakir… armoire Ikea (77) | 119.8 mm | 13.5 / 12.6 / 17.9 pt | 8.3 pt → drop the author |
-| La Vie et les aventures surprenantes de Robinson Crusoé, de York… (127) | 195.9 mm | 8.3 / 7.6 / 10.8 pt | 5.1 pt → cut at the comma (56 characters) |
+| La Vie et les aventures surprenantes de Robinson Crusoé, de York… (127) | 195.9 mm | 8.3 / 7.6 / 10.8 pt | 5.1 pt → cut at the comma (55 characters) |
 
-Live length 162 mm = 178 − 2 × 8. A 77-character title still fits on one line above 12 pt; truncation is a rare path.
+Live length 162 mm = 178 − 2 × 8 (150 mm when a publisher mark is placed). A 77-character title still fits on one line above
+12 pt; truncation is a rare path.
 
 ### 5.4 Scripts and shaping
 
@@ -268,23 +288,24 @@ Live length 162 mm = 178 − 2 × 8. A 77-character title still fits on one line
 
 | Tool | What it does for spines | Parameters worth copying | Conf. |
 |---|---|---|---|
-| **calibre 9.0.0** Bookshelf view (2026-01-30: "books arranged on shelves showing their spines") | Synthesises a spine per book. Colour = dominant colour of the cover thumbnail. Text colour = whichever of two theme colours has the higher contrast ratio. Optional cover crop overlaid at 30 % opacity | Width 15–80 px on a 200 px spine, default 40, from pages through log₃(1 + 2f), 1,500 pages = maximum. Font between 0.75 × and 1.3 × base, shrink in 1 pt steps, wrap to two lines, then elide right. Default `bookshelf_up_to_down = False`, i.e. −90° rotation, bottom-to-top; a preference, not locale-driven | [V1, [view](https://raw.githubusercontent.com/kovidgoyal/calibre/master/src/calibre/gui2/library/bookshelf_view.py), [defaults](https://raw.githubusercontent.com/kovidgoyal/calibre/master/src/calibre/gui2/__init__.py), [changelog](https://raw.githubusercontent.com/kovidgoyal/calibre/master/Changelog.txt)]; GPLv3: read for facts only |
+| **calibre 9.0.0** Bookshelf view (2026-01-30: "books arranged on shelves showing their spines") | Synthesises a spine per book. Colour = dominant colour of the cover thumbnail. Text colour = whichever of two theme colours has the higher contrast ratio. By default a crop of the cover is overlaid at 30 % opacity | Width 15–80 px on a 200 px spine, default 40, from pages through log₃(1 + 2f), 1,500 pages = maximum. Font between 0.75 × and 1.3 × base, shrink in 1 pt steps, wrap to two lines, then elide right. Default `bookshelf_up_to_down = False`, i.e. −90° rotation, bottom-to-top; a preference, not locale-driven | [V1, [view](https://raw.githubusercontent.com/kovidgoyal/calibre/master/src/calibre/gui2/library/bookshelf_view.py), [defaults](https://raw.githubusercontent.com/kovidgoyal/calibre/master/src/calibre/gui2/__init__.py), [changelog](https://raw.githubusercontent.com/kovidgoyal/calibre/master/Changelog.txt)]; GPLv3: read for facts only |
 | calibre `dominant_color` | Downscale to ≤ 100 px; 32 levels per channel; most frequent bucket; if its saturation < 0.2, take one of the top five with saturation > 0.3 and > 10 % of pixels | a cheap deterministic "dominant colour" | [V1, [imageops.cpp](https://raw.githubusercontent.com/kovidgoyal/calibre/master/src/calibre/utils/imageops/imageops.cpp)] |
 | calibre cover generator | Front covers only. Fixed sizes (120/80/80 px on 1,200 × 1,600), four fixed colour themes, random style, no contrast computation, no use of an existing image; lines that do not fit are not drawn and no ellipsis is added | a counter-example: silent loss of words | [V1, [covers.py](https://raw.githubusercontent.com/kovidgoyal/calibre/master/src/calibre/ebooks/covers.py)] |
 | KOReader `FakeCover` | Text-only cover when none exists; no spine rendering in the file | Title 24 → 10, authors 20 → 6, step 2; accept when no word is split and > 20 % free height; second pass after cleaning the string | [V1, [mosaicmenu.lua](https://raw.githubusercontent.com/koreader/koreader/master/plugins/coverbrowser.koplugin/mosaicmenu.lua)] |
-| Harvard Stack View (2012, MIT / GPL) | Library shelf of spines from metadata: thickness = pages clamped to 200–540 × 0.20 px; length = height clamped to 20–39 cm mapped to 59–100 %; colour = "heat" 1–10 from a usage rank; title, first author and year on the spine | clamping physical sizes to a readable range | [V1, [README](https://raw.githubusercontent.com/harvard-lil/stackview/master/README.md), [book.js](https://raw.githubusercontent.com/harvard-lil/stackview/master/src/js/types/book.js)] |
+| Harvard Stack View (2012, MIT / GPL) | Library shelf of spines from metadata: thickness = pages clamped to 200–540 × 0.20 px; length = the height field clamped to 20–39 (presumably cm) mapped to 59–100 %; colour = "heat" 1–10 from a usage rank; title, first author and year on the spine | clamping physical sizes to a readable range | [V1, [README](https://raw.githubusercontent.com/harvard-lil/stackview/master/README.md), [book.js](https://raw.githubusercontent.com/harvard-lil/stackview/master/src/js/types/book.js)] |
 | virtual-bookshelf (CSS) | Spines built from markup, with title and author initials; height, colours and patterns randomised | — | [V1, [README](https://raw.githubusercontent.com/petargyurov/virtual-bookshelf/master/README.md)] |
 | 3D book CSS generator (MIT) | 3D book from a cover URL with perspective and thickness; the README does not describe a spine | — | [V1, [README](https://raw.githubusercontent.com/scastiel/3d-book-image-css-generator/master/README.md)] |
 | AndroidX Palette | Quantise to 16 colours on a bitmap of at most 112 × 112 px area; drop near-black, near-white and one hue range; dominant = largest population; six luma/saturation targets (dark ≤ 0.45, light ≥ 0.55) | swatch choice and text-on-swatch rule | [V1, [Palette.java](https://raw.githubusercontent.com/androidx/androidx/androidx-main/palette/palette/src/main/java/androidx/palette/graphics/Palette.java), [Target.java](https://raw.githubusercontent.com/androidx/androidx/androidx-main/palette/palette/src/main/java/androidx/palette/graphics/Target.java)] |
-| Color Thief (MIT), Material Color Utilities | Dominant colour and palette (`quality` 10, `colorCount` 10, `ignoreWhite` true by default); quantiser "Celebi, which runs Wu, then WSMeans" | `ignoreWhite` is wrong for cream French covers | [V1, [color-thief](https://raw.githubusercontent.com/lokesh/color-thief/master/README.md), [MCU](https://raw.githubusercontent.com/material-foundation/material-color-utilities/main/README.md)] |
+| Color Thief (MIT), Material Color Utilities | Color Thief: dominant colour and palette, defaults `quality` 10, `colorCount` 10, `ignoreWhite` true. Material: quantiser "Celebi, which runs Wu, then WSMeans", plus scoring and contrast helpers | `ignoreWhite` would be wrong for white and cream French covers | [V1, [color-thief](https://raw.githubusercontent.com/lokesh/color-thief/master/README.md), [MCU](https://raw.githubusercontent.com/material-foundation/material-color-utilities/main/README.md)] |
 | Open Library | The coverstore README describes cover size variants only; nothing about spines | — | [V1, weak, [README](https://raw.githubusercontent.com/internetarchive/openlibrary/master/openlibrary/coverstore/README.md)] |
 | Kindle, Kobo, Apple Books, Google Play Books | Face-out covers; I know of no mainstream e-reader shelf that synthesises spines | — | [M] |
 | Retail 3D packshots, mockup sites | Front cover with a generic or stretched spine | — | [M] |
 | Academic spine work | Shelf photographs: segmentation by long near-vertical lines, then text reading or image matching (Stanford mobile book-spine recognition, about 2010–2011; Talker and Moses, "Viewpoint-independent book spine segmentation", 2014; "Smart Library", 2016–2017). They solve shelf photos, not flat wraps; useful only for the scan input | — | [M], nothing verified |
 
 Three lessons. calibre shows the simplest scheme that works: one flat dominant colour and a two-way text colour. Its shading
-(edges darkened 115 %, top highlight) imitates a round spine on screen and should not be printed on a real one. Nobody in this
-list samples the binding edge or adapts a real spine: both parts of this note are new work.
+(edges darkened with `darker(115)`, a white highlight at the top, a black shade at the bottom) imitates a round spine on
+screen and should not be printed on a real one. Nothing in this list samples the binding edge or adapts a real spine: both
+parts of this note are new work.
 
 ## 7. Test cases
 
@@ -301,7 +322,8 @@ Fixtures must be synthetic (generated at build time), so that tests stay offline
 | T7 | Japanese title "1Q84"-style mix | kana and kanji upright, Latin run sideways, top-to-bottom |
 | T8 | All-caps "ÉCOLE DES FEMMES, ÇA" | ink box ≤ 5.0 mm including accents and cedilla |
 | T9 | Light cover (L\* 97) | flat background, dark K100 text; ratio ≥ 7 on coated, ≥ 4.5 on uncoated |
-| T10 | Mid-tone flat cover (L\* 50) | background moved out of the dead zone (≤ 34 or ≥ 73); move ≤ 25 L\* |
+| T10 | Mid-tone flat cover (L\* 50) | background darkened to L\* ≤ 34 (a move of 16), paper-white text at ≥ 7:1; never black text on a mid-tone |
+| T10b | Pastel cover (L\* 80), uncoated profile | K100 text at ≥ 4.5:1 (5.3:1); 7:1 not reachable without lightening to L\* 90 |
 | T11 | Busy photographic cover | class busy; flat palette colour; no streaks, no mirrored objects |
 | T12 | Photo inside a white frame (3.5 %) | frame detected; white spine, dark text |
 | T13 | Cover with white bars on two sides only | bars cropped before sampling |
@@ -336,7 +358,7 @@ All fetched successfully in this session.
 - Text: [rustybuzz README](https://raw.githubusercontent.com/harfbuzz/rustybuzz/main/README.md), [harfrust on crates.io](https://crates.io/api/v1/crates/harfrust), [unicode-vo on crates.io](https://crates.io/api/v1/crates/unicode-vo), [CSS Writing Modes 4 source](https://raw.githubusercontent.com/w3c/csswg-drafts/main/css-writing-modes-4/Overview.bs)
 - Spine width and metadata: [Pressbooks class-spine.php](https://raw.githubusercontent.com/pressbooks/pressbooks/dev/inc/covergenerator/class-spine.php), [ONIX List 158 (im_onix)](https://raw.githubusercontent.com/immateriel/im_onix/master/data/codelists/codelist-158.yml)
 - Taken from the sibling note `print-requirements.folding.md`, not re-read by me: [KDP help](https://kdp.amazon.com/en_US/help/topic/G201953020), [Lulu API help](https://help.api.lulu.com/en/support/solutions/articles/64000254616-how-is-spine-width-calculated-)
-- Local: `assets/fonts/*.ttf` (metrics and cmap), `crates/ebc-color/src/palette.rs`, `crates/ebc-layout/src/profile.rs`, `docs/architecture.md`, cargo cache sources of `rustybuzz` 0.20.1, `imageproc` 0.27.0, `unicode-vo` 0.1.0. The four prototype scripts were throwaway files outside the repository.
+- Local: `assets/fonts/*.ttf` (metrics and cmap), `crates/ebc-color/src/palette.rs`, `crates/ebc-layout/src/profile.rs`, `docs/architecture.md`, cargo cache sources of `rustybuzz` 0.20.1, `imageproc` 0.27.0, `unicode-vo` 0.1.0. The prototype scripts were throwaway files outside the repository.
 
 ## Could not verify
 

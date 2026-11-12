@@ -100,6 +100,16 @@ fn output_intent_must_be_usable() {
         });
         assert!(matches!(error(&doc), PdfError::UnsupportedOutputIntent { .. }), "{standard:?}");
     }
+    // A condition that is in no registry must at least be described.
+    for standard in X_LEVELS {
+        let mut doc = doc_with(standard, vec![]);
+        let intent = doc.output_intent.as_mut().expect("intent");
+        intent.registry_name = String::new();
+        intent.info = " ".into();
+        assert!(matches!(error(&doc), PdfError::UnsupportedOutputIntent { .. }), "{standard:?}");
+        doc.output_intent.as_mut().expect("intent").info = "House profile for press 3".into();
+        assert!(write(&doc).is_ok(), "{standard:?}");
+    }
     // Plain PDF may carry an RGB output intent.
     let mut doc = doc_with(PdfStandard::Plain, vec![]);
     doc.output_intent.as_mut().expect("intent").icc_profile = Some(srgb_v4_profile());

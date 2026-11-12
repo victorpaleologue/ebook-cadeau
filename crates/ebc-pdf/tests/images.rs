@@ -319,3 +319,62 @@ fn images_are_placed_upright_and_shared_between_pages() {
         .count();
     assert_eq!(images, 1, "unused and never-painted images are not embedded");
 }
+
+#[test]
+fn smooth_images_are_png_predicted_before_deflating() {
+    let (w, h) = (96u32, 64u32);
+    // A diagonal gradient: neighbouring pixels differ by small, regular steps.
+    let mut gradient = Vec::new();
+    let mut alpha = Vec::new();
+    for y in 0..h {
+        for x in 0..w {
+            gradient.extend_from_slice(&[
+                (x * 2 + y) as u8,
+                (x + y * 3) as u8,
+                (255 - x - y) as u8,
+            ]);
+            alpha.push((x + 2 * y) as u8);
+        }
+    }
+    let rgba: Vec<u8> =
+        gradient.chunks_exact(3).zip(&alpha).flat_map(|(p, a)| [p[0], p[1], p[2], *a]).collect();
+
+    let pdf = parse(
+        &write_pdf(
+            &doc_with(PdfStandard::X4, raw(PixelFormat::Rgba8, w, h, rgba), None),
+            &WriteOptions::default(),
+        )
+        .expect("ok"),
+    );
+    let image = image_object(&pdf, "Im0");
+    let parms = get_dict(&pdf, &image.dict, "DecodeParms");
+    assert_eq!(get(&pdf, parms, "Predictor").as_i64().expect("int"), 15);
+    assert_eq!(get(&pdf, parms, "Colors").as_i64().expect("int"), 3);
+    assert_eq!(get(&pdf, parms, "BitsPerComponent").as_i64().expect("int"), 8);
+    assert_eq!(get(&pdf, parms, "Columns").as_i64().expect("int"), i64::from(w));
+    assert_eq!(image.decompressed_content().expect("inflates and un-predicts"), gradient);
+    assert!(image.content.len() < gradient.len() / 20, "{} bytes", image.content.len());
+
+    let mask = get(&pdf, &image.dict, "SMask").as_stream().expect("soft mask");
+    let parms = get_dict(&pdf, &mask.dict, "DecodeParms");
+    assert_eq!(get(&pdf, parms, "Predictor").as_i64().expect("int"), 15);
+    assert_eq!(get(&pdf, parms, "Colors").as_i64().expect("int"), 1);
+    assert_eq!(get(&pdf, parms, "Columns").as_i64().expect("int"), i64::from(w));
+    assert_eq!(mask.decompressed_content().expect("inflates and un-predicts"), alpha);
+
+    // Flat or noisy data gains nothing from prediction and is deflated as it is.
+    let flat = raw(PixelFormat::Cmyk8, 40, 40, [10u8, 20, 30, 40].repeat(1600));
+    let pdf = parse(
+        &write_pdf(&doc_with(PdfStandard::X4, flat, None), &WriteOptions::default()).expect("ok"),
+    );
+    let image = image_object(&pdf, "Im0");
+    assert!(!image.dict.has(b"DecodeParms"));
+    assert_eq!(filters(image), ["FlateDecode"]);
+
+    // And without compression there is nothing to predict for.
+    let smooth = raw(PixelFormat::Rgb8, w, h, gradient.clone());
+    let pdf = parse(&write_pdf(&doc_with(PdfStandard::X4, smooth, None), &READABLE).expect("ok"));
+    let image = image_object(&pdf, "Im0");
+    assert!(!image.dict.has(b"DecodeParms") && filters(image).is_empty());
+    assert_eq!(image.content, gradient);
+}

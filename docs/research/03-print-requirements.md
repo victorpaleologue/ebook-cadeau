@@ -58,7 +58,7 @@ Default = the upload profile for a professional printer (`upload_eu`), poche for
 | Output intent | FOGRA39, "ISO Coated v2 300% (ECI)", profile embedded | FOGRA51 (PSO Coated v3), FOGRA52 (PSO Uncoated v3) | §3.1 [V2 for the conditions]; identifiers [M] |
 | Total ink | 300 % or less | 260 % (Onlineprinters express), 270 % (Lulu) | §4.3 [V2] |
 | Text, typed code, QR symbol | 100 % K only | — | §4.3 [V2] |
-| Large black solids | K100 + C30 M30 Y30 (190 %) | K100 alone within 5 mm of a crease | Exaprint [V1]; crease rule is a house rule |
+| Large black solids | K100 + C30 M30 Y30 (190 %) | K100 alone when the solid crosses a crease | Exaprint [V1]; the crease rule is a house rule |
 | Lightest tint | 5 % in each channel used | — | Pixartprinting [V1] |
 | Minimum type size | 6 pt positive; 8 pt reversed or multi-ink | — | [V2]; reversed figure [M] |
 | Minimum line weight | 0.25 pt positive; 0.5 pt reversed | — | [V2] |
@@ -83,7 +83,7 @@ Default = the upload profile for a professional printer (`upload_eu`), poche for
 | Resolution: target / warning / error | 300 / 250 / 150 ppi | same | 200 / 150 / 100 ppi |
 | Companion file | dimensioned plan PDF, not for print | dimensioned plan PDF | none: instructions are on the sheet |
 
-The repository already has these three profiles (`crates/ebc-layout/src/profile.rs`). Two of its values differ from this document: `professional_eu` uses a 4 mm safety margin and a 1.5 mm spine clear zone. The changes are listed in "Implications for the implementation".
+The repository already has these three profiles (`crates/ebc-layout/src/profile.rs`). Four of its values differ from this document: `professional_eu` uses a 4 mm safety margin, a 1.5 mm spine clear zone and registration targets; `home_*` assumes a 5 mm unprintable margin. The changes are listed in "Implications for the implementation".
 
 ### 1.4 Contradictions between the notes, and what is kept
 
@@ -256,8 +256,8 @@ Such a file is valid content for PDF/X-1a:2001, PDF/X-3:2002 and PDF/X-4 at once
 |---|---|---|---|
 | PDF/X-4 (default) | 1.6 | generic download, Onlineprinters, Saxoprint, Gelato, Baumer-type printers, Pixartprinting, Helloprint | It is what the printers with the most explicit current guides ask for [V1 to V2]. It requires the embedded profile, which we always write |
 | PDF/X-3:2002 | 1.3 | Flyeralarm | Named on its checklist [V2] |
-| PDF/X-1a:2001 | 1.3 | Bookvault, Exaprint ("PDF 1.3 optimal"), any printer that rejects the X-4 label | The most conservative label; CMYK-only content is exactly what it describes |
-| Plain PDF | 1.4 or later | home profile, Printoclock (PDF, JPEG or TIFF accepted) | No output condition applies to a home printer |
+| PDF/X-1a:2001 | 1.3 | Bookvault, Exaprint ("PDF 1.3 optimal"), Printoclock (any PDF accepted, text outlined), any printer that rejects the X-4 label | The most conservative label; CMYK-only content is exactly what it describes |
+| Plain PDF | 1.4 or later | home profile | No output condition applies to a home printer |
 
 Why not PDF/X-1a everywhere: it would be accepted by every printer we know of [M], but it forbids the tagged-RGB variant of §3.4 and it is not what the German groups and Gelato publish. Why not X-4 everywhere: Bookvault and Flyeralarm name older parts, and a validator that checks the label literally would fail the file. The label is one field in the printer profile; the page content does not change.
 
@@ -298,7 +298,7 @@ One exactly-one rule applies to all three: a single `GTS_PDFX` output intent per
 |---|---|---|
 | Cover image, professional profiles | Converted from sRGB to the output-intent CMYK with a real ICC transform. Intent: relative colorimetric with black-point compensation by default, perceptual as an option [M]. Never the naive formula | Document 07, rule 5: no colour change other than ICC conversion to the output profile. A 300 % profile also guarantees the ink limit |
 | Cover image, when the output profile is not available in the browser | Left as sRGB, tagged with the sRGB profile, in a PDF/X-4 file. Preflight warning "RGB image, the printer converts". Allowed only in profiles with `allow_rgb` | Pixartprinting converts non-CMYK files automatically [V2]; Printoclock accepts RVB [V1]; Gelato is said to convert sRGB (unverified). Onlineprinters, Saxoprint, Flyeralarm and Exaprint expect CMYK |
-| Ground and spine colours | Defined in sRGB for the preview, converted through the same ICC transform, then cleaned: channels below 2.5 % go to 0, channels between 2.5 % and 5 % go to 5 % | Preview and print stay consistent. Pixartprinting: no tint below 5 % [V1] |
+| Ground and spine colours | Defined in sRGB for the preview, converted through the same ICC transform, then cleaned: channels below 2.5 % go to 0, channels between 2.5 % and 5 % go to 5 % (house rule) | Preview and print stay consistent. Pixartprinting: no tint below 5 % [V1] |
 | Black text, typed code, QR symbol, thin rules | Written directly as 0/0/0/100, never through the ICC transform | An ICC conversion of sRGB black gives a four-colour black. Printers want text in K only [V2] |
 | White | 0/0/0/0 | |
 | Home profile | Images stay sRGB (JPEG passed through unchanged); text in DeviceGray | Home printer drivers work in RGB [M] |
@@ -340,7 +340,7 @@ To be stored as data, one record per printer and product. "Used" is the value ou
 |---|---|---|---|---|---|---|---|---|
 | Exaprint (FR) | 3 mm | 3 / 5 mm | none | PDF/X-1a:2001 | FOGRA39, 300 % | 300 % | embedded | bleed 2 or 3 mm; current profile |
 | Pixartprinting (IT) | 3 mm or template | template / 5 mm | none | PDF/X-4 | FOGRA39 | 300 % assumed | embedded, not outlined | ink limit not published |
-| Printoclock (FR) | 2 or 5 mm per template | 2 / 5 mm | none | plain PDF | FOGRA39 assumed | 300 % assumed | all outlined | bleed; profile |
+| Printoclock (FR) | 2 or 5 mm per template | 2 / 5 mm | none | PDF/X-1a:2001 (any PDF accepted) | FOGRA39 assumed | 300 % assumed | all outlined | bleed; profile |
 | Onlineprinters (DE) | 2 mm | 4 / 5 mm | none | PDF/X-4 | FOGRA51 coated, FOGRA52 uncoated | 300 %, 260 % express | embedded | mark policy not found |
 | Saxoprint (DE) | 2 mm, 3 mm on folders | 3 / 5 mm | none | PDF/X-4 | FOGRA51 | 300 % | embedded | mark policy not found |
 | Flyeralarm (DE) | per data sheet (1 to 3 mm) | data sheet / 5 mm | none | PDF/X-3:2002 | FOGRA39, 300 % | 300 % | embedded | data sheet of the folder product |
@@ -348,7 +348,7 @@ To be stored as data, one record per printer and product. "Used" is the value ou
 | Bookvault (UK) | 3 mm | 5 / 5 mm | none | PDF/X-1a:2001 | not found | not found | embedded | profile |
 | Gelato | 3 mm (unverified) | not found / 5 mm | none | PDF/X-4 | not found; may accept sRGB | not found | embedded | first-party specification |
 | Cloudprinter | 3 mm | not found / 5 mm | none | PDF/X-4 assumed | not found | not found | embedded | first-party specification |
-| Lulu | 3.175 mm | 12.7 / 12.7 mm | none | plain PDF | GRACoL 2006 (US) | 270 % | embedded | out of the default scope |
+| Lulu | 3.175 mm | 12.7 / 12.7 mm | none | any print-ready PDF | GRACoL 2006 (US) | 270 % | embedded | out of the default scope |
 | BoD | 5 mm | not found | none | flattened PDF | not found | not found | embedded | current guide |
 
 Where the mark policy was not found (Onlineprinters, Saxoprint, Exaprint, Helloprint), "none" is used because their product pages define the upload as the data format with bleed [V2 for Onlineprinters].
@@ -400,7 +400,7 @@ Consequences:
 | How it is met for flat colours | computed colours are checked and, if above the limit, reduced by scaling C, M and Y | house rule |
 | Text, typed code, QR symbol | 0/0/0/100 | Saxoprint, Exaprint, Pixartprinting [V2] |
 | Large black solids | K100 + C30 M30 Y30 | Exaprint [V1] |
-| Solids crossing a crease | prefer a mid or light ground; avoid heavy coverage on the crease lines | Print Pas Cher: with heavy ink coverage the paper may tear in the folds, and this is not a ground for complaint ([printpascher.com](https://www.printpascher.com/chemise-rabats.html)) [V1]; Printoclock warns against heavy black solids [V1] |
+| Solids crossing a crease | prefer a mid or light ground; a black ground that crosses a crease is K100 only, not rich black (house rule) | Print Pas Cher: with heavy ink coverage the paper may tear in the folds, and this is not a ground for complaint ([printpascher.com](https://www.printpascher.com/chemise-rabats.html)) [V1]; Printoclock warns against heavy black solids [V1] |
 | Lightest tint | 5 % | Pixartprinting [V1] |
 | Registration colour | marks only, outside the bleed | Saxoprint [V1] |
 | Overprint | K100 text on a coloured ground is set to overprint; nothing else is. A white object must never overprint | Onlineprinters and Exaprint do this themselves [V1 each]; the white-object rule is standard preflight practice [M] |
@@ -507,7 +507,7 @@ Platform cover templates (as of 2026-11):
 | Platform | Bleed | Spine width formula | Spine text allowed from | Spine text side margin | Hinge and other |
 |---|---|---|---|---|---|
 | Amazon KDP paperback | 0.125 in (3.2 mm) top, bottom, outside; cover text 0.125 in or more inside the trim ([KDP help](https://kdp.amazon.com/en_US/help/topic/G201953020)) [V2] | pages × 0.002252 in (0.0572 mm) for white and standard colour; 0.002347 in (0.0596 mm) for premium colour ([KDP help](https://kdp.amazon.com/en_US/help/topic/G201953020)) [V1]; cream 0.0025 in per third parties ([kdpeasy](https://www.kdpeasy.com/fr/tools/calculateur-dos-kdp)) [V1] | 79 pages; KDP pages are inconsistent ("at least 79", "more than 79", Cover Creator says 80) ([KDP help](https://kdp.amazon.com/en_US/help/topic/A1L46HVPPIYTE), [ebookpbook](https://www.ebookpbook.com/2026/06/24/book-spine-text-requirements/)) [V2] | 0.0625 in (1.6 mm) each side [M], not confirmed by search | 0.4 in (10 mm) between the spine and the safe area on front and back ([KDP help](https://kdp.amazon.com/en_US/help/topic/G201953020)) [V1]; probably the hardcover hinge [M] |
-| Lulu paperback | 0.125 in [M in the folding note; [V2] in the prepress note, §2.3] | pages / 444 + 0.06 in; pages / 460 + 0.06 in for magazine and comic paper ([Lulu API help](https://help.api.lulu.com/en/support/solutions/articles/64000254616-how-is-spine-width-calculated-)) [V1] | No spine text at 80 pages or fewer ([Lulu Book Creation Guide](https://assets.lulu.com/media/guides/en/lulu-book-creation-guide.pdf), read through a [Scribd copy](https://www.scribd.com/document/615961952/lulu-book-creation-guide)) [V1] | 0.125 in (3.2 mm) to each spine edge (same guide) [V1] | Text spanning the full spine is risky: small shifts push it onto the covers; spine width differs between Lulu's own network and its distribution partners ([Lulu help](https://help.lulu.com/en/support/solutions/articles/64000255462)) [V1] |
+| Lulu paperback | 0.125 in ([M] in the folding note; [V2] in the prepress note, §2.3) | pages / 444 + 0.06 in; pages / 460 + 0.06 in for magazine and comic paper ([Lulu API help](https://help.api.lulu.com/en/support/solutions/articles/64000254616-how-is-spine-width-calculated-)) [V1] | No spine text at 80 pages or fewer ([Lulu Book Creation Guide](https://assets.lulu.com/media/guides/en/lulu-book-creation-guide.pdf), read through a [Scribd copy](https://www.scribd.com/document/615961952/lulu-book-creation-guide)) [V1] | 0.125 in (3.2 mm) to each spine edge (same guide) [V1] | Text spanning the full spine is risky: small shifts push it onto the covers; spine width differs between Lulu's own network and its distribution partners ([Lulu help](https://help.lulu.com/en/support/solutions/articles/64000255462)) [V1] |
 | IngramSpark | 0.125 in (3 mm) ([Ingram cover bleed sheet](https://marketing.ingramcontent.com/mrkng/documents/publishers/Cover-Bleed-Dimensions.pdf)) [V1] | Template generator only ([IngramSpark help](https://help.ingramspark.com/hc/en-us/articles/35303841585933-Cover-Template-Generator)) | Paperback 48 pages, hardcover 18 pages ([IngramSpark help](https://help.ingramspark.com/hc/en-us/articles/35306346735245-Cover-File-Creation), [ebookpbook](https://www.ebookpbook.com/2026/06/24/book-spine-text-requirements/)) [V2] | Spine of 0.35 in (9 mm) or more: 0.0625 in; thinner: 0.03125 in (about 1 mm) ([IngramSpark blog](https://www.ingramspark.com/blog/file-requirements-for-print-books), [Ingram dust-jacket template](https://marketing.ingramcontent.com/mrkng/documents/publishers/Dust-Jacket-Template.pdf)) [V2] | All text 0.25 in (6 mm) or more from the trim; duplex covers keep the spine + 0.0625 in each side white for the glue; a 0.5 in (13 mm) hinge is quoted for Ingram covers [V1] |
 | BoD (DE/FR) | **5 mm** on the four outer sides ([BoD cover guide, about 11 years old](https://www.yumpu.com/de/document/view/41877228/wie-gestalte-ich-das-buchcover-richtig-bod)) [V1] | Online *Umschlagsberechnung*; minimum 24 pages (same guide) | 80 pages or a **5 mm** spine (same guide) [V1] | not found | Keep text 8 mm away from the fold area next to the spine (same guide) [V1] |
 | Bookvault (UK) | 3 mm ([V2] in the prepress note, §2.3) | Sizing calculator and generated template ([Bookvault templates](https://bookvault.app/downloading-bookvault-templates/)) | "About 10 mm or more leaves room for spine text"; skip spine text on low page counts ([Bookvault help](https://help.bookvault.app/book-cover-spine-misaligned)) [V1] | not found | The help page treats slight cover and spine misalignment as normal production variance |
@@ -536,12 +536,14 @@ Synthesis:
 Poche format, trim coordinates in millimetres:
 
 ```
-x:   0          105 110 112      118 120 125              225 230
-     |  back      |   |  |  text  |   |   |   cover box    |   |
-     |  live area |   |cz| band   |cz |   |  (inset 5 mm)  |   |
-     trim         safe A           B  safe                safe trim
-                      crease     crease
+x (mm)  0             105 110 112         118 120 125               225 230
+        |             |   |   |           |   |   |                 |   |
+        | back live   |   |cz | text band |cz |   | cover box       |   |
+        | area        |   |   | 6 mm      |   |   | (inset 5 mm)    |   |
+        trim              A                   B                         trim
 ```
+
+A and B are the creases; cz is the 2 mm clear zone; 105 is the safety line of the back panel; 125 and 225 are the edges of the cover box.
 
 | Zone | x from | x to | y from | y to |
 |---|---|---|---|---|
@@ -685,7 +687,7 @@ Observations [calc]:
 | Cut guides | corner ticks from the bleed edge outward, 5 mm, 0.5 pt, light grey (K only) |
 | Fold guides | at both creases, above and below, same length, dashed, light grey |
 | Scale ruler | a 100 mm line with a tick every 10 mm, labelled "100 mm", 5 mm above the trim, over the back panel |
-| Printed instruction | one line in the top margin: "Imprimer en taille réelle (100 %), recto verso, retourner sur le bord court" |
+| Printed instruction | a short text in a side margin (27 mm of printable width is free on each side): "Imprimer en taille réelle (100 %), recto verso, retourner sur le bord court" |
 | PDF | plain PDF, sRGB images, grey text; no PDF/X claim |
 | Inside page | white ground; all content 5 mm or more inside the trim and away from the creases |
 | Resolution thresholds | 200 ppi target, warning below 150, error below 100 |
@@ -945,7 +947,7 @@ All retrieved as search-result summaries on 2026-11-12 unless stated. Links mark
 3. Change `home_*`: printable margin from 5 to 6.35 mm. Keep: bleed 2 mm, safety margin 5 mm, spine clear zone 2 mm, grey K-only guides at 0.5 pt, scale ruler, plain PDF.
 4. Add a third resolution threshold to every profile. Professional: target 300, warning below 250, error below 150 ppi. Home: 200, 150, 100.
 5. Add per-printer profiles as data records, not code: bleed, safety margin, marks on or off, crease encoding (`ticks`, `spot`, `plan`), crease separation name and preview colour, PDF label, output condition, ink limit, `allow_rgb`, `outline_all_text`, status (`unconfirmed` or `confirmed`), source URL, date checked. Seed them from §3.6, all `unconfirmed`. An unconfirmed profile shows a warning and cannot be used for an automated order.
-6. Validate profiles: bleed is one of 1, 2, 3, 3.175, 5 mm (or any value from 1 to 5 mm); safety margin 3 to 10 mm; spine width 5 to 15 mm when the spine carries text; two creases never closer than 5 mm.
+6. Validate profiles: bleed from 1 to 5 mm (published values: 1, 2, 3, 3.175 and 5 mm); safety margin 3 to 10 mm; spine width 5 to 15 mm when the spine carries text; two creases never closer than 5 mm.
 7. The default format is the poche, 110 × 178 mm, spine 10.0 mm. Page creation fails with a clear error when a format does not fit the home sheet at 100 %: panel at most 130 × 183 mm on A4 with 5 mm ticks. Never scale the layout to fit. The `digest` and `a5` presets are professional-only.
 
 **Boxes and marks**

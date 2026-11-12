@@ -196,6 +196,11 @@ jobs:
         env:
           EBC_E2E_REQUIRE_TOOLS: "1"
         run: bash e2e/run.sh
+      # e2e/run.sh has built web/pkg (with the native golden digests) and the ebc CLI: run the
+      # web package tests, incl. "the browser writes the very bytes the native library writes"
+      # and "every page string exists in every language". They fail instead of skipping in CI.
+      - name: Web package tests (wasm vs native golden cards, i18n completeness)
+        run: node --test web/tests/*.test.mjs
       - uses: actions/upload-artifact@v7
         if: failure()
         with:

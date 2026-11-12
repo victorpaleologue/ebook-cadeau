@@ -666,7 +666,9 @@ def cash_flow(v: Mapping, level: str, scenario: str, volumes: Sequence) -> SimRe
             MonthRow(
                 month=month,
                 regime=regime,
-                cards=vol.generated + vol.mailed + reseller_cards + jackets,
+                # Mailed cards are a subset of generated cards (an upgrade), so they are
+                # not added again here.
+                cards=vol.generated + reseller_cards + jackets,
                 paying_units=vol.paid_pdf + vol.mailed + reseller_cards + jackets,
                 partners_live=partners_live,
                 authors=vol.authors,

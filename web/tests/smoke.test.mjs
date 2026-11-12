@@ -110,6 +110,8 @@ test('render_card writes a PDF, the preview two SVG pages', () => {
 test('the browser writes the very bytes the native library writes (golden cards)', (t) => {
   const digestsFile = join(pkgDir, 'golden-native.sha256');
   if (!existsSync(digestsFile)) {
+    // In CI a missing prerequisite is a failure, not a skip: these checks must run there.
+    if (process.env.CI) assert.fail('web/pkg/golden-native.sha256 is missing: run scripts/build-wasm.sh');
     t.skip('web/pkg/golden-native.sha256 is missing: run scripts/build-wasm.sh');
     return;
   }
@@ -129,6 +131,8 @@ test('the browser writes the very bytes the native library writes (golden cards)
 
 test('the QR code of the PDF decodes to the upper-case claim URL', (t) => {
   if (!which('pdftoppm') || !which('zbarimg')) {
+    // In CI a missing prerequisite is a failure, not a skip: these checks must run there.
+    if (process.env.CI) assert.fail('pdftoppm or zbarimg not on PATH');
     t.skip('pdftoppm or zbarimg not on PATH');
     return;
   }
@@ -154,6 +158,8 @@ test('the QR code of the PDF decodes to the upper-case claim URL', (t) => {
 test('the PDF passes the preflight of the command-line tool', (t) => {
   const ebc = ebcBinary();
   if (!ebc) {
+    // In CI a missing prerequisite is a failure, not a skip: these checks must run there.
+    if (process.env.CI) assert.fail('the ebc command-line tool is not built');
     t.skip('the ebc command-line tool is not built');
     return;
   }

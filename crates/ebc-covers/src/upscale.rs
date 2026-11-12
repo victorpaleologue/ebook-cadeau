@@ -329,7 +329,8 @@ fn resample(src: &[u8], sw: usize, sh: usize, dw: usize, dh: usize) -> Vec<u8> {
 fn blur_axis(src: &[u8], w: usize, h: usize, kernel: &[i32], horizontal: bool) -> Vec<u8> {
     let radius = kernel.len() / 2;
     let mut out = src.to_vec();
-    let (len, lines, step, line_step) = if horizontal { (w, h, 4, w * 4) } else { (h, w, w * 4, 4) };
+    let (len, lines, step, line_step) =
+        if horizontal { (w, h, 4, w * 4) } else { (h, w, w * 4, 4) };
     for line in 0..lines {
         let base = line * line_step;
         for i in 0..len {
@@ -352,7 +353,8 @@ fn blur_axis(src: &[u8], w: usize, h: usize, kernel: &[i32], horizontal: bool) -
 
 /// Applies an unsharp mask in place on the colour channels of RGBA bytes.
 fn unsharp(data: &mut [u8], w: usize, h: usize, mask: &UnsharpMask) {
-    let sigma = if mask.sigma_px.is_finite() { f64::from(mask.sigma_px).clamp(0.3, 10.0) } else { 1.0 };
+    let sigma =
+        if mask.sigma_px.is_finite() { f64::from(mask.sigma_px).clamp(0.3, 10.0) } else { 1.0 };
     let amount = if mask.amount.is_finite() { f64::from(mask.amount).clamp(0.0, 4.0) } else { 0.0 };
     let amount_fixed = (amount * 256.0).round() as i32;
     if amount_fixed == 0 {
@@ -497,7 +499,8 @@ mod tests {
 
     /// FNV-1a, to pin exact output bytes without storing them.
     fn fnv(data: &[u8]) -> u64 {
-        data.iter().fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ u64::from(*b)).wrapping_mul(0x100_0000_01b3))
+        data.iter()
+            .fold(0xcbf2_9ce4_8422_2325, |h, b| (h ^ u64::from(*b)).wrapping_mul(0x100_0000_01b3))
     }
 
     #[test]
@@ -522,7 +525,9 @@ mod tests {
 
     #[test]
     fn taps_are_normalised_and_in_range() {
-        for (src, dst) in [(1usize, 1usize), (1, 7), (2, 9), (5, 5), (10, 3), (100, 421), (640, 97), (3, 1000)] {
+        for (src, dst) in
+            [(1usize, 1usize), (1, 7), (2, 9), (5, 5), (10, 3), (100, 421), (640, 97), (3, 1000)]
+        {
             let taps = lanczos_taps(src, dst);
             assert_eq!(taps.starts.len(), dst);
             for i in 0..dst {
@@ -546,7 +551,10 @@ mod tests {
                 for opts in [UpscaleOptions::plain(), UpscaleOptions::mild_sharpen()] {
                     let out = upscale(&src, w, h, &opts).expect("resample");
                     assert_eq!((out.width(), out.height()), (w, h));
-                    assert!(out.data().chunks_exact(4).all(|px| px == colour), "{colour:?} {w}x{h}");
+                    assert!(
+                        out.data().chunks_exact(4).all(|px| px == colour),
+                        "{colour:?} {w}x{h}"
+                    );
                 }
             }
         }
@@ -679,10 +687,7 @@ mod tests {
             upscale(&src, MAX_SIDE_PX + 1, 10, &opts),
             Err(CoversError::ImageTooLarge { .. })
         ));
-        assert!(matches!(
-            upscale(&src, 9000, 9000, &opts),
-            Err(CoversError::ImageTooLarge { .. })
-        ));
+        assert!(matches!(upscale(&src, 9000, 9000, &opts), Err(CoversError::ImageTooLarge { .. })));
         let tight = UpscaleOptions { max_pixels: 99, ..opts };
         assert!(upscale(&src, 10, 10, &tight).is_err());
         assert!(upscale(&src, 9, 11, &tight).is_ok());
@@ -722,7 +727,11 @@ mod tests {
                 return Some(Pixmap::filled(3, 3, [1, 2, 3, 255]));
             }
             // A recognisable "model": solid magenta at the requested size.
-            Some(Pixmap::filled(image.width() * factor, image.height() * factor, [255, 0, 255, 255]))
+            Some(Pixmap::filled(
+                image.width() * factor,
+                image.height() * factor,
+                [255, 0, 255, 255],
+            ))
         }
     }
 

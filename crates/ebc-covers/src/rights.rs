@@ -174,9 +174,10 @@ impl FromStr for RightsBasis {
             .find(|basis| {
                 let name = basis.as_str();
                 name.len() == wanted.len()
-                    && name.bytes().zip(wanted.bytes()).all(|(a, b)| {
-                        a == b.to_ascii_lowercase() || (a == b'_' && b == b'-')
-                    })
+                    && name
+                        .bytes()
+                        .zip(wanted.bytes())
+                        .all(|(a, b)| a == b.to_ascii_lowercase() || (a == b'_' && b == b'-'))
             })
             .ok_or_else(|| CoversError::UnknownRightsBasis(wanted.chars().take(64).collect()))
     }
@@ -328,7 +329,11 @@ impl PrintableCover {
     /// * [`CoversError::NotAnImage`] when the bytes are not a recognised image;
     /// * [`CoversError::Placeholder`] when they are a "no cover" placeholder
     ///   ([`crate::placeholder::assess`]).
-    pub fn new(bytes: Vec<u8>, basis: RightsBasis, origin: AssetOrigin) -> Result<Self, CoversError> {
+    pub fn new(
+        bytes: Vec<u8>,
+        basis: RightsBasis,
+        origin: AssetOrigin,
+    ) -> Result<Self, CoversError> {
         if basis == RightsBasis::None {
             return Err(CoversError::NoRightsBasis);
         }
@@ -408,7 +413,11 @@ mod tests {
             RightsBasis::ALL.into_iter().filter(|b| b.allows_professional_print()).collect();
         assert_eq!(
             allowed,
-            [RightsBasis::PrintLicence, RightsBasis::RightsHolderDeclared, RightsBasis::PublicDomain]
+            [
+                RightsBasis::PrintLicence,
+                RightsBasis::RightsHolderDeclared,
+                RightsBasis::PublicDomain
+            ]
         );
         for basis in RightsBasis::ALL {
             let gate = basis.gate(PrintRoute::ProfessionalOrder);
@@ -438,9 +447,8 @@ mod tests {
         assert!(private.requires(Condition::OneJacketPerGiftCode));
         assert!(private.requires(Condition::FeatureSwitchOn));
         assert!(home(RightsBasis::PublicDomain).requires(Condition::PublicDomainCountryTest));
-        let order = RightsBasis::RightsHolderDeclared
-            .gate(PrintRoute::ProfessionalOrder)
-            .expect("order");
+        let order =
+            RightsBasis::RightsHolderDeclared.gate(PrintRoute::ProfessionalOrder).expect("order");
         assert!(order.requires(Condition::DeclarantIdentified));
         assert!(!home(RightsBasis::RightsHolderDeclared).requires(Condition::DeclarantIdentified));
     }
@@ -480,7 +488,9 @@ mod tests {
             assert!(!origin.compatible_bases().is_empty());
         }
         assert!(
-            !AssetOrigin::OperatorDownload.compatible_bases().contains(&RightsBasis::UserPrivateCopy)
+            !AssetOrigin::OperatorDownload
+                .compatible_bases()
+                .contains(&RightsBasis::UserPrivateCopy)
         );
         assert!(!AssetOrigin::LocalFile.compatible_bases().contains(&RightsBasis::PrintLicence));
     }

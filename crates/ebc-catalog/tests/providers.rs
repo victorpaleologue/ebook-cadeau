@@ -836,3 +836,47 @@ fn every_provider_reports_rate_limits_outages_and_wrong_formats() {
         }
     }
 }
+
+// ---------------------------------------------------------------------------------------
+// Documentation
+// ---------------------------------------------------------------------------------------
+
+/// The provider table of the crate README must say what `ProviderInfo` says.
+#[test]
+fn readme_table_matches_provider_info() {
+    let readme = std::fs::read_to_string(concat!(env!("CARGO_MANIFEST_DIR"), "/README.md"))
+        .expect("README.md");
+    for info in ebc_catalog::provider_infos() {
+        let id = info.id;
+        let row = readme
+            .lines()
+            .find(|line| line.starts_with(&format!("| `{id}` |")))
+            .unwrap_or_else(|| panic!("{id}: no row in the README table"));
+        let cells: Vec<String> = row.split('|').map(|cell| cell.trim().replace("**", "")).collect();
+        assert_eq!(cells.len(), 12, "{id}: {row}");
+        let class = match info.class {
+            ebc_catalog::SourceClass::Open => "A",
+            ebc_catalog::SourceClass::TermsBound => "B",
+            ebc_catalog::SourceClass::Contract => "C",
+        };
+        assert_eq!(cells[4], class, "{id}: class");
+        assert_eq!(cells[5], info.data_licence, "{id}: licence");
+        assert_eq!(cells[6], info.terms_url, "{id}: terms URL");
+        assert_eq!(cells[7].starts_with("yes"), info.requires_key, "{id}: key");
+        assert!(
+            cells[8].starts_with(&format!("{} s", info.min_interval_ms / 1000)),
+            "{id}: interval {}",
+            cells[8]
+        );
+        assert_eq!(cells[9].starts_with("yes"), info.browser_cors, "{id}: CORS");
+        let on = match (info.default_enabled, info.requires_key) {
+            (true, false) => "yes",
+            (true, true) => "only with a key",
+            (false, _) => "no",
+        };
+        assert_eq!(cells[10], on, "{id}: on by default");
+        for host in info.hosts.iter().take(1) {
+            assert!(cells[3].contains(host), "{id}: the endpoint cell names {host}");
+        }
+    }
+}

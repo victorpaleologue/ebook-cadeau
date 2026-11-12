@@ -163,7 +163,14 @@ pub fn print_quality_with(info: &ImageInfo, target_mm: Size, thresholds: &Thresh
     };
     let target_px =
         if upscale_factor > 1.0 { (scaled(w_px), scaled(h_px)) } else { (info.width, info.height) };
-    Quality { effective_ppi, verdict, upscale_factor, placed_mm, target_px, thresholds: *thresholds }
+    Quality {
+        effective_ppi,
+        verdict,
+        upscale_factor,
+        placed_mm,
+        target_px,
+        thresholds: *thresholds,
+    }
 }
 
 #[cfg(test)]
@@ -245,7 +252,10 @@ mod tests {
     #[test]
     fn home_thresholds_are_more_tolerant() {
         let info = ImageInfo::new(Format::Jpeg, 800, 1224);
-        assert_eq!(print_quality_with(&info, POCHE, &Thresholds::HOME).verdict, Verdict::Acceptable);
+        assert_eq!(
+            print_quality_with(&info, POCHE, &Thresholds::HOME).verdict,
+            Verdict::Acceptable
+        );
         assert_eq!(print_quality(&info, POCHE).verdict, Verdict::Low);
         assert_eq!(Thresholds::default(), Thresholds::PROFESSIONAL);
     }

@@ -23,10 +23,11 @@ fn redirect_delivery() -> serde_json::Value {
     json!({ "type": "reseller_redirect", "url": STORE_URL })
 }
 
+/// What a store sends, absent values included (empty strings, as the demo stores do).
 fn gift_body(order_ref: &str) -> serde_json::Value {
     json!({
         "order_ref": order_ref,
-        "book": { "title": "Madame Bovary", "contributors": [{"name": "Gustave Flaubert"}] },
+        "book": { "title": "Madame Bovary", "isbn13": "", "contributors": [{"name": "Gustave Flaubert"}], "publisher": "", "language": "fr" },
         "giver_name": "Camille", "recipient_name": "Sacha", "message": "", "locale": "fr",
         "delivery": redirect_delivery(),
     })

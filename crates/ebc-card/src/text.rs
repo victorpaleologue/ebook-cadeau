@@ -179,7 +179,8 @@ pub(crate) fn layout(
     max_height: f64,
     spec: &ParaSpec,
 ) -> Para {
-    if text.trim().is_empty() || !(width > 0.0) || spec.max_lines == 0 {
+    let usable = width.is_finite() && width > 0.0;
+    if text.trim().is_empty() || !usable || spec.max_lines == 0 {
         return Para::empty();
     }
     let min_pt = spec.min_pt.max(1.0);

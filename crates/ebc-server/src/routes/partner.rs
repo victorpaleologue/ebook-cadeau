@@ -269,7 +269,7 @@ pub(crate) async fn create(State(state): State<AppState>, request: Request) -> R
         Err(error) => return error.into_response(),
     };
     idempotent(&state, &authed, || async {
-        let request: GiftRequest = parse_json(&authed.body)?;
+        let request = GiftRequest::parse(&authed.body)?;
         let created = state.create_gift(request, Some(&authed.partner))?;
         let mut members = code_members(&state, &created.code);
         members.insert("id".to_owned(), created.record.id.clone().into());

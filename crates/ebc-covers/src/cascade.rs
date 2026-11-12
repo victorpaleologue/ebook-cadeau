@@ -512,7 +512,8 @@ impl CoverCandidate {
         if response.content_type().is_some_and(|t| t.starts_with("text/")) {
             return false;
         }
-        let announced = response.header("content-length").and_then(|v| v.trim().parse::<u64>().ok());
+        let announced =
+            response.header("content-length").and_then(|v| v.trim().parse::<u64>().ok());
         if self.source == "bnf"
             && announced.is_some_and(crate::placeholder::is_bnf_placeholder_length)
         {
@@ -523,7 +524,8 @@ impl CoverCandidate {
         }
         match crate::sniff::probe(&response.body) {
             Some(info) => {
-                !crate::placeholder::assess_for_source(self.source, &info, &response.body).is_placeholder()
+                !crate::placeholder::assess_for_source(self.source, &info, &response.body)
+                    .is_placeholder()
             }
             None => false,
         }
@@ -566,7 +568,11 @@ impl OptOutList {
         };
         let name_listed = |name: &str| {
             let name = name.trim();
-            !name.is_empty() && self.publishers.iter().any(|p| p.trim().eq_ignore_ascii_case(name) || p.trim().to_lowercase() == name.to_lowercase())
+            !name.is_empty()
+                && self.publishers.iter().any(|p| {
+                    p.trim().eq_ignore_ascii_case(name)
+                        || p.trim().to_lowercase() == name.to_lowercase()
+                })
         };
         book.isbn13.as_ref().is_some_and(isbn_listed)
             || book.related_isbns.iter().any(isbn_listed)
@@ -648,9 +654,15 @@ impl Default for Policy {
         Self {
             mode: Mode::Standalone,
             max_risk: Risk::Medium,
-            allowed_sources: ["reseller_feed", "openlibrary", "googlebooks", "publisher_page", "reference"]
-                .map(String::from)
-                .to_vec(),
+            allowed_sources: [
+                "reseller_feed",
+                "openlibrary",
+                "googlebooks",
+                "publisher_page",
+                "reference",
+            ]
+            .map(String::from)
+            .to_vec(),
             user_agent: DEFAULT_USER_AGENT.to_owned(),
             obey_robots: true,
             per_host_delay_ms: 5000,
@@ -707,7 +719,9 @@ impl Policy {
             }
             SourceStatus::ContractOnly | SourceStatus::Never => false,
         };
-        status_ok && info.preview_risk <= self.max_risk && self.allowed_sources.iter().any(|s| s == id)
+        status_ok
+            && info.preview_risk <= self.max_risk
+            && self.allowed_sources.iter().any(|s| s == id)
     }
 
     /// `true` when downloads may be described: an operator rights basis other than
@@ -807,11 +821,16 @@ impl Policy {
     #[must_use]
     pub fn tdmrep_request(&self, url: &str) -> Option<HttpRequest> {
         let parsed = guard::check_url(url).ok()?;
-        Some(self.get(&format!("{}/.well-known/tdmrep.json", guard::origin_of(&parsed)), "application/json"))
+        Some(self.get(
+            &format!("{}/.well-known/tdmrep.json", guard::origin_of(&parsed)),
+            "application/json",
+        ))
     }
 
     fn get(&self, url: &str, accept: &str) -> HttpRequest {
-        HttpRequest::get(url).with_header("User-Agent", self.user_agent.clone()).with_header("Accept", accept)
+        HttpRequest::get(url)
+            .with_header("User-Agent", self.user_agent.clone())
+            .with_header("Accept", accept)
     }
 
     fn head(&self, url: &str) -> HttpRequest {
@@ -852,7 +871,11 @@ impl OpenLibrarySize {
 /// cover is a 404 and not a placeholder image.
 #[must_use]
 pub fn openlibrary_isbn_image_url(isbn: &Isbn13, size: OpenLibrarySize) -> String {
-    format!("https://covers.openlibrary.org/b/isbn/{}{}.jpg?default=false", isbn.to_plain(), size.suffix())
+    format!(
+        "https://covers.openlibrary.org/b/isbn/{}{}.jpg?default=false",
+        isbn.to_plain(),
+        size.suffix()
+    )
 }
 
 /// Open Library cover facts by ISBN: redirects to the id record, whose JSON holds
@@ -874,7 +897,9 @@ pub fn openlibrary_id_image_url(cover_id: u64, size: OpenLibrarySize) -> String 
 #[must_use]
 pub fn openlibrary_cover_id(url: &str) -> Option<u64> {
     let parsed = Url::parse(url.trim()).ok()?;
-    if !matches!(parsed.scheme(), "http" | "https") || parsed.host_str() != Some("covers.openlibrary.org") {
+    if !matches!(parsed.scheme(), "http" | "https")
+        || parsed.host_str() != Some("covers.openlibrary.org")
+    {
         return None;
     }
     let rest = parsed.path().strip_prefix("/b/id/")?;
@@ -1012,7 +1037,8 @@ impl Builder<'_> {
         min_interval_ms: u32,
     ) {
         let info = builtin(source_id);
-        let risk = if role == CandidateRole::Download { info.store_risk } else { info.preview_risk };
+        let risk =
+            if role == CandidateRole::Download { info.store_risk } else { info.preview_risk };
         if risk > self.policy.max_risk {
             return;
         }
@@ -1021,7 +1047,9 @@ impl Builder<'_> {
         {
             return;
         }
-        if self.out.iter().any(|c| c.role == role && c.request.url == request.url && c.request.method == request.method) {
+        if self.out.iter().any(|c| {
+            c.role == role && c.request.url == request.url && c.request.method == request.method
+        }) {
             return;
         }
         self.out.push(CoverCandidate {
@@ -1059,10 +1087,30 @@ impl Builder<'_> {
                 if policy.allows_source("googlebooks") && guard::check_url(&thumbnail).is_ok() {
                     let interval = builtin("googlebooks").min_interval_ms;
                     let request = policy.get(&thumbnail, "image/*");
-                    self.push("googlebooks", CandidateRole::Preview, request, cover.kind, NOTE_GOOGLE_PREVIEW, None, false, declared, interval);
+                    self.push(
+                        "googlebooks",
+                        CandidateRole::Preview,
+                        request,
+                        cover.kind,
+                        NOTE_GOOGLE_PREVIEW,
+                        None,
+                        false,
+                        declared,
+                        interval,
+                    );
                     if let Some(larger) = google_books_image_url(&thumbnail, Some(0)) {
                         let request = policy.get(&larger, "image/*");
-                        self.push("googlebooks", CandidateRole::Link, request, cover.kind, NOTE_GOOGLE_LINK, None, false, None, interval);
+                        self.push(
+                            "googlebooks",
+                            CandidateRole::Link,
+                            request,
+                            cover.kind,
+                            NOTE_GOOGLE_LINK,
+                            None,
+                            false,
+                            None,
+                            interval,
+                        );
                     }
                 }
                 continue;
@@ -1073,7 +1121,17 @@ impl Builder<'_> {
             }
             if policy.allows_source("reference") {
                 let request = policy.get(url.as_str(), "image/*");
-                self.push("reference", CandidateRole::Link, request, cover.kind, NOTE_REFERENCE, None, false, declared, policy.per_host_delay_ms);
+                self.push(
+                    "reference",
+                    CandidateRole::Link,
+                    request,
+                    cover.kind,
+                    NOTE_REFERENCE,
+                    None,
+                    false,
+                    declared,
+                    policy.per_host_delay_ms,
+                );
             }
         }
     }
@@ -1113,7 +1171,17 @@ impl Builder<'_> {
         ];
         for (role, size, note) in steps {
             let request = policy.get(&openlibrary_isbn_image_url(isbn, size), "image/*");
-            self.push("openlibrary", role, request, CoverKind::Front, note, Some(*isbn), other_edition, None, interval);
+            self.push(
+                "openlibrary",
+                role,
+                request,
+                CoverKind::Front,
+                note,
+                Some(*isbn),
+                other_edition,
+                None,
+                interval,
+            );
         }
     }
 
@@ -1155,15 +1223,45 @@ impl Builder<'_> {
             .flatten();
         match known_ark.as_deref().and_then(bnf_cover_url) {
             Some(cover_url) => {
-                self.push("bnf", CandidateRole::Probe, policy.head(&cover_url), CoverKind::Front, NOTE_BNF_PROBE, Some(*isbn), other_edition, None, interval);
-                self.push("bnf", CandidateRole::Link, policy.get(&cover_url, "image/*"), CoverKind::Front, NOTE_BNF_LINK, Some(*isbn), other_edition, None, interval);
+                self.push(
+                    "bnf",
+                    CandidateRole::Probe,
+                    policy.head(&cover_url),
+                    CoverKind::Front,
+                    NOTE_BNF_PROBE,
+                    Some(*isbn),
+                    other_edition,
+                    None,
+                    interval,
+                );
+                self.push(
+                    "bnf",
+                    CandidateRole::Link,
+                    policy.get(&cover_url, "image/*"),
+                    CoverKind::Front,
+                    NOTE_BNF_LINK,
+                    Some(*isbn),
+                    other_edition,
+                    None,
+                    interval,
+                );
             }
             None => {
                 let url = format!(
                     "https://catalogue.bnf.fr/api/SRU?version=1.2&operation=searchRetrieve&query=bib.isbn%20all%20%22{}%22&recordSchema=dublincore&maximumRecords=1",
                     isbn.to_plain()
                 );
-                self.push("bnf", CandidateRole::Locate, policy.get(&url, "application/xml"), CoverKind::Front, NOTE_BNF_LOCATE, Some(*isbn), other_edition, None, interval);
+                self.push(
+                    "bnf",
+                    CandidateRole::Locate,
+                    policy.get(&url, "application/xml"),
+                    CoverKind::Front,
+                    NOTE_BNF_LOCATE,
+                    Some(*isbn),
+                    other_edition,
+                    None,
+                    interval,
+                );
             }
         }
     }
@@ -1175,8 +1273,28 @@ impl Builder<'_> {
         let policy = self.policy;
         let interval = builtin("dnb").min_interval_ms;
         let url = format!("https://portal.dnb.de/opac/mvb/cover?isbn={}", isbn.to_plain());
-        self.push("dnb", CandidateRole::Probe, policy.head(&url), CoverKind::Front, NOTE_DNB_PROBE, Some(*isbn), other_edition, None, interval);
-        self.push("dnb", CandidateRole::Link, policy.get(&url, "image/*"), CoverKind::Front, NOTE_DNB_LINK, Some(*isbn), other_edition, None, interval);
+        self.push(
+            "dnb",
+            CandidateRole::Probe,
+            policy.head(&url),
+            CoverKind::Front,
+            NOTE_DNB_PROBE,
+            Some(*isbn),
+            other_edition,
+            None,
+            interval,
+        );
+        self.push(
+            "dnb",
+            CandidateRole::Link,
+            policy.get(&url, "image/*"),
+            CoverKind::Front,
+            NOTE_DNB_LINK,
+            Some(*isbn),
+            other_edition,
+            None,
+            interval,
+        );
     }
 }
 
@@ -1226,7 +1344,17 @@ pub fn candidates(book: &BookMeta, policy: &Policy) -> Vec<CoverCandidate> {
                     continue;
                 }
                 let request = policy.get(url.as_str(), "image/*");
-                builder.push("reseller_feed", CandidateRole::Link, request, cover.kind, NOTE_FEED, None, false, Builder::declared(cover), 0);
+                builder.push(
+                    "reseller_feed",
+                    CandidateRole::Link,
+                    request,
+                    cover.kind,
+                    NOTE_FEED,
+                    None,
+                    false,
+                    Builder::declared(cover),
+                    0,
+                );
             }
         }
         return builder.out;
@@ -1317,7 +1445,11 @@ pub fn page_candidate(url: &str, policy: &Policy) -> Result<CoverCandidate, Cove
 /// when it states neither ([`crate::scrape::IsbnMatch::NotFound`]) the caller should
 /// flag the result "ISBN not found on page" before showing anything.
 #[must_use]
-pub fn page_image_candidates(page: &PageInfo, book: &BookMeta, policy: &Policy) -> Vec<CoverCandidate> {
+pub fn page_image_candidates(
+    page: &PageInfo,
+    book: &BookMeta,
+    policy: &Policy,
+) -> Vec<CoverCandidate> {
     if policy.mode == Mode::Reseller
         || !policy.allows_source("publisher_page")
         || policy.opt_out.blocks_book(book)
@@ -1333,9 +1465,21 @@ pub fn page_image_candidates(page: &PageInfo, book: &BookMeta, policy: &Policy) 
             continue;
         }
         let declared = image.width.zip(image.height);
-        for (role, note) in [(CandidateRole::Link, NOTE_PAGE_IMAGE), (CandidateRole::Download, NOTE_PAGE_DOWNLOAD)] {
+        for (role, note) in
+            [(CandidateRole::Link, NOTE_PAGE_IMAGE), (CandidateRole::Download, NOTE_PAGE_DOWNLOAD)]
+        {
             let request = policy.get(url.as_str(), "image/*");
-            builder.push("publisher_page", role, request, CoverKind::Front, note, book.isbn13, other_edition, declared, interval);
+            builder.push(
+                "publisher_page",
+                role,
+                request,
+                CoverKind::Front,
+                note,
+                book.isbn13,
+                other_edition,
+                declared,
+                interval,
+            );
         }
     }
     builder.out

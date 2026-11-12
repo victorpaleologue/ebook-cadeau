@@ -15,7 +15,12 @@ use jpeg_encoder::ColorType;
 fn image_corpus() -> Vec<(&'static str, Vec<u8>)> {
     let mut exif = b"Exif\0\0".to_vec();
     exif.extend(tiff_orientation(6, true));
-    let props = vec![ispe(160, 240), full(b"pixi", 0, 0, &[3, 8, 8, 8]), ispe(1200, 1800), bx(b"irot", &[3])];
+    let props = vec![
+        ispe(160, 240),
+        full(b"pixi", 0, 0, &[3, 8, 8, 8]),
+        ispe(1200, 1800),
+        bx(b"irot", &[3]),
+    ];
     vec![
         ("png", png_rgb(37, 53)),
         ("png-rgba", png_rgba(9, 11)),
@@ -23,9 +28,27 @@ fn image_corpus() -> Vec<(&'static str, Vec<u8>)> {
         ("gif-animated", gif_animated(16, 16)),
         ("webp-lossless", webp_lossless(33, 47)),
         ("webp-lossy", riff_webp(&[(b"VP8 ", vp8_frame_header(550, 368, 1))])),
-        ("webp-extended", riff_webp(&[(b"VP8X", vp8x_payload(0x1A, 640, 960)), (b"ALPH", vec![1; 7]), (b"EXIF", exif)])),
+        (
+            "webp-extended",
+            riff_webp(&[
+                (b"VP8X", vp8x_payload(0x1A, 640, 960)),
+                (b"ALPH", vec![1; 7]),
+                (b"EXIF", exif),
+            ]),
+        ),
         ("jpeg", jpeg_baseline(48, 64)),
-        ("jpeg-progressive", jpeg_custom(40, 30, ColorType::Rgb, true, Some(2), Some(&tiff_orientation(8, false)), 300)),
+        (
+            "jpeg-progressive",
+            jpeg_custom(
+                40,
+                30,
+                ColorType::Rgb,
+                true,
+                Some(2),
+                Some(&tiff_orientation(8, false)),
+                300,
+            ),
+        ),
         ("jpeg-cmyk", jpeg_custom(24, 24, ColorType::Cmyk, false, None, None, 0)),
         ("avif", bmff(&[b"avif", b"mif1"], &props, &[3, 2, 4])),
         ("heic", bmff(&[b"heic"], &props, &[])),
@@ -42,7 +65,11 @@ fn poke(bytes: &[u8]) {
         let _ = assess_for_source("bnf", &info, bytes);
     }
     let _ = assess_bytes(bytes);
-    let _ = PrintableCover::new(bytes.to_vec(), RightsBasis::RightsHolderDeclared, AssetOrigin::LocalFile);
+    let _ = PrintableCover::new(
+        bytes.to_vec(),
+        RightsBasis::RightsHolderDeclared,
+        AssetOrigin::LocalFile,
+    );
 }
 
 #[test]
@@ -146,10 +173,16 @@ fn probe_survives_random_bytes_behind_every_magic_number() {
 }
 
 fn pages() -> Vec<String> {
-    ["publisher_jsonld_book", "publisher_graph_imageobject", "bookseller_product", "malformed", "hostile"]
-        .iter()
-        .map(|name| fixture(&format!("pages/{name}.html")))
-        .collect()
+    [
+        "publisher_jsonld_book",
+        "publisher_graph_imageobject",
+        "bookseller_product",
+        "malformed",
+        "hostile",
+    ]
+    .iter()
+    .map(|name| fixture(&format!("pages/{name}.html")))
+    .collect()
 }
 
 #[test]
@@ -170,7 +203,8 @@ fn extract_survives_truncation_at_every_offset() {
         }
         // And from the other end.
         for skip in (0..bytes.len()).step_by(3) {
-            let _ = extract(&String::from_utf8_lossy(&bytes[skip..]), "https://www.editeur.example/");
+            let _ =
+                extract(&String::from_utf8_lossy(&bytes[skip..]), "https://www.editeur.example/");
         }
     }
 }
@@ -186,12 +220,73 @@ fn extract_survives_random_input() {
     }
     // Random soup of the tokens the scanner cares about.
     let tokens = [
-        "<", ">", "</", "/>", "<!--", "-->", "<!", "<?", "=", "\"", "'", " ", "\n", "&", ";", "&amp;", "&#x", "&#",
-        "<meta ", "<link ", "<base ", "<img ", "<a ", "<script", "</script>", "<style>", "</style", "<title>", "</title>",
-        "property", "name", "content", "href", "rel", "itemprop", "image", "og:image", "og:image:width", "twitter:image",
-        "image_src", "type", "application/ld+json", "{", "}", "[", "]", ":", ",", "\\", "@type", "Book", "@graph",
-        "isbn", "9782999900011", "978-2-9999-0001-1", "https://", "//", "..", "/", "é", "\u{202e}", "\0", "\u{feff}",
-        "tdm-reservation", "robots", "noai", "1",
+        "<",
+        ">",
+        "</",
+        "/>",
+        "<!--",
+        "-->",
+        "<!",
+        "<?",
+        "=",
+        "\"",
+        "'",
+        " ",
+        "\n",
+        "&",
+        ";",
+        "&amp;",
+        "&#x",
+        "&#",
+        "<meta ",
+        "<link ",
+        "<base ",
+        "<img ",
+        "<a ",
+        "<script",
+        "</script>",
+        "<style>",
+        "</style",
+        "<title>",
+        "</title>",
+        "property",
+        "name",
+        "content",
+        "href",
+        "rel",
+        "itemprop",
+        "image",
+        "og:image",
+        "og:image:width",
+        "twitter:image",
+        "image_src",
+        "type",
+        "application/ld+json",
+        "{",
+        "}",
+        "[",
+        "]",
+        ":",
+        ",",
+        "\\",
+        "@type",
+        "Book",
+        "@graph",
+        "isbn",
+        "9782999900011",
+        "978-2-9999-0001-1",
+        "https://",
+        "//",
+        "..",
+        "/",
+        "é",
+        "\u{202e}",
+        "\0",
+        "\u{feff}",
+        "tdm-reservation",
+        "robots",
+        "noai",
+        "1",
     ];
     for round in 0..3000 {
         let mut html = String::new();

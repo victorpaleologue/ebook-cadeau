@@ -147,6 +147,14 @@ impl Condition {
         self.name = name.into();
         self
     }
+
+    /// A number that identifies how covers are drawn — everything but the name and
+    /// whether the title is given, so that two conditions that differ only in what the
+    /// pipeline is told are measured on the same covers.
+    fn drawing_key(&self) -> u64 {
+        let recipe = Self { name: String::new(), with_text: true, ..self.clone() };
+        hash(&format!("{recipe:?}"))
+    }
 }
 
 /// The conditions of the standard table: clean, typical, hard, then one factor at a
@@ -351,7 +359,8 @@ fn make_case(
 ) -> Option<Case> {
     let n = fonts.len();
     let font = i % n;
-    let mut rng = Rng::new(opts.seed ^ (i as u64).wrapping_mul(0x9e37_79b9) ^ hash(&condition.name));
+    let mut rng =
+        Rng::new(opts.seed ^ (i as u64).wrapping_mul(0x9e37_79b9) ^ condition.drawing_key());
     let (_, title_font) = &fonts[font];
     let (_, author_font) = &fonts[(font + 1 + rng.below(n.max(2) - 1)) % n];
     // A title the font can draw.

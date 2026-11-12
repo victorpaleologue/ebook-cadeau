@@ -318,8 +318,7 @@ fn le24(b: &[u8], at: usize) -> Option<u32> {
 }
 
 fn be64(b: &[u8], at: usize) -> Option<u64> {
-    slice(b, at, 8)
-        .map(|s| u64::from_be_bytes([s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7]]))
+    slice(b, at, 8).map(|s| u64::from_be_bytes([s[0], s[1], s[2], s[3], s[4], s[5], s[6], s[7]]))
 }
 
 // ------------------------------------------------------------------------------------
@@ -739,7 +738,9 @@ fn probe_bmff(b: &[u8]) -> Option<Details> {
                         (Some(w), Some(h)) if p.start + 12 <= p.end => Property::Size(w, h),
                         _ => Property::Other,
                     },
-                    b"irot" => u8_at(b, p.start).map_or(Property::Other, |v| Property::Rotation(v & 3)),
+                    b"irot" => {
+                        u8_at(b, p.start).map_or(Property::Other, |v| Property::Rotation(v & 3))
+                    }
                     b"pixi" => u8_at(b, p.start + 5).map_or(Property::Other, Property::Depth),
                     b"auxC" => {
                         let urn = b.get(p.start + 4..p.end).unwrap_or_default();

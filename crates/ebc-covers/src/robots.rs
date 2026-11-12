@@ -125,8 +125,23 @@ const fn is_unreserved(b: u8) -> bool {
 const fn is_reserved(b: u8) -> bool {
     matches!(
         b,
-        b':' | b'/' | b'?' | b'#' | b'[' | b']' | b'@' | b'!' | b'$' | b'&' | b'\'' | b'(' | b')'
-            | b'*' | b'+' | b',' | b';' | b'='
+        b':' | b'/'
+            | b'?'
+            | b'#'
+            | b'['
+            | b']'
+            | b'@'
+            | b'!'
+            | b'$'
+            | b'&'
+            | b'\''
+            | b'('
+            | b')'
+            | b'*'
+            | b'+'
+            | b','
+            | b';'
+            | b'='
     )
 }
 
@@ -321,7 +336,8 @@ impl Robots {
                     if delay_agents.is_empty() {
                         continue;
                     }
-                    if let Some(seconds) = value.parse::<f32>().ok().filter(|s| s.is_finite() && *s >= 0.0)
+                    if let Some(seconds) =
+                        value.parse::<f32>().ok().filter(|s| s.is_finite() && *s >= 0.0)
                     {
                         out.delays.push((delay_agents.clone(), seconds));
                     }
@@ -420,8 +436,7 @@ impl Robots {
     #[must_use]
     pub fn crawl_delay(&self, user_agent: &str) -> Option<f32> {
         let token = product_token(user_agent);
-        let specific =
-            !token.is_empty() && self.groups.iter().any(|g| g.agents.contains(&token));
+        let specific = !token.is_empty() && self.groups.iter().any(|g| g.agents.contains(&token));
         let wanted = if specific { token.as_str() } else { "*" };
         self.delays
             .iter()
@@ -515,7 +530,9 @@ EOF
         assert_eq!(normalise("/foo/bar/%e3%83%84", false, 9999), "/foo/bar/%E3%83%84");
         assert_eq!(normalise("/foo/bar/%62%61%7A", false, 9999), "/foo/bar/baz");
 
-        let r = Robots::parse("User-agent: *\nDisallow: /foo/bar/\u{30C4}\nDisallow: /caf%c3%a9\nDisallow: /b%61z\n");
+        let r = Robots::parse(
+            "User-agent: *\nDisallow: /foo/bar/\u{30C4}\nDisallow: /caf%c3%a9\nDisallow: /b%61z\n",
+        );
         assert!(!r.allowed("x", "/foo/bar/%E3%83%84"));
         assert!(!r.allowed("x", "/foo/bar/\u{30C4}/more"));
         assert!(!r.allowed("x", "/caf\u{e9}"));
@@ -550,12 +567,25 @@ EOF
         let cases: [(&str, &[&str], &[&str]); 7] = [
             (
                 "/fish",
-                &["/fish", "/fish.html", "/fish/salmon.html", "/fishheads", "/fishheads/yummy.html", "/fish.php?id=anything"],
+                &[
+                    "/fish",
+                    "/fish.html",
+                    "/fish/salmon.html",
+                    "/fishheads",
+                    "/fishheads/yummy.html",
+                    "/fish.php?id=anything",
+                ],
                 &["/Fish.asp", "/catfish", "/?id=fish", "/desired-fish"],
             ),
             (
                 "/fish*",
-                &["/fish", "/fish.html", "/fish/salmon.html", "/fishheads", "/fish.php?id=anything"],
+                &[
+                    "/fish",
+                    "/fish.html",
+                    "/fish/salmon.html",
+                    "/fishheads",
+                    "/fish.php?id=anything",
+                ],
                 &["/Fish.asp", "/catfish", "/?id=fish", "/desired-fish"],
             ),
             (
@@ -565,7 +595,14 @@ EOF
             ),
             (
                 "/*.php",
-                &["/index.php", "/filename.php", "/folder/filename.php", "/folder/filename.php?parameters", "/folder/any.php.file.html", "/filename.php/"],
+                &[
+                    "/index.php",
+                    "/filename.php",
+                    "/folder/filename.php",
+                    "/folder/filename.php?parameters",
+                    "/folder/any.php.file.html",
+                    "/filename.php/",
+                ],
                 &["/", "/windows.PHP"],
             ),
             (
@@ -656,7 +693,9 @@ Disallow: /c
         // Misspelt Disallow still restricts.
         assert!(!Robots::parse("User-agent: *\nDisalow: /x\n").allowed("a", "/x"));
         // Unknown records do not split a group.
-        let r = Robots::parse("User-agent: a\nSitemap: https://example.org/s.xml\nUser-agent: b\nDisallow: /\n");
+        let r = Robots::parse(
+            "User-agent: a\nSitemap: https://example.org/s.xml\nUser-agent: b\nDisallow: /\n",
+        );
         assert!(!r.allowed("a", "/x"));
         assert!(!r.allowed("b", "/x"));
     }
@@ -673,7 +712,9 @@ Disallow: /c
         assert!(!r.allowed("a", "/x"));
         assert!(!r.allowed("b", "/x"));
         // Garbage values are ignored.
-        let r = Robots::parse("User-agent: *\nCrawl-delay: soon\nCrawl-delay: -3\nCrawl-delay: NaN\nCrawl-delay: inf\n");
+        let r = Robots::parse(
+            "User-agent: *\nCrawl-delay: soon\nCrawl-delay: -3\nCrawl-delay: NaN\nCrawl-delay: inf\n",
+        );
         assert_eq!(r.crawl_delay("x"), None);
         assert_eq!(Robots::parse("Crawl-delay: 3\n").crawl_delay("x"), None);
         // A specific group without a delay does not inherit the * delay.
@@ -699,7 +740,10 @@ Disallow: /c
         assert!(!Robots::unreachable().allowed("x", "/"));
         assert!(Robots::allow_all().allowed("x", "/"));
         // Invalid UTF-8 does not prevent parsing.
-        let r = Robots::from_response(200, b"User-agent: *\nDisallow: /caf\xE9\n\xFF\xFE\nDisallow: /b\n");
+        let r = Robots::from_response(
+            200,
+            b"User-agent: *\nDisallow: /caf\xE9\n\xFF\xFE\nDisallow: /b\n",
+        );
         assert!(!r.allowed("x", "/b"));
     }
 
@@ -735,7 +779,9 @@ Disallow: /c
     fn garbage_never_panics() {
         let mut seed = 0x2545_F491_4F6C_DD1Du64;
         let alphabet: Vec<char> =
-            "User-agent:DisallowAllow*$/%#\n\r :\u{e9}\u{30C4}\0abc123crawl-delay.".chars().collect();
+            "User-agent:DisallowAllow*$/%#\n\r :\u{e9}\u{30C4}\0abc123crawl-delay."
+                .chars()
+                .collect();
         for round in 0..300 {
             let mut txt = String::new();
             for _ in 0..(round * 7 % 400) {

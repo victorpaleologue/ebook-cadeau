@@ -32,7 +32,7 @@
 //! * [`robots`] — RFC 9309 parser and matcher; [`tdm`] — TDMRep opt-out signals;
 //! * [`sniff`] — header-only format and pixel-size probing;
 //! * [`placeholder`] — "no cover available" detection;
-//! * [`quality`] — print-quality rating; [`upscale`] — Lanczos-3 resampling.
+//! * [`quality`] — print-quality rating; [`mod@upscale`] — Lanczos-3 resampling.
 //!
 //! Nothing here was checked against the live services: URL grammars come from the
 //! research (source code of the services and of library systems), terms and quotas are
@@ -59,7 +59,9 @@ pub use ebc_model::CoverKind;
 pub use guard::{Refusal, check_url, is_denied_host, is_public_ip};
 pub use placeholder::{Assessment, is_placeholder, is_placeholder_pixels};
 pub use quality::{Quality, Thresholds, Verdict, print_quality, print_quality_with};
-pub use rights::{AssetOrigin, Condition, Grant, Placement, PrintRoute, PrintableCover, RightsBasis};
+pub use rights::{
+    AssetOrigin, Condition, Grant, Placement, PrintRoute, PrintableCover, RightsBasis,
+};
 pub use sniff::{Format, ImageInfo, probe};
 pub use upscale::{UnsharpMask, UpscaleOptions, upscale, upscale_by};
 

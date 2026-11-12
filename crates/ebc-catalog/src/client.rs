@@ -5,7 +5,7 @@
 //!
 //! What it adds to a bare HTTP client, following the research's "network etiquette":
 //!
-//! * one `User-Agent` on every request ([`DEFAULT_USER_AGENT`](crate::DEFAULT_USER_AGENT)
+//! * one `User-Agent` on every request ([`DEFAULT_USER_AGENT`]
 //!   unless configured);
 //! * a minimum interval between two requests to the same host, taken from
 //!   [`ProviderInfo::min_interval_ms`](crate::ProviderInfo::min_interval_ms);

@@ -119,12 +119,12 @@ impl TdmRep {
     }
 }
 
-fn header<'a>(headers: &'a [(String, String)], name: &str) -> impl Iterator<Item = &'a str> + use<'a> {
+fn header<'a>(
+    headers: &'a [(String, String)],
+    name: &str,
+) -> impl Iterator<Item = &'a str> + use<'a> {
     let name = name.to_ascii_lowercase();
-    headers
-        .iter()
-        .filter(move |(n, _)| n.eq_ignore_ascii_case(&name))
-        .map(|(_, v)| v.as_str())
+    headers.iter().filter(move |(n, _)| n.eq_ignore_ascii_case(&name)).map(|(_, v)| v.as_str())
 }
 
 /// The `tdm-reservation` response header, if present with a valid value.

@@ -271,7 +271,7 @@ fn embeddable_jpeg_components(data: &[u8]) -> Option<u8> {
         pos += 1;
         match marker {
             0x01 | 0xD0..=0xD7 => continue,
-            0xD8 | 0xD9 | 0xDA => return None,
+            0xD8..=0xDA => return None,
             _ => {}
         }
         let length = usize::from(u16::from_be_bytes([*data.get(pos)?, *data.get(pos + 1)?]));

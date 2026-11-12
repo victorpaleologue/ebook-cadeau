@@ -157,9 +157,16 @@ pub fn identify_detailed(
     let Some(prepared) = Prepared::new(img, region, known_text, index.centroids()) else {
         return Identification::empty();
     };
-    let distances = prepared.distances(index.entries().iter().map(|e| &*e.descriptor), index.centroids());
-    let mut out = prepared.identification();
-    out.matches = rank(index.entries(), &distances, prepared.labelling.is_some());
+    let scored =
+        prepared.score(index.entries().iter().map(|e| &*e.descriptor), index.centroids());
+    let mut out = prepared.identification(scored.labelled);
+    out.matches = index
+        .entries()
+        .iter()
+        .zip(&scored.scores)
+        .map(|(entry, &score)| Match { entry: entry.clone(), score })
+        .collect();
+    sort_matches(&mut out.matches);
     out.settle();
     out
 }
@@ -168,7 +175,16 @@ pub fn identify_detailed(
 pub(crate) struct Prepared {
     pub(crate) analysis: Analysis,
     pub(crate) obs: Observed,
-    pub(crate) labelling: Option<Labelling>,
+    /// The case hypotheses that fit, most plausible first.
+    pub(crate) labellings: Vec<Labelling>,
+}
+
+/// The descriptor scores of a list of faces.
+pub(crate) struct Scored {
+    /// One score per face, in the order given.
+    pub(crate) scores: Vec<f32>,
+    /// The scores come from labelled glyphs (else from the unlabelled fallback).
+    pub(crate) labelled: bool,
 }
 
 impl Prepared {
@@ -183,18 +199,18 @@ impl Prepared {
         if obs.glyphs.is_empty() {
             return None;
         }
-        let labelling = known_text.and_then(|text| label(&obs, text, centroids));
-        Some(Self { analysis, obs, labelling })
+        let labellings = known_text.map_or_else(Vec::new, |text| label(&obs, text, centroids));
+        Some(Self { analysis, obs, labellings })
     }
 
     /// An [`Identification`] with everything but the matches.
-    pub(crate) fn identification(&self) -> Identification {
+    pub(crate) fn identification(&self, labelled: bool) -> Identification {
         let mut out = Identification::empty();
         out.glyphs = self.analysis.tall_count();
         out.lines = self.analysis.lines.len();
         out.light_on_dark = self.analysis.light_on_dark;
         out.skew_degrees = self.analysis.skew_degrees;
-        if let Some(l) = &self.labelling {
+        if let (true, Some(l)) = (labelled, self.labellings.first()) {
             out.labelled_glyphs = l.labels.len();
             out.case_used = l.case;
             out.text_coverage = l.coverage;
@@ -202,37 +218,44 @@ impl Prepared {
         out
     }
 
-    /// The distance of every face to the glyphs (`None`: not comparable).
-    pub(crate) fn distances<'a>(
+    /// Scores every face.
+    ///
+    /// With labels, a face's distance is the smallest over the case hypotheses. The
+    /// unlabelled comparison is always run as well and wins when it explains some face
+    /// better than the labels explain any: labels that fit no font at all are more
+    /// likely wrong (touching letters that happen to add up) than right.
+    pub(crate) fn score<'a>(
         &self,
-        faces: impl Iterator<Item = &'a FaceDescriptor>,
+        faces: impl Iterator<Item = &'a FaceDescriptor> + Clone,
         centroids: &FaceDescriptor,
-    ) -> Vec<Option<f32>> {
-        match &self.labelling {
-            Some(l) => faces.map(|f| labelled_distance(&self.obs, &l.labels, f)).collect(),
-            None => {
-                let guesses = guess_characters(&self.obs, centroids);
-                faces.map(|f| unlabelled_distance(&self.obs, &guesses, f)).collect()
-            }
+    ) -> Scored {
+        let guesses = guess_characters(&self.obs, centroids);
+        let unlabelled: Vec<f32> = faces
+            .clone()
+            .map(|f| {
+                unlabelled_distance(&self.obs, &guesses, f)
+                    .map_or(0.0, |d| UNLABELLED_FACTOR * score_from_distance(d))
+            })
+            .collect();
+        if self.labellings.is_empty() {
+            return Scored { scores: unlabelled, labelled: false };
+        }
+        let labelled: Vec<f32> = faces
+            .map(|f| {
+                self.labellings
+                    .iter()
+                    .filter_map(|l| labelled_distance(&self.obs, &l.labels, f))
+                    .fold(None, |best: Option<f32>, d| Some(best.map_or(d, |b| b.min(d))))
+                    .map_or(0.0, score_from_distance)
+            })
+            .collect();
+        let top = |scores: &[f32]| scores.iter().copied().fold(0.0f32, f32::max);
+        if top(&labelled) >= top(&unlabelled) {
+            Scored { scores: labelled, labelled: true }
+        } else {
+            Scored { scores: unlabelled, labelled: false }
         }
     }
-}
-
-/// Turns distances into scores (same order).
-pub(crate) fn scores(distances: &[Option<f32>], labelled: bool) -> Vec<f32> {
-    let factor = if labelled { 1.0 } else { UNLABELLED_FACTOR };
-    distances.iter().map(|d| d.map_or(0.0, |d| factor * score_from_distance(d))).collect()
-}
-
-/// Turns distances into sorted matches.
-pub(crate) fn rank(entries: &[IndexEntry], distances: &[Option<f32>], labelled: bool) -> Vec<Match> {
-    let mut matches: Vec<Match> = entries
-        .iter()
-        .zip(scores(distances, labelled))
-        .map(|(entry, score)| Match { entry: entry.clone(), score })
-        .collect();
-    sort_matches(&mut matches);
-    matches
 }
 
 /// Sorts by decreasing score; ties keep the index order.

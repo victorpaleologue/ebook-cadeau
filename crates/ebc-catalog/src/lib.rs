@@ -30,8 +30,10 @@
 //!     Ok(HttpResponse {
 //!         status: 200,
 //!         headers: vec![],
-//!         body: br#"{"ISBN:9782070360024": {"details": {
-//!             "title": "L'étranger", "authors": [{"name": "Albert Camus"}]}}}"#.to_vec(),
+//!         body: r#"{"ISBN:9782070360024": {"details": {
+//!             "title": "L'étranger", "authors": [{"name": "Albert Camus"}]}}}"#
+//!             .as_bytes()
+//!             .to_vec(),
 //!         final_url: request.url.clone(),
 //!     })
 //! };

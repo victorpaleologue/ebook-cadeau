@@ -35,7 +35,10 @@ fn real_files_agree_with_a_full_decoder() {
 #[test]
 fn png_details() {
     let d = probe_details(&png_rgb(37, 53)).expect("png");
-    assert_eq!((d.bit_depth, d.channels, d.has_alpha, d.animated, d.progressive), (Some(8), Some(3), false, false, false));
+    assert_eq!(
+        (d.bit_depth, d.channels, d.has_alpha, d.animated, d.progressive),
+        (Some(8), Some(3), false, false, false)
+    );
     let d = probe_details(&png_rgba(5, 300)).expect("png");
     assert_eq!((d.channels, d.has_alpha), (Some(4), true));
     // The IHDR alone is enough.
@@ -54,13 +57,19 @@ fn gif_details() {
 #[test]
 fn jpeg_frame_types_and_components() {
     let baseline = probe_details(&jpeg_baseline(64, 48)).expect("jpeg");
-    assert_eq!((baseline.jpeg_sof, baseline.progressive, baseline.channels, baseline.bit_depth), (Some(0xC0), false, Some(3), Some(8)));
-    let progressive = probe_details(&jpeg_custom(123, 77, ColorType::Rgb, true, None, None, 0)).expect("jpeg");
+    assert_eq!(
+        (baseline.jpeg_sof, baseline.progressive, baseline.channels, baseline.bit_depth),
+        (Some(0xC0), false, Some(3), Some(8))
+    );
+    let progressive =
+        probe_details(&jpeg_custom(123, 77, ColorType::Rgb, true, None, None, 0)).expect("jpeg");
     assert_eq!((progressive.jpeg_sof, progressive.progressive), (Some(0xC2), true));
     assert_eq!((progressive.info.width, progressive.info.height), (123, 77));
-    let grey = probe_details(&jpeg_custom(31, 17, ColorType::Luma, false, Some(2), None, 0)).expect("jpeg");
+    let grey = probe_details(&jpeg_custom(31, 17, ColorType::Luma, false, Some(2), None, 0))
+        .expect("jpeg");
     assert_eq!(grey.channels, Some(1));
-    let cmyk = probe_details(&jpeg_custom(40, 60, ColorType::Cmyk, false, None, None, 0)).expect("jpeg");
+    let cmyk =
+        probe_details(&jpeg_custom(40, 60, ColorType::Cmyk, false, None, None, 0)).expect("jpeg");
     assert_eq!((cmyk.channels, cmyk.info.width, cmyk.info.height), (Some(4), 40, 60));
 }
 
@@ -73,10 +82,26 @@ fn jpeg_every_sof_marker_by_hand() {
         // A Huffman table (C4), a reserved JPG (C8) and an arithmetic-conditioning
         // segment (CC) that must not be read as frames, though their bytes look like one.
         for not_a_frame in [0xC4u8, 0xC8, 0xCC] {
-            j.extend_from_slice(&[0xFF, not_a_frame, 0x00, 0x0B, 8, 0x11, 0x11, 0x22, 0x22, 3, 0, 0, 0]);
+            j.extend_from_slice(&[
+                0xFF,
+                not_a_frame,
+                0x00,
+                0x0B,
+                8,
+                0x11,
+                0x11,
+                0x22,
+                0x22,
+                3,
+                0,
+                0,
+                0,
+            ]);
         }
         // Fill bytes before the marker are legal.
-        j.extend_from_slice(&[0xFF, 0xFF, 0xFF, 0xFF, marker, 0x00, 0x11, 12, 0x08, 0x36, 0x05, 0x13, 3]);
+        j.extend_from_slice(&[
+            0xFF, 0xFF, 0xFF, 0xFF, marker, 0x00, 0x11, 12, 0x08, 0x36, 0x05, 0x13, 3,
+        ]);
         j.extend_from_slice(&[1, 0x22, 0, 2, 0x11, 1, 3, 0x11, 1]);
         j.extend_from_slice(&[0xFF, 0xDA, 0x00, 0x08, 1, 1, 0, 0, 0x3F, 0]);
         let d = probe_details(&j).unwrap_or_else(|| panic!("SOF {marker:#X}"));
@@ -117,13 +142,18 @@ fn jpeg_exif_orientation() {
             assert_eq!((d.info.width, d.info.height), (300, 200));
             let displayed = d.oriented();
             let swapped = value >= 5;
-            assert_eq!((displayed.width, displayed.height), if swapped { (200, 300) } else { (300, 200) });
+            assert_eq!(
+                (displayed.width, displayed.height),
+                if swapped { (200, 300) } else { (300, 200) }
+            );
         }
     }
     // Garbage orientation values and a truncated EXIF block are ignored.
-    let odd = jpeg_custom(30, 20, ColorType::Rgb, false, None, Some(&tiff_orientation(77, true)), 0);
+    let odd =
+        jpeg_custom(30, 20, ColorType::Rgb, false, None, Some(&tiff_orientation(77, true)), 0);
     assert_eq!(probe_details(&odd).expect("jpeg").orientation, Orientation::Normal);
-    let cut = jpeg_custom(30, 20, ColorType::Rgb, false, None, Some(&tiff_orientation(6, true)[..20]), 0);
+    let cut =
+        jpeg_custom(30, 20, ColorType::Rgb, false, None, Some(&tiff_orientation(6, true)[..20]), 0);
     assert_eq!(probe_details(&cut).expect("jpeg").orientation, Orientation::Normal);
 }
 
@@ -132,7 +162,10 @@ fn webp_three_variants() {
     // Lossless, from a real encoder.
     let lossless = webp_lossless(33, 47);
     let d = probe_details(&lossless).expect("webp");
-    assert_eq!((d.info.format, d.info.width, d.info.height, d.webp), (Format::WebP, 33, 47, Some(WebpKind::Lossless)));
+    assert_eq!(
+        (d.info.format, d.info.width, d.info.height, d.webp),
+        (Format::WebP, 33, 47, Some(WebpKind::Lossless))
+    );
 
     // Lossy: 14-bit sizes; the two upper bits are the scaling factor and are masked.
     let lossy = riff_webp(&[(b"VP8 ", vp8_frame_header(550, 368, 0))]);

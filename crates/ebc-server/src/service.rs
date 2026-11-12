@@ -79,6 +79,27 @@ pub(crate) struct GiftRequest {
     pub(crate) expires_at: Option<i64>,
 }
 
+impl GiftRequest {
+    /// Parses a creation body: `400 invalid_json` for text that is not JSON, `422
+    /// invalid_request` for JSON that does not fit (missing member, invalid ISBN…).
+    ///
+    /// Empty strings in `book` (`"isbn13": ""`, `"publisher": ""`) mean "not known", as
+    /// stores serialise absent values that way; they are dropped rather than refused.
+    pub(crate) fn parse(body: &[u8]) -> Result<Self, ApiError> {
+        let mut value: serde_json::Value = serde_json::from_slice(body)
+            .map_err(|error| ApiError::bad_request("invalid_json", error.to_string()))?;
+        if let Some(book) = value.get_mut("book").and_then(serde_json::Value::as_object_mut) {
+            book.retain(|key, member| {
+                key == "title"
+                    || !(member.is_null()
+                        || member.as_str().is_some_and(|text| text.trim().is_empty()))
+            });
+        }
+        serde_json::from_value(value)
+            .map_err(|error| ApiError::unprocessable("invalid_request", error.to_string()))
+    }
+}
+
 /// A gift that was just created, with the secrets that exist only now.
 pub(crate) struct CreatedGift {
     pub(crate) record: GiftRecord,

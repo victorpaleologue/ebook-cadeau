@@ -31,7 +31,7 @@ impl Rng {
 pub(crate) fn busy_rgb(w: u32, h: u32) -> RgbImage {
     RgbImage::from_fn(w, h, |x, y| {
         let v = x.wrapping_mul(2_654_435_761).wrapping_add(y.wrapping_mul(40_503)) >> 7;
-        image::Rgb([(x * 7 + y * 13) as u8, (v >> 3) as u8, (x * 3 ^ y * 5) as u8])
+        image::Rgb([(x * 7 + y * 13) as u8, (v >> 3) as u8, ((x * 3) ^ (y * 5)) as u8])
     })
 }
 
@@ -101,7 +101,8 @@ pub(crate) fn jpeg_custom(
         jpeg_encoder::ColorType::Cmyk => 4,
         _ => 3,
     };
-    let data: Vec<u8> = (0..usize::from(w) * usize::from(h) * channels).map(|i| (i * 31 % 251) as u8).collect();
+    let data: Vec<u8> =
+        (0..usize::from(w) * usize::from(h) * channels).map(|i| (i * 31 % 251) as u8).collect();
     let mut out = Vec::new();
     {
         let mut encoder = jpeg_encoder::Encoder::new(&mut out, 80);
@@ -126,8 +127,12 @@ pub(crate) fn jpeg_custom(
 /// A TIFF block holding only the orientation tag, little- or big-endian.
 pub(crate) fn tiff_orientation(value: u16, little_endian: bool) -> Vec<u8> {
     let mut t = Vec::new();
-    let w16 = |t: &mut Vec<u8>, v: u16| t.extend_from_slice(&if little_endian { v.to_le_bytes() } else { v.to_be_bytes() });
-    let w32 = |t: &mut Vec<u8>, v: u32| t.extend_from_slice(&if little_endian { v.to_le_bytes() } else { v.to_be_bytes() });
+    let w16 = |t: &mut Vec<u8>, v: u16| {
+        t.extend_from_slice(&if little_endian { v.to_le_bytes() } else { v.to_be_bytes() })
+    };
+    let w32 = |t: &mut Vec<u8>, v: u32| {
+        t.extend_from_slice(&if little_endian { v.to_le_bytes() } else { v.to_be_bytes() })
+    };
     t.extend_from_slice(if little_endian { b"II" } else { b"MM" });
     w16(&mut t, 42);
     w32(&mut t, 8); // offset of the first IFD

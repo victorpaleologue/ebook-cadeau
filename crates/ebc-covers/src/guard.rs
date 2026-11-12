@@ -168,10 +168,7 @@ pub fn is_denied_host(host: &str) -> bool {
 
 /// `true` when `host` equals `suffix` or is a subdomain of it (both lower-case).
 pub(crate) fn host_matches_suffix(host: &str, suffix: &str) -> bool {
-    host == suffix
-        || host
-            .strip_suffix(suffix)
-            .is_some_and(|rest| rest.ends_with('.'))
+    host == suffix || host.strip_suffix(suffix).is_some_and(|rest| rest.ends_with('.'))
 }
 
 /// Shape checks only: absolute `https` URL, no credentials, default port, a named host
@@ -372,7 +369,10 @@ mod tests {
     #[test]
     fn denylist_covers_the_research_list() {
         let denied = [
-            ("https://images-na.ssl-images-amazon.com/images/P/2070360024.01.LZZZZZZZ.jpg", "Amazon"),
+            (
+                "https://images-na.ssl-images-amazon.com/images/P/2070360024.01.LZZZZZZZ.jpg",
+                "Amazon",
+            ),
             ("https://m.media-amazon.com/images/I/41abc.jpg", "Amazon"),
             ("https://www.amazon.fr/dp/2070360024", "Amazon"),
             ("https://www.amazon.co.uk/dp/2070360024", "Amazon"),
@@ -382,7 +382,10 @@ mod tests {
             ("https://static.fnac-static.com/multimedia/x.jpg", "Fnac"),
             ("https://www.fnac.com/a1", "Fnac"),
             ("https://livre.fnac.com/a1", "Fnac"),
-            ("https://products-images.di-static.com/image/x/9782070360024-475x500-1.jpg", "Decitre"),
+            (
+                "https://products-images.di-static.com/image/x/9782070360024-475x500-1.jpg",
+                "Decitre",
+            ),
             ("https://www.decitre.fr/livres/x.html", "Decitre"),
             ("https://www.furet.com/x", "Furet du Nord"),
             ("https://cdn.cultura.com/cdn-cgi/image/width=180/media/x.jpg", "Cultura"),
@@ -419,7 +422,10 @@ mod tests {
     #[test]
     fn shape_check_skips_the_denylist_only() {
         assert!(check_url_shape("https://static.fnac-static.com/multimedia/x.jpg").is_ok());
-        assert_eq!(check_url_shape("http://static.fnac-static.com/x.jpg").err(), Some(Refusal::NotHttps));
+        assert_eq!(
+            check_url_shape("http://static.fnac-static.com/x.jpg").err(),
+            Some(Refusal::NotHttps)
+        );
         assert_eq!(check_url_shape("https://10.0.0.8/x.jpg").err(), Some(Refusal::IpAddress));
     }
 
@@ -434,18 +440,42 @@ mod tests {
     #[test]
     fn public_ip_classification() {
         let private = [
-            "127.0.0.1", "10.1.2.3", "172.16.0.1", "172.31.255.255", "192.168.1.1",
-            "169.254.169.254", "100.64.0.1", "0.0.0.0", "224.0.0.1", "255.255.255.255",
-            "192.0.2.1", "198.18.0.1", "::1", "::", "fc00::1", "fd12:3456::1", "fe80::1",
-            "ff02::1", "::ffff:127.0.0.1", "::ffff:192.168.0.1", "64:ff9b::a00:1",
-            "2001:db8::1", "::10.0.0.1", "2002:a00:1::1",
+            "127.0.0.1",
+            "10.1.2.3",
+            "172.16.0.1",
+            "172.31.255.255",
+            "192.168.1.1",
+            "169.254.169.254",
+            "100.64.0.1",
+            "0.0.0.0",
+            "224.0.0.1",
+            "255.255.255.255",
+            "192.0.2.1",
+            "198.18.0.1",
+            "::1",
+            "::",
+            "fc00::1",
+            "fd12:3456::1",
+            "fe80::1",
+            "ff02::1",
+            "::ffff:127.0.0.1",
+            "::ffff:192.168.0.1",
+            "64:ff9b::a00:1",
+            "2001:db8::1",
+            "::10.0.0.1",
+            "2002:a00:1::1",
         ];
         for ip in private {
             assert!(!is_public_ip(ip.parse().expect("ip")), "{ip}");
         }
         let public = [
-            "93.184.216.34", "8.8.8.8", "172.32.0.1", "100.128.0.1", "2606:4700::1111",
-            "::ffff:8.8.8.8", "64:ff9b::808:808",
+            "93.184.216.34",
+            "8.8.8.8",
+            "172.32.0.1",
+            "100.128.0.1",
+            "2606:4700::1111",
+            "::ffff:8.8.8.8",
+            "64:ff9b::808:808",
         ];
         for ip in public {
             assert!(is_public_ip(ip.parse().expect("ip")), "{ip}");

@@ -41,6 +41,9 @@ const UNCOVERED_COST: f32 = 0.15;
 /// fonts: right labels 0.35–0.75, wrong labels above 1.0.
 const PLAUSIBLE_MAX: f32 = 0.92;
 
+/// Hypotheses whose plausibility is worse than the best by more than this are dropped.
+const PLAUSIBLE_SPREAD: f32 = 0.3;
+
 /// One letter-sized glyph of a region, described.
 #[derive(Debug, Clone)]
 pub(crate) struct GlyphObs {
@@ -501,14 +504,19 @@ fn plausibility(obs: &Observed, labels: &[Label], centroids: &FaceDescriptor) ->
     (n > 0).then(|| sum / n as f32)
 }
 
-/// Matches `text` with the glyphs. `None` when no case hypothesis fits the glyph counts
-/// or the letters do not look like the glyphs.
-pub(crate) fn label(obs: &Observed, text: &str, centroids: &FaceDescriptor) -> Option<Labelling> {
+/// Matches `text` with the glyphs under every case hypothesis. Returns the hypotheses
+/// whose letter counts fit the lines and whose letters look like the glyphs, most
+/// plausible first (empty when none does).
+///
+/// More than one hypothesis can survive, and rightly so: a small-caps font draws the
+/// lower-case letters of "Title" as capitals, a caps-only font draws everything so. The
+/// caller scores every font under each hypothesis and keeps the best.
+pub(crate) fn label(obs: &Observed, text: &str, centroids: &FaceDescriptor) -> Vec<Labelling> {
+    let mut out: Vec<(f32, Labelling)> = Vec::new();
     if obs.glyphs.is_empty() || text.trim().is_empty() {
-        return None;
+        return Vec::new();
     }
     let mut tried: Vec<String> = Vec::new();
-    let mut best: Option<(f32, Labelling)> = None;
     for case in [CaseUsed::AsGiven, CaseUsed::Upper, CaseUsed::Title, CaseUsed::Lower] {
         let cased = apply_case(text, case);
         if tried.contains(&cased) {
@@ -519,33 +527,33 @@ pub(crate) fn label(obs: &Observed, text: &str, centroids: &FaceDescriptor) -> O
         let Some(structure) = match_structure(obs, &ws, centroids) else { continue };
         let total: usize = ws.iter().map(|w| w.chars.len()).sum();
         let Some(plaus) = plausibility(obs, &structure.labels, centroids) else { continue };
-        let coverage = structure.covered as f32 / total.max(1) as f32;
-        let key = plaus + 0.03 * structure.cost;
-        if best.as_ref().is_none_or(|(k, _)| key < *k) {
-            let line_texts = structure
-                .line_words
-                .iter()
-                .map(|r| {
-                    r.clone().map(|r| {
-                        ws[r].iter().map(|w| w.text.as_str()).collect::<Vec<_>>().join(" ")
-                    })
-                })
-                .collect();
-            best = Some((
-                key,
-                Labelling {
-                    case,
-                    labels: structure.labels,
-                    line_texts,
-                    coverage,
-                    exact: structure.exact,
-                    plausibility: plaus,
-                },
-            ));
+        if plaus > PLAUSIBLE_MAX || structure.labels.is_empty() {
+            continue;
         }
+        let line_texts = structure
+            .line_words
+            .iter()
+            .map(|r| {
+                r.clone()
+                    .map(|r| ws[r].iter().map(|w| w.text.as_str()).collect::<Vec<_>>().join(" "))
+            })
+            .collect();
+        out.push((
+            plaus + 0.03 * structure.cost,
+            Labelling {
+                case,
+                labels: structure.labels,
+                line_texts,
+                coverage: structure.covered as f32 / total.max(1) as f32,
+                exact: structure.exact,
+                plausibility: plaus,
+            },
+        ));
     }
-    let (_, labelling) = best?;
-    (labelling.plausibility <= PLAUSIBLE_MAX && !labelling.labels.is_empty()).then_some(labelling)
+    out.sort_by(|a, b| a.0.total_cmp(&b.0));
+    // Hypotheses far less plausible than the best only add noise.
+    let limit = out.first().map_or(0.0, |(k, _)| k + PLAUSIBLE_SPREAD);
+    out.into_iter().filter(|(k, _)| *k <= limit).map(|(_, l)| l).collect()
 }
 
 #[cfg(test)]

@@ -485,7 +485,10 @@ mod tests {
             assess(&info(99, 150), &body).reasons,
             [Reason::TooSmall { width: 99, height: 150 }]
         );
-        assert_eq!(assess(&info(1, 600), &body).reasons, [Reason::TooSmall { width: 1, height: 600 }]);
+        assert_eq!(
+            assess(&info(1, 600), &body).reasons,
+            [Reason::TooSmall { width: 1, height: 600 }]
+        );
         assert!(!is_placeholder(&info(100, 150), &body));
     }
 
@@ -523,7 +526,9 @@ mod tests {
             assert!(generic.suspicions.contains(&Suspicion::PlaceholderLength { bytes: len }));
             let bnf = assess_for_source("bnf", &info, &body);
             assert_eq!(bnf.reasons, [Reason::KnownLength { source: "bnf", bytes: len }]);
-            assert!(!bnf.suspicions.iter().any(|s| matches!(s, Suspicion::PlaceholderLength { .. })));
+            assert!(
+                !bnf.suspicions.iter().any(|s| matches!(s, Suspicion::PlaceholderLength { .. }))
+            );
             assert!(!assess_for_source("openlibrary", &info, &body).is_placeholder());
         }
         assert!(!assess_for_source("bnf", &info, &vec![1u8; 4567]).is_placeholder());

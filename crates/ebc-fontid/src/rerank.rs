@@ -7,7 +7,7 @@ use ebc_text::{Font, ShapeOptions, try_rasterize};
 use crate::descriptor::remap_coverage;
 use crate::detect::TextRegion;
 use crate::gray::Gray;
-use crate::identify::{Identification, Match, Prepared, scores, sort_matches};
+use crate::identify::{Identification, Match, Prepared, sort_matches};
 use crate::index::{CharTable, FaceDescriptor, IndexEntry};
 use crate::label::{CaseUsed, apply_case};
 
@@ -71,37 +71,41 @@ pub fn rerank_detailed(
     let Some(prepared) = Prepared::new(img, region, Some(known_text), &centroids) else {
         return Identification::empty();
     };
-    let distances = prepared.distances(candidates.iter().map(|(e, _)| &*e.descriptor), &centroids);
-    let mut out = prepared.identification();
-    // Descriptor scores, and the candidates in decreasing order of them.
-    let descriptor = scores(&distances, prepared.labelling.is_some());
+    let scored = prepared.score(candidates.iter().map(|(e, _)| &*e.descriptor), &centroids);
+    let mut out = prepared.identification(scored.labelled);
+    // The candidates in decreasing order of their descriptor score.
+    let descriptor = scored.scores;
     let mut order: Vec<usize> = (0..candidates.len()).collect();
     order.sort_by(|&a, &b| descriptor[b].total_cmp(&descriptor[a]));
 
-    // The lines to compare: (query image, text).
+    // The lines to compare: (query image, the texts it may show).
     let mut jobs: Vec<(Gray, Vec<String>)> = Vec::new();
-    match &prepared.labelling {
-        Some(l) => {
-            for (line, text) in prepared.analysis.lines.iter().zip(&l.line_texts) {
-                let Some(text) = text else { continue };
-                if let Some(query) = line_image(&prepared, line, text) {
-                    jobs.push((query, vec![text.clone()]));
+    if scored.labelled {
+        for (i, line) in prepared.analysis.lines.iter().enumerate() {
+            // The same line under every case hypothesis that survived.
+            let mut texts: Vec<String> = Vec::new();
+            for l in &prepared.labellings {
+                if let Some(Some(text)) = l.line_texts.get(i) {
+                    if !texts.contains(text) {
+                        texts.push(text.clone());
+                    }
                 }
+            }
+            let Some(first) = texts.first() else { continue };
+            if let Some(query) = line_image(&prepared, line, first) {
+                jobs.push((query, texts));
             }
         }
-        None => {
-            // Without labels only a single line can be compared as a whole; the case
-            // is unknown, so both likely cases are tried.
-            if let [line] = prepared.analysis.lines.as_slice() {
-                let mut texts = vec![known_text.trim().to_string()];
-                let upper = apply_case(known_text.trim(), CaseUsed::Upper);
-                if !texts.contains(&upper) {
-                    texts.push(upper);
-                }
-                if let Some(query) = line_image(&prepared, line, &texts[0]) {
-                    jobs.push((query, texts));
-                }
-            }
+    } else if let [line] = prepared.analysis.lines.as_slice() {
+        // Without labels only a single line can be compared as a whole; the case is
+        // unknown, so both likely cases are tried.
+        let mut texts = vec![known_text.trim().to_string()];
+        let upper = apply_case(known_text.trim(), CaseUsed::Upper);
+        if !texts.contains(&upper) {
+            texts.push(upper);
+        }
+        if let Some(query) = line_image(&prepared, line, &texts[0]) {
+            jobs.push((query, texts));
         }
     }
 

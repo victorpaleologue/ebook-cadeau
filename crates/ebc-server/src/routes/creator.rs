@@ -107,7 +107,7 @@ pub(crate) async fn create(
     let (parts, body) = request.into_parts();
     throttle(&state, &visitor)?;
     let body = read_body(&parts.headers, body, MAX_JSON_BYTES).await?;
-    let request: GiftRequest = parse_json(&body)?;
+    let request = GiftRequest::parse(&body)?;
     let created = state.create_gift(request, None)?;
     let mut members = code_members(&state, &created.code);
     members.insert("id".to_owned(), created.record.id.clone().into());

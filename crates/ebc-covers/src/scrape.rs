@@ -307,7 +307,8 @@ fn parse_attrs(src: &str, start: usize, collect: bool) -> (Attrs, usize) {
             return (attrs, i + 1);
         }
         let name_start = i;
-        while i < len && !bytes[i].is_ascii_whitespace() && !matches!(bytes[i], b'=' | b'>' | b'/') {
+        while i < len && !bytes[i].is_ascii_whitespace() && !matches!(bytes[i], b'=' | b'>' | b'/')
+        {
             i += 1;
         }
         if i == name_start {
@@ -339,7 +340,11 @@ fn parse_attrs(src: &str, start: usize, collect: bool) -> (Attrs, usize) {
                 value = &src[value_start..i];
             }
         }
-        if collect && attrs.len() < MAX_ATTRS && value.len() <= MAX_ATTR_VALUE_BYTES && name.len() <= 64 {
+        if collect
+            && attrs.len() < MAX_ATTRS
+            && value.len() <= MAX_ATTR_VALUE_BYTES
+            && name.len() <= 64
+        {
             attrs.push((name.to_ascii_lowercase(), decode_entities(value)));
         }
     }
@@ -403,12 +408,28 @@ struct Collector {
 }
 
 impl Collector {
-    fn add_image(&mut self, url: &str, width: Option<u32>, height: Option<u32>, via: Via, confidence: f32, isbns: &[Isbn13]) {
+    fn add_image(
+        &mut self,
+        url: &str,
+        width: Option<u32>,
+        height: Option<u32>,
+        via: Via,
+        confidence: f32,
+        isbns: &[Isbn13],
+    ) {
         let url = url.trim();
-        if url.is_empty() || url.len() > guard::MAX_URL_BYTES || self.images.len() >= MAX_RAW_IMAGES {
+        if url.is_empty() || url.len() > guard::MAX_URL_BYTES || self.images.len() >= MAX_RAW_IMAGES
+        {
             return;
         }
-        self.images.push(RawImage { url: url.to_owned(), width, height, via, confidence, isbns: isbns.to_vec() });
+        self.images.push(RawImage {
+            url: url.to_owned(),
+            width,
+            height,
+            via,
+            confidence,
+            isbns: isbns.to_vec(),
+        });
     }
 
     fn add_isbn_field(&mut self, text: &str) {
@@ -486,7 +507,9 @@ impl Collector {
             let height = attr(attrs, "height").and_then(parse_dimension);
             self.add_image(url, width, height, Via::Microdata, 0.45, &[]);
         }
-        if (has_token(itemprop, "isbn") || has_token(itemprop, "gtin13") || has_token(itemprop, "gtin"))
+        if (has_token(itemprop, "isbn")
+            || has_token(itemprop, "gtin13")
+            || has_token(itemprop, "gtin"))
             && let Some(content) = attr(attrs, "content")
         {
             self.add_isbn_field(content);
@@ -504,7 +527,8 @@ impl Collector {
             self.handle_itemprop(attrs, href);
         } else if name.eq_ignore_ascii_case("base") {
             if self.base_href.is_none() {
-                self.base_href = attr(attrs, "href").map(|h| h.trim().to_owned()).filter(|h| !h.is_empty());
+                self.base_href =
+                    attr(attrs, "href").map(|h| h.trim().to_owned()).filter(|h| !h.is_empty());
             }
         } else if name.eq_ignore_ascii_case("img") {
             self.handle_itemprop(attrs, attr(attrs, "src").unwrap_or_default());
@@ -537,7 +561,9 @@ fn json_aware_script_end(bytes: &[u8], start: usize, limit: usize) -> Option<usi
             }
         } else if b == b'"' {
             in_string = true;
-        } else if b == b'<' && bytes.get(i..i + 8).is_some_and(|w| w.eq_ignore_ascii_case(b"</script")) {
+        } else if b == b'<'
+            && bytes.get(i..i + 8).is_some_and(|w| w.eq_ignore_ascii_case(b"</script"))
+        {
             return Some(i);
         }
         i += 1;
@@ -575,7 +601,12 @@ fn sanitise_json(s: &str) -> String {
 /// semicolon, raw control characters in strings and entity-encoded quotes.
 fn parse_json_ld(raw: &str) -> Option<Value> {
     let mut body = raw.trim();
-    for (prefix, suffix) in [("<!--", "-->"), ("//<![CDATA[", "//]]>"), ("/*<![CDATA[*/", "/*]]>*/"), ("<![CDATA[", "]]>")] {
+    for (prefix, suffix) in [
+        ("<!--", "-->"),
+        ("//<![CDATA[", "//]]>"),
+        ("/*<![CDATA[*/", "/*]]>*/"),
+        ("<![CDATA[", "]]>"),
+    ] {
         if let Some(inner) = body.strip_prefix(prefix) {
             body = inner.strip_suffix(suffix).unwrap_or(inner).trim();
         }
@@ -665,7 +696,8 @@ impl Collector {
                 }
             }
             Value::Object(object) => {
-                let url = ["url", "contentUrl", "@id"].iter().find_map(|k| object.get(*k)?.as_str());
+                let url =
+                    ["url", "contentUrl", "@id"].iter().find_map(|k| object.get(*k)?.as_str());
                 if let Some(url) = url {
                     let width = json_dimension(object.get("width"));
                     let height = json_dimension(object.get("height"));
@@ -688,8 +720,9 @@ impl Collector {
                 }
             }
             Value::Object(object) => {
-                let confidence = type_confidence(object.get("@type").or_else(|| object.get("type")))
-                    .map(|c| if inside_typed { c - 0.15 } else { c });
+                let confidence =
+                    type_confidence(object.get("@type").or_else(|| object.get("type")))
+                        .map(|c| if inside_typed { c - 0.15 } else { c });
                 if let Some(confidence) = confidence {
                     let mut field_text = String::new();
                     for key in ["isbn", "gtin13", "gtin", "productID"] {
@@ -717,7 +750,8 @@ impl Collector {
                     if let Some(name) = object.get("name").and_then(Value::as_str) {
                         let better = self.json_title.as_ref().is_none_or(|(c, _)| *c < confidence);
                         if better && !name.trim().is_empty() {
-                            self.json_title = Some((confidence, collapse_whitespace(name, MAX_TITLE_CHARS)));
+                            self.json_title =
+                                Some((confidence, collapse_whitespace(name, MAX_TITLE_CHARS)));
                         }
                     }
                 }
@@ -743,7 +777,8 @@ impl Collector {
         }
         self.json_blocks += 1;
         let mut candidates = [None, None];
-        let aware_end = json_aware_script_end(bytes, start, start.saturating_add(MAX_JSON_LD_BYTES));
+        let aware_end =
+            json_aware_script_end(bytes, start, start.saturating_add(MAX_JSON_LD_BYTES));
         if let Some(end) = aware_end.filter(|end| *end != html_end) {
             candidates[0] = Some(end);
         }
@@ -792,7 +827,9 @@ fn scan(src: &str, collector: &mut Collector) {
         let closing = rest.get(1) == Some(&b'/');
         let name_start = lt + 1 + usize::from(closing);
         let mut name_end = name_start;
-        while name_end < len && (bytes[name_end].is_ascii_alphanumeric() || matches!(bytes[name_end], b'-' | b':')) {
+        while name_end < len
+            && (bytes[name_end].is_ascii_alphanumeric() || matches!(bytes[name_end], b'-' | b':'))
+        {
             name_end += 1;
         }
         if name_end == name_start || !bytes[name_start].is_ascii_alphabetic() {
@@ -807,7 +844,9 @@ fn scan(src: &str, collector: &mut Collector) {
             continue;
         }
         let name = &src[name_start..name_end];
-        let wanted = ["meta", "link", "base", "img", "a", "script"].iter().any(|t| name.eq_ignore_ascii_case(t));
+        let wanted = ["meta", "link", "base", "img", "a", "script"]
+            .iter()
+            .any(|t| name.eq_ignore_ascii_case(t));
         let (attrs, after) = parse_attrs(src, name_end, wanted);
         pos = after;
         if name.eq_ignore_ascii_case("script") {
@@ -824,7 +863,8 @@ fn scan(src: &str, collector: &mut Collector) {
         } else if name.eq_ignore_ascii_case("title") {
             let body_end = find_tag_ci(bytes, pos, len, b"</title").unwrap_or(len);
             if collector.html_title.is_none() {
-                let title = collapse_whitespace(&decode_entities(&src[pos..body_end]), MAX_TITLE_CHARS);
+                let title =
+                    collapse_whitespace(&decode_entities(&src[pos..body_end]), MAX_TITLE_CHARS);
                 if !title.is_empty() {
                     collector.html_title = Some(title);
                 }
@@ -891,7 +931,8 @@ pub fn extract(html: &str, base_url: &str) -> PageInfo {
     }
 
     // Base URL: <base href> resolved against the page URL.
-    let page_url = Url::parse(base_url.trim()).ok().filter(|u| matches!(u.scheme(), "http" | "https"));
+    let page_url =
+        Url::parse(base_url.trim()).ok().filter(|u| matches!(u.scheme(), "http" | "https"));
     let base = collector
         .base_href
         .as_deref()
@@ -964,16 +1005,26 @@ mod tests {
 
     #[test]
     fn entities() {
-        assert_eq!(decode_entities("a &amp; b &lt;c&gt; &quot;d&quot; &#233;&#xE9;&#XE9;"), "a & b <c> \"d\" ééé");
-        assert_eq!(decode_entities("&unknown; & &; &#; &#xZZ; &#0; &#1114112; &amp"), "&unknown; & &; &#; &#xZZ; &#0; &#1114112; &amp");
-        assert_eq!(decode_entities("L&rsquo;&Eacute;tranger &ndash; Folio"), "L\u{2019}Étranger \u{2013} Folio");
+        assert_eq!(
+            decode_entities("a &amp; b &lt;c&gt; &quot;d&quot; &#233;&#xE9;&#XE9;"),
+            "a & b <c> \"d\" ééé"
+        );
+        assert_eq!(
+            decode_entities("&unknown; & &; &#; &#xZZ; &#0; &#1114112; &amp"),
+            "&unknown; & &; &#; &#xZZ; &#0; &#1114112; &amp"
+        );
+        assert_eq!(
+            decode_entities("L&rsquo;&Eacute;tranger &ndash; Folio"),
+            "L\u{2019}Étranger \u{2013} Folio"
+        );
         assert_eq!(decode_entities("&&&&amp;&"), "&&&&&");
         assert_eq!(decode_entities("é&é;"), "é&é;");
     }
 
     #[test]
     fn attribute_parsing() {
-        let (attrs, after) = parse_attrs(r#" a="1" B='two words' c=three d e = "x&amp;y" /> tail"#, 0, true);
+        let (attrs, after) =
+            parse_attrs(r#" a="1" B='two words' c=three d e = "x&amp;y" /> tail"#, 0, true);
         assert_eq!(
             attrs,
             vec![

@@ -45,7 +45,7 @@ OUT = ROOT / "docs" / "business"
 CHARTS = OUT / "charts"
 DATA = CHARTS / "data"
 
-PNG_DPI = 200
+PNG_DPI = 150
 FIG_W = 9.6  # inches; the SVG is 960 px wide at 100 px per inch
 
 # Reference palette of the dataviz skill; every hex below is a documented step.
@@ -179,6 +179,8 @@ def k_eur(value: float, signed: bool = False) -> str:
 
 def money(value: float, digits: int = 2) -> str:
     sign = "−" if value < 0 else ""
+    if 0 < abs(value) < 0.005:
+        digits = 3
     return f"{sign}{abs(value):,.{digits}f}"
 
 
@@ -271,10 +273,14 @@ def style(ax, t: dict, grid: str = "y") -> None:
 
 
 def panel_title(ax, t: dict, text: str, sub: str | None = None) -> None:
-    ax.text(0.0, 1.085 if sub else 1.03, text, transform=ax.transAxes, fontsize=10, fontweight="bold", color=t["ink"],
-            va="bottom", ha="left")
+    """Bold panel title with an optional subtitle of one or two lines, above the axes."""
+    height = ax.get_window_extent().height  # px at 100 px per inch
+    lines = sub.count("\n") + 1 if sub else 0
+    title_y = 1.0 + (9 + 15 * lines) / height
+    ax.text(0.0, title_y, text, transform=ax.transAxes, fontsize=10, fontweight="bold", color=t["ink"], va="bottom", ha="left")
     if sub:
-        ax.text(0.0, 1.02, sub, transform=ax.transAxes, fontsize=8.5, color=t["ink2"], va="bottom", ha="left")
+        ax.text(0.0, 1.0 + 6 / height, sub, transform=ax.transAxes, fontsize=8.5, color=t["ink2"], va="bottom", ha="left",
+                linespacing=1.3)
 
 
 def bar(ax, x0: float, x1: float, y0: float, y1: float, color: str, round_at: str = "", alpha: float = 1.0,
@@ -443,7 +449,8 @@ def compute(inputs: dict) -> dict:
             reseller_year = volume * 12 - jackets_year
             partners = max(1, round(reseller_year / (v["reseller_orders_mid"] * v["reseller_attach_rate"])))
             flows = model.cash_flow(flat_v, level, "MIX", model.flat_volumes(flat_v, level, reseller_cards_year=reseller_year,
-                                                                               partners=partners, authors=authors))
+                                                                               partners=partners, authors=authors,
+                                                                               ramp_months=model.MONTHS))
             for horizon in curves:
                 curves[horizon].append(model.roi(flows, horizon))
         data["roi"]["levels"][level] = curves
@@ -558,19 +565,19 @@ def chart_breakeven(data: dict, t: dict):
     v = data["base"]
     fixed = data["annual_fixed"]["minimal"]
     panels = [
-        ("a", "A'. Paid print-at-home PDF", "Price per PDF, EUR incl. VAT", "paid PDFs", ("minimal", "A_fee")),
-        ("b", "B. Printed-and-posted card", "Price per card, EUR incl. VAT", "mailed cards", ("minimal", "B_mailed")),
-        ("c", "C. Reseller fee", "Fee per card, EUR excl. VAT", "reseller cards", ("minimal", "C_reseller")),
-        ("d", "D. Author packs", "Price per jacket, EUR incl. VAT", "jackets", ("minimal", "D_authors")),
+        ("a", "A'. Paid print-at-home PDF", "Price per PDF, EUR incl. VAT", "Paid PDFs", ("minimal", "A_fee")),
+        ("b", "B. Printed-and-posted card", "Price per card, EUR incl. VAT", "Mailed cards", ("minimal", "B_mailed")),
+        ("c", "C. Reseller fee", "Fee per card, EUR excl. VAT", "Reseller cards", ("minimal", "C_reseller")),
+        ("d", "D. Author packs", "Price per jacket, EUR incl. VAT", "Jackets", ("minimal", "D_authors")),
     ]
     fig, top = new_figure(
         t, 8.4,
         "How many sales a year must each channel make to pay the bills, and how does the price move that?",
         "Units a year at which one channel alone covers a solo founder's yearly cash costs "
         f"(EUR {min(fixed.values()):,.0f} to {max(fixed.values()):,.0f} depending on the channel; own time unpaid). Line: base inputs. "
-        "Band: every cost input at its favourable and at its adverse end. Dot: the base price. Log scale.",
+        "Band: every cost input at its favourable and at its adverse end. Dot: the base price.",
     )
-    axes = add_panels(fig, 2, 2, top=top + 0.5, left=0.85, wspace=1.0, hspace=1.15, bottom=0.85)
+    axes = add_panels(fig, 2, 2, top=top + 0.65, left=0.85, wspace=1.0, hspace=1.3, bottom=0.85)
     rows_csv = []
     for ax, (channel, title, xlabel, unit, sim_key) in zip(axes, panels):
         series = data["breakeven"][channel]
@@ -585,7 +592,7 @@ def chart_breakeven(data: dict, t: dict):
         ax.yaxis.set_major_formatter(log_formatter())
         ax.yaxis.set_minor_locator(NullLocator())
         ax.set_xlabel(xlabel)
-        ax.set_ylabel(f"{unit.capitalize()} a year (log)")
+        ax.set_ylabel(f"{unit} a year (log)")
         clip = lambda column: [min(value, ceiling * 10) for value in column]  # noqa: E731
         ax.fill_between(prices, clip(series["favourable"]), clip(series["adverse"]), color=t["blue"], alpha=0.12, linewidth=0, zorder=2)
         shown = [(p, value) for p, value in zip(prices, series["base"]) if value < ceiling * 10]
@@ -604,17 +611,17 @@ def chart_breakeven(data: dict, t: dict):
                         fontweight="bold", ha="left", va="bottom")
         # Price floor: below it a unit earns nothing.
         floor_price = next((p for p, value in zip(prices, series["base"]) if not math.isinf(value)), None)
+        sub = "every sale earns something across this price range"
         if floor_price is not None and floor_price > prices[0]:
             ax.axvline(floor_price, color=t["muted"], linewidth=0.9, linestyle=(0, (4, 3)), zorder=2)
-            ax.text(floor_price, ceiling * 0.6, f" below EUR {floor_price:.2f}\n every sale loses money", fontsize=8,
-                    color=t["ink2"], ha="right", va="top", linespacing=1.3)
+            sub = f"below EUR {floor_price:.2f} (dashed) every sale loses money"
         # What the base case actually sells in year 3.
         expected = data["summary"][sim_key]["last_year_paying_units"]
         if expected >= floor:
             ax.axhline(expected, color=t["muted"], linewidth=0.9, linestyle=(0, (4, 3)), zorder=2)
             ax.text(prices[-1], expected, f"base-case sales in year 3: {compact(round(expected, -1))} ", fontsize=8,
                     color=t["ink2"], ha="right", va="bottom")
-        panel_title(ax, t, title)
+        panel_title(ax, t, title, sub)
     write_csv("02-break-even-volume-vs-price", ["channel", "price_eur", "units_favourable", "units_base", "units_adverse"], rows_csv)
     return fig
 
@@ -670,8 +677,8 @@ def chart_cumulative(data: dict, t: dict):
             ax.annotate(f"EUR {k_eur(p50[-1], signed=True)}", (36, p50[-1] / scale), xytext=(-2, 9), textcoords="offset points",
                         fontsize=8.5, color=t["ink"], fontweight="bold", ha="right", va="bottom")
         else:
-            ax.text(0.04, 0.05, note + f"\nprobability of payback by month 36: {pct(mc['prob_payback'])}",
-                    transform=ax.transAxes, fontsize=8.2, color=t["ink"], ha="left", va="bottom", linespacing=1.3)
+            ax.text(0.93, 0.80, note + f"\npaid back by month 36 in {pct(mc['prob_payback'])} of draws",
+                    transform=ax.transAxes, fontsize=8.2, color=t["ink"], ha="right", va="top", linespacing=1.3)
         for month, a, b, c in zip(months, p10, p50, p90):
             rows_csv.append([level, month, a, b, c])
     write_csv("03-cumulative-cash-by-investment-level", ["level", "month", "p10_eur", "median_eur", "p90_eur"], rows_csv)
@@ -681,13 +688,13 @@ def chart_cumulative(data: dict, t: dict):
 def chart_roi(data: dict, t: dict):
     volumes = data["roi"]["volumes"]
     fig, top = new_figure(
-        t, 5.3,
+        t, 5.5,
         "How much monthly volume does each investment level need before the money comes back?",
         "ROI = net cash generated ÷ cash committed (set-up, fixed costs, people, marketing); −100 % means all of it is gone, "
-        "0 % means it just came back. Steady volume from month 1: reseller cards at the metered fee (no minimum) "
-        "plus 16 % author jackets up to the ceiling of paying authors.",
+        "0 % means it just came back. Volume grows in a straight line from zero to the figure on the horizontal axis in "
+        "month 36: reseller cards at the metered fee (no minimum) plus 16 % author jackets, up to the ceiling of paying authors.",
     )
-    axes = add_panels(fig, 1, 3, top=top + 0.95, left=0.8, wspace=0.55, bottom=0.95)
+    axes = add_panels(fig, 1, 3, top=top + 1.15, left=0.8, wspace=0.55, bottom=0.95)
     rows_csv = []
     handles = []
     for ax, level in zip(axes, model.LEVELS):
@@ -702,7 +709,7 @@ def chart_roi(data: dict, t: dict):
         ax.yaxis.set_major_locator(FixedLocator([-100, 0, 100, 200]))
         ax.yaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{value:+.0f} %".replace("-", "−").replace("+0", "0")))
         ax.axhline(0, color=t["axis"], linewidth=1.0, zorder=3)
-        ax.set_xlabel("Cards a month, all channels (log)")
+        ax.set_xlabel("Cards a month reached in month 36 (log)")
         if level == "minimal":
             ax.set_ylabel("ROI on cash committed")
         else:
@@ -725,17 +732,16 @@ def chart_roi(data: dict, t: dict):
             ax.plot([crossing], [0], marker="o", markersize=7, color=t["ramp"][2], markeredgecolor=t["surface"],
                     markeredgewidth=1.6, zorder=6)
             digits = -2 if crossing >= 1000 else -1
-            label = f"money back in 36 months\nfrom ≈ {compact(round(crossing, digits))} cards a month"
-            right_side = crossing < 3000
-            ax.annotate(label, (crossing, 0), xytext=(9 if right_side else -9, -10), textcoords="offset points", fontsize=8.2,
-                        color=t["ink"], ha="left" if right_side else "right", va="top", linespacing=1.3)
+            back = f"back by month 36 from ≈ {compact(round(crossing, digits))} cards a month (dot)"
+        else:
+            back = "not back by month 36 at any volume shown"
         title = {"minimal": "Minimal", "seed": "Seed", "funded": "Funded"}[level]
         committed = data["summary"][(level, "MIX")]["outlay_total"]
-        panel_title(ax, t, title, f"about EUR {k_eur(committed)} committed over 36 months")
+        panel_title(ax, t, title, f"about EUR {k_eur(committed)} committed over 36 months\n{back}")
         for i, volume in enumerate(volumes):
             rows_csv.append([level, volume, curves[12][i], curves[24][i], curves[36][i]])
     fig.legend(handles, ["after 12 months", "after 24 months", "after 36 months"], loc="upper left",
-               bbox_to_anchor=(0.8 / FIG_W, 1.0 - (top + 0.12) / 5.3), ncol=3, frameon=False, fontsize=8.5, handlelength=1.8,
+               bbox_to_anchor=(0.8 / FIG_W, 1.0 - (top + 0.12) / 5.5), ncol=3, frameon=False, fontsize=8.5, handlelength=1.8,
                columnspacing=1.6, labelcolor=t["ink2"], borderaxespad=0.0)
     write_csv("04-roi-vs-monthly-volume", ["level", "cards_per_month", "roi_12", "roi_24", "roi_36"], rows_csv)
     return fig
@@ -864,7 +870,7 @@ def chart_partners(data: dict, t: dict):
         ax.set_xscale("log")
         ax.set_yscale("log")
         ax.set_xlim(rates[0], rates[-1])
-        ax.set_ylim(0.3, 300)
+        ax.set_ylim(0.5, 300)
         ax.xaxis.set_major_locator(FixedLocator([0.2, 0.5, 1, 2, 5, 10]))
         ax.xaxis.set_minor_locator(NullLocator())
         ax.xaxis.set_major_formatter(FuncFormatter(lambda value, _: f"{value:g} %"))
@@ -879,18 +885,20 @@ def chart_partners(data: dict, t: dict):
         ax.text(2.0, 300 * 0.82, " base 2 %", fontsize=8, color=t["ink2"], ha="left", va="top")
         platforms = v["seed_max_partners"]
         ax.axhline(platforms, color=t["muted"], linewidth=0.9, linestyle=(0, (4, 3)), zorder=2)
-        ax.text(rates[0] * 1.06, platforms * 1.1, f"about {platforms:.0f} eBook platforms in France (assumption)", fontsize=8,
-                color=t["ink2"], ha="left", va="bottom")
+        ax.text(rates[0] * 1.06, platforms * 0.9, f"{platforms:.0f} eBook platforms in France (assumed)", fontsize=8,
+                color=t["ink2"], ha="left", va="top")
         handles = []
-        for colour, (size, _) in zip(t["ramp"], sizes):
+        at_two = []
+        for colour, (size, size_label) in zip(t["ramp"], sizes):
             curve = partners["curves"][key][size]
             (line,) = ax.plot(rates, curve, color=colour, linewidth=1.8, zorder=4, solid_capstyle="round")
             handles.append(line)
             at_base = model.partners_needed(v, partners["targets"][key], v[f"reseller_orders_{size}"], v["reseller_attach_rate"])
             ax.plot([2.0], [at_base], marker="o", markersize=6.5, color=colour, markeredgecolor=t["surface"],
                     markeredgewidth=1.6, zorder=5)
-            ax.annotate(f"{at_base:.0f}" if at_base >= 10 else f"{at_base:.1f}", (2.0, at_base), xytext=(7, 4),
-                        textcoords="offset points", fontsize=8.5, color=t["ink"], fontweight="bold", ha="left", va="bottom")
+            at_two.append((f"{at_base:.0f}" if at_base >= 10 else f"{at_base:.1f}") + f" {size_label}")
+        ax.text(rates[0] * 1.06, 0.62, "At 2 %: " + ", or ".join(at_two), fontsize=8.5, color=t["ink"], fontweight="bold",
+                ha="left", va="bottom")
         panel_title(ax, t, title, sub)
         for i, rate in enumerate(partners["rates"]):
             rows_csv.append([key, rate] + [partners["curves"][key][size][i] for size, _ in sizes])

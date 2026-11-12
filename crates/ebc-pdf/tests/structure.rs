@@ -84,7 +84,9 @@ fn page_boxes_follow_trim_bleed_and_slug() {
 fn poche_card_boxes_match_the_print_requirements_table() {
     // docs/research/03-print-requirements.md, section 2.2: the poche spread (230 x 178 mm)
     // for the upload profile (bleed 3 mm, no slug) and the marks profile (slug 10 mm).
-    let cases: [(f64, f64, [f64; 4], [f64; 4], [f64; 4]); 2] = [
+    // (bleed, slug, MediaBox, BleedBox, TrimBox)
+    type Case = (f64, f64, [f64; 4], [f64; 4], [f64; 4]);
+    let cases: [Case; 2] = [
         (
             3.0,
             0.0,

@@ -484,13 +484,19 @@ def flat_volumes(
     paid_pdf_year: float = 0.0,
     generated_year: float = 0.0,
     spend_budget: bool = True,
+    ramp_months: int = 0,
 ) -> list:
-    """Constant yearly volumes from month 1 (with seasonality), for what-if charts."""
+    """Given yearly volumes (with seasonality), for what-if charts.
+
+    With ``ramp_months`` the volumes grow linearly from zero and reach the given
+    yearly rate in that month; without it they apply from month 1.
+    """
     weights = seasonality_weights(v["season_december_share"])
     partners = max(1, int(partners))
     out = []
     for month in range(1, months + 1):
-        weight = weights[(month - 1) % 12]
+        scale = min(1.0, month / ramp_months) if ramp_months > 0 else 1.0
+        weight = weights[(month - 1) % 12] * scale
         per_partner = reseller_cards_year / 12.0 * weight / partners
         out.append(
             MonthVolumes(
@@ -499,8 +505,8 @@ def flat_volumes(
                 mailed=mailed_year / 12.0 * weight,
                 partner_cards=(per_partner,) * partners if reseller_cards_year > 0 else (),
                 partner_survival=(1.0,) * partners if reseller_cards_year > 0 else (),
-                authors=authors,
-                packs=authors * v["author_packs_per_year"] / 12.0,
+                authors=authors * scale,
+                packs=authors * scale * v["author_packs_per_year"] / 12.0,
                 marketing_spend=marketing_budget_month(v, level) if spend_budget else 0.0,
             )
         )

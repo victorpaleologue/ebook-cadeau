@@ -1136,7 +1136,7 @@ L 233.035594 243.8388
    </g>
    <g id="text_14">
     <!-- A'. Paid print-at-home PDF -->
-    <g style="fill: #0b0b0b" transform="translate(126 92.539691) scale(0.1 -0.1)">
+    <g style="fill: #0b0b0b" transform="translate(126 90.467891) scale(0.1 -0.1)">
      <defs>
       <path id="Inter-Bold-5ce" d="M 728 2719 
 L 1441 2719 
@@ -1255,7 +1255,7 @@ z
    </g>
    <g id="text_15">
     <!-- EUR 1.99 per PDF -->
-    <g style="fill: #52514e" transform="translate(126 104.531307) scale(0.085 -0.085)">
+    <g style="fill: #52514e" transform="translate(126 101.431372) scale(0.085 -0.085)">
      <defs>
       <path id="Inter-Regular-54a" d="M 1884 -63 
 C 2938 -63 3588 866 3588 2513 
@@ -1397,29 +1397,8 @@ z
 " style="fill: #c3c2b7"/>
    </g>
    <g id="text_18">
-    <!-- −0.00 -->
+    <!-- −0.004 -->
     <g style="fill: #52514e" transform="translate(270.636688 177.152041) scale(0.085 -0.085)">
-     <use xlink:href="#Inter-Regular-602"/>
-     <use xlink:href="#Inter-Regular-53f" transform="translate(66.15625 0)"/>
-     <use xlink:href="#Inter-Regular-5e0" transform="translate(126.71875 0)"/>
-     <use xlink:href="#Inter-Regular-53f" transform="translate(153 0)"/>
-     <use xlink:href="#Inter-Regular-53f" transform="translate(216.09375 0)"/>
-    </g>
-   </g>
-   <g id="patch_6">
-    <path d="M 235.915594 206.5212 
-L 267.129364 206.5212 
-L 267.129364 192.7188 
-L 235.915594 192.7188 
-C 234.32497 192.7188 233.035594 194.008176 233.035594 195.5988 
-L 233.035594 203.6412 
-C 233.035594 205.231824 234.32497 206.5212 235.915594 206.5212 
-z
-" style="fill: #c3c2b7"/>
-   </g>
-   <g id="text_19">
-    <!-- −0.42 -->
-    <g style="fill: #52514e" transform="translate(270.345757 202.712041) scale(0.085 -0.085)">
      <defs>
       <path id="Inter-Regular-544" d="M 375 947 
 L 2566 947 
@@ -1443,6 +1422,28 @@ L 2569 1469
 z
 " transform="scale(0.015625)"/>
      </defs>
+     <use xlink:href="#Inter-Regular-602"/>
+     <use xlink:href="#Inter-Regular-53f" transform="translate(66.15625 0)"/>
+     <use xlink:href="#Inter-Regular-5e0" transform="translate(126.71875 0)"/>
+     <use xlink:href="#Inter-Regular-53f" transform="translate(153 0)"/>
+     <use xlink:href="#Inter-Regular-53f" transform="translate(216.09375 0)"/>
+     <use xlink:href="#Inter-Regular-544" transform="translate(279.1875 0)"/>
+    </g>
+   </g>
+   <g id="patch_6">
+    <path d="M 235.915594 206.5212 
+L 267.129364 206.5212 
+L 267.129364 192.7188 
+L 235.915594 192.7188 
+C 234.32497 192.7188 233.035594 194.008176 233.035594 195.5988 
+L 233.035594 203.6412 
+C 233.035594 205.231824 234.32497 206.5212 235.915594 206.5212 
+z
+" style="fill: #c3c2b7"/>
+   </g>
+   <g id="text_19">
+    <!-- −0.42 -->
+    <g style="fill: #52514e" transform="translate(270.345757 202.712041) scale(0.085 -0.085)">
      <use xlink:href="#Inter-Regular-602"/>
      <use xlink:href="#Inter-Regular-53f" transform="translate(66.15625 0)"/>
      <use xlink:href="#Inter-Regular-5e0" transform="translate(126.71875 0)"/>
@@ -1926,7 +1927,7 @@ L 482.287997 249.49395
    </g>
    <g id="text_37">
     <!-- B. Printed-and-posted card -->
-    <g style="fill: #0b0b0b" transform="translate(469.8 92.539691) scale(0.1 -0.1)">
+    <g style="fill: #0b0b0b" transform="translate(469.8 90.467891) scale(0.1 -0.1)">
      <defs>
       <path id="Inter-Bold-41" d="M 422 0 
 L 2388 0 
@@ -1984,7 +1985,7 @@ z
    </g>
    <g id="text_38">
     <!-- EUR 6.90 per card, outsourced print and post -->
-    <g style="fill: #52514e" transform="translate(469.8 104.531307) scale(0.085 -0.085)">
+    <g style="fill: #52514e" transform="translate(469.8 101.481177) scale(0.085 -0.085)">
      <defs>
       <path id="Inter-Regular-5df" d="M 400 -1122 
 L 831 -1122 
@@ -2515,7 +2516,7 @@ L 254.012459 487.2186
    </g>
    <g id="text_58">
     <!-- C. Reseller fee -->
-    <g style="fill: #0b0b0b" transform="translate(126 343.459691) scale(0.1 -0.1)">
+    <g style="fill: #0b0b0b" transform="translate(126 341.387891) scale(0.1 -0.1)">
      <defs>
       <path id="Inter-Bold-181" d="M 422 0 
 L 1375 0 
@@ -2564,7 +2565,7 @@ z
    </g>
    <g id="text_59">
     <!-- EUR 0.30 per card generated (minimum ignored) -->
-    <g style="fill: #52514e" transform="translate(126 355.451307) scale(0.085 -0.085)">
+    <g style="fill: #52514e" transform="translate(126 352.439028) scale(0.085 -0.085)">
      <use xlink:href="#Inter-Regular-5f"/>
      <use xlink:href="#Inter-Regular-1a9" transform="translate(60.109375 0)"/>
      <use xlink:href="#Inter-Regular-181" transform="translate(134.53125 0)"/>
@@ -2644,13 +2645,14 @@ z
 " style="fill: #c3c2b7"/>
    </g>
    <g id="text_61">
-    <!-- −0.00 -->
+    <!-- −0.004 -->
     <g style="fill: #52514e" transform="translate(293.252459 408.902041) scale(0.085 -0.085)">
      <use xlink:href="#Inter-Regular-602"/>
      <use xlink:href="#Inter-Regular-53f" transform="translate(66.15625 0)"/>
      <use xlink:href="#Inter-Regular-5e0" transform="translate(126.71875 0)"/>
      <use xlink:href="#Inter-Regular-53f" transform="translate(153 0)"/>
      <use xlink:href="#Inter-Regular-53f" transform="translate(216.09375 0)"/>
+     <use xlink:href="#Inter-Regular-544" transform="translate(279.1875 0)"/>
     </g>
    </g>
    <g id="patch_22">
@@ -3088,7 +3090,7 @@ L 505.300943 494.7588
    </g>
    <g id="text_79">
     <!-- D. Author pack of 100 -->
-    <g style="fill: #0b0b0b" transform="translate(469.8 343.459691) scale(0.1 -0.1)">
+    <g style="fill: #0b0b0b" transform="translate(469.8 341.387891) scale(0.1 -0.1)">
      <defs>
       <path id="Inter-Bold-2d9" d="M 400 0 
 L 1338 0 
@@ -3132,7 +3134,7 @@ z
    </g>
    <g id="text_80">
     <!-- EUR 2.00 per jacket -->
-    <g style="fill: #52514e" transform="translate(469.8 355.451307) scale(0.085 -0.085)">
+    <g style="fill: #52514e" transform="translate(469.8 352.401177) scale(0.085 -0.085)">
      <defs>
       <path id="Inter-Regular-2d1" d="M 491 3494 
 L 491 -250 

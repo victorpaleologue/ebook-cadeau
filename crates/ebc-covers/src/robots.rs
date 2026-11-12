@@ -214,12 +214,27 @@ pub(crate) fn pattern_matches(pattern: &str, anchored: bool, path: &str) -> bool
     true
 }
 
+/// Splits a raw rule path into its normalised pattern and the "anchored by a final `$`"
+/// flag.
+pub(crate) fn compile_pattern(raw: &str) -> (String, bool) {
+    let (raw, anchored) = match raw.strip_suffix('$') {
+        Some(stripped) => (stripped, true),
+        None => (raw, false),
+    };
+    (normalise(raw, true, usize::MAX), anchored)
+}
+
 /// Normalises a URL path for matching: cuts the fragment, makes sure it starts with `/`.
-fn normalise_path(path: &str) -> String {
+pub(crate) fn normalise_path(path: &str) -> String {
     let path = path.trim();
     // A full URL is accepted: keep what follows the authority.
     let path = match path.find("://") {
-        Some(scheme_end) if !path.starts_with('/') => {
+        Some(scheme_end)
+            if scheme_end > 0
+                && path[..scheme_end]
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'+' | b'-' | b'.')) =>
+        {
             let after = &path[scheme_end + 3..];
             after.find(['/', '?']).map_or("/", |at| &after[at..])
         }
@@ -275,11 +290,7 @@ impl Robots {
                     if value.is_empty() {
                         continue; // "Disallow:" restricts nothing
                     }
-                    let (raw, anchored) = match value.strip_suffix('$') {
-                        Some(stripped) => (stripped, true),
-                        None => (value, false),
-                    };
-                    let mut pattern = normalise(raw, true, usize::MAX);
+                    let (mut pattern, anchored) = compile_pattern(value);
                     if !pattern.starts_with('/') && !pattern.starts_with('*') {
                         if allow {
                             continue; // can never match a path
@@ -457,7 +468,7 @@ EOF
             assert!(!r.allowed(ua, "/example/page.html"), "{ua}");
             assert!(r.allowed(ua, "/publications/"), "{ua}");
             assert!(r.allowed(ua, "/publications/report.pdf"), "{ua}");
-            assert!(!r.allowed(ua, "/publications/figure.gif"), "{ua}: longer rule wins");
+            assert!(r.allowed(ua, "/publications/figure.gif"), "{ua}: the longer Allow wins");
             assert!(r.allowed(ua, "/"), "{ua}");
             assert!(r.allowed(ua, "/example"), "{ua}");
         }

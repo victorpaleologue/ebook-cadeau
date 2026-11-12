@@ -218,16 +218,18 @@ impl Prepared {
     }
 }
 
+/// Turns distances into scores (same order).
+pub(crate) fn scores(distances: &[Option<f32>], labelled: bool) -> Vec<f32> {
+    let factor = if labelled { 1.0 } else { UNLABELLED_FACTOR };
+    distances.iter().map(|d| d.map_or(0.0, |d| factor * score_from_distance(d))).collect()
+}
+
 /// Turns distances into sorted matches.
 pub(crate) fn rank(entries: &[IndexEntry], distances: &[Option<f32>], labelled: bool) -> Vec<Match> {
-    let factor = if labelled { 1.0 } else { UNLABELLED_FACTOR };
     let mut matches: Vec<Match> = entries
         .iter()
-        .zip(distances)
-        .map(|(entry, d)| Match {
-            entry: entry.clone(),
-            score: d.map_or(0.0, |d| factor * score_from_distance(d)),
-        })
+        .zip(scores(distances, labelled))
+        .map(|(entry, score)| Match { entry: entry.clone(), score })
         .collect();
     sort_matches(&mut matches);
     matches

@@ -223,7 +223,10 @@ fn sample_card_passes_external_validators() {
             }
         }
 
-        if let Some((ok, _, stderr)) = run("mutool", &["draw", "-o", "/dev/null", &path]) {
+        // Render to a small PNG next to the PDF: recent MuPDF versions cannot infer an output
+        // format from `/dev/null` ("Output format could not be determined").
+        let render = format!("{}-mutool-%d.png", path.trim_end_matches(".pdf"));
+        if let Some((ok, _, stderr)) = run("mutool", &["draw", "-r", "20", "-o", &render, &path]) {
             assert!(ok, "{name}: mutool draw failed: {stderr}");
             assert!(!stderr.contains("error"), "{name}: {stderr}");
         }

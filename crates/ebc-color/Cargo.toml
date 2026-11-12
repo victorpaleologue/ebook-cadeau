@@ -9,6 +9,7 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+ebc-scene.workspace = true
 
 [lints]
 workspace = true

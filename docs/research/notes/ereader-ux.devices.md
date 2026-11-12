@@ -75,8 +75,9 @@ Sources for the [V1]/[V2] cells are detailed per family below.
   exactly this [V1: [CWA README](https://raw.githubusercontent.com/crocodilestick/Calibre-Web-Automated/main/README.md)].
   Limits (50 MB by e-mail, 200 MB by web/app) and the list of channels (web uploader, desktop apps,
   phone share sheet) are [M].
-- **Browser download**: tap an `.azw3` link → "OK"; the file is readable but "won't add the ebook to your
-  Kindle library" in the same way and gets no cover [V1: Standard Ebooks]. send2ereader converts EPUB→MOBI
+- **Browser download**: tap an `.azw3` link → "OK" in the download box; this "won't add the ebook to your
+  Kindle library, but your Kindle will remember your reading position", and shows no cover
+  [V1: Standard Ebooks]. send2ereader converts EPUB→MOBI
   with KindleGen for Kindle, sets `Content-Disposition: attachment`, and strips every filename character
   outside `[.\w\-"'()]` "a limitation of the Kindle browser" [V1: index.js, upload.html]. calibre removes
   `Content-Disposition` for `Kindle/3` user agents because non-ASCII filenames break the download
@@ -94,7 +95,7 @@ Sources for the [V1]/[V2] cells are detailed per family below.
 
 - Kobo's own guidelines: EPUB 2.0.1–3.3 supported; side-loaded `.epub` uses the "Adobe Digital Editions"
   engine, renaming to `.kepub.epub` triggers "the Kobo WebKit"; store files carry Kobo DRM (per-book,
-  per-user, per-device keys); JavaScript inside books is not supported on eInk
+  per-user, per-device keys); JavaScript inside books has only "limited support" on eInk
   [V1: [kobolabs/epub-spec](https://raw.githubusercontent.com/kobolabs/epub-spec/master/README.md)];
   Standard Ebooks and [kepubify](https://raw.githubusercontent.com/pgaskin/kepubify/master/README.md) confirm the two renderers [V2].
 - Browser: Kobo publishes `qtwebkit`/`qtbase` forks [V1: [kobolabs org](https://github.com/kobolabs)];

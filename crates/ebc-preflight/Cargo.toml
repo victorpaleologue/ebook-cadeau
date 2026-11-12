@@ -9,6 +9,13 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+lopdf = { version = "0.47.0", default-features = false }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
 
 [lints]
 workspace = true
+
+[target.'cfg(all(target_family = "wasm", target_os = "unknown"))'.dependencies]
+lopdf = { version = "0.47.0", default-features = false, features = ["wasm_js"] }

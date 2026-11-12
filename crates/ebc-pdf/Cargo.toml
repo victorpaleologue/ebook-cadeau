@@ -9,6 +9,12 @@ repository.workspace = true
 authors.workspace = true
 
 [dependencies]
+ebc-scene.workspace = true
+miniz_oxide = "0.9.1"
+pdf-writer = "0.15.0"
+subsetter = "0.2.6"
+thiserror.workspace = true
+ttf-parser = "0.25.1"
 
 [lints]
 workspace = true

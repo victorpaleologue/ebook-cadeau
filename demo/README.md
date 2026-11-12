@@ -55,8 +55,11 @@ A walk-through:
 
 1. Open Septante, put a book in the cart, check out, tick **"C'est pour offrir"**, pay
    (any e-mail address; no card is asked for).
-2. The order page shows the claim URL and the code (`XXXX-XXXX-XXXX`). The printable card
-   is not available yet (see *Limits*), so the page says to pass on the link and the code.
+2. The order page shows the claim URL, the code (`XXXX-XXXX-XXXX`) and the printable card
+   (PDF, composed by the server with the store's cover): print it duplex at 100 %, flip
+   on the short edge, cut and fold. Choosing **"Carte imprimée et envoyée par la poste"** instead sends
+   the professional variant of the same card to the printer, whose status then shows on
+   the order page.
 3. Redeem it as an e-reader without a phone would — by typing the code on the home page:
 
    ```sh
@@ -102,7 +105,7 @@ and `DEMO_TEST_HOOKS`; the printer reads `DEMO_PRINTER_BIND`, `DEMO_PRINTER_TICK
 ## End-to-end tests
 
 ```sh
-cargo test -p ebc-demo-integration        # about 2 s; offline, loopback sockets only
+cargo test -p ebc-demo-integration        # about 25 s (cards are rendered in a debug build); offline, loopback only
 ```
 
 Each test starts its own constellation on ephemeral ports with a shared manual clock
@@ -118,7 +121,9 @@ none of our own components is mocked:
 | Every device profile gets the book or is told why; download limit → `exhausted`; two books, two gifts | `septante.rs` |
 | Grande Enseigne: signed redirect → account → fulfilment confirmed → account sync; second account refused | `tests/it/grande_enseigne.rs` |
 | `reseller_licence` with an in-test licence endpoint and the simulated LCP reader | `tests/it/licence.rs` |
-| Printer: card with bleed accepted, without bleed rejected (via a store's client and via the server's print orders); posted-card checkout | `tests/it/printing.rs` |
+| The printed card: the order page's PDF is rendered (`pdftoppm`), its QR code decoded (`zbarimg`) and compared with the upper-cased claim URL, the printed code and address read back (`pdftotext`) and used to redeem on a simulated Kobo; reissued card; reseller card; formats and profiles | `tests/it/card.rs` |
+| "Printed and posted": the store sends the server's card to the printer, which accepts it; status callbacks; printer verdicts on a card with and without bleed (via a store's client and via the server's print orders); fallback of a server without card renderer | `tests/it/printing.rs` |
+| Standalone creator mode: upload rules, reveal date, manage token, reissue, cancel | `tests/it/standalone.rs` |
 | Typos, unknown codes and the rate limit, cancelled and reissued codes, tampered signatures, hostile text, misleading `User-Agent` + device chooser | `tests/it/negative.rs` |
 
 Keystroke costs of the device journeys are written to `target/tmp/keystrokes-*.txt`.
@@ -128,13 +133,15 @@ and API tests.
 
 ## Limits (what is stubbed or unverified)
 
-* **No printable card yet.** The server's `card.pdf` answers `501` until the card composer
-  (`ebc-card`) is plugged into its `CardRenderer`; the stores then show the claim URL and
-  code instead, and a "printed and posted" order reports that nothing was sent to the
-  printer. `tests/it/printing.rs` covers the printer leg with a structural PDF built with
-  `ebc-layout` + `ebc-pdf` (flat panels — a fixture, not a card), exercises the
-  store → `card.pdf` → printer → callback chain with that fixture behind the renderer seam,
-  and keeps the real full-chain test `#[ignore = "needs ebc-card wired into the server"]`.
+* **The card is checked by tools, not by a press.** `tests/it/card.rs` needs `pdftoppm`,
+  `pdftotext` (poppler) and `zbarimg`; where one is missing the check is skipped with a
+  note. The demo printer's preflight accepts the card; no real printer has seen it.
+  The demo stores declare `cover_rights=print_licence` for their own fictional covers —
+  a real reseller must declare what its contracts say (a cover without a declared basis
+  is never printed: the card is then typographic).
+* A server built without the `card` feature answers `501` on `card.pdf`; the stores then
+  show the claim URL and code only, and a posted-card order reports that nothing was sent
+  to the printer (covered in `tests/it/printing.rs`).
 * **LCP is simulated**: the licence flow has the right shape but no cryptography
   (`ebc_demo_ereaders::lcp`). Neither store issues licence files; the `reseller_licence`
   journey uses an in-test partner.

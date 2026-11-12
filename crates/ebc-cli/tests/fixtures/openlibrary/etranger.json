@@ -1,0 +1,19 @@
+{
+  "ISBN:9782070360024": {
+    "bib_key": "ISBN:9782070360024",
+    "info_url": "https://openlibrary.org/books/OL8838946M/L'étranger",
+    "details": {
+      "publishers": ["Gallimard"],
+      "number_of_pages": 185,
+      "isbn_10": ["2070360024"],
+      "series": ["Collection Folio ; 2"],
+      "key": "/books/OL8838946M",
+      "authors": [{"key": "/authors/OL124171A", "name": "Albert Camus"}],
+      "languages": [{"key": "/languages/fre"}],
+      "title": "L'étranger",
+      "isbn_13": ["9782070360024"],
+      "publish_date": "1971",
+      "type": {"key": "/type/edition"}
+    }
+  }
+}

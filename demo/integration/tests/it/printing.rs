@@ -231,11 +231,8 @@ async fn buy_posted(world: &World) -> (ebc_demo_ereaders::EinkBrowser, Receipt) 
 /// sent to the printer.
 #[tokio::test]
 async fn without_a_card_renderer_the_stores_fall_back_to_the_link_and_the_code() {
-    let world = World::builder()
-        .card_renderer(Arc::new(ebc_server::NoCardRenderer))
-        .start()
-        .await
-        .unwrap();
+    let world =
+        World::builder().card_renderer(Arc::new(ebc_server::NoCardRenderer)).start().await.unwrap();
     let (mut buyer, receipt) = buy_posted(&world).await;
     let gift = &receipt.gifts[0];
     assert_eq!(gift.status, "created", "the gift itself exists either way: {gift:#?}");

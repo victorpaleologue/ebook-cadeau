@@ -78,7 +78,11 @@ async fn a_kobo_types_the_printed_code_and_downloads_the_watermarked_epub() {
     let saved = buyer.open(&card_link).await.unwrap();
     let entry = saved.download().expect("the browser saves the card PDF");
     assert_eq!(entry.format, FileFormat::Pdf);
-    assert_eq!(entry.sha256, sha256_hex(&card.body), "the card the server rendered for home printing");
+    assert_eq!(
+        entry.sha256,
+        sha256_hex(&card.body),
+        "the card the server rendered for home printing"
+    );
 
     // --- the recipient: a Kobo, no phone, no account ---
     let mut kobo = browser(&world, DeviceProfile::kobo_clara());

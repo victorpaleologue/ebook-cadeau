@@ -23,7 +23,7 @@
 //!   the imprint and — when a cover is printed — its credit line. No barcode, no logo.
 
 use ebc_color::{Edge, Rgb8, edge_palette, relative_luminance};
-use ebc_i18n::{Msg, spine_direction_for_book, t};
+use ebc_i18n::{Msg, spine_direction_for_book, t, tf};
 use ebc_layout::{Face, Fit, place_image, place_image_aligned, safe_rect};
 use ebc_scene::{Color, Item, Page, Path, Pixmap, Point, Rect, Stroke};
 use ebc_spine::{
@@ -36,7 +36,6 @@ use crate::compose::{Composer, CoverPlan};
 use crate::error::{CardError, CardWarning, TextField};
 use crate::request::SpineChoice;
 use crate::rights::{Placement, RightsBasis};
-use crate::strings;
 use crate::text::{
     Align, MIN_REVERSED_PT, MIN_TYPE_PT, Para, ParaSpec, fit_line, layout, note_clamped,
 };
@@ -306,12 +305,16 @@ impl Composer<'_> {
         let supplied = self.req.cover_credit.as_deref().map(str::trim).filter(|c| !c.is_empty());
         let publisher = self.req.book.publisher.as_deref().map(str::trim).filter(|p| !p.is_empty());
         match (supplied, rights, publisher) {
-            (Some(credit), _, _) => strings::cover_credit(locale, credit),
-            (None, RightsBasis::PublicDomain, _) => strings::cover_credit_public_domain(locale),
-            (None, _, Some(publisher)) => strings::cover_credit_publisher(locale, publisher),
+            (Some(credit), _, _) => tf(locale, Msg::CoverCredit, &[("credit", credit)]),
+            (None, RightsBasis::PublicDomain, _) => {
+                t(locale, Msg::CoverCreditPublicDomain).to_owned()
+            }
+            (None, _, Some(publisher)) => {
+                tf(locale, Msg::CoverCreditPublisher, &[("publisher", publisher)])
+            }
             (None, _, None) => {
                 self.warnings.push(CardWarning::CoverCreditMissing);
-                strings::cover_credit_unknown(locale)
+                t(locale, Msg::CoverCreditUnknown).to_owned()
             }
         }
     }

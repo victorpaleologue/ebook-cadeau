@@ -53,6 +53,20 @@ pub(super) fn text(msg: Msg) -> &'static str {
         Msg::EreaderWord => "eReader",
         Msg::QrWord => "QR-Code",
 
+        Msg::PrintDuplexShortEdge => {
+            "Mit 100\u{a0}% (ohne Skalierung) beidseitig drucken, an der kurzen Kante spiegeln."
+        }
+        Msg::PrintDuplexLongEdge => {
+            "Mit 100\u{a0}% (ohne Skalierung) beidseitig drucken, an der langen Kante spiegeln."
+        }
+        Msg::PrintCutFold => "An den durchgezogenen Marken schneiden, an den gestrichelten falzen.",
+        Msg::CoverCredit => "Umschlagabbildung: {credit}",
+        Msg::CoverCreditPublisher => "Umschlagabbildung: © {publisher}",
+        Msg::CoverCreditPublicDomain => "Umschlagabbildung: gemeinfrei",
+        Msg::CoverCreditUnknown => "Umschlagabbildung: alle Rechte vorbehalten",
+        Msg::CardFormatLine => "Format {width} × {height} mm, Rücken {spine} mm",
+        Msg::OutsideLabel => "Vorder- und Rückseite",
+
         Msg::RedeemTitle => "Buch abholen",
         Msg::RedeemIntro => "Bitte den Code von der Innenseite der Karte eingeben.",
         Msg::RedeemCta => "Mein Buch abholen",

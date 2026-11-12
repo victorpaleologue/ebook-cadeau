@@ -21,7 +21,7 @@ bundled-fogra39 = []
 
 [dependencies]
 ebc-color.workspace = true
-ebc-covers = { path = "../ebc-covers", version = "0.1.0" }
+ebc-covers.workspace = true
 ebc-i18n.workspace = true
 ebc-layout.workspace = true
 ebc-model.workspace = true

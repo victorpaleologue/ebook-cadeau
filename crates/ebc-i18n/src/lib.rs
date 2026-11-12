@@ -47,16 +47,22 @@
 //!   Dutch; French running text says « livre numérique » and only the checkout option
 //!   says « ebook ». The device is « liseuse », "e-reader" (English, Dutch) or "eReader".
 //! * Typography: French strings put a no-break space (U+00A0) before `? ! : ;`;
-//!   apostrophes are typographic (U+2019). Only characters found in ordinary Latin text
-//!   fonts are used.
+//!   apostrophes are typographic (U+2019). The languages that set a space between a
+//!   number and `%` (French, German, Spanish, Portuguese) make it a no-break space; the
+//!   other strings hold no no-break space at all. Only characters found in ordinary Latin
+//!   text fonts are used.
+//! * **The sheet** ([`Msg::PrintDuplexShortEdge`], [`Msg::PrintDuplexLongEdge`],
+//!   [`Msg::PrintCutFold`]): the instructions in the margin of a sheet printed at home
+//!   follow the register of the card (infinitive, or imperative in English and Dutch)
+//!   and use the words of the print dialogs ("flip on the short edge", « retourner sur le
+//!   bord court », „an der kurzen Kante spiegeln“).
 //!
 //! **Not verified.** The research itself is unverified at source, and no string has been
 //! reviewed by a native speaker; Portuguese is the least reliable. See [`t_with`] for
 //! overriding any message per reseller. Not implemented here, although the research asks
 //! for them: per-tenant noun style and register, regional deltas (fr-CA, pt-BR, es-419),
-//! and a catalogue kept in data files — `locales/*.toml` is an unfinished draft of the
-//! latter (three languages, not read by any code): the tables in `src/strings/` are what
-//! ships.
+//! and a catalogue kept in data files: the tables in `src/strings/` are the only source
+//! of the strings.
 //!
 //! # Templates
 //!
@@ -191,6 +197,36 @@ messages! {
     /// The words for a QR code, for screens, alternative text and help pages — not for
     /// the printed card.
     QrWord => "qr_word", [];
+
+    // ---- The printed sheet: margin notes, cover credit, job line ------------------------
+
+    /// Instruction in the margin of a sheet printed at home, for a sheet that is turned
+    /// over on its **short** edge: print at 100 % (actual size), on both sides, flip on
+    /// the short edge. Which of this and [`Msg::PrintDuplexLongEdge`] applies is a matter
+    /// of geometry (`ebc_layout::SheetPlacement::duplex_flip`), not of language.
+    PrintDuplexShortEdge => "print_duplex_short_edge", [];
+    /// [`Msg::PrintDuplexShortEdge`] for a sheet that is turned over on its **long** edge.
+    PrintDuplexLongEdge => "print_duplex_long_edge", [];
+    /// Instruction in the margin of a sheet printed at home: cut on the solid marks, fold
+    /// on the dashed ones.
+    PrintCutFold => "print_cut_fold", [];
+    /// Credit line for the cover image, with a credit text supplied by the caller and
+    /// printed as given. Placeholder: `credit` (e.g. `© Jeanne Roy / Atelier du Lac`).
+    CoverCredit => "cover_credit", ["credit"];
+    /// Credit line for the cover image when only the publisher is known. Placeholder:
+    /// `publisher`.
+    CoverCreditPublisher => "cover_credit_publisher", ["publisher"];
+    /// Credit line for a cover image in the public domain.
+    CoverCreditPublicDomain => "cover_credit_public_domain", [];
+    /// Credit line for a cover image whose rights holder is not known to the composer.
+    CoverCreditUnknown => "cover_credit_unknown", [];
+    /// The size of the card, for the job line in the slug of a press sheet. Placeholders:
+    /// `width` and `height` of one cover and `spine`, the width of the spine, all in
+    /// millimetres, as plain numbers.
+    CardFormatLine => "card_format_line", ["width", "height", "spine"];
+    /// Label: the outside of the card (back cover, spine and front cover) — the
+    /// counterpart of [`Msg::InsideLabel`], also printed in the job line of a press sheet.
+    OutsideLabel => "outside_label", [];
 
     // ---- Redemption pages ------------------------------------------------------------
 

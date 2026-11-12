@@ -283,7 +283,8 @@ impl WorldBuilder {
         self
     }
 
-    /// Plugs a card renderer into the server (`card.pdf` answers `501` without one).
+    /// Replaces the server's card renderer (the default is the real card composer;
+    /// `ebc_server::NoCardRenderer` makes `card.pdf` answer `501`).
     #[must_use]
     pub fn card_renderer(mut self, renderer: Arc<dyn CardRenderer>) -> Self {
         self.card_renderer = Some(renderer);

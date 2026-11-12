@@ -93,7 +93,6 @@ mod outside;
 mod paint;
 mod request;
 pub mod rights;
-mod strings;
 pub mod svg;
 mod text;
 

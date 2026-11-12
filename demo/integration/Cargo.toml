@@ -22,13 +22,10 @@ path = "tests/it/main.rs"
 
 [dependencies]
 axum = "0.8.9"
-# Internal crates that are not (yet) listed in the root `[workspace.dependencies]`: the
-# integration owner may not edit that table beyond its own line, so they are path
-# dependencies here.
-ebc-demo-ereaders = { path = "../ereaders", version = "0.1.0" }
+ebc-demo-ereaders.workspace = true
 ebc-demo-printer.workspace = true
-ebc-demo-stores = { path = "../stores", version = "0.1.0" }
-ebc-server = { path = "../../crates/ebc-server", version = "0.1.0" }
+ebc-demo-stores.workspace = true
+ebc-server.workspace = true
 reqwest = { version = "0.13.5", default-features = false, features = ["rustls-no-provider"] }
 serde_json.workspace = true
 thiserror.workspace = true

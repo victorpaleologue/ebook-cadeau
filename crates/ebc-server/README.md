@@ -93,11 +93,40 @@ Recipient pages (no JavaScript, no cookie): `GET /`, `GET /k?code=`, `GET /aide`
 Creator API: `POST /api/v1/uploads`, `POST /api/v1/gifts`, `GET|DELETE /api/v1/gifts/{id}`,
 `POST …/reissue`, `PUT …/card.pdf`, `POST …/print-orders`.
 Partner API: `POST /api/partner/v1/uploads`, `POST /api/partner/v1/gifts`, `GET …/gifts/{id}`,
-`PUT …/cover`, `GET …/card.pdf`, `POST …/cancel|reissue|fulfilled`; signed webhooks.
+`PUT …/cover[?cover_rights=…]`, `GET …/card.pdf`, `POST …/cancel|reissue|fulfilled`; signed webhooks.
 
 Beyond the contract: `GET /{CODE}` redirects to `/k/{CODE}`; `/static/eink.css` (the one
 style sheet); `/o/{session}/cover` (the partner's cover, for OPDS clients); the form field
 `opds=1` on `POST /k/{code}/download` redirects to the OPDS feed instead of the file.
+
+## The card (`card.pdf`)
+
+`GET /api/partner/v1/gifts/{id}/card.pdf?format=poche|a6|digest|a5&profile=pro|home-a4|home-letter`
+returns the print-ready card composed by `ebc-card` (cargo feature `card`, default on;
+defaults: `poche`, `pro`). The same gift always gives the same bytes.
+
+| `profile` | Output |
+|---|---|
+| `pro` | trim + 3 mm bleed, no marks, PDF/X-4 (the composer's `upload_eu` profile: what web-to-print portals accept) |
+| `home-a4`, `home-letter` | the card centred on the sheet with cut and fold guides, plain PDF, to print duplex at 100 % |
+
+**Covers and rights.** The cover a partner uploads with `PUT …/cover` is printed only
+under a rights basis the partner *declares*: `"cover_rights"` in the gift creation body,
+or `PUT …/cover?cover_rights=…` (the query string is part of the request signature).
+Values: `none` (default), `print_licence`, `promo_all_media`, `rights_holder_declared`,
+`public_domain`. Without a declaration the cover is stored but never enters a print
+file — the card is typographic (title and author as text). `promo_all_media` only allows
+the reduced-size layout of home-printed cards.
+
+| Answer | When |
+|---|---|
+| `200 application/pdf` | the card |
+| `400 invalid_parameter` | unknown `format` / `profile` |
+| `422 invalid_cover_rights` | an unknown `cover_rights` value (creation or cover upload) |
+| `422 cover_rights_refused` | the declared basis does not allow this print route (e.g. `promo_all_media` with `profile=pro`) |
+| `422 card_unprocessable` | the card cannot be laid out as asked: it does not fit the sheet (`a5` on A4), the declared cover is not a decodable JPEG/PNG/WebP image, … |
+| `409 gift_cancelled`, `409 code_unavailable` | the gift is cancelled, or its code cannot be reproduced |
+| `501 not_implemented` | the server was built without the `card` feature |
 
 ## Security notes
 
@@ -119,8 +148,11 @@ style sheet); `/o/{session}/cover` (the partner's cover, for OPDS clients); the 
 
 ## Known limits
 
-- `card.pdf` answers `501 not_implemented` until a `CardRenderer` backed by `ebc-card` is
+- `card.pdf` needs the cargo feature `card` (on by default); a build with
+  `--no-default-features` answers `501 not_implemented` unless another `CardRenderer` is
   passed to `AppState::builder(..).card_renderer(..)`.
+- Cards are composed with the composer's bundled fonts and FOGRA39 output intent; a
+  partner cannot choose the printing condition, the spine style or the ground colour yet.
 - Storage is one JSON snapshot rewritten on every change, with a single writer process.
 - Uploads (≤ 50 MB) are buffered in memory while they are checked.
 - Page strings specific to the server (`src/text.rs`) are not reviewed by native speakers.

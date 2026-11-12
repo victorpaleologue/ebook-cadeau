@@ -351,7 +351,31 @@ fn typography_is_clean() {
             }
         }
         if locale != Locale::Fr {
-            assert!(!text.contains('\u{a0}'), "{context}: unexpected no-break space");
+            // The only no-break space outside French: between a number and its per cent
+            // sign, in the languages that set a space there ("100 %" must not break).
+            for (i, c) in chars.iter().enumerate() {
+                if *c != '\u{a0}' {
+                    continue;
+                }
+                let before = i.checked_sub(1).and_then(|p| chars.get(p)).copied();
+                let after = chars.get(i + 1).copied();
+                let percent = before.is_some_and(|b| b.is_ascii_digit()) && after == Some('%');
+                assert!(
+                    percent && matches!(locale, Locale::De | Locale::Es | Locale::Pt),
+                    "{context}: unexpected no-break space"
+                );
+            }
+        }
+        // A per cent sign follows its number directly (English, Italian, Dutch) or after
+        // a no-break space — never after a space a line could break at.
+        for (i, c) in chars.iter().enumerate() {
+            if *c == '%' {
+                let before = i.checked_sub(1).and_then(|p| chars.get(p)).copied();
+                assert!(
+                    before.is_some_and(|b| b.is_ascii_digit() || b == '\u{a0}'),
+                    "{context}: breakable space before %"
+                );
+            }
         }
         if locale == Locale::Es {
             assert_eq!(text.matches('¿').count(), text.matches('?').count(), "{context}");
@@ -364,7 +388,7 @@ fn typography_is_clean() {
 }
 
 /// Every message that can be printed on the card.
-const CARD_MESSAGES: [Msg; 22] = [
+const CARD_MESSAGES: [Msg; 31] = [
     Msg::CardHeadline,
     Msg::CardFrom,
     Msg::CardTo,
@@ -387,7 +411,144 @@ const CARD_MESSAGES: [Msg; 22] = [
     Msg::FoldHere,
     Msg::CutHere,
     Msg::PrintedWith,
+    Msg::PrintDuplexShortEdge,
+    Msg::PrintDuplexLongEdge,
+    Msg::PrintCutFold,
+    Msg::CoverCredit,
+    Msg::CoverCreditPublisher,
+    Msg::CoverCreditPublicDomain,
+    Msg::CoverCreditUnknown,
+    Msg::CardFormatLine,
+    Msg::OutsideLabel,
 ];
+
+/// The instructions printed in the margin of a sheet printed at home.
+const SHEET_INSTRUCTIONS: [Msg; 3] =
+    [Msg::PrintDuplexShortEdge, Msg::PrintDuplexLongEdge, Msg::PrintCutFold];
+
+#[test]
+fn sheet_instructions_say_how_to_print_cut_and_fold() {
+    for locale in Locale::ALL {
+        let short = t(locale, Msg::PrintDuplexShortEdge);
+        let long = t(locale, Msg::PrintDuplexLongEdge);
+        // Print at 100 %, on both sides — and the two differ by one word only: the edge.
+        for text in [short, long] {
+            assert!(text.contains("100"), "{locale}: {text:?}");
+            assert!(text.contains('%'), "{locale}: {text:?}");
+        }
+        assert_ne!(short, long, "{locale}");
+        let (short_words, long_words): (Vec<&str>, Vec<&str>) =
+            (short.split(' ').collect(), long.split(' ').collect());
+        assert_eq!(short_words.len(), long_words.len(), "{locale}");
+        let differing = short_words.iter().zip(&long_words).filter(|(a, b)| a != b).count();
+        assert_eq!(differing, 1, "{locale}: {short:?} / {long:?}");
+        for msg in SHEET_INSTRUCTIONS {
+            let text = t(locale, msg);
+            assert!(msg.placeholders().is_empty());
+            assert!(text.ends_with('.'), "{locale}/{msg:?}: {text:?}");
+            assert!(text.chars().next().is_some_and(char::is_uppercase), "{locale}/{msg:?}");
+            // Two lines of 7 pt type in the margin beside a cover: about 90 characters.
+            let length = text.chars().count();
+            assert!((40..=90).contains(&length), "{locale}/{msg:?} has {length} characters");
+        }
+    }
+    // The words of the print dialogs.
+    let expected = [
+        (Locale::Fr, "retourner sur le bord court", "retourner sur le bord long"),
+        (Locale::En, "flip on the short edge", "flip on the long edge"),
+        (Locale::De, "an der kurzen Kante spiegeln", "an der langen Kante spiegeln"),
+        (Locale::Es, "voltear por el borde corto", "voltear por el borde largo"),
+        (Locale::It, "capovolgere sul lato corto", "capovolgere sul lato lungo"),
+        (Locale::Nl, "omslaan langs de korte zijde", "omslaan langs de lange zijde"),
+        (Locale::Pt, "virar pela margem curta", "virar pela margem longa"),
+    ];
+    for (locale, short, long) in expected {
+        assert!(t(locale, Msg::PrintDuplexShortEdge).contains(short), "{locale}");
+        assert!(t(locale, Msg::PrintDuplexLongEdge).contains(long), "{locale}");
+    }
+    assert_eq!(
+        t(Locale::Fr, Msg::PrintDuplexShortEdge),
+        "Imprimer à 100\u{a0}% (taille réelle), recto verso, retourner sur le bord court."
+    );
+    assert_eq!(
+        t(Locale::Fr, Msg::PrintCutFold),
+        "Couper sur les traits pleins, plier sur les pointillés."
+    );
+    assert_eq!(
+        t(Locale::En, Msg::PrintCutFold),
+        "Cut along the solid marks, fold along the dashed ones."
+    );
+}
+
+#[test]
+fn cover_credit_lines_share_one_label_per_locale() {
+    let credits = [
+        Msg::CoverCredit,
+        Msg::CoverCreditPublisher,
+        Msg::CoverCreditPublicDomain,
+        Msg::CoverCreditUnknown,
+    ];
+    for locale in Locale::ALL {
+        // "Couverture :", "Cover:", … — the same word before the colon in all four.
+        let labels: HashSet<&str> = credits
+            .iter()
+            .map(|msg| t(locale, *msg).split(':').next().unwrap_or_default())
+            .collect();
+        assert_eq!(labels.len(), 1, "{locale}: {labels:?}");
+        for msg in credits {
+            assert_eq!(t(locale, msg).matches(':').count(), 1, "{locale}/{msg:?}");
+        }
+        // The caller's credit is printed as given, at the end; only the publisher line
+        // adds a copyright sign of its own.
+        let given = tf(locale, Msg::CoverCredit, &[("credit", "© Jeanne Roy / Atelier du Lac")]);
+        assert!(given.ends_with(": © Jeanne Roy / Atelier du Lac"), "{locale}: {given:?}");
+        assert!(!t(locale, Msg::CoverCredit).contains('©'), "{locale}");
+        let publisher = tf(locale, Msg::CoverCreditPublisher, &[("publisher", "Éditions du Lac")]);
+        assert!(publisher.ends_with("Éditions du Lac"), "{locale}: {publisher:?}");
+        assert_eq!(publisher.matches('©').count(), 1, "{locale}: {publisher:?}");
+        for msg in [Msg::CoverCreditPublicDomain, Msg::CoverCreditUnknown] {
+            assert!(!t(locale, msg).contains('©'), "{locale}/{msg:?}");
+            assert!(!t(locale, msg).ends_with('.'), "{locale}/{msg:?}: a label, not a sentence");
+        }
+        assert_ne!(
+            t(locale, Msg::CoverCreditPublicDomain),
+            t(locale, Msg::CoverCreditUnknown),
+            "{locale}"
+        );
+    }
+    assert_eq!(
+        tf(Locale::Fr, Msg::CoverCreditPublisher, &[("publisher", "Éditions du Lac")]),
+        "Couverture\u{a0}: ©\u{a0}Éditions du Lac"
+    );
+    assert_eq!(t(Locale::Fr, Msg::CoverCreditPublicDomain), "Couverture\u{a0}: domaine public");
+    assert_eq!(t(Locale::Fr, Msg::CoverCreditUnknown), "Couverture\u{a0}: tous droits réservés");
+    assert_eq!(t(Locale::En, Msg::CoverCreditPublicDomain), "Cover: public domain");
+}
+
+#[test]
+fn the_format_line_gives_cover_and_spine_in_millimetres() {
+    assert_eq!(Msg::CardFormatLine.placeholders(), ["width", "height", "spine"]);
+    let args = [("width", "110"), ("height", "178"), ("spine", "10")];
+    for locale in Locale::ALL {
+        let line = tf(locale, Msg::CardFormatLine, &args);
+        assert!(!line.contains(['{', '}']), "{locale}: {line:?}");
+        // Width × height, then the spine named with the word of the spine label.
+        let spaces = line.replace('\u{a0}', " ");
+        assert!(spaces.contains("110 × 178 mm"), "{locale}: {line:?}");
+        assert!(spaces.ends_with(" 10 mm"), "{locale}: {line:?}");
+        // No number of its own in any translation.
+        let template = t(locale, Msg::CardFormatLine);
+        assert!(!template.chars().any(|c| c.is_ascii_digit()), "{locale}: {template:?}");
+        // The outside and the inside of the card are told apart.
+        assert_ne!(t(locale, Msg::OutsideLabel), t(locale, Msg::InsideLabel), "{locale}");
+    }
+    assert_eq!(
+        tf(Locale::Fr, Msg::CardFormatLine, &args),
+        "Format 110 × 178\u{a0}mm, dos 10\u{a0}mm"
+    );
+    assert_eq!(tf(Locale::En, Msg::CardFormatLine, &args), "Format 110 × 178 mm, spine 10 mm");
+    assert_eq!(t(Locale::Fr, Msg::OutsideLabel), "Extérieur");
+}
 
 #[test]
 fn card_steps_are_short_single_instructions() {
@@ -607,7 +768,10 @@ fn french_card_uses_the_infinitive_and_screens_say_vous() {
     // The printed card does not choose between tu and vous on behalf of the giver
     // (ereader-ux.ux.md §12): instructions are infinitives, and no card line holds a
     // second-person pronoun or possessive.
-    for msg in [Msg::CardStep1, Msg::CardStep2, Msg::CardStep2Reseller] {
+    for msg in [Msg::CardStep1, Msg::CardStep2, Msg::CardStep2Reseller]
+        .into_iter()
+        .chain(SHEET_INSTRUCTIONS)
+    {
         let text = t(Locale::Fr, msg);
         let mut words = text.split_whitespace();
         let first = words.next().unwrap_or_default();

@@ -53,6 +53,20 @@ pub(super) fn text(msg: Msg) -> &'static str {
         Msg::EreaderWord => "e-reader",
         Msg::QrWord => "QR-code",
 
+        Msg::PrintDuplexShortEdge => {
+            "Print op 100% (werkelijke grootte), dubbelzijdig, omslaan langs de korte zijde."
+        }
+        Msg::PrintDuplexLongEdge => {
+            "Print op 100% (werkelijke grootte), dubbelzijdig, omslaan langs de lange zijde."
+        }
+        Msg::PrintCutFold => "Snijd langs de doorgetrokken lijnen, vouw langs de stippellijnen.",
+        Msg::CoverCredit => "Omslag: {credit}",
+        Msg::CoverCreditPublisher => "Omslag: © {publisher}",
+        Msg::CoverCreditPublicDomain => "Omslag: publiek domein",
+        Msg::CoverCreditUnknown => "Omslag: alle rechten voorbehouden",
+        Msg::CardFormatLine => "Formaat {width} × {height} mm, rug {spine} mm",
+        Msg::OutsideLabel => "Buitenkant",
+
         Msg::RedeemTitle => "Haal je boek op",
         Msg::RedeemIntro => "Vul de code in die aan de binnenkant van je kaart staat.",
         Msg::RedeemCta => "Mijn boek ophalen",

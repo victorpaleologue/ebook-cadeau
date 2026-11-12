@@ -2,10 +2,10 @@
 //! instructions printed on a home sheet. The two pages are built in `outside.rs` and
 //! `inside.rs`.
 
-use ebc_i18n::{Msg, t};
+use ebc_i18n::{Msg, t, tf};
 use ebc_layout::{
-    CardFormat, Face, GUIDES_LAYER, PageGeometry, PrintProfile, caption_areas, check_marks_fit,
-    guides, info_entries, marks, new_page_for, page_geometry, scale_ruler,
+    CardFormat, DuplexFlip, Face, GUIDES_LAYER, PageGeometry, PrintProfile, caption_areas,
+    check_marks_fit, guides, info_entries, marks, new_page_for, page_geometry, scale_ruler,
 };
 use ebc_scene::{DocInfo, Document, Item, Page, PdfStandard, Point, Rect};
 use ebc_text::fit_size;
@@ -16,7 +16,6 @@ use crate::inspect::{Inspector, LeafKind};
 use crate::paint::Paint;
 use crate::request::{CardRequest, CoverInput, FontSet, OutputProfile, SpineChoice};
 use crate::rights::{self, Placement, RightsBasis};
-use crate::strings;
 use crate::text::{Align, MIN_TYPE_PT, ParaSpec, Setter, clean, layout, note_clamped};
 
 /// Name of the layer that holds the instructions printed in the margin of a home sheet
@@ -235,21 +234,33 @@ impl Composer<'_> {
                 // default, "long edge", which would print the inside upside down behind
                 // the wrong cover. `duplex_flip()` gives the edge for the sheet in use
                 // (the long edge only for tall custom cards on a portrait sheet).
-                [
-                    strings::duplex_hint(locale, self.geometry.duplex_flip()).to_owned(),
-                    strings::cut_fold_hint(locale).to_owned(),
-                ]
+                let duplex = match self.geometry.duplex_flip() {
+                    DuplexFlip::ShortEdge => Msg::PrintDuplexShortEdge,
+                    DuplexFlip::LongEdge => Msg::PrintDuplexLongEdge,
+                };
+                [t(locale, duplex).to_owned(), t(locale, Msg::PrintCutFold).to_owned()]
             } else {
-                // Press sheet with marks: a job line in the bottom slug.
+                // Press sheet with marks: a job line in the bottom slug — product, title,
+                // format and face, in the card's language.
                 let title = self.clean_line(&font, &self.req.book.title, TextField::Title);
                 let title: String = title.chars().take(60).collect();
+                let size = tf(
+                    locale,
+                    Msg::CardFormatLine,
+                    &[
+                        ("width", &trim_mm(format.cover.w)),
+                        ("height", &trim_mm(format.cover.h)),
+                        ("spine", &trim_mm(format.spine_width)),
+                    ],
+                );
+                let face = match face {
+                    Face::Outside => Msg::OutsideLabel,
+                    Face::Inside => Msg::InsideLabel,
+                };
                 let job = format!(
-                    "{} · {title} · {} × {} mm + {} mm · {}",
+                    "{} · {title} · {size} · {}",
                     t(locale, Msg::ProductName),
-                    trim_mm(format.cover.w),
-                    trim_mm(format.cover.h),
-                    trim_mm(format.spine_width),
-                    face.label(),
+                    t(locale, face)
                 );
                 [String::new(), job]
             };

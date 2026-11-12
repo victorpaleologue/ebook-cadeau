@@ -48,6 +48,20 @@ pub(super) fn text(msg: Msg) -> &'static str {
         Msg::EreaderWord => "eReader",
         Msg::QrWord => "código QR",
 
+        Msg::PrintDuplexShortEdge => {
+            "Imprimir a 100\u{a0}% (tamanho real), frente e verso, virar pela margem curta."
+        }
+        Msg::PrintDuplexLongEdge => {
+            "Imprimir a 100\u{a0}% (tamanho real), frente e verso, virar pela margem longa."
+        }
+        Msg::PrintCutFold => "Cortar pelas marcas contínuas, dobrar pelas tracejadas.",
+        Msg::CoverCredit => "Capa: {credit}",
+        Msg::CoverCreditPublisher => "Capa: © {publisher}",
+        Msg::CoverCreditPublicDomain => "Capa: domínio público",
+        Msg::CoverCreditUnknown => "Capa: todos os direitos reservados",
+        Msg::CardFormatLine => "Formato {width} × {height} mm, lombada {spine} mm",
+        Msg::OutsideLabel => "Exterior",
+
         Msg::RedeemTitle => "Receba o seu livro",
         Msg::RedeemIntro => "Introduza o código impresso no interior do cartão.",
         Msg::RedeemCta => "Receber o meu livro",

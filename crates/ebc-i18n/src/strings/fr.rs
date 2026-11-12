@@ -54,6 +54,20 @@ pub(super) fn text(msg: Msg) -> &'static str {
         Msg::EreaderWord => "liseuse",
         Msg::QrWord => "QR code",
 
+        Msg::PrintDuplexShortEdge => {
+            "Imprimer à 100\u{a0}% (taille réelle), recto verso, retourner sur le bord court."
+        }
+        Msg::PrintDuplexLongEdge => {
+            "Imprimer à 100\u{a0}% (taille réelle), recto verso, retourner sur le bord long."
+        }
+        Msg::PrintCutFold => "Couper sur les traits pleins, plier sur les pointillés.",
+        Msg::CoverCredit => "Couverture\u{a0}: {credit}",
+        Msg::CoverCreditPublisher => "Couverture\u{a0}: ©\u{a0}{publisher}",
+        Msg::CoverCreditPublicDomain => "Couverture\u{a0}: domaine public",
+        Msg::CoverCreditUnknown => "Couverture\u{a0}: tous droits réservés",
+        Msg::CardFormatLine => "Format {width} × {height}\u{a0}mm, dos {spine}\u{a0}mm",
+        Msg::OutsideLabel => "Extérieur",
+
         Msg::RedeemTitle => "Recevoir votre livre",
         Msg::RedeemIntro => "Saisissez le code imprimé à l’intérieur de votre carte.",
         Msg::RedeemCta => "Récupérer mon livre",

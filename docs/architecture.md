@@ -12,10 +12,44 @@ on A4 or ordered from a professional printer.
 Two modes:
 
 - **Standalone** — an individual, author or publisher creates a card for a file they are
-  entitled to distribute (own work, public domain, open licence).
+  entitled to distribute (own work, public domain, open licence). Since v0.3 of the
+  contract this goes through a **shelf** service (below), never through the core.
 - **Reseller-integrated** — an eBook store offers an "eBook cadeau" option at checkout. The
   store keeps the content, the DRM and the customer account; eBook Cadeau issues the code,
   renders the card and routes the redemption back to the store's fulfilment.
+
+### 1.1 The two-service model (owner decision, contract v0.3)
+
+```
+            signed partner API (docs/api.md §4)                 recipient's device
+ store ─┐   create gift, cover, card.pdf, print, cancel  ┌────────┐  /k/CODE, /e, /d/…   ┌──────────┐
+        ├──────────────────────────────────────────────►│  core  │◄─────────────────────│ e-reader │
+ shelf ─┘◄──────────────────────────────────────────────│ (codes,│  303 to the partner's │  phone   │
+   ▲        §4.5: signed "give me a link" on each claim  │ cards, │  short-lived link     └────┬─────┘
+   │                                                     │ pages) │                          │
+   └─────────────────── the file itself, from the partner's own host ────────────────────────┘
+```
+
+- The **core** (`crates/ebc-server`) issues codes, renders cards, serves the redemption
+  pages, pairs devices, sends to Kindle, forwards print orders and keeps **gift records
+  only**. It never stores a book file: there is no upload route and no creator API.
+- A **file is only ever served by a registered partner**: a store (Septante in the demo
+  serves its own stamped EPUBs), or a **shelf** — a separate service (next step) that
+  hosts files for their rights holders and carries the hosting duties: uploader identity
+  and rights declaration, DRM refusal (`crates/ebc-epub`), notice and action (DSA art. 16),
+  statements of reasons, repeat-infringer policy. The shelf registers with the core exactly
+  like a store (`EBC_PARTNERS`, same signed API) and creates `partner_file` gifts for its
+  users.
+- `partner_file` delivery: on each claim the core sends the partner a signed request (the
+  parameters of the redemption redirect), gets back a short-lived download link on one of
+  the partner's `redirect_hosts`, and redirects the device to it; Send to Kindle fetches
+  the link into memory only. OPDS acquisition links are the core's session URLs.
+- Why: a service storing users' book files is a hosting provider whose liability exemption
+  is fragile when it knows which work each file is (the card names it), and which must run
+  notice and action (`docs/research/09-legal-gifting-and-commerce.md` §2.6, §3.3). Keeping
+  files out of the core keeps the core a code-and-card service with a contact point
+  (`EBC_CONTACT_EMAIL`) and a short retention of personal data (names and message deleted
+  12 months after the first claim).
 
 ## 2. Principles
 
@@ -49,12 +83,14 @@ ebc-pdf        Document -> PDF bytes (PDF/X)                      -> ebc-scene
 ebc-preflight  PDF bytes -> findings                              (independent)
 ebc-catalog    ISBN database providers (sans-IO), merge           -> ebc-model
 ebc-covers     cover cascade, scraping helpers, sniffing          -> ebc-model
+ebc-epub       eBook file checks for a hosting service: EPUB/PDF sniffing, DRM refusal,
+               rights declaration, safe file names (used by the shelf, not the core)
 ebc-fontid     identify the cover's title font (image-based)      -> ebc-scene, ebc-text
 ebc-spine      adapt or synthesise the 10 mm spine                -> scene, text, color, layout, i18n, model
 ebc-card       compose the whole card                             -> all of the above print crates
 ebc-wasm       wasm-bindgen facade                                -> card, catalog, covers, fontid, qr, isbn
 ebc-cli        `ebc` command line                                 -> everything
-ebc-server     axum service                                       -> model, i18n, isbn (+ card for server-side render)
+ebc-server     the core: axum service, no file hosting            -> model, i18n, isbn (+ card for server-side render)
 demo/stores    two fictional eBook stores                         -> server's partner API (HTTP)
 demo/printer   fictional print-on-demand API                      -> ebc-preflight
 demo/ereaders  simulated e-readers                                (HTTP clients)
@@ -139,7 +175,10 @@ quasigroup and randomised whole-code tests. Parsing must distinguish `CodeError:
 
 Also add `gift`: `GiftId`, `Gift { id, code, book: BookMeta, giver_name, recipient_name,
 message, locale, created_unix, expires_unix, delivery: Delivery }`,
-`Delivery::{HostedFile { file_name, media_type, size_bytes, sha256 }, ResellerRedirect { url }, ResellerLicence { format: "lcpl" | "acsm" | … , url }}`, `GiftStatus`.
+`Delivery::{PartnerFile { format: FileFormat (epub | pdf), url }, ResellerRedirect { url }, ResellerLicence { format: "lcpl" | "acsm" | … , url }}`,
+`PartnerFileLink { download_url, file_name?, media_type?, size_bytes?, sha256?, expires_at? }`
+(the partner's answer of `docs/api.md` §4.5, with `validate(format, now)`), `GiftStatus`.
+(`HostedFile` was removed in contract v0.3: the core holds no file.)
 
 ### ebc-i18n
 
@@ -399,7 +438,8 @@ image is allowed or available.
 ### ebc-wasm, ebc-cli, ebc-server, web, demos
 
 Specified in their own briefs once the libraries exist. The server's redemption and
-delivery design follows `docs/research/05-ereader-distribution-ux.md`.
+delivery design follows `docs/research/05-ereader-distribution-ux.md`; its HTTP contract
+is `docs/api.md` (v0.3: the two-service model of §1.1).
 
 ## 6. Testing strategy
 

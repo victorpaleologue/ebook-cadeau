@@ -29,6 +29,8 @@ pub use book::{
 };
 pub use code::{CLAIM_PATH, CodeError, GiftCode, PairCode, claim_url, claim_url_qr};
 pub use ebc_isbn::{Isbn10, Isbn13};
-pub use gift::{Delivery, Gift, GiftError, GiftId, GiftStatus, LicenceFormat};
+pub use gift::{
+    Delivery, FileFormat, Gift, GiftError, GiftId, GiftStatus, LicenceFormat, PartnerFileLink,
+};
 pub use http::{HttpRequest, HttpResponse, Method};
 pub use locale::Locale;

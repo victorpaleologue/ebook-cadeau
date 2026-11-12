@@ -48,6 +48,11 @@ pub(crate) async fn serve(router: Router) -> String {
     format!("http://{address}")
 }
 
+/// Hexadecimal SHA-256 of `bytes`.
+pub(crate) fn sha256_hex(bytes: &[u8]) -> String {
+    hex(&Sha256::digest(bytes))
+}
+
 fn hex(bytes: &[u8]) -> String {
     bytes.iter().map(|b| format!("{b:02x}")).collect()
 }
@@ -101,14 +106,6 @@ pub(crate) struct MockGift {
     pub(crate) voided: Vec<String>,
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct MockUpload {
-    pub(crate) id: String,
-    pub(crate) bytes: Vec<u8>,
-    pub(crate) file_name: String,
-    pub(crate) media_type: String,
-}
-
 /// How the mock answers `card.pdf`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum CardMode {
@@ -133,7 +130,6 @@ struct FailRule {
 #[derive(Default)]
 struct EbcInner {
     partners: HashMap<String, String>,
-    uploads: Vec<MockUpload>,
     gifts: Vec<MockGift>,
     /// Codes issued so far (creations and reissues).
     codes_issued: usize,
@@ -170,7 +166,7 @@ impl MockEbc {
         mock
     }
 
-    fn now(&self) -> i64 {
+    pub(crate) fn now(&self) -> i64 {
         self.clock.load(Ordering::SeqCst)
     }
 
@@ -216,8 +212,12 @@ impl MockEbc {
         self.gifts().into_iter().find(|g| g.id == id).unwrap()
     }
 
-    pub(crate) fn uploads(&self) -> Vec<MockUpload> {
-        self.inner.lock().unwrap().uploads.clone()
+    /// What eBook Cadeau does when the recipient claims a `partner_file` gift: a signed
+    /// `GET` of the delivery URL (§4.5). Returns the status and the JSON answer.
+    pub(crate) async fn ask_file_link(&self, gift_id: &str) -> (StatusCode, Value) {
+        let response = plain_client().get(self.redirect_url(gift_id)).send().await.unwrap();
+        let status = response.status();
+        (status, response.json().await.unwrap_or(Value::Null))
     }
 
     /// Simulates what happens on the eBook Cadeau side when the recipient uses the card.
@@ -402,40 +402,14 @@ fn route(
     partner: &str,
     method: &Method,
     uri: &Uri,
-    headers: &HeaderMap,
+    _headers: &HeaderMap,
     body: &[u8],
 ) -> (StatusCode, Value, Option<Vec<u8>>) {
-    let header = |name: &str| headers.get(name).and_then(|v| v.to_str().ok());
     let segments: Vec<&str> = uri.path().trim_start_matches('/').split('/').collect();
     let Some(rest) = segments.strip_prefix(&["api", "partner", "v1"]) else {
         return fail(StatusCode::NOT_FOUND, "not_found");
     };
     match (method.as_str(), rest) {
-        ("POST", ["uploads"]) => {
-            if header("x-rights-basis") != Some("licensed_distributor") {
-                return fail(StatusCode::BAD_REQUEST, "rights_basis_required");
-            }
-            let Some(file_name) = header("x-file-name").filter(|n| !n.is_empty()) else {
-                return fail(StatusCode::BAD_REQUEST, "file_name_required");
-            };
-            // Sniffed, not trusted from the header: an EPUB is a ZIP whose first entry is
-            // the stored `mimetype`.
-            if body.len() < 58 || &body[30..58] != b"mimetypeapplication/epub+zip" {
-                return fail(StatusCode::UNSUPPORTED_MEDIA_TYPE, "unsupported_media_type");
-            }
-            let id = format!("up_{:04}", inner.uploads.len() + 1);
-            inner.uploads.push(MockUpload {
-                id: id.clone(),
-                bytes: body.to_vec(),
-                file_name: file_name.to_owned(),
-                media_type: header("content-type").unwrap_or("").to_owned(),
-            });
-            let receipt = json!({
-                "upload_id": id, "sha256": hex(&Sha256::digest(body)),
-                "size_bytes": body.len(), "media_type": "application/epub+zip",
-            });
-            (StatusCode::CREATED, receipt, None)
-        }
         ("POST", ["gifts"]) => {
             let Ok(request) = serde_json::from_slice::<Value>(body) else {
                 return fail(StatusCode::BAD_REQUEST, "invalid_json");
@@ -446,10 +420,11 @@ fn route(
                 return fail(StatusCode::UNPROCESSABLE_ENTITY, "invalid_gift");
             }
             match text("/delivery/type") {
-                "hosted_file" => {
-                    let upload = text("/delivery/upload_id");
-                    if !inner.uploads.iter().any(|u| u.id == upload) {
-                        return fail(StatusCode::UNPROCESSABLE_ENTITY, "unknown_upload");
+                "partner_file" => {
+                    if text("/delivery/format") != "epub"
+                        || !text("/delivery/url").starts_with("http")
+                    {
+                        return fail(StatusCode::UNPROCESSABLE_ENTITY, "invalid_delivery");
                     }
                 }
                 "reseller_redirect" => {

@@ -1,8 +1,10 @@
 //! Demo: two fictional eBook stores offering the "eBook cadeau" option at checkout.
 //!
 //! * **Septante** — an independent French store selling DRM-free, watermarked eBooks with
-//!   direct downloads. Gifts are delivered as `hosted_file` by default: the store uploads a
-//!   copy stamped for the recipient to eBook Cadeau, so the recipient needs no account.
+//!   direct downloads. Gifts are delivered as `partner_file`: the store serves the file
+//!   itself through a signed download endpoint (`GET /cadeau/fichier`), stamping a copy
+//!   for the recipient when the gift is claimed; eBook Cadeau never holds the book and the
+//!   recipient needs no account.
 //! * **Grande Enseigne** — a large cultural retailer whose eBooks live in an e-reader
 //!   ecosystem account. Nothing is downloaded in the browser; gifts are delivered as
 //!   `reseller_redirect` to the store's activation page, and the recipient's e-reader

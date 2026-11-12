@@ -6,7 +6,7 @@
 //! * the printer's verdicts on a card-shaped PDF built here with `ebc-layout` (page boxes,
 //!   bleed, `EBC.*` geometry keys) and `ebc-pdf` (PDF/X-4): accepted with bleed, refused
 //!   without, both when a store's printer client submits it and when the server forwards
-//!   a creator's print order;
+//!   a partner's print order (a card composed elsewhere, uploaded with the signed API);
 //! * a server without a card renderer (`501`): the stores fall back to the link and the
 //!   code, and order nothing from the printer.
 
@@ -14,15 +14,17 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use ebc_demo_ereaders::DeviceProfile;
+use ebc_demo_integration::partner::plain_client;
 use ebc_demo_integration::shop::{self, GiftOrder, PostTo, Receipt};
 use ebc_demo_integration::{T0, World};
+use ebc_demo_stores::StoreKind;
 use ebc_demo_stores::outbound::{PostalAddress, PrintOrderRequest, PrintSubmission, PrinterClient};
 use ebc_layout::{CardFormat, Face, PrintProfile, info_entries, new_page_for};
 use ebc_pdf::{WriteOptions, write_pdf};
 use ebc_scene::{Color, DocInfo, Document, Item, OutputIntent, PdfStandard};
 use serde_json::json;
 
-use crate::support::{browser, creator_call, gift_id, plain_epub, sha256_hex};
+use crate::support::{browser, gift_id, sha256_hex};
 
 /// A two-page "poche" card (2 × 110 × 178 mm covers, 10 mm spine) as flat CMYK panels,
 /// written as PDF/X-4 with `bleed_mm` of bleed on every side. A fixture, not artwork: no
@@ -114,37 +116,27 @@ async fn the_printer_accepts_a_card_with_bleed_and_rejects_one_without() {
         ("IT-0001", sha256_hex(&good).as_str())
     );
 
-    // --- 2. forwarded by the server for a standalone creator (docs/api.md §3) ---
-    let upload = creator_call(
-        &world,
-        "POST",
-        "/api/v1/uploads",
-        None,
-        &[("x-rights-basis", "public_domain"), ("x-file-name", "candide.epub")],
-        plain_epub("candide"),
-    )
-    .await;
-    assert_eq!(upload.status, 201, "{}", upload.text());
-    let gift = creator_call(
-        &world,
-        "POST",
-        "/api/v1/gifts",
-        None,
-        &[("content-type", "application/json")],
-        json!({
-            "book": { "title": "Candide", "contributors": [{"name": "Voltaire"}] },
-            "giver_name": "Camille", "recipient_name": "Sacha", "locale": "fr",
-            "delivery": { "type": "hosted_file", "upload_id": upload.json()["upload_id"] },
-        })
-        .to_string()
-        .into_bytes(),
-    )
-    .await;
+    // --- 2. forwarded by the server for a partner (docs/api.md §4.6): the card was
+    //     composed elsewhere (e.g. the card designer) and uploaded with the signed API ---
+    let api = world.partner_api(StoreKind::Septante);
+    let gift = api
+        .post_json(
+            "/api/partner/v1/gifts",
+            &json!({
+                "order_ref": "PRINT-0001",
+                "book": { "title": "Candide", "contributors": [{"name": "Voltaire"}] },
+                "giver_name": "Camille", "recipient_name": "Sacha", "locale": "fr",
+                "delivery": { "type": "partner_file", "format": "epub", "url": world.septante.url("/cadeau/fichier") },
+            }),
+            None,
+        )
+        .await
+        .unwrap();
     assert_eq!(gift.status, 201, "{}", gift.text());
     let gift = gift.json();
-    let (id, token) = (gift["id"].as_str().unwrap(), gift["manage_token"].as_str().unwrap());
-    let card_path = format!("/api/v1/gifts/{id}/card.pdf");
-    let orders_path = format!("/api/v1/gifts/{id}/print-orders");
+    let id = gift["id"].as_str().unwrap();
+    let card_path = format!("/api/partner/v1/gifts/{id}/card.pdf");
+    let orders_path = format!("/api/partner/v1/gifts/{id}/print-orders");
     let print = |pdf: &[u8]| {
         json!({
             "product": "card-poche", "pdf_sha256": sha256_hex(pdf),
@@ -154,16 +146,27 @@ async fn the_printer_accepts_a_card_with_bleed_and_rejects_one_without() {
         .into_bytes()
     };
     let json_header = [("content-type", "application/json")];
+    // Signatures are single-use: each call below is signed a second after the previous.
+    let signed = |method: &'static str, path: String, body: Vec<u8>| {
+        let api = api.clone();
+        world.advance(1);
+        async move { api.send(method, &path, body, &json_header).await.unwrap() }
+    };
 
-    // Without the manage token nothing is uploaded or ordered.
-    let anonymous = creator_call(&world, "PUT", &card_path, None, &[], bare.clone()).await;
-    assert_eq!(anonymous.status, 401, "{}", anonymous.text());
+    // Without a signature nothing is uploaded or ordered.
+    let anonymous = plain_client()
+        .unwrap()
+        .put(world.server.url(&card_path))
+        .body(bare.clone())
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(anonymous.status(), 401);
 
     // The card without bleed: the printer's findings come back through the server.
-    let put = creator_call(&world, "PUT", &card_path, Some(token), &[], bare.clone()).await;
+    let put = signed("PUT", card_path.clone(), bare.clone()).await;
     assert_eq!(put.status, 200, "{}", put.text());
-    let refused =
-        creator_call(&world, "POST", &orders_path, Some(token), &json_header, print(&bare)).await;
+    let refused = signed("POST", orders_path.clone(), print(&bare)).await;
     assert_eq!((refused.status, refused.error_code().as_deref()), (422, Some("preflight_failed")));
     let findings = refused.json()["error"]["findings"].as_array().cloned().unwrap_or_default();
     assert!(
@@ -174,15 +177,13 @@ async fn the_printer_accepts_a_card_with_bleed_and_rejects_one_without() {
     assert_eq!(world.printer.state.orders().len(), 1);
 
     // Ordering a file other than the one uploaded is refused before the printer sees it.
-    let mismatch =
-        creator_call(&world, "POST", &orders_path, Some(token), &json_header, print(&good)).await;
+    let mismatch = signed("POST", orders_path.clone(), print(&good)).await;
     assert_eq!((mismatch.status, mismatch.error_code().as_deref()), (409, Some("pdf_mismatch")));
 
     // The good card: accepted, priced, and at the printer with the very same bytes.
-    let put = creator_call(&world, "PUT", &card_path, Some(token), &[], good.clone()).await;
+    let put = signed("PUT", card_path.clone(), good.clone()).await;
     assert_eq!(put.json()["sha256"], sha256_hex(&good).as_str());
-    let ordered =
-        creator_call(&world, "POST", &orders_path, Some(token), &json_header, print(&good)).await;
+    let ordered = signed("POST", orders_path.clone(), print(&good)).await;
     assert_eq!(ordered.status, 201, "{}", ordered.text());
     let receipt = ordered.json();
     assert_eq!(

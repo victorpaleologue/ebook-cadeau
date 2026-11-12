@@ -1,8 +1,8 @@
 //! The server-side gift pipeline run after payment, and the status refresh run on each
 //! order page load.
 //!
-//! The pipeline is a sequence of idempotent steps — upload (for `hosted_file`), gift
-//! creation (`Idempotency-Key` = the order line reference), cover, card PDF, print order —
+//! The pipeline is a sequence of idempotent steps — gift creation (`Idempotency-Key` =
+//! the order line reference), cover, card PDF, print order —
 //! each recorded in the [`GiftRecord`](crate::state::GiftRecord) as soon as it succeeds, so
 //! that a failed run can be resumed from where it stopped ("Réessayer" on the order page)
 //! without creating anything twice.
@@ -11,7 +11,7 @@ use std::sync::Arc;
 
 use crate::catalogue::{self, Book, PUBLISHER};
 use crate::config::GiftDelivery;
-use crate::epub::{self, Watermark};
+
 use crate::outbound::{
     BookPayload, CardFetch, ContributorPayload, DeliveryPayload, Fulfilment, NewGift,
     PrintOrderRequest, PrintSubmission,
@@ -28,6 +28,10 @@ pub const CARD_PRODUCT: &str = "card-poche";
 /// (fictional) editions, whose covers they drew themselves, so each holds the right to
 /// have them printed. A real reseller would declare what its contracts say, per title.
 pub const COVER_RIGHTS: &str = "print_licence";
+/// The store's signed file endpoint for `partner_file` gifts (`docs/api.md` §4.5).
+pub const FILE_ENDPOINT: &str = "/cadeau/fichier";
+/// Lifetime of a download link handed to eBook Cadeau, in seconds.
+pub const FILE_LINK_TTL_SECS: i64 = 300;
 /// How long the price of a posted card is cached, in seconds.
 const POST_PRICE_TTL_SECS: i64 = 30;
 
@@ -86,42 +90,17 @@ async fn process_line(state: &AppState, order: &Order, details: &GiftDetails, in
     };
     state.update_gift(line_ref, |g| g.last_error = None);
 
-    // 1. hosted_file: upload a copy stamped for the recipient.
-    if details.delivery == GiftDelivery::HostedFile && gift.upload_id.is_none() {
-        let watermark = Watermark {
-            store_name: state.config.kind.display_name().to_owned(),
-            order_ref: line_ref.to_owned(),
-            licensee: format!("Offert à {} par {}", details.recipient_name, details.giver_name),
-            stamped_at: order.created_at,
-        };
-        let stamped = match assets.stamped_epub(&watermark) {
-            Ok(bytes) => bytes,
-            Err(_) => {
-                fail(state, line_ref, "Le fichier du livre n'a pas pu être préparé.".into());
-                return;
-            }
-        };
-        let key = format!("{line_ref}-upload");
-        match partner.upload(&book.file_name(), epub::MEDIA_TYPE, stamped, &key).await {
-            Ok(receipt) => {
-                state.update_gift(line_ref, |g| g.upload_id = Some(receipt.upload_id));
-            }
-            Err(e) => {
-                fail(state, line_ref, e.user_message());
-                return;
-            }
-        }
-    }
-
-    // 2. Create the gift (idempotent on the order line reference).
+    // 1. Create the gift (idempotent on the order line reference). A `partner_file` gift
+    //    points eBook Cadeau at the store's signed file endpoint: the book itself is
+    //    stamped and served by the store when the recipient claims it (`routes.rs`).
     let Some(gift) = current(state) else { return };
     if gift.gift_id.is_none() {
-        let delivery = match (details.delivery, gift.upload_id.clone()) {
-            (GiftDelivery::HostedFile, Some(upload_id)) => {
-                DeliveryPayload::HostedFile { upload_id }
-            }
-            (GiftDelivery::HostedFile, None) => return,
-            (GiftDelivery::ResellerRedirect, _) => DeliveryPayload::ResellerRedirect {
+        let delivery = match details.delivery {
+            GiftDelivery::PartnerFile => DeliveryPayload::PartnerFile {
+                format: "epub".to_owned(),
+                url: format!("{}{FILE_ENDPOINT}", state.config.public_url),
+            },
+            GiftDelivery::ResellerRedirect => DeliveryPayload::ResellerRedirect {
                 url: format!("{}/cadeau/activer", state.config.public_url),
             },
         };
@@ -154,7 +133,7 @@ async fn process_line(state: &AppState, order: &Order, details: &GiftDetails, in
         }
     }
 
-    // 3. Send the cover the store is entitled to print (its own artwork).
+    // 2. Send the cover the store is entitled to print (its own artwork).
     let Some(gift) = current(state) else { return };
     let Some(gift_id) = gift.gift_id.clone() else { return };
     if !gift.cover_sent {
@@ -176,7 +155,7 @@ async fn process_line(state: &AppState, order: &Order, details: &GiftDetails, in
         }
     }
 
-    // 4. Fetch the card rendered by eBook Cadeau.
+    // 3. Fetch the card rendered by eBook Cadeau.
     if gift.card == CardState::Pending {
         match partner.card_pdf(&gift_id, CARD_FORMAT, details.card_delivery.card_profile()).await {
             Ok(CardFetch::Ready(pdf)) => {
@@ -192,7 +171,7 @@ async fn process_line(state: &AppState, order: &Order, details: &GiftDetails, in
         }
     }
 
-    // 5. Posted card: hand the PDF to the printer.
+    // 4. Posted card: hand the PDF to the printer.
     if details.card_delivery == CardDelivery::Post {
         submit_print_order(state, line_ref, details).await;
     }

@@ -149,7 +149,7 @@ mod tests {
         CheckoutOffer {
             gift_available: true,
             post_price_cents: post,
-            delivery: GiftDelivery::HostedFile,
+            delivery: GiftDelivery::PartnerFile,
         }
     }
 
@@ -181,7 +181,7 @@ mod tests {
         assert_eq!(details.card_delivery, CardDelivery::Home);
         assert_eq!(details.card_price_cents, 0);
         assert_eq!(details.address, None);
-        assert_eq!(details.delivery, GiftDelivery::HostedFile);
+        assert_eq!(details.delivery, GiftDelivery::PartnerFile);
         // No radio at all (a client that did not send the field) means the free default.
         let form = CheckoutForm { card_delivery: String::new(), ..gift_form() };
         assert_eq!(

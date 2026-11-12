@@ -599,6 +599,8 @@ function siteAddress() {
 function refreshEbook() {
   state.ebookMode = radioValue('ebook-mode');
   const mode = state.ebookMode;
+  // The "upload" mode is hidden and disabled in index.html: the core no longer hosts
+  // files. TODO(shelf): send the file to the shelf service instead.
   show($('ebook-upload'), mode === 'upload');
   show($('ebook-code'), mode === 'code');
   show($('ebook-demo'), mode === 'demo');
@@ -692,6 +694,11 @@ async function onSiteInput() {
   }
 }
 
+/**
+ * Uploads the file and creates the gift on the core's creator API. That API was removed
+ * with file hosting (docs/api.md v0.3): this path is unreachable while the upload mode is
+ * hidden. TODO(shelf): create the gift through the shelf service.
+ */
 async function onCreateGift() {
   const status = $('create-status');
   const file = $('ebook-file').files[0];

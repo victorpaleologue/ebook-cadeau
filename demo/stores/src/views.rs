@@ -418,7 +418,7 @@ pub fn checkout(
                         p.muted #gift-option-help { (GIFT_OPTION_HELP) }
                         p.muted #gift-delivery-note {
                             @match offer.delivery {
-                                GiftDelivery::HostedFile => {
+                                GiftDelivery::PartnerFile => {
                                     "La personne qui reçoit la carte télécharge le livre sans créer de compte."
                                 }
                                 GiftDelivery::ResellerRedirect => {

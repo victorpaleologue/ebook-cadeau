@@ -5,7 +5,7 @@
 #![allow(clippy::unwrap_used, missing_docs, dead_code, unreachable_pub)]
 
 mod common;
-mod creator_api;
 mod delivery;
 mod partner_api;
+mod print_and_store;
 mod redemption;

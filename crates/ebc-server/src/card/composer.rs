@@ -191,7 +191,7 @@ mod tests {
             claim_url: ebc_model::claim_url(&public_url, &code),
             claim_url_qr: ebc_model::claim_url_qr(&public_url, &code),
             public_url,
-            delivery_type: "hosted_file",
+            delivery_type: "partner_file",
             store_name: None,
             cover: None,
             cover_rights: CoverRights::None,

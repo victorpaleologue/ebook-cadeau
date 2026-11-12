@@ -75,7 +75,7 @@ impl StoreKind {
     #[must_use]
     pub const fn default_gift_delivery(self) -> GiftDelivery {
         match self {
-            Self::Septante => GiftDelivery::HostedFile,
+            Self::Septante => GiftDelivery::PartnerFile,
             Self::GrandeEnseigne => GiftDelivery::ResellerRedirect,
         }
     }
@@ -110,30 +110,32 @@ impl StoreKind {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, serde::Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum GiftDelivery {
-    /// The store uploads a watermarked EPUB to eBook Cadeau, which serves it to the
-    /// recipient; no store account is needed.
-    HostedFile,
+    /// The store serves the file itself (`partner_file`): on each claim eBook Cadeau
+    /// asks the store's signed file endpoint for a short-lived download link, and the
+    /// store stamps a fresh copy for the recipient. No store account is needed, and the
+    /// file never leaves the store for eBook Cadeau.
+    PartnerFile,
     /// eBook Cadeau redirects the recipient to the store's activation page; the book is
     /// added to the recipient's store account.
     ResellerRedirect,
 }
 
 impl GiftDelivery {
-    /// Parses `hosted_file` / `reseller_redirect` (as used in the API and in env vars).
+    /// Parses `partner_file` / `reseller_redirect` (as used in the API and in env vars).
     #[must_use]
     pub fn from_name(name: &str) -> Option<Self> {
         match name.trim().to_ascii_lowercase().replace('-', "_").as_str() {
-            "hosted_file" => Some(Self::HostedFile),
+            "partner_file" => Some(Self::PartnerFile),
             "reseller_redirect" => Some(Self::ResellerRedirect),
             _ => None,
         }
     }
 
-    /// The API name: `hosted_file` or `reseller_redirect`.
+    /// The API name: `partner_file` or `reseller_redirect`.
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
-            Self::HostedFile => "hosted_file",
+            Self::PartnerFile => "partner_file",
             Self::ResellerRedirect => "reseller_redirect",
         }
     }
@@ -371,7 +373,7 @@ impl StoreConfig {
     /// | `EBC_URL` | `http://127.0.0.1:8080` (set it to an empty string to disable gifts) |
     /// | `DEMO_{STORE}_PARTNER_ID` | `septante` / `grande-enseigne` |
     /// | `DEMO_{STORE}_PARTNER_SECRET` | `dev-secret-…` (see [`StoreKind::default_partner_secret`]) |
-    /// | `DEMO_{STORE}_DELIVERY` | `hosted_file` (Septante) / `reseller_redirect` (Grande Enseigne) |
+    /// | `DEMO_{STORE}_DELIVERY` | `partner_file` (Septante) / `reseller_redirect` (Grande Enseigne) |
     /// | `EBC_PRINTER_URL` | unset: the "post" card choice is disabled |
     /// | `DEMO_TEST_HOOKS` | unset; `1` enables `/__test/state` |
     ///
@@ -408,7 +410,7 @@ impl StoreConfig {
         if let Some(name) = get(&format!("{prefix}_DELIVERY")).filter(|v| !v.is_empty()) {
             config.gift_delivery = GiftDelivery::from_name(&name).ok_or_else(|| {
                 StoreError::Config(format!(
-                    "{prefix}_DELIVERY must be hosted_file or reseller_redirect, got {name:?}"
+                    "{prefix}_DELIVERY must be partner_file or reseller_redirect, got {name:?}"
                 ))
             })?;
         }
@@ -444,7 +446,7 @@ mod tests {
     fn defaults_per_store() {
         let s = StoreConfig::from_env(StoreKind::Septante, env(&[])).unwrap();
         assert_eq!(s.public_url, "http://127.0.0.1:8101");
-        assert_eq!(s.gift_delivery, GiftDelivery::HostedFile);
+        assert_eq!(s.gift_delivery, GiftDelivery::PartnerFile);
         let partner = s.partner.unwrap();
         assert_eq!(partner.base_url, "http://127.0.0.1:8080");
         assert_eq!(partner.partner_id, "septante");

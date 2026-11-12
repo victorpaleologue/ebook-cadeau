@@ -41,7 +41,7 @@ pub enum GiftStatus {
     Created,
     /// The recipient used the code.
     Redeemed,
-    /// The recipient used the code and the limit of download sessions of a hosted file is
+    /// The recipient used the code and the limit of download sessions of a file is
     /// reached (`docs/api.md` §2, "Claim semantics").
     Exhausted,
     /// The book is in the recipient's account (`reseller_redirect`).
@@ -204,8 +204,6 @@ pub struct PrintRecord {
 pub struct GiftRecord {
     /// Reference sent to eBook Cadeau as `order_ref` and `Idempotency-Key`.
     pub line_ref: String,
-    /// Upload identifier (`hosted_file`).
-    pub upload_id: Option<String>,
     /// Gift identifier at eBook Cadeau.
     pub gift_id: Option<String>,
     /// Redemption code as printed.
@@ -235,13 +233,15 @@ pub struct GiftRecord {
     /// How many times the code was replaced (lost card). Also numbers the
     /// `Idempotency-Key` of the next reissue request.
     pub reissues: u32,
+    /// Download links handed to eBook Cadeau for this gift (`partner_file`): one per
+    /// claim, each with a freshly stamped copy.
+    pub file_links: u32,
 }
 
 impl GiftRecord {
     fn new(line_ref: String) -> Self {
         Self {
             line_ref,
-            upload_id: None,
             gift_id: None,
             code_display: None,
             claim_url: None,
@@ -256,6 +256,7 @@ impl GiftRecord {
             downloads: None,
             redeemed_at: None,
             reissues: 0,
+            file_links: 0,
         }
     }
 }
@@ -476,6 +477,30 @@ pub enum Activation {
     Unknown,
 }
 
+/// A short-lived download link handed to eBook Cadeau for a `partner_file` gift.
+#[derive(Debug, Clone)]
+pub struct FileLink {
+    /// The order line it was stamped for.
+    pub line_ref: String,
+    /// The file name in the URL and in `Content-Disposition`.
+    pub file_name: String,
+    /// The EPUB, stamped at claim time.
+    pub bytes: Arc<Vec<u8>>,
+    /// When the link stops working.
+    pub expires_at: i64,
+}
+
+/// What the store needs to stamp the copy of a claimed `partner_file` gift.
+#[derive(Debug, Clone)]
+pub struct FileClaim {
+    /// The gifted book.
+    pub book: &'static Book,
+    /// Who gives it.
+    pub giver_name: String,
+    /// Who receives it.
+    pub recipient_name: String,
+}
+
 #[derive(Debug, Default)]
 struct Inner {
     accounts: BTreeMap<String, Account>,
@@ -485,6 +510,7 @@ struct Inner {
     devices: HashMap<String, String>,
     webhook_log: Vec<WebhookEvent>,
     post_price: Option<(i64, Option<u32>)>,
+    file_links: HashMap<String, FileLink>,
 }
 
 /// Shared state of one storefront.
@@ -998,6 +1024,43 @@ impl AppState {
                 already_owned: owned.contains(&book.id),
             },
         }
+    }
+
+    /// Checks a `partner_file` claim eBook Cadeau signed for (`gift_id`, `line_ref`): the
+    /// gift must exist in this store and still be claimable. Counts the link about to be
+    /// handed out.
+    ///
+    /// # Errors
+    /// [`Activation::Unknown`] or [`Activation::Void`].
+    pub fn claim_gift_file(&self, gift_id: &str, line_ref: &str) -> Result<FileClaim, Activation> {
+        let mut inner = self.lock();
+        let Some((details, line)) = Self::find_gift(&mut inner, gift_id, line_ref) else {
+            return Err(Activation::Unknown);
+        };
+        let giver_name = details.giver_name.clone();
+        let recipient_name = details.recipient_name.clone();
+        let book = catalogue::find(line.book_id).ok_or(Activation::Unknown)?;
+        let gift = line.gift.as_mut().ok_or(Activation::Unknown)?;
+        if matches!(gift.status, GiftStatus::Cancelled | GiftStatus::Expired) {
+            return Err(Activation::Void);
+        }
+        gift.file_links = gift.file_links.saturating_add(1);
+        Ok(FileClaim { book, giver_name, recipient_name })
+    }
+
+    /// Keeps a download link under `token`, and forgets the expired ones.
+    pub fn add_file_link(&self, token: String, link: FileLink) {
+        let now = self.now();
+        let mut inner = self.lock();
+        inner.file_links.retain(|_, l| l.expires_at > now);
+        inner.file_links.insert(token, link);
+    }
+
+    /// The live download link behind `token`, if any.
+    #[must_use]
+    pub fn file_link(&self, token: &str) -> Option<FileLink> {
+        let now = self.now();
+        self.lock().file_links.get(token).filter(|l| l.expires_at > now).cloned()
     }
 
     /// Adds the gifted book to `email`'s library and marks the gift as activated by that

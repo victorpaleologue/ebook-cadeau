@@ -26,6 +26,7 @@ print_stdout = "warn"
 [workspace.dependencies]
 ebc-scene = { path = "crates/ebc-scene", version = "0.1.0" }
 ebc-isbn = { path = "crates/ebc-isbn", version = "0.1.0" }
+ebc-epub = { path = "crates/ebc-epub", version = "0.1.0" }
 ebc-model = { path = "crates/ebc-model", version = "0.1.0" }
 ebc-i18n = { path = "crates/ebc-i18n", version = "0.1.0" }
 ebc-color = { path = "crates/ebc-color", version = "0.1.0" }

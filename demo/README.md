@@ -15,8 +15,14 @@ The two stores model two *kinds* of reseller (the archetypes are named here only
 the user interface):
 
 * **Septante** — an independent store selling DRM-free, watermarked EPUBs with direct
-  downloads (the way stores of the 7switch kind work). Gifts are `hosted_file`: the store
-  uploads a copy stamped for the recipient; the recipient needs no account.
+  downloads (the way stores of the 7switch kind work). Gifts are `partner_file`: the store
+  serves the file itself. When the recipient claims the gift, eBook Cadeau asks the store's
+  signed endpoint `GET /cadeau/fichier?ebc_gift=…&ebc_order=…&ebc_ts=…&ebc_sig=…`; the store
+  verifies the signature and its timestamp (≤ 900 s), stamps a copy for the recipient
+  **at that moment** with the order reference, keeps it in memory behind a random token
+  for five minutes and answers the JSON download link of `docs/api.md` §4.5
+  (`/cadeau/telechargement/{token}/{file}`). The recipient needs no account and the book
+  never passes through eBook Cadeau.
 * **Grande Enseigne** — a large cultural retailer whose eBooks live in an e-reader
   ecosystem account (the way a Fnac/Kobo-like pairing works). Gifts are `reseller_redirect`:
   the recipient adds the book to their store account and their e-reader syncs it.
@@ -33,7 +39,7 @@ SMTP), and prints where everything listens:
 
 ```text
   eBook Cadeau (server)           http://127.0.0.1:8080  code form at /, help at /aide, pairing at /e
-  Septante (démo)                 http://127.0.0.1:8101  fictional DRM-free store — gifts as hosted_file
+  Septante (démo)                 http://127.0.0.1:8101  fictional DRM-free store — gifts as partner_file (it serves the file)
   Grande Enseigne (démo)          http://127.0.0.1:8102  fictional ecosystem store — gifts as reseller_redirect
   Imprimerie du Dos Carré (démo)  http://127.0.0.1:8103  fictional printer — GET /v1/products, /__test/orders
   Mail-to-device gateway          smtp://127.0.0.1:…     SMTP sink for demo@kindle.com
@@ -99,6 +105,7 @@ The stores' default partner identifiers and secrets (`septante` / `grande-enseig
 and webhook URLs are the stores' default addresses — so the three commands above work
 together unchanged. The stores read `EBC_URL` (default `http://127.0.0.1:8080`),
 `EBC_PRINTER_URL`, `DEMO_{SEPTANTE,GRANDE_ENSEIGNE}_{BIND,PUBLIC_URL,PARTNER_ID,PARTNER_SECRET,DELIVERY}`
+(`DELIVERY`: `partner_file` or `reseller_redirect`)
 and `DEMO_TEST_HOOKS`; the printer reads `DEMO_PRINTER_BIND`, `DEMO_PRINTER_TICK_MS` and
 `DEMO_TEST_HOOKS`.
 
@@ -114,16 +121,16 @@ none of our own components is mocked:
 
 | Journey | Test module |
 |---|---|
-| Septante: browse → cart → gift checkout → signed partner API + watermarked upload → a Kobo with **no phone** types the printed code and downloads the stamped EPUB (page lint, keystroke cost) | `tests/it/septante.rs` |
-| Phone + pair code to a PocketBook; reuse and expiry refused | `septante.rs` |
-| Kindle: no EPUB download offered; Send to Kindle by SMTP, parked until the sender is approved | `septante.rs` |
-| OPDS 1.2 and 2.0 feeds of a download session | `septante.rs` |
+| Septante: browse → cart → gift checkout → signed partner API (`partner_file`) → a Kobo with **no phone** types the printed code; the server asks the store for a link and redirects the Kobo to the copy the store stamps at claim time (page lint, keystroke cost, `Referer` only towards the store) | `tests/it/septante.rs` |
+| Phone + pair code to a PocketBook (the copy stamped at each claim); reuse and expiry refused | `septante.rs` |
+| Kindle: no EPUB download offered; Send to Kindle by SMTP (the server fetches the store's link into memory and attaches it), parked until the sender is approved | `septante.rs` |
+| OPDS 1.2 and 2.0 feeds of a download session (acquisition link = the server's session URL, redirected to the store) | `septante.rs` |
 | Every device profile gets the book or is told why; download limit → `exhausted`; two books, two gifts | `septante.rs` |
 | Grande Enseigne: signed redirect → account → fulfilment confirmed → account sync; second account refused | `tests/it/grande_enseigne.rs` |
 | `reseller_licence` with an in-test licence endpoint and the simulated LCP reader | `tests/it/licence.rs` |
 | The printed card: the order page's PDF is rendered (`pdftoppm`), its QR code decoded (`zbarimg`) and compared with the upper-cased claim URL, the printed code and address read back (`pdftotext`) and used to redeem on a simulated Kobo; reissued card; reseller card; formats and profiles | `tests/it/card.rs` |
-| "Printed and posted": the store sends the server's card to the printer, which accepts it; status callbacks; printer verdicts on a card with and without bleed (via a store's client and via the server's print orders); fallback of a server without card renderer | `tests/it/printing.rs` |
-| Standalone creator mode: upload rules, reveal date, manage token, reissue, cancel | `tests/it/standalone.rs` |
+| "Printed and posted": the store sends the server's card to the printer, which accepts it; status callbacks; printer verdicts on a card with and without bleed (via a store's client and via the server's partner print orders, `docs/api.md` §4.6); fallback of a server without card renderer | `tests/it/printing.rs` |
+| A non-store partner standing in for the shelf (`partner_file` from its own file server): reveal date, status, reissue, cancel through the partner API; a download link on an undeclared host is refused, no claim counted, the device sent nowhere | `tests/it/shelf.rs` |
 | Typos, unknown codes and the rate limit, cancelled and reissued codes, tampered signatures, hostile text, misleading `User-Agent` + device chooser | `tests/it/negative.rs` |
 
 Keystroke costs of the device journeys are written to `target/tmp/keystrokes-*.txt`.

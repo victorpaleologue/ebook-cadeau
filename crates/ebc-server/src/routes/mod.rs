@@ -1,4 +1,4 @@
-//! The HTTP surface: the router of `docs/api.md` §2–§4, the security headers every
+//! The HTTP surface: the router of `docs/api.md` §2 and §4, the security headers every
 //! response carries, and helpers shared by the handlers.
 
 use std::convert::Infallible;
@@ -24,9 +24,9 @@ use crate::pages::{self, Chrome};
 use crate::state::AppState;
 use crate::text::{S, s};
 
-mod creator;
 mod files;
 mod partner;
+mod print;
 mod recipient;
 
 /// Largest JSON body accepted by the APIs.
@@ -61,17 +61,14 @@ pub fn app(state: AppState) -> Router {
         .route("/o/{session}/catalog.xml", get(files::opds_atom))
         .route("/o/{session}/catalog.json", get(files::opds_json))
         .route("/o/{session}/cover", get(files::opds_cover))
-        .route("/api/v1/uploads", post(creator::upload))
-        .route("/api/v1/gifts", post(creator::create))
-        .route("/api/v1/gifts/{id}", get(creator::status).delete(creator::cancel))
-        .route("/api/v1/gifts/{id}/reissue", post(creator::reissue))
-        .route("/api/v1/gifts/{id}/card.pdf", put(creator::put_card_pdf))
-        .route("/api/v1/gifts/{id}/print-orders", post(creator::print_order))
-        .route("/api/partner/v1/uploads", post(partner::upload))
         .route("/api/partner/v1/gifts", post(partner::create))
         .route("/api/partner/v1/gifts/{id}", get(partner::status))
         .route("/api/partner/v1/gifts/{id}/cover", put(partner::put_cover))
-        .route("/api/partner/v1/gifts/{id}/card.pdf", get(partner::card_pdf))
+        .route(
+            "/api/partner/v1/gifts/{id}/card.pdf",
+            get(partner::card_pdf).put(partner::put_card_pdf),
+        )
+        .route("/api/partner/v1/gifts/{id}/print-orders", post(partner::print_order))
         .route("/api/partner/v1/gifts/{id}/cancel", post(partner::cancel))
         .route("/api/partner/v1/gifts/{id}/reissue", post(partner::reissue))
         .route("/api/partner/v1/gifts/{id}/fulfilled", post(partner::fulfilled));
@@ -215,6 +212,7 @@ impl Visitor {
             device: chosen.unwrap_or(self.detected),
             chosen,
             host: state.config.public_host(),
+            contact: state.config.contact_email.as_deref(),
         }
     }
 }
@@ -445,7 +443,7 @@ pub(crate) fn code_members(
     members
 }
 
-/// The status document of a gift (`docs/api.md` §3; `order_ref` for partner gifts).
+/// The status document of a gift (`docs/api.md` §4.2).
 pub(crate) fn status_json(state: &AppState, gift: &crate::store::GiftRecord) -> serde_json::Value {
     let mut value = serde_json::json!({
         "id": gift.id,
@@ -483,8 +481,8 @@ mod tests {
             (format!("/o/{token}/catalog.xml"), "/o/…/catalog.xml".to_owned()),
             (format!("/x/{token}"), "/x/…".to_owned()),
             (
-                "/api/v1/gifts/g_fedcba9876543210fedcba9876543210".to_owned(),
-                "/api/v1/gifts/g_fedcba9876543210fedcba9876543210".to_owned(),
+                "/api/partner/v1/gifts/g_fedcba9876543210fedcba9876543210".to_owned(),
+                "/api/partner/v1/gifts/g_fedcba9876543210fedcba9876543210".to_owned(),
             ),
             ("/".to_owned(), "/".to_owned()),
             ("/aide".to_owned(), "/aide".to_owned()),

@@ -4,6 +4,38 @@ Everything the original request asked for exists in a first version. This page s
 each piece goes, what is verified, and what is not. Earlier versions of this page (the
 interrupted overnight build) are in the git history.
 
+## Two-service model (contract v0.3, 2026-11-12)
+
+Owner decision: **the core service stops holding book files; any file hosting acts exactly
+like a reseller.** Done in this step:
+
+- `hosted_file`, `POST /api/v1/uploads`, `POST /api/partner/v1/uploads` and the whole
+  creator API (`/api/v1/gifts…`, manage tokens) are **removed** (`404`). Every gift belongs
+  to a registered partner. Print orders moved to the partner API (`PUT …/card.pdf`,
+  `POST …/print-orders`, `docs/api.md` §4.6).
+- New delivery **`partner_file { format, url }`** (`docs/api.md` §4.5): on each claim the
+  core sends the partner a signed request (`ebc_gift`, `ebc_order`, `ebc_ts`, `ebc_sig`) and
+  redirects the device to the short-lived link it answers (JSON or `303`), checked against
+  the partner's `redirect_hosts`. Typed code, pair code, OPDS, HEAD and the claim count work
+  as before; Send to Kindle fetches the link into memory (≤ `EBC_SEND_MAX_MB`, size and
+  SHA-256 checked).
+- EPUB/PDF sniffing, DRM detection, the rights declaration and file-name sanitising moved
+  out of the server into the library `crates/ebc-epub`, for the shelf.
+- Names and message are deleted 12 months after the first claim
+  (`EBC_RETENTION_AFTER_CLAIM_DAYS`); the core shows a contact point (`EBC_CONTACT_EMAIL`).
+- The demo store Septante serves its own watermarked EPUB (stamped at claim time) through
+  a signed download endpoint; Grande Enseigne is unchanged. The web designer's upload path
+  is hidden (TODO: the shelf).
+
+**Next step — the shelf** (a separate service, registered as a partner): uploads with
+identity and rights declaration (`ebc-epub`), storage, the `partner_file` endpoint of
+§4.5, notice and action (DSA art. 16), statements of reasons, repeat-infringer policy, and
+the designer's upload and print-order paths pointed at it.
+
+Known caveat: e-reader browsers that ignore `Referrer-Policy` send the gift page URL (with
+the code) as `Referer` to the partner's download host when following the redirect. That
+host is the partner's own and the partner issued the code (documented in §4.5).
+
 ## Checks
 
 Run on the whole workspace, locally, after the adversarial review fixes:
@@ -12,11 +44,11 @@ Run on the whole workspace, locally, after the adversarial review fixes:
 |---|---|
 | `cargo fmt --all -- --check` | clean |
 | `cargo clippy --workspace --all-targets --locked -- -D warnings` | clean |
-| `cargo test --workspace --locked` | **1 884 passed, 0 failed**, 19 ignored (opt-in live and reference tests); re-run 2026-11-12 after the ink-limit work |
+| `cargo test --workspace` | **1 884 passed, 0 failed**, 19 ignored (opt-in live and reference tests); re-run 2026-11-12 after the two-service change (hosted-file and creator-API tests replaced by `partner_file`, shelf stand-in, retention and contact tests; sniffing tests moved to `ebc-epub`) |
 | `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps` | clean |
-| `scripts/wasm-crates.sh build` (all pure libraries for `wasm32-unknown-unknown`) | clean |
-| `cargo deny check` | advisories, bans, licences, sources: ok |
-| `e2e/run.sh` (10 Playwright tests in Chromium) | 10 passed |
+| `scripts/wasm-crates.sh build` (all pure libraries for `wasm32-unknown-unknown`) | clean before the two-service change; since then only the new `ebc-epub` was checked for wasm (`cargo check --target wasm32-unknown-unknown`, clean) |
+| `cargo deny check` | advisories, bans, licences, sources: ok (not re-run after the two-service change; no new third-party crate was added) |
+| `e2e/run.sh` (10 Playwright tests in Chromium) | 10 passed (scenario 6 now checks the designer without upload) |
 | `e2e/print-check.sh` (every format × profile through preflight, qpdf, pdffonts, gs) | 21 PDFs, 0 failures |
 | `python3 -m unittest` in `tools/bizmodel` | 48 passed |
 | `CI=1 node --test web/tests/*.test.mjs` (incl. wasm output byte-identical to native for four golden cards, one through the ink-limited FOGRA39 transform) | 9 passed |
@@ -57,10 +89,12 @@ the native-vs-wasm golden cards.
 | Card composer (outside + inside, rights gate) | `crates/ebc-card` | done; samples in `docs/samples/` |
 | Command line `ebc` | `crates/ebc-cli` | done |
 | Browser bindings (3.8 MiB wasm, 1.5 MiB gzip) | `crates/ebc-wasm` | done |
-| Card designer web app | `web/` | done |
-| Web service: redemption pages, creator and partner APIs, OPDS, pairing, send-to-device | `crates/ebc-server` | done |
+| Card designer web app | `web/` | done; upload and print-order paths hidden until the shelf |
+| Web service (the core): redemption pages, partner API with `partner_file`, OPDS, pairing, send-to-device, print orders — no file hosting | `crates/ebc-server` | done (v0.3) |
+| eBook file checks for a hosting service (sniffing, DRM, rights declaration, names) | `crates/ebc-epub` | done; used by nobody until the shelf |
+| Shelf service (files of rights holders, notice and action) | — | **not started** (next step) |
 | Fictional stores "Septante" and "Grande Enseigne", printer, e-readers | `demo/` | done |
-| 21 Rust end-to-end journeys + `ebc-demo` binary | `demo/integration` | done |
+| 22 Rust end-to-end journeys + `ebc-demo` binary | `demo/integration` | done |
 | 9 browser end-to-end tests | `e2e/` | done |
 | Business model, charts | `tools/bizmodel/`, `docs/business/` | done; inputs are estimates |
 | Research 01–12 | `docs/research/` | all written; fact-check status per document below |
@@ -115,8 +149,8 @@ in 07–09 and every vendor price except La Poste's remain unverified at source.
   warning (`SpineOutsideTextRange`).
 - **Font identification** is the classical v0; the learned embedding (research 10, training
   plan) is not built. Connected scripts and stencils are not recognised.
-- **Server storage** is one JSON snapshot rewritten per change; uploads are buffered in memory;
-  rate-limit state is in memory.
+- **Server storage** is one JSON snapshot rewritten per change; request bodies (covers, card
+  PDFs) are buffered in memory; rate-limit state and partners' download links are in memory.
 - **Mailed cards**: the cheapest postal API (research 04) takes one image per card, so the
   four-panel card would go by letter with the A4 PDF; no real printer has seen a card.
 - **Devices**: e-reader behaviour is simulated (user agents, JavaScript off, mail sink, LCP
@@ -129,8 +163,8 @@ in 07–09 and every vendor price except La Poste's remain unverified at source.
   by preflight: B8 colour *boundaries* near creases (heavy ink there is: a warning),
   D3/D5/D6 type-size and safety-zone geometry, C7 overprint; and the stated output
   condition is not compared with the profile's own description.
-- `docs/api.md` does not yet list `cover_rights`, the 422 rights codes and a few fields the
-  server accepts (they are documented in `crates/ebc-server/README.md`).
+- `docs/api.md` does not yet list the 422 rights codes of `card.pdf` (they are documented in
+  `crates/ebc-server/README.md`).
 
 ## Decisions taken without the owner (veto any)
 

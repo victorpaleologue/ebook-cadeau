@@ -1,6 +1,25 @@
-//! Validation of uploaded files (`docs/api.md` §3): the type is **sniffed**, never trusted
-//! from a header; EPUBs carrying DRM are refused; the uploader must declare on what basis
-//! the file may be distributed.
+//! Checks for eBook files a hosting service accepts, shared by any service that stores
+//! books (the eBook Cadeau core does not: since the two-service model, files are only
+//! ever served by a registered partner — a store, or a "shelf" service hosting files for
+//! their rights holders; see `docs/architecture.md`).
+//!
+//! * [`sniff`] — the type is **sniffed** from the bytes, never trusted from a header;
+//!   EPUBs carrying DRM (Adobe ADEPT `rights.xml`, Readium LCP, any `encryption.xml`
+//!   beyond font obfuscation) and encrypted PDFs are refused.
+//! * [`RightsBasis`] — the declaration an uploader must make (own work, public domain,
+//!   open licence, licensed distributor); deliberately no value for a purchased copy.
+//! * [`decode_file_name`] — a percent-encoded `X-File-Name` header made into a safe plain
+//!   file name.
+//!
+//! Pure library: no I/O, no clock, no randomness; compiles to `wasm32-unknown-unknown`.
+//! Never panics on hostile input and reads at most 1 MiB out of any archive entry.
+//!
+//! **Limits, stated plainly**: absence of DRM clears nothing (watermark-only retail files
+//! carry no DRM container); this crate catches the obvious cases only. Retailer marks,
+//! ISBN/publisher checks and review states are the hosting service's job
+//! (`docs/research/09-legal-gifting-and-commerce.md` §3.3).
+
+#![forbid(unsafe_code)]
 
 use std::io::{Cursor, Read};
 
@@ -241,22 +260,6 @@ fn sniff_pdf(bytes: &[u8]) -> Result<FileKind, UploadError> {
     Ok(FileKind::Pdf)
 }
 
-/// What a cover image turned out to be (`PUT …/cover` accepts JPEG, PNG and WebP).
-///
-/// Returns the media type, or `None` for anything else.
-#[must_use]
-pub fn sniff_image(bytes: &[u8]) -> Option<&'static str> {
-    if bytes.starts_with(&[0xff, 0xd8, 0xff]) {
-        Some("image/jpeg")
-    } else if bytes.starts_with(&[0x89, b'P', b'N', b'G', 0x0d, 0x0a, 0x1a, 0x0a]) {
-        Some("image/png")
-    } else if bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WEBP") {
-        Some("image/webp")
-    } else {
-        None
-    }
-}
-
 /// Decodes the `X-File-Name` header (percent-encoded UTF-8) into a safe plain file name:
 /// the last path component, without control characters, trimmed, at most 120 characters,
 /// with the extension forced to match the sniffed kind. Returns `None` when nothing
@@ -285,7 +288,7 @@ pub fn decode_file_name(header: &str, kind: FileKind) -> Option<String> {
 
 #[cfg(test)]
 #[allow(clippy::unwrap_used)]
-pub(crate) mod testing {
+mod testing {
     //! EPUB fixtures built in memory for tests.
     use std::io::{Cursor, Write};
     use zip::write::SimpleFileOptions;
@@ -511,22 +514,6 @@ mod tests {
         body.extend_from_slice(b"\n%%EOF\n");
         assert_eq!(sniff(&body), Ok(FileKind::Pdf));
         assert_eq!(sniff(b"%PDF-"), Ok(FileKind::Pdf));
-    }
-
-    #[test]
-    fn images_are_sniffed() {
-        assert_eq!(sniff_image(&[0xff, 0xd8, 0xff, 0xe0, 0, 0]), Some("image/jpeg"));
-        assert_eq!(sniff_image(b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR"), Some("image/png"));
-        assert_eq!(sniff_image(b"RIFF\x24\0\0\0WEBPVP8 "), Some("image/webp"));
-        for other in [
-            &b"GIF89a"[..],
-            b"RIFF\x24\0\0\0WAVE",
-            b"<svg xmlns=\"http://www.w3.org/2000/svg\"/>",
-            b"",
-            b"\xff\xd8",
-        ] {
-            assert_eq!(sniff_image(other), None);
-        }
     }
 
     #[test]

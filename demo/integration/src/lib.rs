@@ -2,7 +2,7 @@
 //! manual demos.
 //!
 //! [`World`] starts, on loopback ports, the **real** `ebc-server`, the two fictional stores
-//! of `demo/stores` ("Septante", a DRM-free store using `hosted_file`, and "Grande
+//! of `demo/stores` ("Septante", a DRM-free store serving its own files as `partner_file`, and "Grande
 //! Enseigne", an ecosystem store using `reseller_redirect`), the fictional printer of
 //! `demo/printer` and, on request, a mail-to-device gateway of `demo/ereaders` — wired to
 //! each other exactly as a deployment would be: the stores sign partner requests with the

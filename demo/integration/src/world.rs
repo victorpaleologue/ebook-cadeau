@@ -450,7 +450,7 @@ pub struct World {
     pub clock: WorldClock,
     /// The eBook Cadeau server.
     pub server: ServerHandle,
-    /// "Septante": DRM-free store, gifts delivered as `hosted_file`.
+    /// "Septante": DRM-free store, gifts delivered as `partner_file` (it serves the file).
     pub septante: StoreHandle,
     /// "Grande Enseigne": ecosystem store, gifts delivered as `reseller_redirect`.
     pub grande_enseigne: StoreHandle,
@@ -541,7 +541,7 @@ impl World {
             (
                 "Septante (démo)".to_owned(),
                 self.septante.base.clone(),
-                "fictional DRM-free store — gifts as hosted_file".to_owned(),
+                "fictional DRM-free store — gifts as partner_file (it serves the file)".to_owned(),
             ),
             (
                 "Grande Enseigne (démo)".to_owned(),

@@ -1,5 +1,10 @@
-// The server's creator API (docs/api.md §3). Every call goes to the server this page
-// was configured with; nothing else is contacted.
+// The server's former creator API (docs/api.md v0.2 §3). Every call goes to the server this
+// page was configured with; nothing else is contacted.
+//
+// The core service removed this API together with file hosting (docs/api.md v0.3): gifts
+// are created by partners only (a store, or a shelf service hosting files). The designer
+// no longer reaches `createGift` or `orderPrint` (the upload mode is hidden), and the
+// server answers 404 to these routes. TODO(shelf): point both at the shelf service.
 
 /**
  * An error answered by the server (`code` from its JSON body), or `unreachable`.

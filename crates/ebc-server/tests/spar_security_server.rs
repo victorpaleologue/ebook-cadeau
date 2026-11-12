@@ -102,7 +102,7 @@ async fn spar_concurrent_sends_respect_the_daily_limit() {
         c.smtp_url = Some(url);
         c.send_from = "livraison@ebk.example".to_owned();
     });
-    let code = code_of(&h.hosted_gift(json!({})).await);
+    let code = code_of(&h.file_gift(json!({})).await);
     let mut tasks = Vec::new();
     for i in 0..12 {
         let app = h.app.clone();
@@ -188,7 +188,9 @@ async fn spar_licence_fetch_failure_does_not_log_the_signed_url() {
 }
 
 // ---------------------------------------------------------------------------------------
-// F4: an unauthenticated partner upload is buffered in full before the MAC is checked.
+// F4: an unauthenticated partner request is buffered in full before the MAC is checked.
+// (Originally found on the upload route; uploads are gone from the core, the largest body
+// a partner sends now is a card PDF.)
 // ---------------------------------------------------------------------------------------
 struct Zeros {
     left: usize,
@@ -212,7 +214,7 @@ impl tokio::io::AsyncRead for Zeros {
 #[tokio::test]
 async fn spar_unsigned_partner_upload_is_refused_before_its_body_is_buffered() {
     let h = Harness::new();
-    let limit = h.state.config.max_upload_bytes;
+    let limit = h.state.config.max_card_pdf_bytes;
     let pulled = Arc::new(AtomicUsize::new(0));
     let body = Body::from_stream(tokio_util::io::ReaderStream::new(Zeros {
         left: limit,
@@ -220,8 +222,8 @@ async fn spar_unsigned_partner_upload_is_refused_before_its_body_is_buffered() {
     }));
     // Partner ids are not secret; the timestamp is just the current time.
     let request = Request::builder()
-        .method(Method::POST)
-        .uri("/api/partner/v1/uploads")
+        .method(Method::PUT)
+        .uri("/api/partner/v1/gifts/g_00000000000000000000000000000000/card.pdf")
         .header("x-ebc-partner", PARTNER_ID)
         .header("x-ebc-timestamp", T0.to_string())
         .header("x-ebc-signature", "v1=00")
@@ -240,22 +242,13 @@ async fn spar_unsigned_partner_upload_is_refused_before_its_body_is_buffered() {
 #[tokio::test]
 async fn spar_cancelled_gift_forgets_names_and_message() {
     let h = Harness::new();
-    let gift = h.hosted_gift(json!({})).await;
+    let gift = h.file_gift(json!({})).await;
     let id = gift["id"].as_str().unwrap().to_owned();
-    let token = gift["manage_token"].as_str().unwrap().to_owned();
-    let auth = format!("Bearer {token}");
-    let cancelled = h
-        .call(
-            Method::DELETE,
-            &format!("/api/v1/gifts/{id}"),
-            &[("authorization", auth.as_str())],
-            Body::empty(),
-        )
-        .await;
+    let cancelled = h.shelf(Method::POST, &format!("/api/partner/v1/gifts/{id}/cancel"), "").await;
     assert_eq!(cancelled.status, StatusCode::OK, "{}", cancelled.text());
     // A year later.
     h.clock.advance(365 * 86_400);
-    let _ = h.hosted_gift(json!({})).await; // any later write runs the purge
+    let _ = h.file_gift(json!({})).await; // any later write runs the purge
     let kept = h.state.db.view(|db| {
         db.gifts
             .get(&id)
@@ -281,7 +274,7 @@ async fn spar_cancelled_gift_forgets_names_and_message() {
 #[tokio::test]
 async fn spar_global_budget_bounds_looked_up_guesses() {
     let h = Harness::new();
-    let code = code_of(&h.hosted_gift(json!({})).await);
+    let code = code_of(&h.file_gift(json!({})).await);
     // A phone asks for a pair code before the attack starts.
     let paired = h
         .post_form_with(&format!("/k/{code}/pair"), &[], &[("x-forwarded-for", "192.0.2.10")])

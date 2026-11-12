@@ -28,8 +28,18 @@ by a professional printer, and folds at two creases around the spine.
 
 | Mode | Who | How the book is delivered |
 |---|---|---|
-| **Reseller-integrated** (the main business case) | An eBook store adds an "Offer this eBook" option at checkout | The store keeps the content, the DRM and the customer account. eBook Cadeau issues the code, renders the card and sends the recipient back to the store to claim the book (or serves a watermarked file the store uploaded) |
-| **Standalone** | Authors, publishers, individuals | Only for files the person may distribute (own work, public domain, open licence, or as a licensed distributor). Covers need a declared rights basis |
+| **Reseller-integrated** (the main business case) | An eBook store adds an "Offer this eBook" option at checkout | The store keeps the content, the DRM and the customer account. eBook Cadeau issues the code, renders the card and sends the recipient back to the store to claim the book — or, for a store that serves DRM-free files, redirects the recipient's device to a short-lived download link the store issues on each claim (`partner_file`) |
+| **Standalone** | Authors, publishers, individuals | Only for files the person may distribute (own work, public domain, open licence, or as a licensed distributor), and only through a **shelf**: a separate service that hosts those files and is registered with eBook Cadeau exactly like a store (next step; see below). Covers need a declared rights basis |
+
+**Two services (owner decision, contract v0.3).** The core eBook Cadeau service — codes,
+cards, redemption pages — **never holds a book file**. A file is only ever served by a
+registered partner: a store, or the shelf. Whoever stores users' files is a hosting
+provider with DSA duties (notice and action, statements of reasons, a repeat-infringer
+policy) and a fragile liability exemption when it knows which work each file is
+(`docs/research/09` §2.6, §3); those duties sit with the shelf, while the core keeps gift
+records only, with a contact point and short retention (names and message deleted 12
+months after the first claim). Details: `docs/architecture.md` §1.1, `docs/api.md` §3 and
+§4.5.
 
 **Market:** France first (all defaults are French), then the EU. Seven interface languages:
 French, English, German, Spanish, Italian, Dutch, Portuguese.
@@ -44,16 +54,18 @@ store or lawyer has been involved. See §10.
 
 1. **The buyer** buys an eBook in a partner store and ticks the gift option (fields: from, to,
    message; print at home for free, or printed and posted).
-2. **The store** calls eBook Cadeau's partner API (signed requests). The service creates a gift
-   and returns its code and claim URL. The store may upload its cover image, declaring its
-   rights over it.
+2. **The store** (or, in standalone mode, the shelf) calls eBook Cadeau's partner API (signed
+   requests). The service creates a gift and returns its code and claim URL. The store may
+   upload its cover image, declaring its rights over it.
 3. **The card PDF** is composed (by the server for stores, or in the buyer's browser in the
    designer app). The buyer prints it, or the store sends it to a print provider.
 4. **The recipient** receives the card and either:
    - scans the QR code with a phone → the gift page shows title, giver, message and a **device
      chooser** (Kobo, Kindle, PocketBook, tolino, phone, computer); or
    - opens the browser **on the e-reader itself**, types the short address and the code →
-     downloads the EPUB directly (Kobo, PocketBook, tolino); or
+     downloads the EPUB directly (Kobo, PocketBook, tolino) — eBook Cadeau asks the store
+     for a short-lived link and redirects the device there; the book never passes through
+     eBook Cadeau; or
    - on a phone, asks for a **6-letter pair code** and types it on the e-reader at `/e`; or
    - for Kindle, uses **Send to Kindle** (by e-mail; Amazon requires approving the sender once).
    - For stores where books live in an account (the Fnac/Kobo model), the recipient is sent to
@@ -103,14 +115,15 @@ code runs on the server, in the command line and in the browser.
 | `ebc-fontid` | Identifies the typeface of a cover's title from the image (classical image analysis, no AI model) and suggests the closest open font |
 | `ebc-spine` | Designs the 10 mm spine: flat colour from the cover, title and author typeset along it |
 | `ebc-card` | Composes the whole card (both pages) and enforces the rights and print rules |
+| `ebc-epub` | Checks for a service that stores eBook files (the shelf, not the core): EPUB/PDF sniffing, DRM refusal, rights declaration, safe file names |
 
 ### 3.2 The programs
 
 | Program | What it is |
 |---|---|
-| `ebc-server` | The web service: redemption pages, creator API, partner API, OPDS feeds, pairing, send-to-device, print orders, serving the web app at `/app/`. One binary, configured by environment variables (`crates/ebc-server/README.md`) |
+| `ebc-server` | The core web service: redemption pages, partner API (stores and shelves), OPDS feeds, pairing, send-to-device, print orders, serving the web app at `/app/`. No file hosting, no creator API. One binary, configured by environment variables (`crates/ebc-server/README.md`) |
 | `ebc` (`ebc-cli`) | Command line: `isbn`, `lookup`, `cover`, `fontid`, `card`, `preflight`, `qr` |
-| `ebc-wasm` + `web/` | The **card designer** in the browser: type or look up a book, choose the cover and spine, write the message, preview both sides live, download the PDF — generated on the user's device, no cookies, no trackers |
+| `ebc-wasm` + `web/` | The **card designer** in the browser: type or look up a book, choose the cover and spine, write the message, preview both sides live, download the PDF — generated on the user's device, no cookies, no trackers. Its former "upload a file" path is hidden until the shelf exists |
 | `ebc-demo` | Starts the whole demo world on local ports: the server, two stores, a printer, a Kindle mail sink |
 
 ### 3.3 The demo world (`demo/`)
@@ -118,7 +131,8 @@ code runs on the server, in the command line and in the browser.
 Fictional, clearly labelled ("demo — not affiliated"):
 
 - **Septante** — models an independent store selling DRM-free, watermarked eBooks (the 7switch
-  kind). Gifts are delivered as a watermarked file hosted by eBook Cadeau.
+  kind). Gifts are `partner_file`: the store stamps a copy for the recipient when the gift
+  is claimed and serves it through a signed, short-lived download link.
 - **Grande Enseigne** — models a large retailer whose eBooks live in an e-reader account (the
   Fnac/Kobo kind). Gifts are claimed into the recipient's account and synced.
 - **Imprimerie du Dos Carré** — a print-on-demand API that preflights every PDF.
@@ -171,7 +185,7 @@ problems, each proven by a failing test; all were fixed and those tests stay in 
 | **Rights basis for covers**: none / print licence / promotional use / rights-holder declared / private copy / public domain | Each basis allows different routes: home printing accepts all but "none"; professional printing only print licence, rights-holder declaration or public domain. Covers found online are previews only, never printed |
 | **Covers never cropped or altered by default**; the spine is typeset, not cut from the artwork | French moral rights protect the integrity of the work; sampling or extending the art needs explicit authorisation |
 | **Only openly licensed fonts** bundled; no generative AI lettering | Typeface and AI-reproduction risks (research 08) |
-| **Conservative security**: signed partner requests, single-use signatures, codes stored only as hashes, rate limits, 30-day deletion of personal data | Codes are bearer secrets not tied to accounts; GDPR storage limitation |
+| **Conservative security**: signed partner requests, single-use signatures, codes stored only as hashes, rate limits, names and message deleted 12 months after the first claim and 30 days after a cancellation or expiry, no book files in the core | Codes are bearer secrets not tied to accounts; GDPR storage limitation |
 | **Font stack migrated** to HarfRust/read-fonts | The original crates were declared unmaintained by RustSec |
 
 A full list of decisions taken without the owner, open to veto, is in `docs/STATUS.md`.
@@ -327,7 +341,7 @@ hosts for the live catalogue tests (`docs/STATUS.md`, "Owner actions").
 | `README.md` | Short introduction and quick start |
 | `docs/STATUS.md` | Exact state, check results, known gaps, decisions to veto, owner actions |
 | `docs/architecture.md` | Design principles and the contract of every crate |
-| `docs/api.md` | The HTTP contract: redemption pages, creator API, partner API, printer interface, configuration |
+| `docs/api.md` | The HTTP contract (v0.3): redemption pages, partner API with `partner_file` delivery and print orders, printer interface, configuration |
 | `docs/ci.md` | What CI runs, the review process, Dependabot, how to run everything locally |
 | `docs/research/` | The twelve studies, their fact-check reports and the researchers' notes |
 | `docs/business/` | Business model report, results and charts |

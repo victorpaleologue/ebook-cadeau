@@ -1,5 +1,6 @@
-//! Partner API, reseller-integrated mode (`docs/api.md` §4): HMAC-signed requests,
-//! idempotency keys, gifts, cover, card rendering, cancellation, reissue and fulfilment.
+//! Partner API (`docs/api.md` §4): HMAC-signed requests, idempotency keys, gifts, cover,
+//! card rendering, print orders, cancellation, reissue and fulfilment. Every gift is a
+//! partner's — a store, or a shelf service hosting files for their rights holders.
 //!
 //! # Authentication (§4.1)
 //!
@@ -37,7 +38,6 @@ use axum::response::{IntoResponse, Response};
 use ebc_model::{Delivery, GiftStatus};
 use serde::Deserialize;
 
-use super::creator::{rights_basis, upload_receipt};
 use super::{
     MAX_JSON_BYTES, ReadBody, client_key, code_members, header_text, json, parse_json, read_body,
     status_json,
@@ -51,7 +51,6 @@ use crate::rate::Verdict;
 use crate::service::GiftRequest;
 use crate::state::AppState;
 use crate::store::{BlobRef, GiftRecord, IdempotencyRecord, IdempotentOutcome};
-use crate::upload;
 
 /// An authenticated partner request.
 struct Authed {
@@ -329,23 +328,6 @@ fn own_gift(state: &AppState, partner: &Partner, id: &str) -> Result<GiftRecord,
         .ok_or_else(|| ApiError::not_found("no such gift"))
 }
 
-/// `POST /api/partner/v1/uploads`.
-pub(crate) async fn upload(State(state): State<AppState>, request: Request) -> Response {
-    let authed = match authenticate(&state, request, state.config.max_upload_bytes).await {
-        Ok(authed) => authed,
-        Err(error) => return error.into_response(),
-    };
-    idempotent(&state, &authed, || async {
-        let basis = rights_basis(&authed.parts.headers)?;
-        let file_name = header_text(&authed.parts.headers, "x-file-name");
-        let record = state
-            .store_upload(authed.body.clone(), file_name, basis, Some(&authed.partner.id))
-            .await?;
-        Ok(Outcome { status: StatusCode::CREATED, body: upload_receipt(&record), code_of: None })
-    })
-    .await
-}
-
 /// `POST /api/partner/v1/gifts`.
 pub(crate) async fn create(State(state): State<AppState>, request: Request) -> Response {
     let authed = match authenticate(&state, request, MAX_JSON_BYTES).await {
@@ -354,7 +336,7 @@ pub(crate) async fn create(State(state): State<AppState>, request: Request) -> R
     };
     idempotent(&state, &authed, || async {
         let request = GiftRequest::parse(&authed.body)?;
-        let created = state.create_gift(request, Some(&authed.partner))?;
+        let created = state.create_gift(request, &authed.partner)?;
         let mut members = code_members(&state, &created.code);
         members.insert("id".to_owned(), created.record.id.clone().into());
         members.insert("status".to_owned(), "created".into());
@@ -408,7 +390,7 @@ pub(crate) async fn put_cover(
         let Query(query) = Query::<CoverQuery>::try_from_uri(&authed.parts.uri)
             .map_err(|e| ApiError::bad_request("invalid_parameter", e.to_string()))?;
         let declared = crate::service::parse_cover_rights(query.cover_rights.as_deref())?;
-        let media_type = upload::sniff_image(&authed.body).ok_or_else(|| {
+        let media_type = crate::card::sniff_image(&authed.body).ok_or_else(|| {
             ApiError::new(
                 StatusCode::UNSUPPORTED_MEDIA_TYPE,
                 "unsupported_media_type",
@@ -426,6 +408,60 @@ pub(crate) async fn put_cover(
         });
         state.attach_blob(&id, blob, authed.body.clone(), true, declared).await?;
         Ok(Outcome::ok(receipt))
+    })
+    .await
+}
+
+/// `PUT /api/partner/v1/gifts/{id}/card.pdf`: a card PDF the partner composed itself
+/// (e.g. in the card designer), kept for a print order.
+pub(crate) async fn put_card_pdf(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    request: Request,
+) -> Response {
+    let authed = match authenticate(&state, request, state.config.max_card_pdf_bytes).await {
+        Ok(authed) => authed,
+        Err(error) => return error.into_response(),
+    };
+    idempotent(&state, &authed, || async {
+        let gift = own_gift(&state, &authed.partner, &id)?;
+        if gift.status_at(state.now()).is_gone() {
+            return Err(ApiError::conflict("gift_gone", "the gift is cancelled or expired"));
+        }
+        if !authed.body.starts_with(b"%PDF-") {
+            return Err(ApiError::new(
+                StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                "unsupported_media_type",
+                "the body must be a PDF",
+            ));
+        }
+        let blob = BlobRef {
+            sha256: authed.body_sha256.clone(),
+            size_bytes: authed.body.len() as u64,
+            media_type: "application/pdf".to_owned(),
+        };
+        let receipt = serde_json::json!({ "sha256": blob.sha256, "size_bytes": blob.size_bytes });
+        state.attach_blob(&id, blob, authed.body.clone(), false, None).await?;
+        Ok(Outcome::ok(receipt))
+    })
+    .await
+}
+
+/// `POST /api/partner/v1/gifts/{id}/print-orders`: the uploaded card to the print
+/// provider ([`super::print::place_print_order`]).
+pub(crate) async fn print_order(
+    State(state): State<AppState>,
+    Path(id): Path<String>,
+    request: Request,
+) -> Response {
+    let authed = match authenticate(&state, request, MAX_JSON_BYTES).await {
+        Ok(authed) => authed,
+        Err(error) => return error.into_response(),
+    };
+    idempotent(&state, &authed, || async {
+        let gift = own_gift(&state, &authed.partner, &id)?;
+        let receipt = super::print::place_print_order(&state, &gift, &authed.body).await?;
+        Ok(Outcome { status: StatusCode::CREATED, body: receipt, code_of: None })
     })
     .await
 }
@@ -493,7 +529,7 @@ pub(crate) async fn card_pdf(
         claim_url: ebc_model::claim_url(&state.config.public_url, &code),
         claim_url_qr: ebc_model::claim_url_qr(&state.config.public_url, &code),
         delivery_type: gift.delivery.type_name(),
-        store_name: (!matches!(gift.delivery, Delivery::HostedFile { .. }))
+        store_name: (!matches!(gift.delivery, Delivery::PartnerFile { .. }))
             .then(|| authed.partner.display_name().to_owned()),
         cover,
         cover_rights: gift.cover_rights,

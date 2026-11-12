@@ -2,16 +2,14 @@
 // and author typed by hand, the typographic card, the live preview of both sides, the
 // demonstration code, the PDF — checked with `ebc preflight` and its QR code decoded —,
 // the language switch, the phone layout, and a small accessibility audit.
-// Scenario 6: a gift created on the server from the designer, then a printed card ordered
-// through the designer's address form from the demo printer (docs/api.md §3 and §5).
+// Scenario 6: the core no longer hosts files (docs/api.md v0.3): the designer offers no
+// upload, the code from a store stays, and the core answers 404 to the former upload and
+// creator routes. (Ordering a printed card from the designer waits for the shelf service;
+// partner print orders are covered by the Rust journeys.)
 
 import { after, before, describe, test } from 'node:test';
 import assert from 'node:assert/strict';
-import { spawn } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
-import { join } from 'node:path';
-import { ROOT, audit, binary, freePort, launchBrowser, newContext, overflowX, qrPayloads, run, shot, startConstellation, text } from '../lib/harness.mjs';
+import { audit, binary, launchBrowser, newContext, overflowX, qrPayloads, run, shot, startConstellation, text } from '../lib/harness.mjs';
 
 let world;
 let browser;
@@ -128,136 +126,41 @@ describe('card designer (/app/)', () => {
   });
 });
 
-/**
- * An `ebc-server` serving the designer at /app/ with the constellation's printer as its
- * print provider (EBC_PRINTER_URL). Started here so that the scenario does not depend on
- * whether `ebc-demo` serves /app/ itself.
- */
-async function startOrderingServer(printer) {
-  const port = await freePort();
-  const data = mkdtempSync(join(tmpdir(), 'ebc-e2e-order-'));
-  const base = `http://127.0.0.1:${port}`;
-  const child = spawn(binary('ebc-server'), [], {
-    cwd: ROOT,
-    env: { ...process.env, EBC_BIND: `127.0.0.1:${port}`, EBC_PUBLIC_URL: base, EBC_DATA_DIR: data, EBC_WEB_DIR: join(ROOT, 'web'), EBC_PRINTER_URL: printer, RUST_LOG: 'warn' },
-    stdio: ['ignore', 'ignore', 'pipe'],
-  });
-  let stderr = '';
-  child.stderr.on('data', (chunk) => { stderr += chunk; });
-  const stop = () => {
-    try { child.kill('SIGKILL'); } catch { /* already gone */ }
-    rmSync(data, { recursive: true, force: true });
-  };
-  const deadline = Date.now() + 30_000;
-  for (;;) {
-    const answer = await fetch(`${base}/app/`).catch(() => null);
-    if (answer && answer.ok) break;
-    if (child.exitCode !== null || Date.now() > deadline) {
-      stop();
-      throw new Error(`ebc-server with EBC_PRINTER_URL did not start (exit ${child.exitCode}):\n${stderr}`);
-    }
-    await new Promise((r) => setTimeout(r, 100));
-  }
-  return { base, app: `${base}/app/`, stop };
-}
-
-/** A small PDF the server's upload sniffing accepts (the "eBook" of the gift). */
-const EBOOK_PDF = Buffer.from('%PDF-1.7\n1 0 obj\n<< /Type /Catalog >>\nendobj\ntrailer\n<< /Root 1 0 R >>\n%%EOF\n');
-
-describe('ordering a printed card (/app/ → server → printer)', () => {
-  test('6. gift on the server, structured address, printer refusal and acceptance', async (t) => {
-    const server = await startOrderingServer(world.printer);
-    t.after(server.stop);
+describe('the designer without file hosting in the core', () => {
+  test('6. no upload path: a code from a store (or a shelf), and the core refuses uploads', async () => {
     const { context, problems } = await newContext(browser, { viewport: { width: 1280, height: 900 } });
-    // The deployment switch of web/config.json: ordering is offered.
+    // The deployment switch of web/config.json: ordering would be offered.
     await context.route('**/app/config.json', (route) => route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({ server: null, base_url: null, print_orders: true, catalog: { base_urls: {}, enable: [], disable: [], contact_email: null } }),
     }));
     const page = await context.newPage();
-    const orderCalls = [];
-    page.on('request', (request) => {
-      if (request.url().includes('/print-orders')) orderCalls.push(request.postDataJSON());
-    });
-    await page.goto(server.app);
+    await page.goto(world.webApp);
     await page.waitForSelector('#main:not([hidden])', { timeout: 60_000 });
     await page.fill('#title', 'Les Vagues du soir');
     await page.fill('#author', 'Jeanne Roy');
 
-    // Step 5: the gift is created on the server.
-    await page.check('input[name="ebook-mode"][value="upload"]');
-    await page.setInputFiles('#ebook-file', { name: 'vagues.pdf', mimeType: 'application/pdf', buffer: EBOOK_PDF });
-    await page.check('input[name="ebook-rights"][value="own_work"]');
-    await page.check('#ebook-confirm');
-    await page.click('#create-gift');
-    await page.waitForSelector('#gift-result:not([hidden])', { timeout: 30_000 });
-    const created = await text(page, '#gift-code');
-    assert.match(created, /[A-Z]{4}-[A-Z]{4}-[A-Z]{4}/, `the server's code is shown: "${created}"`);
+    // Step 5: the upload choice is gone from view; the code from a store is the way.
+    assert.equal(await page.isVisible('input[name="ebook-mode"][value="upload"]'), false, 'no upload choice');
+    assert.equal(await page.isVisible('#ebook-upload'), false);
+    assert.equal(await page.isVisible('#create-gift'), false);
+    assert.match(await text(page, '#ebook-source-note'), /cadeau|offrir/i, 'the note sends buyers to the store\'s gift option');
+    await page.check('input[name="ebook-mode"][value="code"]');
+    assert.ok(await page.isVisible('#code'), 'the existing-code entry stays');
 
-    // Step 6: a print-ready profile, the poche format, the order form.
-    await page.selectOption('#profile', 'upload_eu');
-    await page.selectOption('#format', 'poche');
+    // Ordering a printed card needs a gift created by a partner: not offered here.
     await page.click('#order summary');
-    await page.waitForSelector('#order-form:not([hidden])');
-    assert.equal(await page.inputValue('#order-country'), 'FR', 'the country defaults to France');
-    const autocomplete = await page.$$eval('#order-address input, #order-address select', (fields) =>
-      Object.fromEntries(fields.map((f) => [f.id, f.getAttribute('autocomplete')])));
-    assert.deepEqual(autocomplete, {
-      'order-name': 'shipping name',
-      'order-line1': 'shipping address-line1',
-      'order-line2': 'shipping address-line2',
-      'order-postal-code': 'shipping postal-code',
-      'order-city': 'shipping address-level2',
-      'order-country': 'shipping country',
-    });
-    assert.equal(await text(page, 'label[for="order-postal-code"]'), 'Code postal');
-    assert.equal(await page.$eval('#order-country option[value="FR"]', (o) => o.textContent), 'France', 'countries are named in the page language');
+    assert.equal(await page.isVisible('#order-form'), false, 'no order form without a partner gift');
 
-    // Nothing is sent while a required field is empty: the gap is marked and focused.
-    await page.click('#order-submit');
-    await page.waitForSelector('#order-name[aria-invalid="true"]');
-    assert.equal(await page.evaluate(() => document.activeElement.id), 'order-name');
-    assert.ok(await page.isVisible('#order-address-error'));
-    assert.equal(orderCalls.length, 0, 'no order without a complete address');
-
-    await page.fill('#order-name', 'Sacha Martin');
-    await page.fill('#order-line1', '12 rue des Lilas');
-    await page.fill('#order-postal-code', '69003');
-    await page.fill('#order-city', 'Lyon');
-
-    // A country the demo printer does not post to: its refusal is shown, not "unavailable".
-    await page.selectOption('#order-country', 'US');
-    await page.click('#order-submit');
-    await page.waitForFunction(() => document.getElementById('order-status').classList.contains('is-error'), null, { timeout: 60_000 });
-    assert.equal(await text(page, '#order-status'), 'Cet imprimeur ne livre pas dans ce pays.');
-
-    // France: accepted by the printer.
-    await page.selectOption('#order-country', 'FR');
-    await page.click('#order-submit');
-    await page.waitForFunction(() => {
-      const status = document.getElementById('order-status');
-      return status.classList.contains('is-ok') || (status.classList.contains('is-error') && !document.getElementById('order-submit').disabled);
-    }, null, { timeout: 60_000 });
-    const sent = await text(page, '#order-status');
-    assert.ok(await page.$eval('#order-status', (s) => s.classList.contains('is-ok')), `the printer accepted the order: "${sent}"`);
-    const orderId = sent.split(/\s/).pop();
-    assert.equal(orderCalls.length, 2);
-    assert.deepEqual(orderCalls[1].address, { name: 'Sacha Martin', line1: '12 rue des Lilas', postal_code: '69003', city: 'Lyon', country: 'FR' }, 'the documented address object');
-    assert.equal(orderCalls[1].product, 'card-poche');
-
-    const atPrinter = await (await fetch(`${world.printer}/v1/orders/${encodeURIComponent(orderId)}`)).json();
-    assert.equal(atPrinter.order_id, orderId);
-    assert.equal(atPrinter.status, 'accepted');
-    assert.equal(atPrinter.product, 'card-poche');
-    assert.equal(atPrinter.preflight.passed, true);
-
-    const findings = await audit(page);
-    assert.deepEqual(findings, [], 'accessibility with the order form open');
-    await shot(page, '6-designer-order');
-    // The browser logs the printer's refusal (422) as a failed resource: expected here.
-    const unexpected = problems.filter((p) => !(p.includes('/print-orders') && p.includes('status of 422')));
-    assert.deepEqual(unexpected, [], 'console errors or requests to other hosts');
+    // The core itself: no upload route, no creator API (docs/api.md v0.3).
+    const origin = new URL(world.webApp).origin;
+    for (const path of ['/api/v1/uploads', '/api/v1/gifts', '/api/partner/v1/uploads']) {
+      const answer = await fetch(`${origin}${path}`, { method: 'POST', body: 'x' });
+      assert.equal(answer.status, 404, `${path} is gone`);
+    }
+    await shot(page, '6-designer-no-upload');
+    assert.deepEqual(problems, [], 'console errors or requests to other hosts');
     await context.close();
   });
 });

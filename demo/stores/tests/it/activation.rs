@@ -552,7 +552,7 @@ async fn both_stores_run_side_by_side_with_separate_state() {
         (gifts[0].partner.as_str(), gifts[1].partner.as_str()),
         ("septante", "grande-enseigne")
     );
-    assert_eq!(gifts[0].request["delivery"]["type"], "hosted_file");
+    assert_eq!(gifts[0].request["delivery"]["type"], "partner_file");
     assert_eq!(gifts[1].request["delivery"]["type"], "reseller_redirect");
 
     // The redirect of the Grande Enseigne gift is meaningless to Septante.

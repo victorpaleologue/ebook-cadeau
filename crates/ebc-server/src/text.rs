@@ -376,6 +376,28 @@ strings! {
         "Dit boek is vandaag al meerdere keren verstuurd. Probeer het morgen opnieuw.",
         "Este livro já foi enviado várias vezes hoje. Tente novamente amanhã.",
     ];
+    /// The partner's file is too large to be sent by e-mail.
+    SendTooLarge => [
+        "Ce fichier est trop volumineux pour être envoyé par e-mail. Téléchargez-le plutôt.",
+        "This file is too large to be sent by e-mail. Download it instead.",
+        "Diese Datei ist zu groß für den Versand per E-Mail. Bitte stattdessen herunterladen.",
+        "Este archivo es demasiado grande para enviarlo por correo. Descárgalo en su lugar.",
+        "Questo file è troppo grande per essere inviato per e-mail. Scaricalo invece.",
+        "Dit bestand is te groot om per e-mail te versturen. Download het in plaats daarvan.",
+        "Este ficheiro é demasiado grande para ser enviado por e-mail. Transfira-o em vez disso.",
+    ];
+    /// Footer link to the service's contact address.
+    Contact => ["Contact", "Contact", "Kontakt", "Contacto", "Contatti", "Contact", "Contacto"];
+    /// Help page: the contact point. Placeholder: `email`.
+    ContactText => [
+        "Une question sur un cadeau, ou un contenu illicite à signaler : écrivez à {email}.",
+        "A question about a gift, or illegal content to report: write to {email}.",
+        "Eine Frage zu einem Geschenk oder rechtswidrige Inhalte zu melden: Schreiben Sie an {email}.",
+        "¿Una pregunta sobre un regalo o un contenido ilícito que denunciar? Escribe a {email}.",
+        "Una domanda su un regalo o un contenuto illecito da segnalare: scrivi a {email}.",
+        "Een vraag over een cadeau, of illegale inhoud melden: schrijf naar {email}.",
+        "Uma pergunta sobre um presente, ou conteúdo ilícito a denunciar: escreva para {email}.",
+    ];
     /// Link back to the gift page.
     BackToGift => [
         "Revenir au livre", "Back to the book", "Zurück zum Buch", "Volver al libro",

@@ -35,8 +35,8 @@ async fn a_gift_is_activated_in_one_store_account_and_syncs_to_its_e_reader() {
     let claim_url = receipt.gifts[0].claim_url.clone().unwrap();
     assert_eq!(claim_url, format!("{}/k/{}", world.server.base, code.compact()));
     let gift_id = gift_id(store, 0);
-    // Nothing was uploaded: the book never leaves the store's ecosystem.
-    assert!(store.snapshot()["gifts"][0]["upload_id"].is_null());
+    // The book never leaves the store's ecosystem: no file link was ever handed out.
+    assert_eq!(store.snapshot()["gifts"][0]["file_links"], 0);
     let api = world.partner_api(store.kind);
 
     // --- on an e-reader the page says to use a phone; nothing is downloadable there ---

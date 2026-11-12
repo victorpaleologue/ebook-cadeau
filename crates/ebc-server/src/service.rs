@@ -1,11 +1,17 @@
 //! What the service does with gifts, independent of HTTP: creating, cancelling and
 //! reissuing gifts, looking codes up, opening download sessions, pairing, redirecting to
-//! a store. Handlers in [`crate::routes`] translate the outcomes into pages and JSON.
+//! a store, obtaining download links from partners. Handlers in [`crate::routes`]
+//! translate the outcomes into pages and JSON.
+//!
+//! The service never stores a book: a `partner_file` gift's file is served by its
+//! partner, which hands out a short-lived download link on each claim (`docs/api.md`
+//! §4.5).
 
 use axum::body::Bytes;
 use axum::http::StatusCode;
 use ebc_model::{
-    BookMeta, Delivery, Gift, GiftCode, GiftId, GiftStatus, LicenceFormat, Locale, PairCode,
+    BookMeta, Delivery, FileFormat, Gift, GiftCode, GiftId, GiftStatus, LicenceFormat, Locale,
+    PairCode, PartnerFileLink,
 };
 use serde::Deserialize;
 
@@ -15,11 +21,17 @@ use crate::device::DeviceClass;
 use crate::error::ApiError;
 use crate::names::{ascii_file_name, display_file_name};
 use crate::state::AppState;
-use crate::store::{BlobRef, GiftRecord, PairRecord, SessionRecord, StoreError, UploadRecord};
-use crate::upload::{self, FileKind, RightsBasis};
+use crate::store::{BlobRef, GiftRecord, PairRecord, SessionRecord, StoreError};
 
 /// Largest licence document accepted from a store.
 const MAX_LICENCE_BYTES: usize = 1 << 20;
+/// Largest JSON answer accepted from a partner's file endpoint.
+const MAX_LINK_ANSWER_BYTES: usize = 64 * 1024;
+/// A partner's download link is reused for a session while it has at least this many
+/// seconds left.
+const LINK_REUSE_MARGIN_SECS: i64 = 10;
+/// Lifetime assumed for a download link whose partner gave no `expires_at`.
+const LINK_DEFAULT_TTL_SECS: i64 = 60;
 /// Sendings of one gift to device addresses per 24 hours.
 pub(crate) const MAX_SENDS_PER_DAY: usize = 3;
 
@@ -35,14 +47,16 @@ impl From<crate::clock::EntropyError> for ApiError {
     }
 }
 
-/// The `delivery` member of a gift creation request (`docs/api.md` §3, §4.2).
+/// The `delivery` member of a gift creation request (`docs/api.md` §4.2).
 #[derive(Debug, Clone, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub(crate) enum DeliveryRequest {
-    /// We serve a file uploaded beforehand.
-    HostedFile {
-        /// From `POST …/uploads`.
-        upload_id: String,
+    /// The partner serves the file through short-lived download links.
+    PartnerFile {
+        /// `epub` or `pdf`.
+        format: String,
+        /// The partner's signed file endpoint.
+        url: String,
     },
     /// The store adds the book to the recipient's account.
     ResellerRedirect {
@@ -58,7 +72,7 @@ pub(crate) enum DeliveryRequest {
     },
 }
 
-/// The body of `POST /api/v1/gifts` and `POST /api/partner/v1/gifts`.
+/// The body of `POST /api/partner/v1/gifts`.
 #[derive(Debug, Clone, Deserialize)]
 pub(crate) struct GiftRequest {
     #[serde(default)]
@@ -122,11 +136,10 @@ pub(crate) fn parse_cover_rights(
     })
 }
 
-/// A gift that was just created, with the secrets that exist only now.
+/// A gift that was just created, with its code.
 pub(crate) struct CreatedGift {
     pub(crate) record: GiftRecord,
     pub(crate) code: GiftCode,
-    pub(crate) manage_token: Option<String>,
 }
 
 /// What a code typed by a recipient turned out to be.
@@ -153,6 +166,9 @@ pub(crate) enum ClaimError {
     NotAvailable,
     /// The store did not deliver (`502`).
     StoreUnavailable,
+    /// The partner's file is larger than a device e-mail may carry (`EBC_SEND_MAX_MB`,
+    /// `502`).
+    TooLargeToSend,
     /// Too many sendings today (`429`).
     SendLimit,
     /// Something broke on our side (`500`).
@@ -171,7 +187,7 @@ impl ClaimError {
             Self::Gone(_) | Self::Exhausted => StatusCode::GONE,
             Self::NotRevealed => StatusCode::FORBIDDEN,
             Self::NotAvailable => StatusCode::CONFLICT,
-            Self::StoreUnavailable => StatusCode::BAD_GATEWAY,
+            Self::StoreUnavailable | Self::TooLargeToSend => StatusCode::BAD_GATEWAY,
             Self::SendLimit => StatusCode::TOO_MANY_REQUESTS,
             Self::Internal => StatusCode::INTERNAL_SERVER_ERROR,
         }
@@ -188,6 +204,23 @@ pub(crate) struct SendReservation {
     at: i64,
     /// Whether it was the first claim of the gift.
     first: bool,
+}
+
+/// A download link a partner handed out, kept in memory for its session
+/// ([`crate::state::Inner::partner_links`]).
+#[derive(Debug, Clone)]
+pub(crate) struct CachedLink {
+    /// Where the device is redirected.
+    pub(crate) url: reqwest::Url,
+    /// When the link stops working (the partner's `expires_at`, or a default).
+    pub(crate) expires_at: i64,
+}
+
+/// A partner's answer, checked: the download URL parsed, the rest as given.
+#[derive(Debug, Clone)]
+pub(crate) struct ResolvedLink {
+    url: reqwest::Url,
+    link: PartnerFileLink,
 }
 
 /// A freshly minted download session.
@@ -215,6 +248,8 @@ struct Payload {
     licence: bool,
     /// The bytes of a licence, to store again once the session references them.
     bytes: Option<Bytes>,
+    /// The download link of a partner file, cached once the session exists.
+    link: Option<ResolvedLink>,
 }
 
 fn unprocessable(code: &'static str, message: impl Into<String>) -> ApiError {
@@ -251,78 +286,6 @@ impl AppState {
         gift.partner.as_deref().and_then(|id| self.config.partner(id))
     }
 
-    /// Stores an uploaded eBook after sniffing it (`POST …/uploads`).
-    pub(crate) async fn store_upload(
-        &self,
-        bytes: Bytes,
-        file_name_header: Option<&str>,
-        rights_basis: RightsBasis,
-        partner: Option<&str>,
-    ) -> Result<UploadRecord, ApiError> {
-        let kind = upload::sniff(&bytes).map_err(|e| match e {
-            upload::UploadError::DrmProtected(_) => unprocessable("drm_protected", e.to_string()),
-            upload::UploadError::Empty => ApiError::bad_request("empty_body", e.to_string()),
-            other => ApiError::new(
-                StatusCode::UNSUPPORTED_MEDIA_TYPE,
-                "unsupported_media_type",
-                other.to_string(),
-            ),
-        })?;
-        let sha256 = codes::sha256_hex(&bytes);
-        let size_bytes = bytes.len() as u64;
-        let quota = self.config.anonymous_storage_quota_bytes;
-        let over_quota = move |db: &crate::store::Db| {
-            partner.is_none()
-                && quota > 0
-                && db.anonymous_upload_bytes().saturating_add(size_bytes) > quota
-        };
-        let storage_full = || {
-            ApiError::new(
-                StatusCode::INSUFFICIENT_STORAGE,
-                "storage_quota_exceeded",
-                "the storage reserved for uploads is full; try again later",
-            )
-        };
-        if self.db.view(over_quota) {
-            // Maybe only stale records hold the space: purge them, then decide.
-            let stale = self.db.update(|db| db.purge(self.now(), &self.config.purge_policy()))?;
-            self.db.delete_unused_blobs(&stale);
-            if self.db.view(over_quota) {
-                return Err(storage_full());
-            }
-        }
-        self.put_blob(&sha256, bytes.clone()).await?;
-        let record = UploadRecord {
-            id: format!("u_{}", codes::random_hex(self.entropy.as_ref(), 16)?),
-            sha256,
-            size_bytes,
-            media_type: kind.media_type().to_owned(),
-            file_name: file_name_header.and_then(|h| upload::decode_file_name(h, kind)),
-            rights_basis,
-            partner: partner.map(str::to_owned),
-            created_at: self.now(),
-            gift_id: None,
-        };
-        let (stored, mut stale) = self.db.update(|db| {
-            let stale = db.purge(self.now(), &self.config.purge_policy());
-            // Checked again under the lock: concurrent uploads cannot overshoot the quota.
-            if over_quota(db) {
-                return (false, stale);
-            }
-            db.uploads.insert(record.id.clone(), record.clone());
-            (true, stale)
-        })?;
-        if !stored {
-            stale.push(record.sha256);
-            self.db.delete_unused_blobs(&stale);
-            return Err(storage_full());
-        }
-        // Again, now that the record protects the file (see `delete_unused_blobs`).
-        self.put_blob(&record.sha256, bytes).await?;
-        self.db.delete_unused_blobs(&stale);
-        Ok(record)
-    }
-
     /// Writes a file to the store without blocking the async runtime.
     pub(crate) async fn put_blob(&self, sha256: &str, bytes: Bytes) -> Result<(), ApiError> {
         let store = std::sync::Arc::clone(self.db.store());
@@ -342,11 +305,11 @@ impl AppState {
             .map(Some)
     }
 
-    /// Creates a gift (`POST /api/v1/gifts`, `POST /api/partner/v1/gifts`).
+    /// Creates a gift (`POST /api/partner/v1/gifts`).
     pub(crate) fn create_gift(
         &self,
         request: GiftRequest,
-        partner: Option<&Partner>,
+        partner: &Partner,
     ) -> Result<CreatedGift, ApiError> {
         let now = self.now();
         check_book(&request.book)?;
@@ -373,75 +336,44 @@ impl AppState {
         let text = |value: &Option<String>| value.as_deref().and_then(Gift::normalise_text);
         let cover_rights = parse_cover_rights(request.cover_rights.as_deref())?.unwrap_or_default();
 
-        // Resolve the delivery; hosted files are checked again inside the transaction.
-        let (delivery, upload_id) = match &request.delivery {
-            DeliveryRequest::HostedFile { upload_id } => {
-                let upload = self
-                    .db
-                    .view(|db| db.uploads.get(upload_id).cloned())
-                    .filter(|u| u.partner.as_deref() == partner.map(|p| p.id.as_str()))
-                    .ok_or_else(|| {
-                        unprocessable(
-                            "unknown_upload",
-                            "delivery.upload_id does not name an upload of yours",
-                        )
-                    })?;
-                let extension = FileKind::from_media_type(&upload.media_type)
-                    .map_or("bin", FileKind::extension);
-                let delivery = Delivery::HostedFile {
-                    file_name: ascii_file_name(&request.book.title, extension),
-                    media_type: upload.media_type.clone(),
-                    size_bytes: upload.size_bytes,
-                    sha256: upload.sha256.clone(),
-                };
-                (delivery, Some(upload.id))
-            }
-            DeliveryRequest::ResellerRedirect { url }
-            | DeliveryRequest::ResellerLicence { url, .. } => {
-                let Some(partner) = partner else {
-                    return Err(unprocessable(
-                        "unsupported_delivery",
-                        "only hosted_file gifts can be created without a partner",
-                    ));
-                };
-                if !partner.allows_url(url) {
-                    return Err(unprocessable(
-                        "redirect_host_not_allowed",
-                        "delivery.url must be an http(s) URL on one of the partner's redirect_hosts",
-                    ));
-                }
-                let delivery = match &request.delivery {
-                    DeliveryRequest::ResellerLicence { format, .. } => Delivery::ResellerLicence {
-                        format: LicenceFormat::from(format.as_str()),
-                        url: url.clone(),
-                    },
-                    _ => Delivery::ResellerRedirect { url: url.clone() },
-                };
-                (delivery, None)
+        // Every delivery URL points to the partner, on one of its redirect_hosts.
+        let url = match &request.delivery {
+            DeliveryRequest::PartnerFile { url, .. }
+            | DeliveryRequest::ResellerRedirect { url }
+            | DeliveryRequest::ResellerLicence { url, .. } => url,
+        };
+        if !partner.allows_url(url) {
+            return Err(unprocessable(
+                "redirect_host_not_allowed",
+                "delivery.url must be an http(s) URL on one of the partner's redirect_hosts",
+            ));
+        }
+        let delivery = match &request.delivery {
+            DeliveryRequest::PartnerFile { format, url } => Delivery::PartnerFile {
+                format: FileFormat::parse(format).ok_or_else(|| {
+                    unprocessable("invalid_delivery", "delivery.format must be epub or pdf")
+                })?,
+                url: url.clone(),
+            },
+            DeliveryRequest::ResellerLicence { format, url } => Delivery::ResellerLicence {
+                format: LicenceFormat::from(format.as_str()),
+                url: url.clone(),
+            },
+            DeliveryRequest::ResellerRedirect { url } => {
+                Delivery::ResellerRedirect { url: url.clone() }
             }
         };
 
         let mut id_bytes = [0u8; 16];
         self.entropy.fill(&mut id_bytes)?;
         let id = GiftId::from_random_bytes(&id_bytes).map_err(ApiError::internal)?;
-        let manage_token = match partner {
-            Some(_) => None,
-            None => Some(codes::random_hex(self.entropy.as_ref(), 32)?),
-        };
 
         for _ in 0..8 {
-            // Partner codes are derived from a stored nonce so that the card can be
-            // rendered later; standalone codes exist only in this response.
-            let (code, nonce, counter) = match partner {
-                Some(_) => {
-                    let nonce = codes::random_hex(self.entropy.as_ref(), 16)?;
-                    let (code, counter) =
-                        codes::derive_gift_code(&self.config.code_secret, &nonce, 0)
-                            .ok_or_else(|| ApiError::internal("no gift code could be derived"))?;
-                    (code, Some(nonce), counter)
-                }
-                None => (codes::random_gift_code(self.entropy.as_ref())?, None, 0),
-            };
+            // Codes are derived from a stored nonce so that the card can be rendered
+            // later (`card.pdf`).
+            let nonce = codes::random_hex(self.entropy.as_ref(), 16)?;
+            let (code, counter) = codes::derive_gift_code(&self.config.code_secret, &nonce, 0)
+                .ok_or_else(|| ApiError::internal("no gift code could be derived"))?;
             let model = Gift {
                 id: id.clone(),
                 code,
@@ -459,19 +391,16 @@ impl AppState {
             let record = GiftRecord {
                 id: id.as_str().to_owned(),
                 code_hash: codes::gift_code_hash(&self.config.code_secret, &code),
-                code_nonce: nonce,
+                code_nonce: Some(nonce),
                 code_counter: counter,
-                partner: partner.map(|p| p.id.clone()),
+                partner: Some(partner.id.clone()),
                 order_ref: order_ref.clone(),
-                manage_token_hash: manage_token.as_deref().map(codes::token_hash),
                 book: model.book,
                 giver_name: model.giver_name,
                 recipient_name: model.recipient_name,
                 message: model.message,
                 locale,
                 delivery: model.delivery,
-                upload_id: upload_id.clone(),
-                rights_basis: None,
                 cover_rights,
                 status: GiftStatus::Created,
                 created_at: now,
@@ -487,33 +416,23 @@ impl AppState {
                 sends: Vec::new(),
                 ended_at: None,
                 anonymised_at: None,
+                personal_data_deleted_at: None,
             };
-            let inserted = self.db.update(|db| -> Result<Option<GiftRecord>, ApiError> {
+            let (inserted, stale) = self.db.update(|db| {
+                // Every write runs the purge (retention, expired sessions).
+                let stale = db.purge(now, &self.config.purge_policy());
                 if db.codes.contains_key(&record.code_hash)
                     || db.voided.contains_key(&record.code_hash)
                 {
-                    return Ok(None);
-                }
-                let mut record = record;
-                if let Some(upload_id) = &record.upload_id {
-                    let upload = db.uploads.get_mut(upload_id).ok_or_else(|| {
-                        unprocessable("unknown_upload", "the upload no longer exists")
-                    })?;
-                    if upload.gift_id.is_some() {
-                        return Err(ApiError::conflict(
-                            "upload_already_used",
-                            "this upload already belongs to a gift",
-                        ));
-                    }
-                    upload.gift_id = Some(record.id.clone());
-                    record.rights_basis = Some(upload.rights_basis);
+                    return (None, stale);
                 }
                 db.codes.insert(record.code_hash.clone(), record.id.clone());
                 db.gifts.insert(record.id.clone(), record.clone());
-                Ok(Some(record))
-            })??;
+                (Some(record), stale)
+            })?;
+            self.db.delete_unused_blobs(&stale);
             if let Some(record) = inserted {
-                return Ok(CreatedGift { record, code, manage_token });
+                return Ok(CreatedGift { record, code });
             }
         }
         Err(ApiError::internal("could not draw an unused gift code"))
@@ -533,9 +452,9 @@ impl AppState {
         (codes::gift_code_hash(&self.config.code_secret, &code) == gift.code_hash).then_some(code)
     }
 
-    /// Cancels a gift: the code stops working, sessions and pair codes are dropped, a
-    /// hosted file is deleted and the names and message are forgotten at once (the rest
-    /// of the record is anonymised after `EBC_RETENTION_DAYS`). Idempotent.
+    /// Cancels a gift: the code stops working, sessions and pair codes are dropped, its
+    /// cover and card PDF are deleted and the names and message are forgotten at once
+    /// (the rest of the record is anonymised after `EBC_RETENTION_DAYS`). Idempotent.
     pub(crate) fn cancel_gift(&self, id: &str) -> Result<GiftRecord, ApiError> {
         let now = self.now();
         let (record, newly, files) = self
@@ -547,19 +466,15 @@ impl AppState {
                 gift.ended_at.get_or_insert(now);
                 gift.forget_personal_data();
                 let record = gift.clone();
-                let mut files: Vec<String> = Vec::new();
-                if let Delivery::HostedFile { sha256, .. } = &record.delivery {
-                    files.push(sha256.clone());
-                }
-                files.extend(
-                    record.card_pdf.iter().chain(record.cover.iter()).map(|b| b.sha256.clone()),
-                );
-                if let Some(upload_id) = &record.upload_id {
-                    db.uploads.remove(upload_id);
-                }
+                let mut files: Vec<String> = record
+                    .card_pdf
+                    .iter()
+                    .chain(record.cover.iter())
+                    .map(|b| b.sha256.clone())
+                    .collect();
                 db.sessions.retain(|_, session| {
                     let keep = session.gift_id != id;
-                    if !keep {
+                    if !keep && session.licence {
                         files.push(session.sha256.clone());
                     }
                     keep
@@ -590,14 +505,9 @@ impl AppState {
             ));
         }
         for _ in 0..8 {
-            let (code, nonce, counter) = if current.partner.is_some() {
-                let nonce = codes::random_hex(self.entropy.as_ref(), 16)?;
-                let (code, counter) = codes::derive_gift_code(&self.config.code_secret, &nonce, 0)
-                    .ok_or_else(|| ApiError::internal("no gift code could be derived"))?;
-                (code, Some(nonce), counter)
-            } else {
-                (codes::random_gift_code(self.entropy.as_ref())?, None, 0)
-            };
+            let nonce = codes::random_hex(self.entropy.as_ref(), 16)?;
+            let (code, counter) = codes::derive_gift_code(&self.config.code_secret, &nonce, 0)
+                .ok_or_else(|| ApiError::internal("no gift code could be derived"))?;
             let hash = codes::gift_code_hash(&self.config.code_secret, &code);
             let updated = self.db.update(|db| -> Result<Option<GiftRecord>, ApiError> {
                 if db.codes.contains_key(&hash) || db.voided.contains_key(&hash) {
@@ -612,7 +522,7 @@ impl AppState {
                     ));
                 }
                 let old = std::mem::replace(&mut gift.code_hash, hash.clone());
-                gift.code_nonce = nonce;
+                gift.code_nonce = Some(nonce);
                 gift.code_counter = counter;
                 let record = gift.clone();
                 db.codes.remove(&old);
@@ -705,24 +615,26 @@ impl AppState {
             .map_err(ClaimError::internal)?
     }
 
-    /// The file a session for `gift` serves: the hosted file, or a licence fetched from
-    /// the store right now.
+    /// The file a session for `gift` serves: a download link obtained from the partner
+    /// right now, or a licence fetched from the store right now.
     async fn payload(&self, gift: &GiftRecord) -> Result<Payload, ClaimError> {
         match &gift.delivery {
-            Delivery::HostedFile { file_name, media_type, size_bytes, sha256 } => {
-                let extension = file_name.rsplit_once('.').map_or("bin", |(_, e)| e);
-                let uploaded_name = gift.upload_id.as_deref().and_then(|id| {
-                    self.db.view(|db| db.uploads.get(id).and_then(|u| u.file_name.clone()))
-                });
+            Delivery::PartnerFile { format, url } => {
+                let resolved = self.request_partner_link(gift, url, *format).await?;
+                let extension = format.as_str();
                 Ok(Payload {
-                    sha256: sha256.clone(),
-                    size_bytes: *size_bytes,
-                    media_type: media_type.clone(),
-                    file_name: file_name.clone(),
-                    display_name: uploaded_name
+                    sha256: String::new(),
+                    size_bytes: resolved.link.size_bytes.unwrap_or(0),
+                    media_type: format.media_type().to_owned(),
+                    file_name: ascii_file_name(&gift.book.title, extension),
+                    display_name: resolved
+                        .link
+                        .file_name
+                        .clone()
                         .unwrap_or_else(|| display_file_name(&gift.book.title, extension)),
                     licence: false,
                     bytes: None,
+                    link: Some(resolved),
                 })
             }
             Delivery::ResellerLicence { format, url } => {
@@ -742,6 +654,7 @@ impl AppState {
                     display_name: display_file_name(&gift.book.title, extension),
                     licence: true,
                     bytes: Some(bytes),
+                    link: None,
                 })
             }
             Delivery::ResellerRedirect { .. } => Err(ClaimError::NotAvailable),
@@ -796,7 +709,178 @@ impl AppState {
         Ok(Bytes::from(body))
     }
 
-    /// Mints a download session for a `hosted_file` or `reseller_licence` gift.
+    /// Asks the partner of a `partner_file` gift for a download link (`docs/api.md`
+    /// §4.5): a signed `GET` of `url` with the parameters of a redemption redirect. The
+    /// partner answers `200` with a [`PartnerFileLink`] as JSON, or `303` with the link
+    /// in `Location`. The link must be valid and on one of the partner's
+    /// `redirect_hosts`. No redirect is followed; neither URL is ever logged (both carry
+    /// signatures).
+    async fn request_partner_link(
+        &self,
+        gift: &GiftRecord,
+        url: &str,
+        format: FileFormat,
+    ) -> Result<ResolvedLink, ClaimError> {
+        let partner = self.partner_of(gift).ok_or(ClaimError::StoreUnavailable)?;
+        let target = self.signed_store_url(gift, url).ok_or(ClaimError::StoreUnavailable)?;
+        let unavailable = |reason: &str| {
+            tracing::warn!(gift = %gift.id, partner = %partner.id, reason, "no download link from the partner");
+            ClaimError::StoreUnavailable
+        };
+        let mut response = self
+            .http
+            .get(target)
+            .header(reqwest::header::ACCEPT, "application/json")
+            .send()
+            .await
+            .map_err(|error| {
+                let error = error.without_url();
+                tracing::warn!(gift = %gift.id, %error, "partner file request failed");
+                ClaimError::StoreUnavailable
+            })?;
+        let link = match response.status() {
+            reqwest::StatusCode::SEE_OTHER => {
+                let location = response
+                    .headers()
+                    .get(reqwest::header::LOCATION)
+                    .and_then(|value| value.to_str().ok())
+                    .ok_or_else(|| unavailable("303 without Location"))?;
+                PartnerFileLink {
+                    download_url: location.trim().to_owned(),
+                    file_name: None,
+                    media_type: None,
+                    size_bytes: None,
+                    sha256: None,
+                    expires_at: None,
+                }
+            }
+            status if status.is_success() => {
+                let mut body = Vec::new();
+                while let Some(chunk) =
+                    response.chunk().await.map_err(|_| unavailable("unreadable answer"))?
+                {
+                    if body.len() + chunk.len() > MAX_LINK_ANSWER_BYTES {
+                        return Err(unavailable("answer too large"));
+                    }
+                    body.extend_from_slice(&chunk);
+                }
+                serde_json::from_slice::<PartnerFileLink>(&body)
+                    .map_err(|_| unavailable("answer is not a download link"))?
+            }
+            status => {
+                tracing::warn!(gift = %gift.id, %status, "the partner refused the file");
+                return Err(ClaimError::StoreUnavailable);
+            }
+        };
+        if let Err(error) = link.validate(format, self.now()) {
+            tracing::warn!(gift = %gift.id, %error, "unusable download link from the partner");
+            return Err(ClaimError::StoreUnavailable);
+        }
+        if !partner.allows_url(&link.download_url) {
+            return Err(unavailable("download link outside the partner's redirect_hosts"));
+        }
+        let url = reqwest::Url::parse(&link.download_url)
+            .map_err(|_| unavailable("download link is not a URL"))?;
+        Ok(ResolvedLink { url, link })
+    }
+
+    /// Keeps a partner's download link for the session `key`, and forgets expired ones.
+    fn cache_link(&self, key: &str, resolved: &ResolvedLink) {
+        let now = self.now();
+        let expires_at =
+            resolved.link.expires_at.unwrap_or_else(|| now.saturating_add(LINK_DEFAULT_TTL_SECS));
+        let mut links =
+            self.partner_links.lock().unwrap_or_else(std::sync::PoisonError::into_inner);
+        links.retain(|_, link| link.expires_at > now);
+        links.insert(key.to_owned(), CachedLink { url: resolved.url.clone(), expires_at });
+    }
+
+    /// Where `GET /d/{session}/…` of a partner-file session sends the device: the link
+    /// obtained for the session while it has [`LINK_REUSE_MARGIN_SECS`] left, else a
+    /// fresh one from the partner.
+    pub(crate) async fn partner_download(
+        &self,
+        key: &str,
+        session: &SessionRecord,
+    ) -> Result<reqwest::Url, ClaimError> {
+        let now = self.now();
+        let cached = self
+            .partner_links
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .get(key)
+            .filter(|link| link.expires_at.saturating_sub(now) >= LINK_REUSE_MARGIN_SECS)
+            .map(|link| link.url.clone());
+        if let Some(url) = cached {
+            return Ok(url);
+        }
+        let gift = self.gift(&session.gift_id).ok_or(ClaimError::Gone(GiftStatus::Cancelled))?;
+        if gift.status_at(now).is_gone() {
+            return Err(ClaimError::Gone(gift.status_at(now)));
+        }
+        let Delivery::PartnerFile { format, url } = &gift.delivery else {
+            return Err(ClaimError::NotAvailable);
+        };
+        let resolved = self.request_partner_link(&gift, url, *format).await?;
+        self.cache_link(key, &resolved);
+        Ok(resolved.url)
+    }
+
+    /// The bytes of a `partner_file` gift, for a send-to-device e-mail: a fresh download
+    /// link, then the file itself, in memory only, at most `EBC_SEND_MAX_MB`, checked
+    /// against the size and SHA-256 the partner announced. Never written to disk.
+    pub(crate) async fn partner_file_bytes(
+        &self,
+        gift: &GiftRecord,
+    ) -> Result<(Bytes, FileFormat), ClaimError> {
+        let Delivery::PartnerFile { format, url } = &gift.delivery else {
+            return Err(ClaimError::NotAvailable);
+        };
+        let resolved = self.request_partner_link(gift, url, *format).await?;
+        let limit = self.config.max_send_bytes;
+        if resolved.link.size_bytes.is_some_and(|size| size > limit) {
+            return Err(ClaimError::TooLargeToSend);
+        }
+        let failed = |reason: &str| {
+            tracing::warn!(gift = %gift.id, reason, "the partner's file could not be fetched");
+            ClaimError::StoreUnavailable
+        };
+        let mut response = self.http.get(resolved.url).send().await.map_err(|error| {
+            let error = error.without_url();
+            tracing::warn!(gift = %gift.id, %error, "partner file download failed");
+            ClaimError::StoreUnavailable
+        })?;
+        if response.status() != reqwest::StatusCode::OK {
+            return Err(failed("the download link did not answer 200"));
+        }
+        if response.content_length().is_some_and(|length| length > limit) {
+            return Err(ClaimError::TooLargeToSend);
+        }
+        let mut body = Vec::new();
+        while let Some(chunk) = response.chunk().await.map_err(|_| failed("download cut off"))? {
+            if (body.len() + chunk.len()) as u64 > limit {
+                return Err(ClaimError::TooLargeToSend);
+            }
+            body.extend_from_slice(&chunk);
+        }
+        if body.is_empty() {
+            return Err(failed("empty file"));
+        }
+        if resolved.link.size_bytes.is_some_and(|size| size != body.len() as u64) {
+            return Err(failed("size differs from the announced one"));
+        }
+        if resolved
+            .link
+            .sha256
+            .as_deref()
+            .is_some_and(|sha| !sha.eq_ignore_ascii_case(&codes::sha256_hex(&body)))
+        {
+            return Err(failed("SHA-256 differs from the announced one"));
+        }
+        Ok((Bytes::from(body), *format))
+    }
+
+    /// Mints a download session for a `partner_file` or `reseller_licence` gift.
     pub(crate) async fn open_session(
         &self,
         gift_id: &str,
@@ -816,10 +900,12 @@ impl AppState {
             expires_at: self.now().saturating_add(self.config.session_ttl_secs),
             device: device.as_str().to_owned(),
             licence: payload.licence,
+            partner_file: payload.link.is_some(),
         };
         let key = codes::token_hash(&token);
+        let session_key = key.clone();
         let outcome = self.record_claim(gift_id, true, false, |db, _| {
-            db.sessions.insert(key, session);
+            db.sessions.insert(session_key, session);
         });
         let (record, first, stale) = match outcome {
             Ok(done) => done,
@@ -833,6 +919,9 @@ impl AppState {
         if let Some(bytes) = payload.bytes {
             // Again, now that the session protects the licence (see `delete_unused_blobs`).
             self.put_blob(&payload.sha256, bytes).await.map_err(|_| ClaimError::Internal)?;
+        }
+        if let Some(resolved) = &payload.link {
+            self.cache_link(&key, resolved);
         }
         self.db.delete_unused_blobs(&stale);
         if first {
@@ -900,7 +989,7 @@ impl AppState {
         })
     }
 
-    /// Reserves one sending of the hosted file of `gift_id` to a device address: the gift
+    /// Reserves one sending of the partner file of `gift_id` to a device address: the gift
     /// must be claimable, below its claim limit and sent fewer than [`MAX_SENDS_PER_DAY`]
     /// times in the last 24 hours. The claim and the sending are counted **now**, in one
     /// transaction, before any mail is sent; a failed delivery hands them back with
@@ -908,7 +997,7 @@ impl AppState {
     /// [`confirm_send`](Self::confirm_send). The address itself is never kept.
     pub(crate) fn reserve_send(&self, gift_id: &str) -> Result<SendReservation, ClaimError> {
         let before = self.gift(gift_id).ok_or(ClaimError::Gone(GiftStatus::Cancelled))?;
-        if !matches!(before.delivery, Delivery::HostedFile { .. }) {
+        if !matches!(before.delivery, Delivery::PartnerFile { .. }) {
             return Err(ClaimError::NotAvailable);
         }
         let (record, first, stale) = self.record_claim(gift_id, true, true, |_, _| {})?;

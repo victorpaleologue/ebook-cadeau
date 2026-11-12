@@ -10,6 +10,7 @@ use ebc_model::{CodeError, Delivery, GiftCode, GiftStatus, Locale, PairCode};
 use serde::Deserialize;
 
 use super::{Visitor, html, see_other, with_retry_after};
+use crate::config::Partner;
 use crate::device::DeviceClass;
 use crate::mail;
 use crate::names::ascii_file_name;
@@ -161,6 +162,47 @@ fn origin_of(url: &str) -> Option<String> {
     })
 }
 
+/// The `form-action` sources for the download hosts of `partners`: a form that claims a
+/// `partner_file` ends, through redirects, on the partner's download link, and browsers
+/// check every hop of a form's redirect chain against `form-action`. Each
+/// `redirect_hosts` entry becomes `http://host[:port] https://host[:port]` (`:*` when the
+/// entry names no port, as the allow-list then accepts any port); entries that are not a
+/// plain host name or IPv4 address (with an optional port) are left out.
+pub(crate) fn download_sources<'a>(partners: impl IntoIterator<Item = &'a Partner>) -> String {
+    let mut sources: Vec<String> = Vec::new();
+    for partner in partners {
+        for entry in &partner.redirect_hosts {
+            let entry = entry.trim().to_ascii_lowercase();
+            let (host, port) = match entry.rsplit_once(':') {
+                Some((host, port))
+                    if !port.is_empty() && port.bytes().all(|b| b.is_ascii_digit()) =>
+                {
+                    (host.to_owned(), port.to_owned())
+                }
+                _ => (entry.clone(), "*".to_owned()),
+            };
+            let plain = !host.is_empty()
+                && host.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'.' || b == b'-');
+            if !plain {
+                continue;
+            }
+            for scheme in ["http", "https"] {
+                let source = format!("{scheme}://{host}:{port}");
+                if !sources.contains(&source) {
+                    sources.push(source);
+                }
+            }
+        }
+    }
+    sources.join(" ")
+}
+
+/// The `form-action` sources of the pair form (`/e`): the gift is not known before the
+/// code is typed, so the download hosts of every partner.
+fn pair_sources(state: &AppState) -> Option<String> {
+    Some(download_sources(&state.config.partners)).filter(|s| !s.is_empty())
+}
+
 /// Renders the gift page with `status`.
 fn gift_response(
     state: &AppState,
@@ -179,6 +221,13 @@ fn gift_response(
             partner.filter(|p| p.allows_url(url)).and_then(|_| origin_of(url))
         }
         _ => None,
+    };
+    let form_action = match &gift.delivery {
+        Delivery::ResellerRedirect { .. } => store_origin.clone(),
+        Delivery::PartnerFile { .. } => {
+            partner.map(|p| download_sources([p])).filter(|s| !s.is_empty())
+        }
+        Delivery::ResellerLicence { .. } => None,
     };
     let send =
         state.config.smtp_url.as_ref().filter(|_| !state.config.send_domains.is_empty()).map(
@@ -204,7 +253,7 @@ fn gift_response(
         send,
         notices,
     };
-    html(status, pages::gift(&view), store_origin.as_deref())
+    html(status, pages::gift(&view), form_action.as_deref())
 }
 
 /// The page for a claim that could not go ahead.
@@ -247,6 +296,7 @@ fn claim_failed(
         ClaimError::NotRevealed | ClaimError::Exhausted => None,
         ClaimError::NotAvailable => Some(s(locale, S::NotAvailable)),
         ClaimError::StoreUnavailable => Some(s(locale, S::StoreUnavailable)),
+        ClaimError::TooLargeToSend => Some(s(locale, S::SendTooLarge)),
         ClaimError::SendLimit => Some(s(locale, S::SendLimit)),
         ClaimError::Internal => Some(t(locale, Msg::ErrorGeneric)),
     };
@@ -334,7 +384,7 @@ pub(crate) async fn download(
         Ok(found) => found,
         Err(page) => return *page,
     };
-    if !matches!(gift.delivery, Delivery::HostedFile { .. }) {
+    if !matches!(gift.delivery, Delivery::PartnerFile { .. }) {
         return claim_failed(&state, &visitor, &gift.id, &code, device, &ClaimError::NotAvailable);
     }
     let chrome = visitor.chrome(&state, gift.locale, device);
@@ -369,7 +419,7 @@ pub(crate) async fn redeem(
             let chrome = visitor.chrome(&state, gift.locale, device);
             state.open_session(&gift.id, chrome.device).await.map(|ticket| ticket.download_path())
         }
-        Delivery::HostedFile { .. } => Err(ClaimError::NotAvailable),
+        Delivery::PartnerFile { .. } => Err(ClaimError::NotAvailable),
     };
     match outcome {
         Ok(location) => see_other(&location),
@@ -413,7 +463,7 @@ pub(crate) async fn pair_form(
     Query(query): Query<PageQuery>,
 ) -> Response {
     let chrome = visitor.chrome(&state, visitor.locale(), query.device.as_deref());
-    html(StatusCode::OK, pages::pair_form(chrome, &[]), None)
+    html(StatusCode::OK, pages::pair_form(chrome, &[]), pair_sources(&state).as_deref())
 }
 
 /// `POST /e`: validates the pair code and redirects to the file. Wrong codes count
@@ -428,6 +478,8 @@ pub(crate) async fn pair_submit(
     let chrome = visitor.chrome(&state, visitor.locale(), device);
     let locale = chrome.locale;
     let now = state.now();
+    let sources = pair_sources(&state);
+    let html = |status, body| html(status, body, sources.as_deref());
     if let Verdict::Blocked { retry_after_secs, .. } =
         state.code_limiter.check(&visitor.client, now)
     {
@@ -435,7 +487,7 @@ pub(crate) async fn pair_submit(
     }
     let Ok(code) = PairCode::parse(form.p.as_deref().unwrap_or("")) else {
         let errors = [s(locale, S::PairFormat).to_owned(), s(locale, S::NotCounted).to_owned()];
-        return html(StatusCode::BAD_REQUEST, pages::pair_form(chrome, &errors), None);
+        return html(StatusCode::BAD_REQUEST, pages::pair_form(chrome, &errors));
     };
     // Pair codes are 6 letters (about 26 bits) against 47.5 bits for gift codes: while
     // the global budget is spent, nobody's pair code is looked up, not even from a
@@ -452,18 +504,14 @@ pub(crate) async fn pair_submit(
                 }
                 Verdict::Allowed { remaining } => {
                     let lines = unknown_lines(locale, s(locale, S::PairUnknown), remaining);
-                    html(StatusCode::NOT_FOUND, pages::pair_form(chrome, &lines), None)
+                    html(StatusCode::NOT_FOUND, pages::pair_form(chrome, &lines))
                 }
             };
         }
         Err(error) => {
             tracing::error!(%error, "pair code lookup failed");
             let errors = [t(locale, Msg::ErrorGeneric).to_owned()];
-            return html(
-                StatusCode::INTERNAL_SERVER_ERROR,
-                pages::pair_form(chrome, &errors),
-                None,
-            );
+            return html(StatusCode::INTERNAL_SERVER_ERROR, pages::pair_form(chrome, &errors));
         }
     };
     match state.open_session(&gift_id, chrome.device).await {
@@ -476,12 +524,14 @@ pub(crate) async fn pair_submit(
                 ClaimError::Gone(_) => t(locale, Msg::ErrorGiftRevoked),
                 _ => t(locale, Msg::ErrorGeneric),
             };
-            html(error.status(), pages::pair_form(chrome, &[text.to_owned()]), None)
+            html(error.status(), pages::pair_form(chrome, &[text.to_owned()]))
         }
     }
 }
 
-/// `POST /k/{code}/send`: e-mails the hosted file to a device address.
+/// `POST /k/{code}/send`: e-mails the partner's file to a device address. The file is
+/// fetched from the partner's download link into memory (at most `EBC_SEND_MAX_MB`) and
+/// never stored.
 pub(crate) async fn send(
     State(state): State<AppState>,
     visitor: Visitor,
@@ -501,8 +551,7 @@ pub(crate) async fn send(
         html(status, pages::send_result(chrome, &code, title, text, ok), None)
     };
 
-    let (Some(smtp_url), Delivery::HostedFile { sha256, media_type, file_name, .. }) =
-        (&state.config.smtp_url, &gift.delivery)
+    let (Some(smtp_url), Delivery::PartnerFile { .. }) = (&state.config.smtp_url, &gift.delivery)
     else {
         return claim_failed(&state, &visitor, &gift.id, &code, device, &ClaimError::NotAvailable);
     };
@@ -529,14 +578,18 @@ pub(crate) async fn send(
         Ok(reservation) => reservation,
         Err(error) => return claim_failed(&state, &visitor, &gift.id, &code, device, &error),
     };
-    let bytes = match state.read_blob(sha256).await {
-        Ok(Some(bytes)) => bytes,
-        other => {
-            tracing::error!(gift = %gift.id, missing = other.is_ok(), "the hosted file cannot be read");
+    let (bytes, format) = match state.partner_file_bytes(&gift).await {
+        Ok(fetched) => fetched,
+        Err(error) => {
             state.release_send(reservation);
-            return result(StatusCode::INTERNAL_SERVER_ERROR, t(locale, Msg::ErrorGeneric), false);
+            let text = match error {
+                ClaimError::TooLargeToSend => s(locale, S::SendTooLarge),
+                _ => s(locale, S::StoreUnavailable),
+            };
+            return result(error.status(), text, false);
         }
     };
+    let file_name = ascii_file_name(&gift.book.title, format.as_str());
     let Ok(message_token) = crate::codes::random_hex(state.entropy.as_ref(), 16) else {
         state.release_send(reservation);
         return result(StatusCode::INTERNAL_SERVER_ERROR, t(locale, Msg::ErrorGeneric), false);
@@ -551,11 +604,8 @@ pub(crate) async fn send(
         to,
         subject,
         text: sf(locale, S::MailBody, &[("title", &gift.book.title)]),
-        attachment_name: ascii_file_name(
-            &gift.book.title,
-            file_name.rsplit_once('.').map_or("epub", |(_, ext)| ext),
-        ),
-        media_type,
+        attachment_name: file_name.clone(),
+        media_type: format.media_type(),
         bytes: bytes.to_vec(),
         now_unix: state.now(),
         message_token,

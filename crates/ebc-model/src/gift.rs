@@ -64,12 +64,15 @@ pub enum GiftError {
     /// A file name with a path separator, a control character, or a reserved name.
     #[error("file name must be a plain name without path separators")]
     InvalidFileName,
-    /// A media type that does not look like `type/subtype`.
-    #[error("media type must look like type/subtype")]
+    /// A media type that does not look like `type/subtype`, or not the expected one.
+    #[error("media type must be the type/subtype of the file format")]
     InvalidMediaType,
     /// A licence format that is not a short lower-case token such as `lcpl`.
     #[error("licence format must be a short lower-case token such as \"lcpl\"")]
     InvalidLicenceFormat,
+    /// A partner download link whose `expires_at` is not in the future.
+    #[error("the download link has already expired")]
+    LinkExpired,
 }
 
 /// Opaque, non-secret identifier of a gift (unlike its [`GiftCode`], which is the secret
@@ -227,20 +230,67 @@ impl<'de> Deserialize<'de> for LicenceFormat {
     }
 }
 
+/// Format of an eBook file served by a partner (`partner_file` deliveries).
+///
+/// Serialises as `"epub"` or `"pdf"`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum FileFormat {
+    /// EPUB (`application/epub+zip`).
+    Epub,
+    /// PDF (`application/pdf`).
+    Pdf,
+}
+
+impl FileFormat {
+    /// Every format.
+    pub const ALL: [FileFormat; 2] = [Self::Epub, Self::Pdf];
+
+    /// The serialised name, which is also the usual file extension: `epub`, `pdf`.
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Epub => "epub",
+            Self::Pdf => "pdf",
+        }
+    }
+
+    /// The media type of the file.
+    #[must_use]
+    pub const fn media_type(self) -> &'static str {
+        match self {
+            Self::Epub => "application/epub+zip",
+            Self::Pdf => "application/pdf",
+        }
+    }
+
+    /// Parses `epub` or `pdf` (case-insensitive).
+    #[must_use]
+    pub fn parse(value: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|format| format.as_str().eq_ignore_ascii_case(value.trim()))
+    }
+}
+
+impl fmt::Display for FileFormat {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// How the eBook reaches the recipient once the code is redeemed.
+///
+/// The service never stores book files: a file is always served by a registered partner
+/// (a store, or a "shelf" service hosting files for their rights holders).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum Delivery {
-    /// Standalone mode: the service stores the file and serves it on redemption.
-    HostedFile {
-        /// Download file name, e.g. `"l-etranger.epub"`. A plain name, no path.
-        file_name: String,
-        /// Media type, e.g. `"application/epub+zip"`.
-        media_type: String,
-        /// Size of the file in bytes.
-        size_bytes: u64,
-        /// SHA-256 of the file as 64 hexadecimal characters.
-        sha256: String,
+    /// The partner serves the file. On each claim the service asks `url` (signed) for a
+    /// short-lived download link ([`PartnerFileLink`]) and redirects the device to it.
+    PartnerFile {
+        /// Format of the file.
+        format: FileFormat,
+        /// Absolute URL at the partner that answers with a download link.
+        url: String,
     },
     /// Reseller mode: the recipient is sent to the store, which fulfils the order in its
     /// own account system.
@@ -259,14 +309,24 @@ pub enum Delivery {
 }
 
 impl Delivery {
-    /// The serialised `type` tag: `"hosted_file"`, `"reseller_redirect"` or
+    /// The serialised `type` tag: `"partner_file"`, `"reseller_redirect"` or
     /// `"reseller_licence"`.
     #[must_use]
     pub fn type_name(&self) -> &'static str {
         match self {
-            Self::HostedFile { .. } => "hosted_file",
+            Self::PartnerFile { .. } => "partner_file",
             Self::ResellerRedirect { .. } => "reseller_redirect",
             Self::ResellerLicence { .. } => "reseller_licence",
+        }
+    }
+
+    /// The partner URL of the delivery.
+    #[must_use]
+    pub fn url(&self) -> &str {
+        match self {
+            Self::PartnerFile { url, .. }
+            | Self::ResellerRedirect { url }
+            | Self::ResellerLicence { url, .. } => url,
         }
     }
 
@@ -280,22 +340,7 @@ impl Delivery {
     /// The first [`GiftError`] found.
     pub fn validate(&self) -> Result<(), GiftError> {
         match self {
-            Self::HostedFile { file_name, media_type, size_bytes, sha256 } => {
-                if !is_plain_file_name(file_name) {
-                    return Err(GiftError::InvalidFileName);
-                }
-                if !is_media_type(media_type) {
-                    return Err(GiftError::InvalidMediaType);
-                }
-                if *size_bytes == 0 {
-                    return Err(GiftError::Empty { field: "file" });
-                }
-                if sha256.len() != 64 || !sha256.bytes().all(|b| b.is_ascii_hexdigit()) {
-                    return Err(GiftError::InvalidSha256);
-                }
-                Ok(())
-            }
-            Self::ResellerRedirect { url } => {
+            Self::PartnerFile { url, .. } | Self::ResellerRedirect { url } => {
                 if is_http_url(url) {
                     Ok(())
                 } else {
@@ -309,6 +354,71 @@ impl Delivery {
                 if is_http_url(url) { Ok(()) } else { Err(GiftError::InvalidUrl) }
             }
         }
+    }
+}
+
+/// What a partner answers when the service asks for the file of a `partner_file` gift
+/// (`docs/api.md` §4.5): a short-lived download link and what it serves.
+///
+/// Every member but `download_url` is optional; the service checks what is given
+/// ([`validate`](Self::validate)) and derives the rest from the gift.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PartnerFileLink {
+    /// Absolute `http(s)` URL the device is redirected to (short-lived, signed by the
+    /// partner). Its host must be one of the partner's `redirect_hosts`.
+    pub download_url: String,
+    /// The file name the partner serves, e.g. `"candide.epub"`. A plain name, no path.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub file_name: Option<String>,
+    /// Media type served; must be the one of the gift's [`FileFormat`].
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub media_type: Option<String>,
+    /// Size of the file in bytes (at least 1).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub size_bytes: Option<u64>,
+    /// SHA-256 of the file as 64 hexadecimal characters.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub sha256: Option<String>,
+    /// When `download_url` stops working (Unix seconds).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub expires_at: Option<i64>,
+}
+
+impl PartnerFileLink {
+    /// Checks the answer for a gift of `format` at `now`: an absolute `http(s)` download
+    /// URL; a plain file name; the media type of `format`; a non-zero size; a SHA-256 of
+    /// 64 hexadecimal digits; an expiry in the future. (Whether the URL's host is one the
+    /// partner may use is the caller's check.)
+    ///
+    /// # Errors
+    /// The first [`GiftError`] found.
+    pub fn validate(&self, format: FileFormat, now_unix: i64) -> Result<(), GiftError> {
+        if !is_http_url(&self.download_url) {
+            return Err(GiftError::InvalidUrl);
+        }
+        if self.file_name.as_deref().is_some_and(|name| !is_plain_file_name(name)) {
+            return Err(GiftError::InvalidFileName);
+        }
+        if let Some(media_type) = self.media_type.as_deref() {
+            let essence = media_type.split(';').next().unwrap_or("").trim();
+            if !is_media_type(essence) || !essence.eq_ignore_ascii_case(format.media_type()) {
+                return Err(GiftError::InvalidMediaType);
+            }
+        }
+        if self.size_bytes == Some(0) {
+            return Err(GiftError::Empty { field: "size_bytes" });
+        }
+        if self
+            .sha256
+            .as_deref()
+            .is_some_and(|sha| sha.len() != 64 || !sha.bytes().all(|b| b.is_ascii_hexdigit()))
+        {
+            return Err(GiftError::InvalidSha256);
+        }
+        if self.expires_at.is_some_and(|at| at <= now_unix) {
+            return Err(GiftError::LinkExpired);
+        }
+        Ok(())
     }
 }
 
@@ -354,7 +464,7 @@ fn is_http_url(url: &str) -> bool {
 /// Where a gift is in its life (the states of `docs/api.md`).
 ///
 /// ```text
-/// created ──► redeemed ──► exhausted   (hosted file: download-session limit reached)
+/// created ──► redeemed ──► exhausted   (file: download-session limit reached)
 ///    │            └──────► fulfilled   (reseller confirmed the book is in an account)
 ///    └── any time ──► cancelled | expired | reissued
 /// ```
@@ -364,9 +474,9 @@ pub enum GiftStatus {
     /// Issued; nobody has claimed it yet.
     #[default]
     Created,
-    /// Claimed at least once. A hosted file stays downloadable by whoever holds the card.
+    /// Claimed at least once. A file delivery stays downloadable by whoever holds the card.
     Redeemed,
-    /// Hosted file: the limit of download sessions has been reached.
+    /// File delivery: the limit of download sessions has been reached.
     Exhausted,
     /// Reseller delivery: the store confirmed the book is in the recipient's account.
     Fulfilled,
@@ -610,11 +720,9 @@ mod tests {
             created_unix: 1_794_000_000,
             expires_unix: Some(1_794_000_000 + 365 * 86_400),
             reveal_unix: None,
-            delivery: Delivery::HostedFile {
-                file_name: "l-etranger.epub".into(),
-                media_type: "application/epub+zip".into(),
-                size_bytes: 345_678,
-                sha256: "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08".into(),
+            delivery: Delivery::PartnerFile {
+                format: FileFormat::Epub,
+                url: "https://shelf.example/ebc/file".into(),
             },
         }
     }
@@ -631,9 +739,10 @@ mod tests {
         assert_eq!(value["id"], "g_abababababababababababababababab");
         assert_eq!(value["code"], gift.code.compact());
         assert_eq!(value["locale"], "fr");
-        assert_eq!(value["delivery"]["type"], "hosted_file");
+        assert_eq!(value["delivery"]["type"], "partner_file");
+        assert_eq!(value["delivery"]["format"], "epub");
         assert_eq!(value["reveal_unix"], serde_json::Value::Null);
-        assert_eq!(value["delivery"]["size_bytes"], 345_678);
+        assert_eq!(value["delivery"]["url"], "https://shelf.example/ebc/file");
         assert_eq!(value["book"]["isbn13"], "9782070360024");
     }
 
@@ -673,7 +782,8 @@ mod tests {
         assert!(mutate("/code", "short".into()).is_err());
         assert!(mutate("/locale", "xx".into()).is_err());
         assert!(mutate("/delivery/type", "carrier_pigeon".into()).is_err());
-        assert!(mutate("/delivery/size_bytes", (-1).into()).is_err());
+        assert!(mutate("/delivery/format", "mobi".into()).is_err());
+        assert!(mutate("/delivery/url", 7.into()).is_err());
         assert!(mutate("/created_unix", "yesterday".into()).is_err());
         assert!(mutate("/book/isbn13", "9782070360025".into()).is_err());
         assert!(mutate("/id", "ok_ID-1".into()).is_ok());
@@ -866,76 +976,80 @@ mod tests {
     }
 
     #[test]
-    fn hosted_file_delivery_is_validated() {
-        let file = |file_name: &str, media_type: &str, size_bytes: u64, sha256: &str| {
-            Delivery::HostedFile {
-                file_name: file_name.into(),
-                media_type: media_type.into(),
-                size_bytes,
-                sha256: sha256.into(),
-            }
-            .validate()
+    fn partner_file_deliveries_and_links_are_validated() {
+        let delivery = |url: &str| {
+            Delivery::PartnerFile { format: FileFormat::Pdf, url: url.into() }.validate()
         };
+        assert_eq!(delivery("https://shelf.example/f?x=1"), Ok(()));
+        assert_eq!(delivery("ftp://shelf.example/f"), Err(GiftError::InvalidUrl));
+        assert_eq!(delivery(""), Err(GiftError::InvalidUrl));
+        assert_eq!(FileFormat::parse(" EPUB "), Some(FileFormat::Epub));
+        assert_eq!(FileFormat::parse("mobi"), None);
+        assert_eq!(FileFormat::Pdf.media_type(), "application/pdf");
+        let parsed: Delivery = serde_json::from_str(
+            r#"{"type":"partner_file","format":"epub","url":"https://s.example/f"}"#,
+        )
+        .expect("parses");
+        assert_eq!(parsed.type_name(), "partner_file");
+        assert_eq!(parsed.url(), "https://s.example/f");
+        assert!(
+            serde_json::from_str::<Delivery>(
+                r#"{"type":"partner_file","format":"exe","url":"https://s.example/f"}"#
+            )
+            .is_err()
+        );
+
         let sha = "9F86D081884C7D659A2FEAA0C55AD015A3BF4F1B2B0B822CD15D6C15B0F00A08";
-        assert_eq!(file("livre.epub", "application/epub+zip", 1, sha), Ok(()));
-        assert_eq!(file("Été 2026 (v2).pdf", "application/pdf", u64::MAX, sha), Ok(()));
-        for bad_name in [
-            "",
-            ".",
-            "..",
-            "../x.epub",
-            "a/b.epub",
-            "a\\b.epub",
-            "a\nb.epub",
-            "a\u{0}.epub",
-            " lead.epub",
-            "trail.epub ",
-        ] {
+        let good = PartnerFileLink {
+            download_url: "https://cdn.shelf.example/dl/abc?sig=1".into(),
+            file_name: Some("Été 2026 (v2).epub".into()),
+            media_type: Some("application/epub+zip".into()),
+            size_bytes: Some(345_678),
+            sha256: Some(sha.into()),
+            expires_at: Some(1_000),
+        };
+        assert_eq!(good.validate(FileFormat::Epub, 999), Ok(()));
+        let minimal: PartnerFileLink =
+            serde_json::from_str(r#"{"download_url":"http://127.0.0.1:9/x"}"#).expect("parses");
+        assert_eq!(minimal.validate(FileFormat::Pdf, 0), Ok(()));
+        assert_eq!(
+            serde_json::to_string(&minimal).expect("json"),
+            r#"{"download_url":"http://127.0.0.1:9/x"}"#
+        );
+        let with = |change: &dyn Fn(&mut PartnerFileLink)| {
+            let mut link = good.clone();
+            change(&mut link);
+            link.validate(FileFormat::Epub, 999)
+        };
+        assert_eq!(with(&|l| l.download_url = "javascript:x".into()), Err(GiftError::InvalidUrl));
+        assert_eq!(with(&|l| l.download_url = "/relative".into()), Err(GiftError::InvalidUrl));
+        for bad_name in
+            ["", ".", "..", "../x.epub", "a/b.epub", "a\\b.epub", "a\nb.epub", " x.epub"]
+        {
             assert_eq!(
-                file(bad_name, "application/pdf", 1, sha),
+                with(&|l| l.file_name = Some(bad_name.into())),
                 Err(GiftError::InvalidFileName),
                 "{bad_name:?}"
             );
         }
+        assert_eq!(with(&|l| l.file_name = Some("a".repeat(256))), Err(GiftError::InvalidFileName));
         assert_eq!(
-            file(&"a".repeat(256), "application/pdf", 1, sha),
-            Err(GiftError::InvalidFileName)
+            with(&|l| l.media_type = Some("application/pdf".into())),
+            Err(GiftError::InvalidMediaType)
         );
-        for bad_type in [
-            "",
-            "epub",
-            "/",
-            "application/",
-            "/epub",
-            "a b/c",
-            "text/html; charset=utf-8",
-            "a/b/c",
-            "é/x",
-        ] {
-            assert_eq!(
-                file("a.epub", bad_type, 1, sha),
-                Err(GiftError::InvalidMediaType),
-                "{bad_type:?}"
-            );
-        }
         assert_eq!(
-            file("a.epub", "application/epub+zip", 0, sha),
-            Err(GiftError::Empty { field: "file" })
+            with(&|l| l.media_type = Some("text/html".into())),
+            Err(GiftError::InvalidMediaType)
         );
-        for bad_sha in [
-            "",
-            "abc",
-            &sha[..63],
-            &format!("{sha}0"),
-            &sha.replace('9', "g"),
-            &sha.replace('9', "é"),
-        ] {
-            assert_eq!(
-                file("a.epub", "application/epub+zip", 1, bad_sha),
-                Err(GiftError::InvalidSha256),
-                "{bad_sha:?}"
-            );
+        assert_eq!(with(&|l| l.media_type = Some("application/EPUB+zip; x=1".into())), Ok(()));
+        assert_eq!(
+            with(&|l| l.size_bytes = Some(0)),
+            Err(GiftError::Empty { field: "size_bytes" })
+        );
+        for bad_sha in ["", "abc", &sha[..63], &format!("{sha}0"), &sha.replace('9', "g")] {
+            assert_eq!(with(&|l| l.sha256 = Some(bad_sha.into())), Err(GiftError::InvalidSha256));
         }
+        assert_eq!(with(&|l| l.expires_at = Some(999)), Err(GiftError::LinkExpired));
     }
 
     #[test]
@@ -1027,7 +1141,7 @@ mod tests {
             Delivery::ResellerRedirect { url: String::new() }.type_name(),
             "reseller_redirect"
         );
-        assert_eq!(sample().delivery.type_name(), "hosted_file");
+        assert_eq!(sample().delivery.type_name(), "partner_file");
     }
 
     #[test]

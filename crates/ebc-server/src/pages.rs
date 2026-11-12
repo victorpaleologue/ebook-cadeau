@@ -49,6 +49,8 @@ pub(crate) struct Chrome<'a> {
     pub(crate) chosen: Option<DeviceClass>,
     /// The host people type, e.g. `ebk.example`.
     pub(crate) host: &'a str,
+    /// The service's contact address (`EBC_CONTACT_EMAIL`), when configured.
+    pub(crate) contact: Option<&'a str>,
 }
 
 impl Chrome<'_> {
@@ -92,6 +94,9 @@ fn layout(chrome: Chrome<'_>, title: &str, body: Markup) -> String {
                 footer {
                     a href=(chrome.link("/")) { (s(locale, S::EnterCode)) }
                     a href=(chrome.link("/aide")) { (s(locale, S::Help)) }
+                    @if let Some(email) = chrome.contact {
+                        a id="contact" href=(format!("mailto:{email}")) { (s(locale, S::Contact)) }
+                    }
                 }
             }
         }
@@ -178,6 +183,10 @@ pub(crate) fn help(chrome: Chrome<'_>) -> String {
                 p { (s(locale, S::KindleExplain)) }
                 h2 { (t(locale, Msg::DeviceComputer)) }
                 p { (s(locale, S::UsbHint)) }
+                @if let Some(email) = chrome.contact {
+                    h2 { (s(locale, S::Contact)) }
+                    p id="contact-point" { (sf(locale, S::ContactText, &[("email", email)])) }
+                }
             }
         },
     )
@@ -250,8 +259,8 @@ fn pair_offer(view: &GiftView<'_>) -> Markup {
     }
 }
 
-/// The action block and the alternatives of a hosted file.
-fn hosted_actions(view: &GiftView<'_>, media_type: &str) -> (Markup, Markup) {
+/// The action block and the alternatives of a file (served by the partner).
+fn file_actions(view: &GiftView<'_>, media_type: &str) -> (Markup, Markup) {
     let locale = view.chrome.locale;
     let device = view.chrome.device;
     let format = if media_type == "application/pdf" { "PDF" } else { "EPUB" };
@@ -323,7 +332,7 @@ pub(crate) fn gift(view: &GiftView<'_>) -> String {
         _ if view.status == GiftStatus::Exhausted => {
             (html! { p { (s(locale, S::Exhausted)) } }, html! {})
         }
-        Delivery::HostedFile { media_type, .. } => hosted_actions(view, media_type),
+        Delivery::PartnerFile { format, .. } => file_actions(view, format.media_type()),
         Delivery::ResellerRedirect { .. } if view.status == GiftStatus::Fulfilled => (
             html! {
                 p { (sf(locale, S::Fulfilled, &[("store", store)])) }

@@ -1,7 +1,7 @@
 //! Shared state of the service: configuration, storage, clock, random source, rate
 //! limiters, outbound clients and the card renderer.
 
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -28,12 +28,10 @@ pub struct Inner {
     pub entropy: Arc<dyn Entropy>,
     /// Budgets for unknown gift codes and pair codes (per client and global).
     pub code_limiter: RateLimiter,
-    /// Budget for uploads and gift creations on the open creator API (per client and
-    /// global).
-    pub create_limiter: RateLimiter,
     /// Budget for failed partner authentications (per client network).
     pub partner_limiter: RateLimiter,
-    /// Outbound HTTP client (webhooks, licences, print provider). Never follows redirects.
+    /// Outbound HTTP client (webhooks, licences, partner files, print provider). Never
+    /// follows redirects.
     pub http: reqwest::Client,
     /// Renders `card.pdf` for partners.
     pub card_renderer: Arc<dyn CardRenderer>,
@@ -42,6 +40,9 @@ pub struct Inner {
     /// Request-body bytes all requests together may hold in memory
     /// (`EBC_MAX_INFLIGHT_BODY_MB`), one permit per byte.
     pub(crate) body_budget: Arc<tokio::sync::Semaphore>,
+    /// Download links obtained from partners, by session key, reused until shortly
+    /// before they expire. In memory only: a restart asks the partner again.
+    pub(crate) partner_links: Mutex<HashMap<String, crate::service::CachedLink>>,
 }
 
 impl std::ops::Deref for AppState {
@@ -118,10 +119,6 @@ impl AppStateBuilder {
                 self.config.rate_unknown_per_10min,
                 self.config.rate_unknown_global_per_10min,
             ),
-            create_limiter: RateLimiter::new(
-                self.config.rate_create_per_10min,
-                self.config.rate_create_global_per_10min,
-            ),
             partner_limiter: RateLimiter::new(self.config.rate_partner_fail_per_10min, 0),
             body_budget: Arc::new(tokio::sync::Semaphore::new(body_budget(&self.config))),
             config: self.config,
@@ -131,6 +128,7 @@ impl AppStateBuilder {
             http,
             card_renderer: self.card_renderer,
             in_flight: Mutex::new(HashSet::new()),
+            partner_links: Mutex::new(HashMap::new()),
         })))
     }
 }
@@ -138,11 +136,8 @@ impl AppStateBuilder {
 /// Permits of the in-flight body budget: the configured bytes, but never less than the
 /// largest single body the service accepts (so that one such request always fits).
 fn body_budget(config: &Config) -> usize {
-    let largest = config
-        .max_upload_bytes
-        .max(config.max_cover_bytes)
-        .max(config.max_card_pdf_bytes)
-        .max(crate::routes::MAX_JSON_BYTES);
+    let largest =
+        config.max_cover_bytes.max(config.max_card_pdf_bytes).max(crate::routes::MAX_JSON_BYTES);
     config.max_inflight_body_bytes.max(largest).min(tokio::sync::Semaphore::MAX_PERMITS)
 }
 

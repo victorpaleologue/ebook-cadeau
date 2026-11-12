@@ -2,14 +2,15 @@
 //! every signature (§4.1) and against the real demo printer.
 
 use crate::common::{
-    CardMode, World, code, code_display, gift_home, gift_post, open_epub, plain_client, text_of,
+    CardMode, World, code, code_display, gift_home, gift_post, open_epub, plain_client, sha256_hex,
+    text_of,
 };
 use axum::http::StatusCode;
 use ebc_demo_stores::{GiftDelivery, StoreKind};
 use serde_json::{Value, json};
 
 #[tokio::test]
-async fn septante_gift_printed_at_home_uses_a_hosted_file() {
+async fn septante_gift_printed_at_home_is_a_partner_file_the_store_serves_itself() {
     let world = World::new().await;
     let store = world.store(StoreKind::Septante).await;
     let browser = store.browser();
@@ -60,7 +61,6 @@ async fn septante_gift_printed_at_home_uses_a_hosted_file() {
     let calls: Vec<(String, String)> =
         world.ebc.requests().iter().map(|r| (r.method.clone(), r.path.clone())).collect();
     let expected = [
-        ("POST", "/api/partner/v1/uploads".to_owned()),
         ("POST", "/api/partner/v1/gifts".to_owned()),
         ("PUT", "/api/partner/v1/gifts/g_0001/cover".to_owned()),
         ("GET", "/api/partner/v1/gifts/g_0001/card.pdf".to_owned()),
@@ -73,20 +73,6 @@ async fn septante_gift_printed_at_home_uses_a_hosted_file() {
         assert_eq!(request.header("x-ebc-partner"), Some("septante"));
         assert!(request.header("x-ebc-signature").unwrap().starts_with("v1="));
     }
-
-    let upload = &world.ebc.requests_to("POST", "/uploads")[0];
-    assert_eq!(upload.header("x-rights-basis"), Some("licensed_distributor"));
-    assert_eq!(upload.header("x-file-name"), Some("candide.epub"));
-    assert_eq!(upload.header("content-type"), Some("application/epub+zip"));
-    assert_eq!(upload.header("idempotency-key"), Some(format!("{reference}-upload").as_str()));
-    let (_, files) = open_epub(&upload.body);
-    let watermark = text_of(&files, "OEBPS/watermark.xhtml");
-    assert!(watermark.contains("Offert à Sacha par Camille"), "{watermark}");
-    assert!(watermark.contains(&reference));
-    assert!(
-        text_of(&files, "OEBPS/package.opf")
-            .contains("<meta property=\"demo:licensee\">Offert à Sacha par Camille</meta>")
-    );
 
     let creation = &world.ebc.requests_to("POST", "/gifts")[0];
     assert_eq!(creation.header("idempotency-key"), Some(reference.as_str()));
@@ -106,9 +92,48 @@ async fn septante_gift_printed_at_home_uses_a_hosted_file() {
             "recipient_name": "Sacha",
             "message": "Joyeux anniversaire !",
             "locale": "fr",
-            "delivery": {"type": "hosted_file", "upload_id": "up_0001"},
+            "delivery": {"type": "partner_file", "format": "epub", "url": format!("{}/cadeau/fichier", store.base)},
         })
     );
+
+    // --- the recipient claims the gift: eBook Cadeau asks the store for a link (signed),
+    //     and the store stamps a copy for the recipient at that moment ---
+    let (status, link) = world.ebc.ask_file_link("g_0001").await;
+    assert_eq!(status, StatusCode::OK, "{link}");
+    assert_eq!(link["file_name"], "candide.epub");
+    assert_eq!(link["media_type"], "application/epub+zip");
+    let download_url = link["download_url"].as_str().unwrap().to_owned();
+    assert!(download_url.starts_with(&format!("{}/cadeau/telechargement/", store.base)));
+    assert!(link["expires_at"].as_i64().unwrap() > world.ebc.now());
+    let file = plain_client().get(&download_url).send().await.unwrap();
+    assert_eq!(file.status(), StatusCode::OK);
+    assert_eq!(file.headers()["content-type"], "application/epub+zip");
+    let bytes = file.bytes().await.unwrap().to_vec();
+    assert_eq!(link["size_bytes"].as_u64(), Some(bytes.len() as u64));
+    assert_eq!(link["sha256"].as_str().unwrap(), sha256_hex(&bytes));
+    let (_, files) = open_epub(&bytes);
+    let watermark = text_of(&files, "OEBPS/watermark.xhtml");
+    assert!(watermark.contains("Offert à Sacha par Camille"), "{watermark}");
+    assert!(watermark.contains(&reference));
+    assert!(
+        text_of(&files, "OEBPS/package.opf")
+            .contains("<meta property=\"demo:licensee\">Offert à Sacha par Camille</meta>")
+    );
+    assert_eq!(store.snapshot()["gifts"][0]["file_links"], 1);
+    // Each claim gets a fresh link; a link dies after its five minutes.
+    let (_, again) = world.ebc.ask_file_link("g_0001").await;
+    assert_ne!(again["download_url"], link["download_url"]);
+    world.clock.fetch_add(301, std::sync::atomic::Ordering::SeqCst);
+    let expired = plain_client().get(&download_url).send().await.unwrap();
+    assert_eq!(expired.status(), StatusCode::NOT_FOUND);
+    // A forged or stale request gets nothing.
+    let forged = world.ebc.redirect_url("g_0001").replace("ebc_sig=", "ebc_sig=zz");
+    assert_eq!(plain_client().get(&forged).send().await.unwrap().status(), StatusCode::BAD_REQUEST);
+    let tampered = world.ebc.redirect_url("g_0001").replace("ebc_gift=g_0001", "ebc_gift=g_0002");
+    assert_eq!(plain_client().get(&tampered).send().await.unwrap().status(), StatusCode::FORBIDDEN);
+    let stale = world.ebc.redirect_url_at("g_0001", world.ebc.now() - 901);
+    assert_eq!(plain_client().get(&stale).send().await.unwrap().status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(store.snapshot()["gifts"][0]["file_links"], 2, "refused requests got no link");
 
     let cover_upload = &world.ebc.requests_to("PUT", "/g_0001/cover")[0];
     assert_eq!(
@@ -437,8 +462,6 @@ async fn a_failed_step_can_be_retried_without_creating_anything_twice() {
     assert_eq!(retried.attr("gift-status", "data-status").as_deref(), Some("created"));
     assert!(retried.has("card-pdf") && !retried.has("retry") && !retried.has("gift-error"));
 
-    assert_eq!(world.ebc.uploads().len(), 1, "the upload that succeeded is not repeated");
-    assert_eq!(world.ebc.requests_to("POST", "/uploads").len(), 1);
     let creations = world.ebc.requests_to("POST", "/gifts");
     assert_eq!(creations.len(), 2);
     assert_eq!(creations[0].header("idempotency-key"), creations[1].header("idempotency-key"));
@@ -541,7 +564,7 @@ async fn requests_with_a_skewed_clock_or_wrong_secret_are_refused_by_the_api() {
         unknown.browser().buy("a@example.org", &["candide"], &gift_home("A", "B", "")).await;
     assert!(order.text("gift-error").unwrap().contains("unknown_partner"));
 
-    assert!(world.ebc.gifts().is_empty() && world.ebc.uploads().is_empty());
+    assert!(world.ebc.gifts().is_empty());
     assert!(world.ebc.requests().iter().all(|r| r.status == 401));
 }
 
@@ -612,14 +635,12 @@ async fn several_books_make_several_gifts() {
         .map(|r| r.header("idempotency-key").unwrap().to_owned())
         .collect();
     assert_eq!(keys, [format!("{reference}-1"), format!("{reference}-2")]);
-    let uploads = world.ebc.uploads();
-    assert_eq!(uploads.len(), 2);
-    // The file name travels percent-encoded in `X-File-Name` and the media type in
-    // `Content-Type` (§3 upload rules).
-    let named: Vec<(&str, &str)> =
-        uploads.iter().map(|u| (u.file_name.as_str(), u.media_type.as_str())).collect();
-    assert!(named.contains(&("candide.epub", "application/epub+zip")), "{named:?}");
-    assert!(named.iter().all(|(name, _)| name.ends_with(".epub")), "{named:?}");
+    // Each gift is a file the store serves; the store stamps the right book for each.
+    for (gift_id, file_name) in [("g_0001", "candide.epub"), ("g_0002", "les-fleurs-du-mal.epub")] {
+        assert_eq!(world.ebc.gift(gift_id).request["delivery"]["type"], "partner_file");
+        let (status, link) = world.ebc.ask_file_link(gift_id).await;
+        assert_eq!((status, link["file_name"].as_str()), (StatusCode::OK, Some(file_name)));
+    }
 }
 
 #[tokio::test]
@@ -705,8 +726,16 @@ async fn hostile_names_and_messages_are_escaped_everywhere() {
     assert_eq!(creation["message"], message);
 
     // The stamped EPUB stays well-formed XML (checked by `open_epub`) and shows the text.
-    let upload = &world.ebc.uploads()[0];
-    let (_, files) = open_epub(&upload.bytes);
+    let (_, link) = world.ebc.ask_file_link("g_0001").await;
+    let bytes = plain_client()
+        .get(link["download_url"].as_str().unwrap())
+        .send()
+        .await
+        .unwrap()
+        .bytes()
+        .await
+        .unwrap();
+    let (_, files) = open_epub(&bytes);
     let watermark = text_of(&files, "OEBPS/watermark.xhtml");
     assert!(watermark.contains("&lt;script&gt;alert(&#39;giver&#39;)&lt;/script&gt;"));
     assert!(!watermark.contains("<script>") && !watermark.contains("<img"));
@@ -762,8 +791,10 @@ async fn grande_enseigne_gifts_use_the_reseller_redirect() {
     assert_eq!(order.attr("gift-status", "data-status").as_deref(), Some("created"));
     assert!(order.has("card-pdf"));
 
-    assert!(world.ebc.uploads().is_empty(), "no file leaves this store");
-    assert!(world.ebc.requests_to("POST", "/uploads").is_empty());
+    // This store serves no files: its books sync to the recipient's account.
+    let endpoint =
+        plain_client().get(format!("{}/cadeau/fichier", store.base)).send().await.unwrap();
+    assert_eq!(endpoint.status(), StatusCode::NOT_FOUND);
     let creation = &world.ebc.requests_to("POST", "/gifts")[0];
     assert_eq!(creation.header("x-ebc-partner"), Some("grande-enseigne"));
     assert_eq!(
@@ -784,7 +815,6 @@ async fn septante_can_be_configured_for_the_reseller_redirect() {
     let order =
         buyer.buy("camille@example.org", &["candide"], &gift_home("Camille", "Sacha", "")).await;
     assert_eq!(order.attr("gift-status", "data-status").as_deref(), Some("created"));
-    assert!(world.ebc.uploads().is_empty());
     assert_eq!(world.ebc.gift("g_0001").request["delivery"]["type"], "reseller_redirect");
 
     // The recipient activates the gift and downloads a copy stamped as a gift.

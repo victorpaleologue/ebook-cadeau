@@ -46,12 +46,17 @@ From `file://` the page does not work in most browsers (module workers need an o
    colours appear only after ticking "I am authorised to adapt this cover", and only for a
    statement that allows it.
 4. **The message** — giver, recipient, text, language of the card.
-5. **The eBook** — upload a DRM-free file with its rights declaration (creates the gift on
-   the server: `POST /api/v1/uploads` then `POST /api/v1/gifts`), or enter an existing
-   code and the address of the site where it is redeemed, or take a demonstration code.
+5. **The eBook** — enter an existing code (from a store, or later from a shelf service)
+   and the address of the site where it is redeemed, or take a demonstration code. The
+   former "upload a file" path is **hidden**: the core service no longer hosts book files
+   and its creator API is gone (`docs/api.md` v0.3); a file is only ever served by a
+   registered partner. TODO(shelf): upload to the shelf service, which creates the gift
+   through the partner API. The note under the choices says to use the store's gift
+   option for a bought eBook.
 6. **The card** — size and printing (professional profiles are disabled, with the reason,
-   for a private copy), warnings, "Download the PDF", and "Order a printed card" when the
-   gift was created on this server and `print_orders` is on.
+   for a private copy), warnings, "Download the PDF". "Order a printed card" needed a gift
+   created on this server; it is unreachable until the shelf step (print orders now go
+   through the partner API, `docs/api.md` §4.6).
 
 Seven languages (fr, en, de, es, it, nl, pt), French by default, `?lang=en` to choose; all
 strings come from the package (`i18n_catalog`).

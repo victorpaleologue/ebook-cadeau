@@ -6,7 +6,7 @@
 //! | Variable | Default | Meaning |
 //! |---|---|---|
 //! | `EBC_DEMO_SERVER_PORT` | `8080` | eBook Cadeau server |
-//! | `EBC_DEMO_SEPTANTE_PORT` | `8101` | store "Septante" (`hosted_file`) |
+//! | `EBC_DEMO_SEPTANTE_PORT` | `8101` | store "Septante" (`partner_file`) |
 //! | `EBC_DEMO_GRANDE_ENSEIGNE_PORT` | `8102` | store "Grande Enseigne" (`reseller_redirect`) |
 //! | `EBC_DEMO_PRINTER_PORT` | `8103` | printer |
 //! | `EBC_DEMO_KINDLE_ADDRESS` | `demo@kindle.com` | device address of the mail sink |

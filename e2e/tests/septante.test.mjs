@@ -1,5 +1,5 @@
 // Scenarios 1–3: a gift bought at the fictional store "Septante" (DRM-free, gifts as
-// `hosted_file`), followed in real browsers from the checkout to three kinds of
+// `partner_file`: the store serves the stamped EPUB itself), followed in real browsers from the checkout to three kinds of
 // recipient device:
 //
 //   1. the buyer on a desktop browser: catalogue → product → cart → account → checkout with
@@ -64,7 +64,7 @@ function checkEpub(file, what) {
   assert.match(watermark.toString('utf8'), new RegExp(`Offert à ${RECIPIENT} par ${GIVER}`), `${what}: the watermark names the recipient and the giver`);
 }
 
-describe('Septante (hosted_file gift)', () => {
+describe('Septante (partner_file gift)', () => {
   test('1. the buyer: gift checkout, card PDF and its QR code', async (t) => {
     const { context, problems } = await newContext(browser, { viewport: { width: 1280, height: 900 } });
     const page = await context.newPage();

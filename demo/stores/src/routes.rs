@@ -16,13 +16,13 @@ use serde::Deserialize;
 
 use crate::catalogue::{self, Book};
 use crate::checkout;
-use crate::config::StoreKind;
+use crate::config::{GiftDelivery, StoreKind};
 use crate::crypto::{self, SignatureError};
 use crate::epub::{self, Watermark};
 use crate::gift::{self, CancelError, ReissueError};
 use crate::state::{
-    AccountError, Activation, AppState, CardState, OrderError, PendingActivation, SessionView,
-    WebhookEvent,
+    AccountError, Activation, AppState, CardState, FileLink, OrderError, PendingActivation,
+    SessionView, WebhookEvent,
 };
 use crate::views::{self, CheckoutForm, CheckoutOffer, Chrome};
 
@@ -52,6 +52,8 @@ pub(crate) fn router(state: Shared) -> Router {
         .route("/bibliotheque", get(library))
         .route("/bibliotheque/{file}", get(library_download))
         .route("/cadeau/activer", get(activation_page).post(activate))
+        .route(gift::FILE_ENDPOINT, get(gift_file))
+        .route("/cadeau/telechargement/{token}/{file}", get(gift_file_download))
         .route("/cadeau/merci", get(activation_done))
         .route("/webhooks/ebc", post(webhook_ebc))
         .route("/webhooks/printer", post(webhook_printer))
@@ -754,6 +756,104 @@ async fn library_download(
     match assets.stamped_epub(&watermark) {
         Ok(bytes) => epub_response(&assets.book.file_name(), bytes),
         Err(_) => internal_error(&state, &view),
+    }
+}
+
+// ----- gift files (partner_file, docs/api.md §4.5) ----------------------------------------
+
+/// `GET /cadeau/fichier?ebc_gift=…&ebc_order=…&ebc_ts=…&ebc_sig=…`: eBook Cadeau asks for
+/// the file of a claimed gift. The signature and its timestamp (at most 900 s old) are
+/// verified like an activation link; the gift must belong to this store and still be
+/// claimable. A copy watermarked for the recipient with the order reference is stamped
+/// **now** (claim time) and kept in memory behind a random token for
+/// [`gift::FILE_LINK_TTL_SECS`]; the answer is the JSON download link of `docs/api.md`
+/// §4.5. Nothing is ever sent to eBook Cadeau but this link.
+async fn gift_file(State(state): State<Shared>, Query(query): Query<ActivationQuery>) -> Response {
+    let (Some(partner), GiftDelivery::PartnerFile) =
+        (state.config.partner.as_ref(), state.config.gift_delivery)
+    else {
+        return json_error(StatusCode::NOT_FOUND, "not_found", "no such endpoint");
+    };
+    let (Some(gift_id), Some(order_ref), Some(ts), Some(sig)) = (
+        query.ebc_gift.as_deref(),
+        query.ebc_order.as_deref(),
+        query.ebc_ts.as_deref(),
+        query.ebc_sig.as_deref(),
+    ) else {
+        return json_error(StatusCode::BAD_REQUEST, "malformed", "signed parameters missing");
+    };
+    let now = state.config.clock.now();
+    match crypto::verify_redirect(&partner.secret, gift_id, order_ref, ts, sig, now) {
+        Ok(()) => {}
+        Err(SignatureError::Stale) => {
+            return json_error(
+                StatusCode::UNAUTHORIZED,
+                "stale_timestamp",
+                "the request is too old",
+            );
+        }
+        Err(SignatureError::Mismatch) => {
+            return json_error(StatusCode::FORBIDDEN, "bad_signature", "the signature is wrong");
+        }
+        Err(_) => {
+            return json_error(StatusCode::BAD_REQUEST, "malformed", "signed parameters malformed");
+        }
+    }
+    let claim = match state.claim_gift_file(gift_id, order_ref) {
+        Ok(claim) => claim,
+        Err(Activation::Void) => {
+            return json_error(StatusCode::GONE, "gift_void", "the gift was cancelled or expired");
+        }
+        Err(_) => return json_error(StatusCode::NOT_FOUND, "unknown_gift", "no such gift here"),
+    };
+    let Some(assets) = state.assets.as_ref().ok().and_then(|a| a.book(claim.book.id)) else {
+        return json_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "unavailable",
+            "the book file is missing",
+        );
+    };
+    let watermark = Watermark {
+        store_name: state.config.kind.display_name().to_owned(),
+        order_ref: order_ref.to_owned(),
+        licensee: format!("Offert à {} par {}", claim.recipient_name, claim.giver_name),
+        stamped_at: now,
+    };
+    let (Ok(bytes), Ok(token)) = (assets.stamped_epub(&watermark), state.config.entropy.token(16))
+    else {
+        return json_error(
+            StatusCode::SERVICE_UNAVAILABLE,
+            "unavailable",
+            "the copy could not be made",
+        );
+    };
+    let file_name = claim.book.file_name();
+    let expires_at = now + gift::FILE_LINK_TTL_SECS;
+    let answer = serde_json::json!({
+        "download_url": format!("{}/cadeau/telechargement/{token}/{file_name}", state.config.public_url),
+        "file_name": file_name,
+        "media_type": epub::MEDIA_TYPE,
+        "size_bytes": bytes.len(),
+        "sha256": crypto::sha256_hex(&bytes),
+        "expires_at": expires_at,
+    });
+    state.add_file_link(
+        token,
+        FileLink { line_ref: order_ref.to_owned(), file_name, bytes: Arc::new(bytes), expires_at },
+    );
+    (StatusCode::OK, axum::Json(answer)).into_response()
+}
+
+/// `GET|HEAD /cadeau/telechargement/{token}/{file}`: the stamped copy behind a live link.
+/// The token (128 random bits) is the only credential; it works until it expires.
+async fn gift_file_download(
+    State(state): State<Shared>,
+    headers: HeaderMap,
+    Path((token, file)): Path<(String, String)>,
+) -> Response {
+    match state.file_link(&token) {
+        Some(link) if link.file_name == file => epub_response(&file, link.bytes.as_ref().clone()),
+        _ => not_found(State(state), headers).await,
     }
 }
 

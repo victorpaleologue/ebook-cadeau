@@ -1,0 +1,22 @@
+[package]
+name = "ebc-epub"
+description = "Checks for eBook files a hosting service accepts: EPUB/PDF sniffing, DRM detection, rights declaration, safe file names."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+
+[dependencies]
+percent-encoding = "2.3.2"
+roxmltree = "0.21.2"
+serde.workspace = true
+thiserror.workspace = true
+zip = { version = "9.5.1", default-features = false, features = ["deflate-flate2-zlib-rs"] }
+
+[dev-dependencies]
+serde_json.workspace = true
+
+[lints]
+workspace = true

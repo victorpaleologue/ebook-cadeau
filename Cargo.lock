@@ -794,6 +794,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "ebc-epub"
+version = "0.1.0"
+dependencies = [
+ "percent-encoding",
+ "roxmltree",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "zip",
+]
+
+[[package]]
 name = "ebc-fontid"
 version = "0.1.0"
 dependencies = [

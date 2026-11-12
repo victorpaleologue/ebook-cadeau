@@ -1,4 +1,4 @@
-//! Send-to-device: e-mailing the hosted file to a device address such as
+//! Send-to-device: e-mailing a partner's file to a device address such as
 //! `…@kindle.com` (`POST /k/{code}/send`, `docs/api.md` §2).
 //!
 //! The address is the only user input that reaches SMTP. It is parsed with a strict

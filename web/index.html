@@ -214,10 +214,18 @@
         <h2 id="h-ebook" data-i18n="ui_step_ebook"></h2>
         <fieldset class="choices">
           <legend class="sr-only" data-i18n="ui_step_ebook"></legend>
-          <label class="choice"><input type="radio" name="ebook-mode" value="upload"> <span data-i18n="ui_ebook_upload"></span></label>
+          <!-- The core service no longer hosts book files (docs/architecture.md, "two-service
+               model"): a file is only ever served by a registered partner — a store, or a
+               shelf service hosting files for their rights holders. The upload path is
+               hidden until it is wired to a shelf.
+               TODO(shelf): upload to the shelf service, which creates the gift through the
+               core's partner API and returns the code. -->
+          <label class="choice" hidden><input type="radio" name="ebook-mode" value="upload" disabled> <span data-i18n="ui_ebook_upload"></span></label>
           <label class="choice"><input type="radio" name="ebook-mode" value="code"> <span data-i18n="ui_ebook_code"></span></label>
           <label class="choice"><input type="radio" name="ebook-mode" value="demo"> <span data-i18n="ui_ebook_demo"></span></label>
         </fieldset>
+
+        <p id="ebook-source-note" class="note" data-i18n="upload_purchased_notice"></p>
 
         <div id="ebook-upload" class="sub-panel" hidden>
           <p id="upload-help" class="hint"></p>

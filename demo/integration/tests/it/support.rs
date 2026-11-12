@@ -143,24 +143,3 @@ pub(crate) async fn http_post_form(
         .unwrap();
     read_reply(response).await.unwrap()
 }
-
-/// A call to the open creator API of the server (`docs/api.md` §3), with the manage token of
-/// a gift as `Authorization: Bearer` when one is given.
-pub(crate) async fn creator_call(
-    world: &World,
-    method: &str,
-    path: &str,
-    token: Option<&str>,
-    headers: &[(&str, &str)],
-    body: Vec<u8>,
-) -> ApiReply {
-    let method = reqwest::Method::from_bytes(method.as_bytes()).unwrap();
-    let mut request = plain_client().unwrap().request(method, world.server.url(path)).body(body);
-    if let Some(token) = token {
-        request = request.header("authorization", format!("Bearer {token}"));
-    }
-    for (name, value) in headers {
-        request = request.header(*name, *value);
-    }
-    read_reply(request.send().await.unwrap()).await.unwrap()
-}

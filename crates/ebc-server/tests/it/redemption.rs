@@ -3,11 +3,13 @@
 
 use std::sync::Arc;
 
-use crate::common::{Harness, T0, UA_DESKTOP, UA_KINDLE, UA_KOBO, UA_PHONE, assert_page, epub};
+use crate::common::{
+    Harness, LINK_EXPIRES, Reply, T0, UA_DESKTOP, UA_KINDLE, UA_KOBO, UA_PHONE, assert_page,
+    start_shop,
+};
 use axum::body::Body;
 use axum::http::{Method, StatusCode};
 use ebc_model::GiftCode;
-use ebc_server::MemoryStore;
 use serde_json::json;
 
 const GIFT_IDS: [&str; 14] = [
@@ -69,6 +71,26 @@ async fn home_help_and_pair_pages_are_localised_script_free_and_carry_their_ids(
 }
 
 #[tokio::test]
+async fn the_contact_point_is_shown_in_the_footer_and_on_the_help_page_when_configured() {
+    let h = Harness::new();
+    let help = h.get("/aide").await;
+    assert!(!help.has_id("contact") && !help.has_id("contact-point"));
+
+    let h = Harness::with(|c| c.contact_email = Some("contact@ebk.example".to_owned()));
+    for lang in ["fr", "en", "de", "es", "it", "nl", "pt"] {
+        let headers = [("accept-language", lang)];
+        let help = h.call(Method::GET, "/aide", &headers, Body::empty()).await;
+        assert_page(&help, StatusCode::OK, lang, &["help", "contact", "contact-point"]);
+        assert!(help.text_of("contact-point").contains("contact@ebk.example"));
+        assert_eq!(help.attr_of("contact", "href").as_deref(), Some("mailto:contact@ebk.example"));
+        let home = h.call(Method::GET, "/", &headers, Body::empty()).await;
+        assert_page(&home, StatusCode::OK, lang, &["code-form", "contact"]);
+    }
+    let code = code_of(&h.file_gift(json!({})).await);
+    assert_page(&h.get(&format!("/k/{code}")).await, StatusCode::OK, "fr", &["contact"]);
+}
+
+#[tokio::test]
 async fn healthz_style_sheet_and_unknown_paths() {
     let h = Harness::new();
     let health = h.get("/healthz").await;
@@ -95,7 +117,7 @@ async fn healthz_style_sheet_and_unknown_paths() {
 #[tokio::test]
 async fn typed_codes_are_normalised_and_redirected_to_the_gift_page() {
     let h = Harness::new();
-    let code = code_of(&h.hosted_gift(json!({})).await);
+    let code = code_of(&h.file_gift(json!({})).await);
     let grouped = GiftCode::parse(&code).unwrap().grouped();
     let target = format!("/k/{code}");
 
@@ -141,7 +163,7 @@ async fn typed_codes_are_normalised_and_redirected_to_the_gift_page() {
 #[tokio::test]
 async fn mistyped_codes_are_400_say_so_and_are_never_counted() {
     let h = Harness::with(|c| c.rate_unknown_per_10min = 3);
-    let code = code_of(&h.hosted_gift(json!({})).await);
+    let code = code_of(&h.file_gift(json!({})).await);
     let mut swapped = code.clone().into_bytes();
     let position = (0..11).find(|i| swapped[*i] != swapped[*i + 1]).unwrap();
     swapped.swap(position, position + 1);
@@ -201,7 +223,7 @@ async fn mistyped_codes_are_400_say_so_and_are_never_counted() {
 #[tokio::test]
 async fn unknown_codes_count_down_then_429_until_the_window_has_passed() {
     let h = Harness::with(|c| c.rate_unknown_per_10min = 3);
-    let code = code_of(&h.hosted_gift(json!({})).await);
+    let code = code_of(&h.file_gift(json!({})).await);
     let guesser = "203.0.113.50";
 
     for (attempt, left) in [(1u64, "2"), (2, "1"), (3, "0")] {
@@ -251,7 +273,7 @@ async fn the_global_budget_stops_distributed_guessing_without_locking_out_card_h
         c.rate_unknown_per_10min = 10;
         c.rate_unknown_global_per_10min = 5;
     });
-    let code = code_of(&h.hosted_gift(json!({})).await);
+    let code = code_of(&h.file_gift(json!({})).await);
     // Five wrong guesses, each from another network: every per-client budget is intact.
     for n in 0..5u64 {
         let reply = h.get_from(&format!("/k/{}", unknown_code(n)), &format!("198.51.{n}.1")).await;
@@ -281,7 +303,7 @@ async fn the_gift_page_shows_the_gift_and_escapes_hostile_text() {
     let hostile_name = "<script>alert('giver')</script>";
     let hostile_message = "\"><img src=x onerror=alert(1)>\nligne 2 & fin";
     let gift = h
-        .hosted_gift(json!({
+        .file_gift(json!({
             "book": { "title": "<b>Titre</b> & \"co\"", "contributors": [{"name": "A. <i>Auteur</i>"}, {"name": "B. Autre"}] },
             "giver_name": hostile_name,
             "message": hostile_message,
@@ -313,7 +335,7 @@ async fn the_gift_page_shows_the_gift_and_escapes_hostile_text() {
     );
 
     // A gift in another language is served in that language whatever the browser says.
-    let german = h.hosted_gift(json!({ "locale": "de", "giver_name": null })).await;
+    let german = h.file_gift(json!({ "locale": "de", "giver_name": null })).await;
     let page = h
         .call(
             Method::GET,
@@ -329,7 +351,7 @@ async fn the_gift_page_shows_the_gift_and_escapes_hostile_text() {
 #[tokio::test]
 async fn each_device_class_gets_its_primary_action_and_the_chooser_overrides_detection() {
     let h = Harness::new();
-    let code = code_of(&h.hosted_gift(json!({})).await);
+    let code = code_of(&h.file_gift(json!({})).await);
     let grouped = GiftCode::parse(&code).unwrap().grouped();
     let path = format!("/k/{code}");
     let inside = |reply: &crate::common::Reply, outer: &str, inner: &str| {
@@ -407,25 +429,25 @@ async fn each_device_class_gets_its_primary_action_and_the_chooser_overrides_det
     assert!(nonsense.text_of("download").contains("téléphone"));
 }
 
+/// The status document of a shelf gift, through the partner API.
+async fn status_of(h: &Harness, id: &str) -> serde_json::Value {
+    h.shelf(Method::GET, &format!("/api/partner/v1/gifts/{id}"), "").await.json()
+}
+
+/// The `/ebc/…` requests (link requests) a shop received.
+fn link_requests(shop: &crate::common::Receiver) -> usize {
+    shop.requests().iter().filter(|r| r.path_and_query.starts_with("/ebc/")).count()
+}
+
 #[tokio::test]
 async fn downloading_counts_claims_shows_them_and_stops_at_the_session_limit() {
     let h = Harness::with(|c| c.max_download_sessions = 2);
-    let gift = h.hosted_gift(json!({})).await;
+    let shop = start_shop().await;
+    let gift = h.file_gift_at(&shop, "/ebc/file", json!({})).await;
     let code = code_of(&gift);
-    let token = gift["manage_token"].as_str().unwrap();
-    let bearer = format!("Bearer {token}");
-    let status = || async {
-        let headers = [("authorization", bearer.as_str())];
-        h.call(
-            Method::GET,
-            &format!("/api/v1/gifts/{}", gift["id"].as_str().unwrap()),
-            &headers,
-            Body::empty(),
-        )
-        .await
-        .json()
-    };
-    assert_eq!(status().await["status"], "created");
+    let id = gift["id"].as_str().unwrap().to_owned();
+    assert_eq!(status_of(&h, &id).await["status"], "created");
+    assert_eq!(link_requests(&shop), 0, "nothing is asked of the partner before a claim");
 
     let first = h.post_form(&format!("/k/{code}/download"), &[]).await.location();
     let parts: Vec<&str> = first.split('/').collect();
@@ -435,16 +457,21 @@ async fn downloading_counts_claims_shows_them_and_stops_at_the_session_limit() {
         parts[2].len() == 32 && parts[2].bytes().all(|b| b.is_ascii_hexdigit()),
         "128-bit token: {first}"
     );
+    // The claim asked the partner for a link (signed: the shop checks it) …
+    assert_eq!(link_requests(&shop), 1);
+    // … and the session URL sends the device to it. The core never relays the bytes.
     let file = h.get(&first).await;
-    assert_eq!(file.status, StatusCode::OK);
-    assert_eq!(file.body.as_ref(), epub().as_slice(), "the stored file is served byte for byte");
-    // Fetching the file again within the session is not another claim.
-    assert_eq!(h.get(&first).await.status, StatusCode::OK);
+    let link = file.location();
+    assert!(link.starts_with(&shop.url("/dl/le-horla.epub")), "{link}");
+    assert!(file.body.is_empty() && !file.has_header("content-disposition"));
+    // Fetching again within the session is not another claim, and reuses the link.
+    assert_eq!(h.get(&first).await.location(), link);
+    assert_eq!(link_requests(&shop), 1);
 
     let page = h.get(&format!("/k/{code}")).await;
     let count = page.text_of("claim-count");
     assert!(count.contains("1 fois") && count.contains("12 novembre 2026"), "{count}");
-    let doc = status().await;
+    let doc = status_of(&h, &id).await;
     assert_eq!(
         (doc["status"].as_str(), doc["downloads"].as_u64(), doc["redeemed_at"].as_i64()),
         (Some("redeemed"), Some(1), Some(T0))
@@ -453,7 +480,7 @@ async fn downloading_counts_claims_shows_them_and_stops_at_the_session_limit() {
     h.clock.advance(86_400);
     let second = h.post_form(&format!("/K/{}/download", code.to_lowercase()), &[]).await.location();
     assert_ne!(first, second, "every claim gets its own session");
-    assert_eq!(h.get(&second).await.status, StatusCode::OK);
+    assert_eq!(h.get(&second).await.status, StatusCode::SEE_OTHER);
 
     // The limit is reached: no third session, and the page says so instead of offering one.
     let third = h.post_form(&format!("/k/{code}/download"), &[]).await;
@@ -465,113 +492,55 @@ async fn downloading_counts_claims_shows_them_and_stops_at_the_session_limit() {
     assert!(page.text_of("primary-action").contains("maximal"));
     let count = page.text_of("claim-count");
     assert!(count.contains("2 fois") && count.contains("13 novembre 2026"), "{count}");
-    let doc = status().await;
+    let doc = status_of(&h, &id).await;
     assert_eq!(
         (doc["status"].as_str(), doc["downloads"].as_u64(), doc["redeemed_at"].as_i64()),
         (Some("exhausted"), Some(2), Some(T0))
     );
+    assert_eq!(link_requests(&shop), 2, "the refused third claim asked nothing");
 }
 
 #[tokio::test]
-async fn download_headers_head_and_ranges() {
+async fn partner_file_sessions_redirect_get_and_head_and_only_the_exact_url_works() {
     let h = Harness::new();
-    let upload_id = h.upload(epub(), "L%27%C3%89tranger%20(Folio).epub").await;
+    let shop = start_shop().await;
     let gift = h
-        .hosted_gift(json!({
-            "book": { "title": "L’Étranger — été 1942" },
-            "delivery": { "type": "hosted_file", "upload_id": upload_id },
-        }))
+        .file_gift_at(&shop, "/ebc/file", json!({ "book": { "title": "L’Étranger — été 1942" } }))
         .await;
     let code = code_of(&gift);
-    let bytes = epub();
-    let len = bytes.len();
     let url = h
         .post_form_with(&format!("/k/{code}/download"), &[], &[("user-agent", UA_DESKTOP)])
         .await
         .location();
     assert!(url.ends_with("/L-Etranger-ete-1942.epub"), "{url}");
+    // Browsers check every hop of a form's redirect chain against `form-action`: the gift
+    // page and the pair form allow the partners' download hosts, and nothing else.
+    let page = h.get(&format!("/k/{code}")).await;
+    let csp = page.header("content-security-policy");
+    assert!(csp.contains("form-action 'self' http://127.0.0.1:* https://127.0.0.1:*;"), "{csp}");
+    let pair_form = h.get("/e").await;
+    assert!(pair_form.header("content-security-policy").contains("http://127.0.0.1:*"));
+    assert!(!h.get("/").await.header("content-security-policy").contains("127.0.0.1"));
 
-    let full = h.get_as(&url, UA_DESKTOP).await;
-    assert_eq!(full.status, StatusCode::OK);
-    assert_eq!(full.header("content-type"), "application/epub+zip");
-    assert_eq!(full.header("content-length"), len.to_string());
-    assert_eq!(full.header("accept-ranges"), "bytes");
-    assert_eq!(full.header("x-content-type-options"), "nosniff");
-    assert!(full.header("cache-control").contains("no-store"));
-    assert!(!full.has_header("content-encoding"));
-    assert_eq!(
-        full.header("content-disposition"),
-        "attachment; filename=\"L-Etranger-ete-1942.epub\"; filename*=UTF-8''L%27%C3%89tranger%20%28Folio%29.epub"
-    );
-    assert_eq!(full.body.as_ref(), bytes.as_slice());
-    let etag = full.header("etag").to_owned();
-
-    let head = h.call(Method::HEAD, &url, &[("user-agent", UA_DESKTOP)], Body::empty()).await;
-    assert_eq!(head.status, StatusCode::OK);
+    let get = h.get_as(&url, UA_DESKTOP).await;
+    let link = get.location();
+    assert!(link.starts_with(&shop.url("/dl/")), "{link}");
+    assert_eq!(get.header("cache-control"), "no-store");
+    assert_eq!(get.header("referrer-policy"), "no-referrer");
+    let head = h.call(Method::HEAD, &url, &[("user-agent", UA_KOBO)], Body::empty()).await;
+    assert_eq!((head.status, head.location()), (StatusCode::SEE_OTHER, link.clone()));
     assert!(head.body.is_empty());
-    for name in ["content-type", "content-length", "content-disposition", "accept-ranges", "etag"] {
-        assert_eq!(head.header(name), full.header(name), "{name}");
-    }
 
-    let range = |value: &'static str| {
-        let (h, url) = (&h, &url);
-        async move { h.call(Method::GET, url, &[("range", value)], Body::empty()).await }
-    };
-    let first = range("bytes=0-3").await;
-    assert_eq!(first.status, StatusCode::PARTIAL_CONTENT);
-    assert_eq!(first.body.as_ref(), b"PK\x03\x04");
-    assert_eq!(first.header("content-range"), format!("bytes 0-3/{len}"));
-    assert_eq!(first.header("content-length"), "4");
-    let tail = range("bytes=-10").await;
-    assert_eq!(tail.status, StatusCode::PARTIAL_CONTENT);
-    assert_eq!(tail.body.as_ref(), &bytes[len - 10..]);
-    let rest = range("bytes=30-").await;
-    assert_eq!(rest.body.as_ref(), &bytes[30..]);
-    assert_eq!(rest.header("content-range"), format!("bytes 30-{}/{len}", len - 1));
-    let beyond = range("bytes=999999-").await;
-    assert_eq!(beyond.status, StatusCode::RANGE_NOT_SATISFIABLE);
-    assert_eq!(beyond.header("content-range"), format!("bytes */{len}"));
-    // Several ranges are not supported: the whole file is served.
-    assert_eq!(range("bytes=0-1,4-5").await.status, StatusCode::OK);
-    // If-Range with the right validator resumes; with another one starts over.
-    let resumed = h
-        .call(
-            Method::GET,
-            &url,
-            &[("range", "bytes=4-7"), ("if-range", etag.as_str())],
-            Body::empty(),
-        )
-        .await;
-    assert_eq!(resumed.status, StatusCode::PARTIAL_CONTENT);
-    let restarted = h
-        .call(
-            Method::GET,
-            &url,
-            &[("range", "bytes=4-7"), ("if-range", "\"other\"")],
-            Body::empty(),
-        )
-        .await;
-    assert_eq!((restarted.status, restarted.body.len()), (StatusCode::OK, len));
-
-    // E-reader browsers get the plain ASCII name only (old ones choke on filename*).
-    let kobo = h.get_as(&url, UA_KOBO).await;
-    assert_eq!(
-        kobo.header("content-disposition"),
-        "attachment; filename=\"L-Etranger-ete-1942.epub\""
-    );
-    let chosen = h
-        .post_form_with(
-            &format!("/k/{code}/download"),
-            &[("device", "kindle")],
-            &[("user-agent", UA_DESKTOP)],
-        )
-        .await
-        .location();
-    let as_kindle = h.get_as(&chosen, UA_DESKTOP).await;
-    assert_eq!(
-        as_kindle.header("content-disposition"),
-        "attachment; filename=\"L-Etranger-ete-1942.epub\""
-    );
+    // The partner was asked once, signed, with the gift id and order reference.
+    let asked: Vec<_> =
+        shop.requests().into_iter().filter(|r| r.path_and_query.starts_with("/ebc/")).collect();
+    assert_eq!(asked.len(), 1);
+    let query = crate::common::query_of(&asked[0].path_and_query);
+    assert_eq!(query["ebc_gift"], gift["id"].as_str().unwrap());
+    assert_eq!(query["ebc_order"], "SHELF-000123");
+    assert_eq!(query["ebc_ts"], T0.to_string());
+    assert_eq!(asked[0].method, "GET");
+    assert_eq!(asked[0].headers["accept"], "application/json");
 
     // Only the exact URL works; nothing in it is a file-system path.
     let token = url.split('/').nth(2).unwrap();
@@ -590,20 +559,74 @@ async fn download_headers_head_and_ranges() {
     }
     // Sessions last 15 minutes.
     h.clock.advance(15 * 60 - 1);
-    assert_eq!(h.get(&url).await.status, StatusCode::OK);
+    assert_eq!(h.get(&url).await.status, StatusCode::SEE_OTHER);
     h.clock.advance(1);
     assert_page(&h.get(&url).await, StatusCode::GONE, "fr", &["error"]);
 }
 
 #[tokio::test]
+async fn partner_links_are_renewed_when_they_expire_and_a_303_answer_works_too() {
+    let h = Harness::new();
+    let shop = start_shop().await;
+    let gift = h.file_gift_at(&shop, "/ebc/see-other", json!({})).await;
+    let url = h.post_form(&format!("/k/{}/download", code_of(&gift)), &[]).await.location();
+    // A 303 answer gives no expiry: the link is reused for about a minute, then renewed.
+    let link = h.get(&url).await.location();
+    assert!(link.starts_with(&shop.url("/dl/")), "{link}");
+    assert_eq!(link_requests(&shop), 1);
+    h.clock.advance(30);
+    assert_eq!(h.get(&url).await.location(), link);
+    assert_eq!(link_requests(&shop), 1);
+    h.clock.advance(30);
+    let renewed = h.get(&url).await.location();
+    assert_eq!(link_requests(&shop), 2, "a fresh link was asked for");
+    assert!(renewed.ends_with(&format!("t={}", T0 + 60)), "{renewed}");
+    // A JSON link carries its own expiry, far away here.
+    let gift = h.file_gift_at(&shop, "/ebc/file", json!({})).await;
+    let url = h.post_form(&format!("/k/{}/download", code_of(&gift)), &[]).await.location();
+    h.clock.advance(14 * 60);
+    let _ = h.get(&url).await.location();
+    assert_eq!(link_requests(&shop), 3, "still the link of the claim");
+    const { assert!(LINK_EXPIRES > T0 + 15 * 60) };
+}
+
+#[tokio::test]
+async fn a_partner_that_gives_no_usable_link_costs_the_recipient_no_claim() {
+    let h = Harness::new();
+    let shop = start_shop().await;
+    for (path, why) in [
+        ("/ebc/elsewhere", "a host outside the partner's redirect_hosts"),
+        ("/ebc/wrong-type", "a PDF announced for an EPUB gift"),
+        ("/ebc/refuse", "a refusal"),
+    ] {
+        let gift = h.file_gift_at(&shop, path, json!({})).await;
+        let code = code_of(&gift);
+        let reply: Reply = h.post_form(&format!("/k/{code}/download"), &[]).await;
+        assert_page(&reply, StatusCode::BAD_GATEWAY, "fr", &["primary-action", "error"]);
+        assert!(!reply.has_header("location"), "{why}");
+        assert!(reply.text_of("error").contains("boutique"), "{why}");
+        let doc = status_of(&h, gift["id"].as_str().unwrap()).await;
+        assert_eq!(
+            (doc["status"].as_str(), doc["downloads"].as_u64()),
+            (Some("created"), Some(0)),
+            "{why}"
+        );
+        assert!(h.get(&format!("/k/{code}")).await.text_of("claim-count").contains("pas encore"));
+    }
+    // An unreachable partner is no link either.
+    let unreachable = json!({ "delivery": { "type": "partner_file", "format": "epub", "url": "http://127.0.0.1:9/ebc/file" } });
+    let gift = h.file_gift_at(&shop, "/ebc/file", unreachable).await;
+    let reply = h.post_form(&format!("/k/{}/download", code_of(&gift)), &[]).await;
+    assert_eq!(reply.status, StatusCode::BAD_GATEWAY);
+}
+
+#[tokio::test]
 async fn reveal_date_expiry_reissue_and_cancellation() {
-    let store = Arc::new(MemoryStore::new());
-    let h = Harness::with_store(store.clone(), |_| {});
+    let h = Harness::new();
 
     // Wrapped until the day: the page shows the date and no action; actions are refused.
-    let wrapped = h
-        .hosted_gift(json!({ "reveal_at": T0 + 3 * 86_400, "expires_at": T0 + 30 * 86_400 }))
-        .await;
+    let wrapped =
+        h.file_gift(json!({ "reveal_at": T0 + 3 * 86_400, "expires_at": T0 + 30 * 86_400 })).await;
     let code = code_of(&wrapped);
     let page = h.get(&format!("/k/{code}")).await;
     assert_page(&page, StatusCode::OK, "fr", &["gift-from", "reveal-date"]);
@@ -635,12 +658,9 @@ async fn reveal_date_expiry_reissue_and_cancellation() {
     h.clock.set(T0);
 
     // Reissue (lost card): the old code answers 410 and is not a "wrong guess".
-    let gift = h.hosted_gift(json!({})).await;
+    let gift = h.file_gift(json!({})).await;
     let (id, old) = (gift["id"].as_str().unwrap(), code_of(&gift));
-    let bearer = format!("Bearer {}", gift["manage_token"].as_str().unwrap());
-    let auth = [("authorization", bearer.as_str())];
-    let reissued =
-        h.call(Method::POST, &format!("/api/v1/gifts/{id}/reissue"), &auth, Body::empty()).await;
+    let reissued = h.shelf(Method::POST, &format!("/api/partner/v1/gifts/{id}/reissue"), "").await;
     assert_eq!(reissued.status, StatusCode::OK, "{}", reissued.text());
     let new = reissued.json();
     let new_code = new["code"].as_str().unwrap();
@@ -655,39 +675,60 @@ async fn reveal_date_expiry_reissue_and_cancellation() {
     assert_eq!(h.post_form(&format!("/k/{old}/download"), &[]).await.status, StatusCode::GONE);
     assert_page(&h.get(&format!("/k/{new_code}")).await, StatusCode::OK, "fr", &GIFT_IDS);
 
-    // Cancellation: the code stops working, live download links die, the file is deleted.
+    // Cancellation: the code stops working, live download links die.
     let session = h.post_form(&format!("/k/{new_code}/download"), &[]).await.location();
-    assert_eq!(h.get(&session).await.status, StatusCode::OK);
-    let before = store.blob_count();
-    let cancelled =
-        h.call(Method::DELETE, &format!("/api/v1/gifts/{id}"), &auth, Body::empty()).await;
-    assert_eq!(cancelled.status, StatusCode::OK);
+    assert_eq!(h.get(&session).await.status, StatusCode::SEE_OTHER);
+    h.clock.advance(1);
+    let cancelled = h.shelf(Method::POST, &format!("/api/partner/v1/gifts/{id}/cancel"), "").await;
+    assert_eq!(cancelled.status, StatusCode::OK, "{}", cancelled.text());
     assert_eq!(cancelled.json()["status"], "cancelled");
-    assert_eq!(store.blob_count(), before, "the same EPUB still backs the first gift of this test");
     let gone = h.get(&format!("/k/{new_code}")).await;
     assert_page(&gone, StatusCode::GONE, "fr", &["error"]);
     assert!(gone.text_of("error").contains("annulé"));
     assert_eq!(h.get(&session).await.status, StatusCode::NOT_FOUND);
-    let again =
-        h.call(Method::POST, &format!("/api/v1/gifts/{id}/reissue"), &auth, Body::empty()).await;
+    let again = h.shelf(Method::POST, &format!("/api/partner/v1/gifts/{id}/reissue"), "").await;
     assert_eq!(
         (again.status, again.json()["error"]["code"].as_str()),
         (StatusCode::CONFLICT, Some("not_reissuable"))
     );
+}
 
-    // Once the last gift using the file is cancelled, the file itself goes.
-    let wrapped_id = wrapped["id"].as_str().unwrap();
-    let bearer = format!("Bearer {}", wrapped["manage_token"].as_str().unwrap());
-    let cancelled = h
-        .call(
-            Method::DELETE,
-            &format!("/api/v1/gifts/{wrapped_id}"),
-            &[("authorization", bearer.as_str())],
-            Body::empty(),
-        )
-        .await;
-    assert_eq!(cancelled.status, StatusCode::OK);
-    assert_eq!(store.blob_count(), 0, "no hosted file is kept for cancelled gifts");
+#[tokio::test]
+async fn names_and_message_are_deleted_a_year_after_the_first_claim_and_the_gift_still_works() {
+    let h = Harness::with(|c| c.retention_after_claim_secs = 365 * 86_400);
+    let gift = h.file_gift(json!({})).await;
+    let code = code_of(&gift);
+    let id = gift["id"].as_str().unwrap();
+    let page = h.get(&format!("/k/{code}")).await;
+    assert!(page.text_of("gift-from").contains("Camille"));
+    // Unclaimed for two years: nothing is deleted (the card may still be in a drawer).
+    h.clock.advance(2 * 365 * 86_400);
+    let _ = h.file_gift(json!({})).await; // a write runs the purge
+    assert!(h.get(&format!("/k/{code}")).await.text_of("gift-message").contains("anniversaire"));
+
+    // First claim, then a year less a second: still there.
+    let claimed_at = h.state.now();
+    let _ = h.post_form(&format!("/k/{code}/download"), &[]).await.location();
+    h.clock.advance(365 * 86_400 - 1);
+    let _ = h.file_gift(json!({})).await;
+    assert!(h.get(&format!("/k/{code}")).await.text_of("gift-from").contains("Camille"));
+    // A year after the first claim: names and message are gone, the gift keeps working.
+    h.clock.advance(1);
+    let _ = h.file_gift(json!({})).await;
+    let page = h.get(&format!("/k/{code}")).await;
+    assert_page(&page, StatusCode::OK, "fr", &GIFT_IDS);
+    assert!(!page.text_of("gift-from").contains("Camille"), "{}", page.text_of("gift-from"));
+    assert_eq!(page.text_of("gift-message"), "");
+    assert_eq!(page.text_of("gift-title"), "Le Horla");
+    assert!(page.has_id("download"));
+    let record = h.state.db.view(|db| db.gifts[id].clone());
+    assert!(record.giver_name.is_none() && record.recipient_name.is_none());
+    assert_eq!(record.personal_data_deleted_at, Some(claimed_at + 365 * 86_400));
+    assert_eq!(
+        h.post_form(&format!("/k/{code}/download"), &[]).await.status,
+        StatusCode::SEE_OTHER
+    );
+    assert_eq!(status_of(&h, id).await["downloads"], 2);
 }
 
 /// Collects everything the service logs.
@@ -725,11 +766,9 @@ async fn no_log_line_at_any_level_contains_a_code_or_a_token() {
 
     let h = Harness::new();
     assert_eq!(h.get("/log-probe-start").await.status, StatusCode::NOT_FOUND);
-    let gift = h.hosted_gift(json!({})).await;
+    let gift = h.file_gift(json!({})).await;
     let code = code_of(&gift);
     let grouped = GiftCode::parse(&code).unwrap().grouped();
-    let manage_token = gift["manage_token"].as_str().unwrap().to_owned();
-    let bearer = format!("Bearer {manage_token}");
 
     // Every route a code or a token travels through, including the failures.
     assert_eq!(h.get(&format!("/k/{code}")).await.status, StatusCode::OK);
@@ -738,7 +777,7 @@ async fn no_log_line_at_any_level_contains_a_code_or_a_token() {
     assert_eq!(h.get(&format!("/k?code={code}")).await.status, StatusCode::SEE_OTHER);
     let session = h.post_form(&format!("/k/{code}/download"), &[]).await.location();
     let token = session.split('/').nth(2).unwrap().to_owned();
-    assert_eq!(h.get(&session).await.status, StatusCode::OK);
+    assert_eq!(h.get(&session).await.status, StatusCode::SEE_OTHER);
     assert_eq!(h.get(&format!("/o/{token}/catalog.xml")).await.status, StatusCode::OK);
     let pair = h.post_form(&format!("/k/{code}/pair"), &[]).await.text_of("pair-code");
     assert_eq!(h.post_form("/e", &[("p", pair.as_str())]).await.status, StatusCode::SEE_OTHER);
@@ -748,13 +787,11 @@ async fn no_log_line_at_any_level_contains_a_code_or_a_token() {
     );
     assert_eq!(h.get(&format!("/k/{}", unknown_code(5))).await.status, StatusCode::NOT_FOUND);
     assert_eq!(h.get(&format!("/k/{}X", &code[..11])).await.status, StatusCode::BAD_REQUEST);
-    let auth = [("authorization", bearer.as_str())];
     let reissued = h
-        .call(
+        .shelf(
             Method::POST,
-            &format!("/api/v1/gifts/{}/reissue", gift["id"].as_str().unwrap()),
-            &auth,
-            Body::empty(),
+            &format!("/api/partner/v1/gifts/{}/reissue", gift["id"].as_str().unwrap()),
+            "",
         )
         .await;
     let new_code = reissued.json()["code"].as_str().unwrap().to_owned();
@@ -778,10 +815,11 @@ async fn no_log_line_at_any_level_contains_a_code_or_a_token() {
         token,
         pair.clone(),
         pair.replace('-', ""),
-        manage_token,
         "a@kindle.com".to_owned(),
     ];
     for secret in secrets {
         assert!(!logs.contains(&secret.to_lowercase()), "{secret} was logged");
     }
+    // Nor the signed request to the partner, nor its download link.
+    assert!(!logs.contains("ebc_sig") && !logs.contains("/dl/le-horla.epub"), "partner URL logged");
 }

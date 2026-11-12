@@ -11,6 +11,7 @@ use std::time::Duration;
 use axum::Router;
 use axum::body::{Body, Bytes};
 use axum::http::{HeaderMap, Method, Request, StatusCode};
+use axum::response::IntoResponse;
 use ebc_server::{AppState, Config, ManualClock, MemoryStore, Partner, Store, app};
 use http_body_util::BodyExt;
 use tower::ServiceExt;
@@ -19,6 +20,12 @@ use tower::ServiceExt;
 pub const T0: i64 = 1_794_441_600;
 pub const PARTNER_ID: &str = "septante";
 pub const PARTNER_SECRET: &str = "septante-demo-secret-0123456789";
+/// A second partner, standing for a shelf service that hosts files: its download links
+/// may point to any loopback port (the in-test file servers of [`start_shop`]).
+pub const SHELF_ID: &str = "etagere";
+pub const SHELF_SECRET: &str = "etagere-demo-secret-0123456789";
+/// `expires_at` of the download links the in-test shop hands out.
+pub const LINK_EXPIRES: i64 = T0 + 10 * 365 * 86_400;
 
 pub const UA_KOBO: &str = "Mozilla/5.0 (Linux; U; Android 2.0; en-us;) AppleWebKit/538.1 (KHTML, like Gecko) Version/4.0 Mobile Safari/538.1 (Kobo Touch 0390/4.38.23038)";
 pub const UA_KINDLE: &str = "Mozilla/5.0 (X11; U; Linux armv7l like Android; en-us) AppleWebKit/531.2+ (KHTML, like Gecko) Version/5.0 Safari/533.2+ Kindle/3.0+";
@@ -92,13 +99,24 @@ pub struct Harness {
 }
 
 /// The configuration tests start from: readable public URL, trusted proxy (so that a
-/// test picks its client with `X-Forwarded-For`), one partner.
+/// test picks its client with `X-Forwarded-For`), a store partner and a shelf partner.
 pub fn test_config() -> Config {
     let mut config = Config::for_tests();
     config.public_url = "https://ebk.example".to_owned();
     config.trust_proxy = true;
-    config.partners = vec![partner(&[], None)];
+    config.partners = vec![partner(&[], None), shelf()];
     config
+}
+
+/// The shelf partner of [`test_config`].
+pub fn shelf() -> Partner {
+    Partner {
+        id: SHELF_ID.to_owned(),
+        name: "Étagère (démo)".to_owned(),
+        secret: SHELF_SECRET.to_owned(),
+        webhook_url: None,
+        redirect_hosts: vec!["127.0.0.1".to_owned()],
+    }
 }
 
 pub fn partner(redirect_hosts: &[&str], webhook_url: Option<String>) -> Partner {
@@ -234,42 +252,49 @@ impl Harness {
         self.partner(method, path, body.to_string(), headers).await
     }
 
-    /// Uploads `bytes` through the creator API; returns the upload id.
-    pub async fn upload(&self, bytes: Vec<u8>, file_name: &str) -> String {
-        let reply = self
-            .call(
-                Method::POST,
-                "/api/v1/uploads",
-                &[
-                    ("x-rights-basis", "public_domain"),
-                    ("x-file-name", file_name),
-                    ("content-type", "application/epub+zip"),
-                ],
-                bytes,
-            )
-            .await;
-        assert_eq!(reply.status, StatusCode::CREATED, "{}", reply.text());
-        reply.json()["upload_id"].as_str().unwrap().to_owned()
+    /// A request signed by the shelf partner.
+    pub async fn shelf(&self, method: Method, path: &str, body: impl Into<Bytes>) -> Reply {
+        let body: Bytes = body.into();
+        let timestamp = self.state.now();
+        let signature = ebc_server::codes::request_signature(
+            SHELF_SECRET,
+            timestamp,
+            method.as_str(),
+            path,
+            &body,
+        );
+        let timestamp = timestamp.to_string();
+        let headers = [
+            ("x-ebc-partner", SHELF_ID),
+            ("x-ebc-timestamp", timestamp.as_str()),
+            ("x-ebc-signature", signature.as_str()),
+        ];
+        self.call(method, path, &headers, Body::from(body)).await
     }
 
-    /// Creates a standalone hosted-file gift; returns the creation response.
-    pub async fn hosted_gift(&self, overrides: serde_json::Value) -> serde_json::Value {
-        let upload_id = self.upload(epub(), "le-horla.epub").await;
+    /// Creates a `partner_file` gift of the shelf, served by a fresh in-test shop
+    /// ([`start_shop`]); returns the creation response.
+    pub async fn file_gift(&self, overrides: serde_json::Value) -> serde_json::Value {
+        let shop = start_shop().await;
+        self.file_gift_at(&shop, "/ebc/file", overrides).await
+    }
+
+    /// Creates a `partner_file` gift of the shelf whose file endpoint is `path` at `shop`.
+    pub async fn file_gift_at(
+        &self,
+        shop: &Receiver,
+        path: &str,
+        overrides: serde_json::Value,
+    ) -> serde_json::Value {
         let mut body = serde_json::json!({
+            "order_ref": "SHELF-000123",
             "book": { "title": "Le Horla", "isbn13": "9782070360024", "contributors": [{"name": "Guy de Maupassant"}], "language": "fr" },
             "giver_name": "Camille", "recipient_name": "Sacha", "message": "Joyeux anniversaire !",
             "locale": "fr",
-            "delivery": { "type": "hosted_file", "upload_id": upload_id },
+            "delivery": { "type": "partner_file", "format": "epub", "url": shop.url(path) },
         });
         merge(&mut body, overrides);
-        let reply = self
-            .call(
-                Method::POST,
-                "/api/v1/gifts",
-                &[("content-type", "application/json")],
-                body.to_string(),
-            )
-            .await;
+        let reply = self.shelf(Method::POST, "/api/partner/v1/gifts", body.to_string()).await;
         assert_eq!(reply.status, StatusCode::CREATED, "{}", reply.text());
         reply.json()
     }
@@ -419,7 +444,8 @@ pub struct Received {
 }
 
 /// An in-test HTTP server on a loopback port that records what it receives and answers
-/// with a programmable function.
+/// with a programmable function. For a `3xx` status the returned bytes are the
+/// `Location` (and the body is empty).
 pub struct Receiver {
     pub addr: SocketAddr,
     pub received: Arc<Mutex<Vec<Received>>>,
@@ -457,10 +483,16 @@ impl Receiver {
                 let failing = failures
                     .fetch_update(Ordering::SeqCst, Ordering::SeqCst, |n| n.checked_sub(1))
                     .is_ok();
-                if failing {
+                let (status, bytes) = if failing {
                     (StatusCode::INTERNAL_SERVER_ERROR, b"try again".to_vec())
                 } else {
                     respond(&entry)
+                };
+                if status.is_redirection() {
+                    let location = String::from_utf8(bytes).unwrap();
+                    (status, [(axum::http::header::LOCATION, location)], Vec::new()).into_response()
+                } else {
+                    (status, bytes).into_response()
                 }
             }
         });
@@ -493,6 +525,80 @@ impl Receiver {
         }
         panic!("expected {count} requests, got {}", self.requests().len());
     }
+}
+
+/// The query parameters of a request, decoded.
+pub fn query_of(path_and_query: &str) -> std::collections::HashMap<String, String> {
+    let query = path_and_query.split_once('?').map_or("", |(_, q)| q);
+    query
+        .split('&')
+        .filter_map(|pair| pair.split_once('='))
+        .map(|(k, v)| {
+            let decode =
+                |t: &str| percent_encoding::percent_decode_str(t).decode_utf8_lossy().into_owned();
+            (decode(k), decode(v))
+        })
+        .collect()
+}
+
+/// An in-test shelf: a file server answering the core's signed requests the way
+/// `docs/api.md` §4.5 says. The signature (by the shelf's or the store's secret) is
+/// checked: a wrong one is `403`.
+///
+/// * `/ebc/file?…` → `200` JSON link to `/dl/le-horla.epub` (with name, type, size,
+///   SHA-256 and expiry);
+/// * `/ebc/see-other?…` → `303` to the same file;
+/// * `/ebc/elsewhere?…` → a link on a host outside the partner's `redirect_hosts`;
+/// * `/ebc/wrong-type?…` → a link announcing a PDF; `/ebc/bad-sha?…` → a wrong SHA-256;
+/// * `/ebc/refuse?…` → `410`;
+/// * `/dl/…` → the EPUB of [`epub`].
+pub async fn start_shop() -> Receiver {
+    Receiver::start(|request| {
+        let host =
+            request.headers.get("host").and_then(|h| h.to_str().ok()).unwrap_or("").to_owned();
+        let path = request.path_and_query.split('?').next().unwrap_or("").to_owned();
+        if path.starts_with("/dl/") {
+            return (StatusCode::OK, epub());
+        }
+        let query = query_of(&request.path_and_query);
+        let field = |name: &str| query.get(name).cloned().unwrap_or_default();
+        let ts = field("ebc_ts").parse::<i64>().unwrap_or(0);
+        let signed_by = |secret: &str| {
+            field("ebc_sig")
+                == ebc_server::codes::redirect_signature(
+                    secret,
+                    &field("ebc_gift"),
+                    &field("ebc_order"),
+                    ts,
+                )
+        };
+        if !signed_by(SHELF_SECRET) && !signed_by(PARTNER_SECRET) {
+            return (StatusCode::FORBIDDEN, b"bad signature".to_vec());
+        }
+        let file = format!("http://{host}/dl/le-horla.epub?t={ts}");
+        let link = |url: &str, media_type: &str, sha: String| {
+            serde_json::json!({
+                "download_url": url, "file_name": "Le Horla (Maupassant).epub",
+                "media_type": media_type, "size_bytes": epub().len(), "sha256": sha,
+                "expires_at": LINK_EXPIRES,
+            })
+            .to_string()
+            .into_bytes()
+        };
+        let sha = ebc_server::codes::sha256_hex(&epub());
+        match path.as_str() {
+            "/ebc/file" => (StatusCode::OK, link(&file, "application/epub+zip", sha)),
+            "/ebc/see-other" => (StatusCode::SEE_OTHER, file.into_bytes()),
+            "/ebc/elsewhere" => (
+                StatusCode::OK,
+                link("http://files.elsewhere.example/le-horla.epub", "application/epub+zip", sha),
+            ),
+            "/ebc/wrong-type" => (StatusCode::OK, link(&file, "application/pdf", sha)),
+            "/ebc/bad-sha" => (StatusCode::OK, link(&file, "application/epub+zip", "0".repeat(64))),
+            _ => (StatusCode::GONE, b"no such gift".to_vec()),
+        }
+    })
+    .await
 }
 
 /// One message accepted by the SMTP sink.

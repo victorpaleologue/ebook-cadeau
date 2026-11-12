@@ -38,11 +38,6 @@ const SEGMENT: &AsciiSet = &CONTROLS
     .add(b'|')
     .add(b'}');
 
-/// Characters escaped in the `X-File-Name` header (percent-encoded UTF-8, RFC 3986
-/// unreserved characters kept).
-const HEADER_VALUE: &AsciiSet =
-    &percent_encoding::NON_ALPHANUMERIC.remove(b'-').remove(b'.').remove(b'_').remove(b'~');
-
 /// A failed outgoing call.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 #[non_exhaustive]
@@ -216,10 +211,13 @@ pub struct ContributorPayload {
 #[derive(Debug, Clone, Serialize, PartialEq, Eq)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DeliveryPayload {
-    /// eBook Cadeau serves a file uploaded beforehand.
-    HostedFile {
-        /// Identifier returned by the upload.
-        upload_id: String,
+    /// The store serves the file: eBook Cadeau asks `url` (signed) for a short-lived
+    /// download link on each claim (`docs/api.md` §4.5).
+    PartnerFile {
+        /// `epub`.
+        format: String,
+        /// The store's signed file endpoint.
+        url: String,
     },
     /// eBook Cadeau redirects the recipient to the store.
     ResellerRedirect {
@@ -277,16 +275,6 @@ pub struct ReissuedGift {
     pub code_display: Option<String>,
     /// The new claim URL.
     pub claim_url: String,
-}
-
-/// Answer to an upload.
-#[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
-pub struct UploadReceipt {
-    /// Identifier to quote in a `hosted_file` delivery.
-    pub upload_id: String,
-    /// SHA-256 of the stored bytes, when the server reports it.
-    #[serde(default)]
-    pub sha256: Option<String>,
 }
 
 /// Answer to `GET /api/partner/v1/gifts/{id}`.
@@ -390,38 +378,6 @@ impl PartnerClient {
             .send()
             .await
             .map_err(|e| OutboundError::Transport { service: EBC, detail: describe(&e) })
-    }
-
-    /// `POST /api/partner/v1/uploads` — stores a file for a `hosted_file` delivery, declared
-    /// under the rights basis `licensed_distributor`.
-    ///
-    /// # Errors
-    /// See [`OutboundError`].
-    pub async fn upload(
-        &self,
-        file_name: &str,
-        media_type: &str,
-        bytes: Vec<u8>,
-        idempotency_key: &str,
-    ) -> Result<UploadReceipt, OutboundError> {
-        let encoded_name = utf8_percent_encode(file_name, HEADER_VALUE).to_string();
-        let response = self
-            .send(
-                Method::POST,
-                "/api/partner/v1/uploads",
-                Some(media_type),
-                bytes,
-                &[
-                    ("X-File-Name", &encoded_name),
-                    ("X-Rights-Basis", "licensed_distributor"),
-                    ("Idempotency-Key", idempotency_key),
-                ],
-            )
-            .await?;
-        if !response.status().is_success() {
-            return Err(api_error(EBC, response).await);
-        }
-        decode_json(EBC, &read_capped(EBC, response, MAX_JSON_BYTES).await?)
     }
 
     /// `POST /api/partner/v1/gifts` with `Idempotency-Key`.
@@ -927,8 +883,12 @@ mod tests {
             })
         );
         assert_eq!(
-            serde_json::to_value(DeliveryPayload::HostedFile { upload_id: "u_1".into() }).unwrap(),
-            serde_json::json!({"type": "hosted_file", "upload_id": "u_1"})
+            serde_json::to_value(DeliveryPayload::PartnerFile {
+                format: "epub".into(),
+                url: "https://s.example/cadeau/fichier".into()
+            })
+            .unwrap(),
+            serde_json::json!({"type": "partner_file", "format": "epub", "url": "https://s.example/cadeau/fichier"})
         );
     }
 

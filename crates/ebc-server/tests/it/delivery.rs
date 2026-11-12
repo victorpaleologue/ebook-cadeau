@@ -4,6 +4,7 @@
 
 use crate::common::{
     Harness, Receiver, SmtpSink, UA_KINDLE, UA_KOBO, UA_PHONE, assert_page, epub, partner,
+    start_shop,
 };
 use axum::http::{Method, StatusCode};
 use mail_parser::MimeHeaders;
@@ -16,7 +17,7 @@ fn code_of(gift: &serde_json::Value) -> String {
 #[tokio::test]
 async fn a_phone_pairs_an_e_reader_with_a_short_single_use_code() {
     let h = Harness::new();
-    let code = code_of(&h.hosted_gift(json!({})).await);
+    let code = code_of(&h.file_gift(json!({})).await);
 
     // On the phone.
     let shown =
@@ -44,8 +45,7 @@ async fn a_phone_pairs_an_e_reader_with_a_short_single_use_code() {
         .location();
     assert!(redirect.starts_with("/d/") && redirect.ends_with("/Le-Horla.epub"), "{redirect}");
     let file = h.get_as(&redirect, UA_KOBO).await;
-    assert_eq!(file.status, StatusCode::OK);
-    assert_eq!(file.body.as_ref(), epub().as_slice());
+    assert!(file.location().contains("/dl/le-horla.epub"), "to the partner's link");
 
     // Single use.
     let reused = h.post_form("/e", &[("p", pair.as_str())]).await;
@@ -86,7 +86,7 @@ async fn a_phone_pairs_an_e_reader_with_a_short_single_use_code() {
 #[tokio::test]
 async fn wrong_pair_codes_are_budgeted_and_malformed_ones_are_not_counted() {
     let h = Harness::with(|c| c.rate_unknown_per_10min = 3);
-    let code = code_of(&h.hosted_gift(json!({})).await);
+    let code = code_of(&h.file_gift(json!({})).await);
     let pair = h.post_form(&format!("/k/{code}/pair"), &[]).await.text_of("pair-code");
     let reader = [("x-forwarded-for", "198.51.100.33")];
 
@@ -150,7 +150,7 @@ async fn send_to_device_mails_the_file_to_allowed_domains_only() {
         c.smtp_url = Some(url);
         c.send_from = "livraison@ebk.example".to_owned();
     });
-    let gift = h.hosted_gift(json!({ "book": { "title": "Le Horla, suivi de « Lui ? »" } })).await;
+    let gift = h.file_gift(json!({ "book": { "title": "Le Horla, suivi de « Lui ? »" } })).await;
     let code = code_of(&gift);
 
     // A Kindle gets the e-mail form as its primary action, with the sender to approve.
@@ -208,7 +208,11 @@ async fn send_to_device_mails_the_file_to_allowed_domains_only() {
     assert_eq!(attachments[0].attachment_name(), Some("Le-Horla-suivi-de-Lui.epub"));
     let content_type = attachments[0].content_type().unwrap();
     assert_eq!((content_type.ctype(), content_type.subtype()), ("application", Some("epub+zip")));
-    assert_eq!(attachments[0].contents(), epub().as_slice(), "the attachment is the stored file");
+    assert_eq!(
+        attachments[0].contents(),
+        epub().as_slice(),
+        "the attachment is the partner's file, fetched through its download link"
+    );
 
     // The sending is a claim like any other, and the address is kept nowhere.
     assert!(h.get(&format!("/k/{code}")).await.text_of("claim-count").contains("1 fois"));
@@ -217,6 +221,7 @@ async fn send_to_device_mails_the_file_to_allowed_domains_only() {
         !stored.contains("sacha_42") && !stored.contains("kindle.com"),
         "the device address was stored"
     );
+    assert!(!stored.contains("/dl/"), "nor the partner's link");
 
     // At most three sendings a day per gift.
     for _ in 0..2 {
@@ -240,10 +245,48 @@ async fn send_to_device_mails_the_file_to_allowed_domains_only() {
 }
 
 #[tokio::test]
+async fn a_partner_file_too_large_or_not_as_announced_is_not_sent_and_costs_no_claim() {
+    let sink = SmtpSink::start().await;
+    let url = sink.url();
+    let h = Harness::with(|c| {
+        c.smtp_url = Some(url);
+        c.max_send_bytes = 64;
+    });
+    let shop = start_shop().await;
+    let code = code_of(&h.file_gift_at(&shop, "/ebc/file", json!({})).await);
+    let reply = h.post_form(&format!("/k/{code}/send"), &[("device_email", "a@kindle.com")]).await;
+    assert_page(&reply, StatusCode::BAD_GATEWAY, "fr", &["send-result"]);
+    assert!(reply.text_of("send-result").contains("volumineux"), "{}", reply.text());
+    // A 303 answer announces no size: the download itself is cut at the limit.
+    let code = code_of(&h.file_gift_at(&shop, "/ebc/see-other", json!({})).await);
+    let reply = h.post_form(&format!("/k/{code}/send"), &[("device_email", "a@kindle.com")]).await;
+    assert!(reply.text_of("send-result").contains("volumineux"));
+
+    let sink = SmtpSink::start().await;
+    let url = sink.url();
+    let h = Harness::with(|c| c.smtp_url = Some(url));
+    let code = code_of(&h.file_gift_at(&shop, "/ebc/bad-sha", json!({})).await);
+    let reply = h.post_form(&format!("/k/{code}/send"), &[("device_email", "a@kindle.com")]).await;
+    assert_page(&reply, StatusCode::BAD_GATEWAY, "fr", &["send-result"]);
+    assert!(reply.text_of("send-result").contains("boutique"));
+    let code = code_of(&h.file_gift_at(&shop, "/ebc/elsewhere", json!({})).await);
+    let reply = h.post_form(&format!("/k/{code}/send"), &[("device_email", "a@kindle.com")]).await;
+    assert_eq!(reply.status, StatusCode::BAD_GATEWAY);
+    assert!(sink.messages().is_empty());
+    let counted = h.state.db.view(|db| db.gifts.values().map(|g| g.claims).sum::<u32>());
+    assert_eq!(counted, 0, "failed sendings are handed back");
+    // A 303 answer of the right size is sent.
+    let code = code_of(&h.file_gift_at(&shop, "/ebc/see-other", json!({})).await);
+    let sent = h.post_form(&format!("/k/{code}/send"), &[("device_email", "a@kindle.com")]).await;
+    assert_eq!(sent.status, StatusCode::OK, "{}", sent.text());
+    assert_eq!(sink.messages().len(), 1);
+}
+
+#[tokio::test]
 async fn send_to_device_is_off_without_smtp_and_fails_cleanly_when_the_server_is_down() {
     // Not configured: no form, and the route refuses.
     let h = Harness::new();
-    let code = code_of(&h.hosted_gift(json!({})).await);
+    let code = code_of(&h.file_gift(json!({})).await);
     assert!(!h.get_as(&format!("/k/{code}"), UA_PHONE).await.has_id("send-form"));
     let refused =
         h.post_form(&format!("/k/{code}/send"), &[("device_email", "a@kindle.com")]).await;
@@ -257,7 +300,7 @@ async fn send_to_device_is_off_without_smtp_and_fails_cleanly_when_the_server_is
         c.smtp_url = Some(dead);
         c.outbound_timeout_ms = 2_000;
     });
-    let code = code_of(&h.hosted_gift(json!({})).await);
+    let code = code_of(&h.file_gift(json!({})).await);
     let failed = h.post_form(&format!("/k/{code}/send"), &[("device_email", "a@kindle.com")]).await;
     assert_page(&failed, StatusCode::BAD_GATEWAY, "fr", &["send-result"]);
     assert!(failed.text_of("send-result").contains("échoué"));
@@ -279,7 +322,7 @@ async fn send_to_device_is_off_without_smtp_and_fails_cleanly_when_the_server_is
 async fn opds_feeds_are_well_formed_and_lead_to_the_file() {
     let h = Harness::new();
     let gift = h
-        .hosted_gift(json!({
+        .file_gift(json!({
             "book": {
                 "title": "Tom & <Jerry> \"l’intégrale\"", "isbn13": "9782070360024",
                 "contributors": [{"name": "Hanna & Barbera"}], "publisher": "Éditions <Démo>", "language": "fr"
@@ -326,10 +369,14 @@ async fn opds_feeds_are_well_formed_and_lead_to_the_file() {
         })
         .unwrap();
     assert_eq!(acquisition.attribute("type"), Some("application/epub+zip"));
+    let length = epub().len().to_string();
+    assert_eq!(acquisition.attribute("length"), Some(length.as_str()), "the partner's size");
     let href = acquisition.attribute("href").unwrap().to_owned();
     assert_eq!(href, format!("/d/{token}/Tom-Jerry-l-integrale.epub"));
+    // The acquisition link is the core's session URL, which sends the reader on to the
+    // partner's short-lived link.
     let file = h.get(&href).await;
-    assert_eq!((file.status, file.body.as_ref()), (StatusCode::OK, epub().as_slice()));
+    assert!(file.location().contains("/dl/le-horla.epub"), "{}", file.location());
 
     // OPDS 2.0: the same publication as JSON.
     let feed = h.get(&format!("/o/{token}/catalog.json")).await;
@@ -397,6 +444,25 @@ async fn a_store_licence_is_fetched_with_signed_parameters_and_served_through_a_
     assert_eq!(licence.status, StatusCode::OK);
     assert_eq!(licence.header("content-type"), "application/vnd.readium.lcp.license.v1.0+json");
     assert_eq!(licence.body.as_ref(), LICENCE);
+    assert_eq!(licence.header("content-length"), LICENCE.len().to_string());
+    assert_eq!(licence.header("accept-ranges"), "bytes");
+    assert!(
+        licence
+            .header("content-disposition")
+            .starts_with("attachment; filename=\"Madame-Bovary.lcpl\"")
+    );
+    // HEAD and ranges, for readers that resume.
+    let head = h.call(Method::HEAD, &location, &[], axum::body::Body::empty()).await;
+    assert_eq!((head.status, head.body.len()), (StatusCode::OK, 0));
+    assert_eq!(head.header("content-length"), licence.header("content-length"));
+    let part =
+        h.call(Method::GET, &location, &[("range", "bytes=0-3")], axum::body::Body::empty()).await;
+    assert_eq!((part.status, part.body.as_ref()), (StatusCode::PARTIAL_CONTENT, &LICENCE[..4]));
+    assert_eq!(part.header("content-range"), format!("bytes 0-3/{}", LICENCE.len()));
+    let beyond = h
+        .call(Method::GET, &location, &[("range", "bytes=9999-")], axum::body::Body::empty())
+        .await;
+    assert_eq!(beyond.status, StatusCode::RANGE_NOT_SATISFIABLE);
 
     // The store was asked with the signed parameters of §4.3, on the stored URL.
     let request = store.requests().pop().unwrap();
@@ -423,6 +489,6 @@ async fn a_store_licence_is_fetched_with_signed_parameters_and_served_through_a_
     let pair = h.post_form(&format!("/k/{code}/pair"), &[]).await.text_of("pair-code");
     let location = h.post_form("/e", &[("p", pair.as_str())]).await.location();
     assert_eq!(h.get(&location).await.body.as_ref(), LICENCE);
-    // The file routes of a hosted gift do not apply.
+    // The file routes of a partner file do not apply.
     assert_eq!(h.post_form(&format!("/k/{code}/download"), &[]).await.status, StatusCode::CONFLICT);
 }

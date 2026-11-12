@@ -1,6 +1,8 @@
-//! Journeys of a `hosted_file` gift bought at "Septante" (the DRM-free store): the
-//! printed code typed on a Kobo, the pair code from a phone to a PocketBook, Send to
-//! Kindle, and the OPDS feeds of a download session.
+//! Journeys of a `partner_file` gift bought at "Septante" (the DRM-free store, which
+//! serves its own files): the printed code typed on a Kobo, the pair code from a phone to
+//! a PocketBook, Send to Kindle, and the OPDS feeds of a download session. The core never
+//! holds the book: each claim asks the store for a short-lived link, and the store stamps
+//! the copy for the recipient at that moment.
 
 use std::time::Duration;
 
@@ -21,7 +23,8 @@ use crate::support::{
 };
 
 /// (a) Browse → cart → checkout with the gift option → pay → the store creates the gift
-/// through the signed partner API and uploads a watermarked EPUB → the order page shows
+/// through the signed partner API (a `partner_file` pointing at its own file endpoint) →
+/// the order page shows
 /// the claim URL and the code → a Kobo **without any phone** opens the server's home
 /// page, types the printed code and downloads the book into its library.
 #[tokio::test]
@@ -52,10 +55,10 @@ async fn a_kobo_types_the_printed_code_and_downloads_the_watermarked_epub() {
     );
     assert_eq!((gift.error.as_deref(), gift.print_status.as_deref()), (None, None));
 
-    // --- what the store did behind the page: upload, gift, cover — all signed ---
+    // --- what the store did behind the page: gift, cover — all signed; no file sent ---
     let snapshot = store.snapshot();
     let record = &snapshot["gifts"][0];
-    assert!(record["upload_id"].as_str().is_some_and(|id| id.starts_with("u_")), "{record}");
+    assert_eq!(record["file_links"], 0, "nothing is asked of the store before a claim");
     assert!(record["gift_id"].as_str().is_some_and(|id| id.starts_with("g_")), "{record}");
     assert_eq!(record["cover_sent"], true);
     let gift_id = gift_id(store, 0);
@@ -125,7 +128,18 @@ async fn a_kobo_types_the_printed_code_and_downloads_the_watermarked_epub() {
     assert!(matches!(entry.source, ImportSource::BrowserDownload { .. }));
     assert_eq!(kobo.library().len(), 1);
     assert!(kobo.cookies().is_empty(), "redeeming needs no cookie");
-    assert!(kobo.cross_origin_referers().is_empty(), "the code leaks through Referer");
+    // The Kobo ignores Referrer-Policy: following the redirect to the store's download
+    // link, it names the gift page (and so the code) in `Referer`. That host is the
+    // partner's own (`redirect_hosts`), which issued the code; no other origin hears it.
+    let leaks = kobo.cross_origin_referers();
+    assert!(
+        leaks.iter().all(|x| x.url.origin() == reqwest::Url::parse(&store.base).unwrap().origin()),
+        "the code leaks through Referer to a third party: {leaks:#?}"
+    );
+    // The book itself came from the store, through the core's session URL.
+    let hops: Vec<String> = kobo.exchanges().iter().map(|x| x.url.path().to_owned()).collect();
+    assert!(hops.iter().any(|p| p.starts_with("/d/")), "{hops:#?}");
+    assert!(hops.iter().any(|p| p.starts_with("/cadeau/telechargement/")), "{hops:#?}");
 
     // The file is the copy the store stamped for Sacha — not the plain edition.
     let expected = stamped_epub(store, "candide", &receipt.order_ref, "Sacha", "Camille", T0);
@@ -256,7 +270,11 @@ async fn a_phone_pairs_a_pocketbook_and_pair_codes_are_single_use_and_expire() {
     let third = phone.page().unwrap().text_of("pair-code").unwrap().to_owned();
     tolino.type_into("pair-input", &third).unwrap();
     let outcome = tolino.click("pair-submit").await.unwrap();
-    assert_eq!(outcome.download().expect("the tolino saves the EPUB").sha256, expected);
+    // The store stamps every claim when it happens: this copy carries the later time.
+    let later =
+        stamped_epub(store, "candide", &receipt.order_ref, "Sacha", "Camille", T0 + 15 * 60 + 1);
+    assert_ne!(sha256_hex(&later), expected);
+    assert_eq!(outcome.download().expect("the tolino saves the EPUB").sha256, sha256_hex(&later));
 }
 
 /// (c) Kindle: its browser is not offered an EPUB download; from a phone, "Send to
@@ -480,7 +498,7 @@ async fn every_simulated_device_gets_the_book_or_is_told_why() {
     assert_eq!(told_why, ["kindle-paperwhite", "kindle-2024", "tolino-legacy-android"]);
 }
 
-/// A hosted file can be downloaded again by whoever holds the card — up to the session
+/// A partner file can be downloaded again by whoever holds the card — up to the session
 /// limit. Then the gift is `exhausted`: the page says so, and the store shows it.
 #[tokio::test]
 async fn the_download_limit_exhausts_the_gift_and_everybody_is_told() {

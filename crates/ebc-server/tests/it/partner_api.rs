@@ -1,11 +1,10 @@
 //! The partner API (`docs/api.md` §4): request signatures, idempotency, the redemption
-//! redirect, fulfilment, webhooks, uploads, cover and card rendering.
+//! redirect, fulfilment, webhooks, cover and card rendering.
 
 use std::sync::{Arc, Mutex};
 
 use crate::common::{
-    Harness, PARTNER_ID, PARTNER_SECRET, Receiver, T0, UA_KOBO, UA_PHONE, assert_page, epub,
-    epub_with, partner,
+    Harness, PARTNER_ID, PARTNER_SECRET, Receiver, T0, UA_KOBO, UA_PHONE, assert_page, partner,
 };
 use axum::body::{Body, Bytes};
 use axum::http::{Method, StatusCode};
@@ -172,7 +171,7 @@ async fn requests_must_be_signed_by_a_known_partner_within_the_time_window() {
             "{target}"
         );
     }
-    // The creator API does not open partner gifts.
+    // There is no creator API any more: nothing opens a gift without a signature.
     let sneaky = h
         .call(
             Method::GET,
@@ -245,11 +244,11 @@ async fn idempotency_keys_replay_the_first_answer_and_refuse_a_different_body() 
     // again (a replay) gets the first answer, whatever headers it adds.
     let retry_key = [("idempotency-key", "retry")];
     let mut bad = gift_body("ORD-D");
-    bad["delivery"] = json!({ "type": "hosted_file", "upload_id": "u_missing" });
+    bad["delivery"] = json!({ "type": "partner_file", "format": "mobi", "url": STORE_URL });
     let failed = h.partner_json(Method::POST, path, &bad, &retry_key).await;
     assert_eq!(
         (failed.status, error_code(&failed).as_str()),
-        (StatusCode::UNPROCESSABLE_ENTITY, "unknown_upload")
+        (StatusCode::UNPROCESSABLE_ENTITY, "invalid_delivery")
     );
     let replayed = h.partner_json(Method::POST, path, &bad, &[("idempotency-key", "other")]).await;
     assert_eq!(replayed.status, StatusCode::UNPROCESSABLE_ENTITY);
@@ -433,7 +432,7 @@ async fn redirect_targets_come_from_the_allow_list_only() {
         "",
     ];
     for url in refused {
-        for kind in ["reseller_redirect", "reseller_licence"] {
+        for kind in ["reseller_redirect", "reseller_licence", "partner_file"] {
             let reply = create(url, kind).await;
             assert_eq!(
                 reply.status,
@@ -445,13 +444,14 @@ async fn redirect_targets_come_from_the_allow_list_only() {
         }
     }
 
-    // Standalone creators cannot create store deliveries at all.
-    let body = gift_body("ORD-Y").to_string();
-    let reply = h.call(Method::POST, "/api/v1/gifts", &[], body).await;
-    assert_eq!(
-        (reply.status, error_code(&reply).as_str()),
-        (StatusCode::UNPROCESSABLE_ENTITY, "unsupported_delivery")
-    );
+    // There is no unsigned way to create a gift: the creator API and uploads are gone.
+    for path in ["/api/v1/gifts", "/api/v1/uploads", "/api/partner/v1/uploads"] {
+        let reply = h.call(Method::POST, path, &[], gift_body("ORD-Y").to_string()).await;
+        assert_eq!(
+            (reply.status, error_code(&reply).as_str()),
+            (StatusCode::NOT_FOUND, "not_found")
+        );
+    }
 
     // If the partner later drops the host from its allow-list, existing gifts stop
     // redirecting there: the target is checked again when the button is pressed.
@@ -477,29 +477,21 @@ async fn redirect_targets_come_from_the_allow_list_only() {
 async fn webhooks_are_signed_retried_with_backoff_and_eventually_given_up() {
     let hooks = Receiver::start(|_| (StatusCode::NO_CONTENT, Vec::new())).await;
     let webhook_url = hooks.url("/hooks/ebc?shop=1");
+    let shop = crate::common::start_shop().await;
+    let shop_host = shop.host();
     let h = Harness::with(|c| {
-        c.partners = vec![partner(&["nowhere.example"], Some(webhook_url))];
+        c.partners = vec![partner(&["nowhere.example", shop_host.as_str()], Some(webhook_url))];
         c.webhook.base_delay_ms = 10;
         c.webhook.max_delay_ms = 40;
         c.webhook.max_attempts = 4;
     });
-    // A partner-hosted file.
-    let upload = h
-        .partner(
-            Method::POST,
-            "/api/partner/v1/uploads",
-            epub(),
-            &[
-                ("x-rights-basis", "licensed_distributor"),
-                ("x-file-name", "bovary.epub"),
-                ("idempotency-key", "up-1"),
-            ],
+    // A file the partner serves.
+    let gift = h
+        .partner_gift(
+            json!({ "type": "partner_file", "format": "epub", "url": shop.url("/ebc/file") }),
+            json!({}),
         )
         .await;
-    assert_eq!(upload.status, StatusCode::CREATED, "{}", upload.text());
-    let upload_id = upload.json()["upload_id"].as_str().unwrap().to_owned();
-    let gift =
-        h.partner_gift(json!({ "type": "hosted_file", "upload_id": upload_id }), json!({})).await;
     let (id, code) =
         (gift["id"].as_str().unwrap().to_owned(), gift["code"].as_str().unwrap().to_owned());
     assert!(hooks.requests().is_empty(), "creation is not an event");
@@ -508,7 +500,7 @@ async fn webhooks_are_signed_retried_with_backoff_and_eventually_given_up() {
     hooks.fail_first.store(2, std::sync::atomic::Ordering::SeqCst);
     h.clock.advance(30);
     let file = h.post_form(&format!("/k/{code}/download"), &[]).await.location();
-    assert_eq!(h.get(&file).await.status, StatusCode::OK);
+    assert_eq!(h.get(&file).await.status, StatusCode::SEE_OTHER);
     let deliveries = hooks.wait_for(4).await;
     for _ in 0..200 {
         if h.state.pending_webhooks() == 0 {
@@ -636,7 +628,7 @@ impl CardRenderer for RecordingRenderer {
 }
 
 #[tokio::test]
-async fn uploads_cover_and_card_rendering_through_the_renderer_seam() {
+async fn cover_and_card_rendering_through_the_renderer_seam() {
     let renderer = Arc::new(RecordingRenderer::default());
     let mut config = crate::common::test_config();
     config.partners = vec![partner(&["store.example"], None), {
@@ -651,40 +643,6 @@ async fn uploads_cover_and_card_rendering_through_the_renderer_seam() {
         .build()
         .unwrap();
     let h = Harness { app: app(state.clone()), state, clock };
-
-    // Uploads follow the rules of the creator API.
-    let uploads = "/api/partner/v1/uploads";
-    let no_basis = h.partner(Method::POST, uploads, epub(), &[]).await;
-    assert_eq!(
-        (no_basis.status, error_code(&no_basis).as_str()),
-        (StatusCode::BAD_REQUEST, "missing_rights_basis")
-    );
-    let basis = [("x-rights-basis", "licensed_distributor")];
-    let drm = h
-        .partner(Method::POST, uploads, epub_with(&[("META-INF/rights.xml", b"<rights/>")]), &basis)
-        .await;
-    assert_eq!(
-        (drm.status, error_code(&drm).as_str()),
-        (StatusCode::UNPROCESSABLE_ENTITY, "drm_protected")
-    );
-    let junk = h.partner(Method::POST, uploads, &b"MZ\x90\x00 not a book"[..], &basis).await;
-    assert_eq!(junk.status, StatusCode::UNSUPPORTED_MEDIA_TYPE);
-    // The first attempt's signature is spent (X-Rights-Basis is not covered by it): the
-    // corrected upload is signed anew, a second later.
-    let replay = h.partner(Method::POST, uploads, epub(), &basis).await;
-    assert_eq!(
-        (replay.status, replay.header("idempotent-replayed")),
-        (StatusCode::BAD_REQUEST, "true")
-    );
-    h.clock.advance(1);
-    let ok = h.partner(Method::POST, uploads, epub(), &basis).await;
-    assert_eq!(ok.status, StatusCode::CREATED);
-    assert_eq!(ok.json()["media_type"], "application/epub+zip");
-    // A creator cannot use a partner's upload, nor another partner.
-    let upload_id = ok.json()["upload_id"].as_str().unwrap().to_owned();
-    let stolen = json!({ "book": { "title": "x" }, "delivery": { "type": "hosted_file", "upload_id": upload_id } }).to_string();
-    let reply = h.call(Method::POST, "/api/v1/gifts", &[], stolen).await;
-    assert_eq!(error_code(&reply), "unknown_upload");
 
     let gift =
         h.partner_gift(json!({ "type": "reseller_redirect", "url": STORE_URL }), json!({})).await;
@@ -1018,10 +976,10 @@ async fn failed_authentications_are_budgeted_per_network_before_anything_is_read
                 ("x-ebc-partner", PARTNER_ID),
                 ("x-ebc-timestamp", ts.as_str()),
                 ("x-ebc-signature", wrong_mac.as_str()),
-                ("x-rights-basis", "licensed_distributor"),
                 ("x-forwarded-for", client),
             ];
-            h.call(Method::POST, "/api/partner/v1/uploads", &headers, epub()).await
+            let card = "/api/partner/v1/gifts/g_00000000000000000000000000000000/card.pdf";
+            h.call(Method::PUT, card, &headers, &b"%PDF-1.7 a card"[..]).await
         }
     };
     // A well-formed but wrong signature: the body is hashed, the MAC compared, 401.
@@ -1108,8 +1066,8 @@ async fn a_signature_is_a_nonce_for_every_state_changing_request() {
     };
     assert_eq!(nonces(&h), 2, "the creation and the cancellation");
     h.clock.advance(601);
+    // A write (this creation) runs the purge before its own signature is kept.
     let _ = h.partner_gift(redirect_delivery(), json!({ "order_ref": "ORD-2" })).await;
-    let _ = h.hosted_gift(json!({})).await; // a write that purges
     assert_eq!(nonces(&h), 1, "only the newest signature is still remembered");
 }
 

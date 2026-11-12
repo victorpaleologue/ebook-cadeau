@@ -1,5 +1,9 @@
-//! Download sessions: the file itself (`GET|HEAD /d/{session}/{file-name}`, with `Range`)
-//! and the OPDS 1.2 / 2.0 feeds of the one publication (`/o/{session}/catalog.*`).
+//! Download sessions: the file itself (`GET|HEAD /d/{session}/{file-name}`) and the
+//! OPDS 1.2 / 2.0 feeds of the one publication (`/o/{session}/catalog.*`).
+//!
+//! A `partner_file` session answers `303 See Other` to a short-lived download link of the
+//! partner (the service holds no book); a `reseller_licence` session serves the licence
+//! stored for it, with `Range`.
 //!
 //! The session token is the only credential; it is looked up by its hash. Nothing in the
 //! path is ever used as a file-system name: the file served is the blob recorded in the
@@ -11,13 +15,15 @@ use axum::http::header::{self, HeaderValue};
 use axum::http::{HeaderMap, Method, StatusCode};
 use axum::response::{IntoResponse, Response};
 use ebc_i18n::{Msg, t};
+use ebc_model::GiftStatus;
 use tokio::io::{AsyncReadExt, AsyncSeekExt};
 
-use super::{Visitor, html};
+use super::{Visitor, html, see_other};
 use crate::codes;
 use crate::device::DeviceClass;
 use crate::names::content_disposition;
 use crate::pages;
+use crate::service::ClaimError;
 use crate::state::AppState;
 use crate::store::{Blob, GiftRecord, SessionRecord};
 use crate::text::{S, s};
@@ -192,6 +198,10 @@ async fn serve_blob(
 
 /// `GET|HEAD /d/{session}/{file-name}`: the file of a download session.
 ///
+/// A partner file: `303` to the partner's download link (the one obtained when the
+/// session was opened while it is fresh, else a new one), `502` when the partner gives
+/// none. The core never relays the bytes.
+///
 /// `Content-Disposition` always carries the ASCII `filename=`; the UTF-8 `filename*` is
 /// added only for phones and computers, because old e-reader browsers mishandle it
 /// (`docs/research/05-ereader-distribution-ux.md`, implication 34).
@@ -208,6 +218,28 @@ pub(crate) async fn download(
     };
     if name != session.file_name {
         return StatusCode::NOT_FOUND.into_response();
+    }
+    if session.partner_file {
+        let key = codes::token_hash(&token);
+        return match state.partner_download(&key, &session).await {
+            Ok(url) => see_other(url.as_str()),
+            Err(error) => {
+                let chrome = visitor.chrome(&state, visitor.locale(), None);
+                let locale = chrome.locale;
+                let text = match error {
+                    ClaimError::Gone(GiftStatus::Expired) => t(locale, Msg::ErrorGiftExpired),
+                    ClaimError::Gone(_) => t(locale, Msg::ErrorGiftRevoked),
+                    _ => s(locale, S::StoreUnavailable),
+                };
+                let page = pages::message(
+                    chrome,
+                    t(locale, Msg::RedeemTitle),
+                    &[text.to_owned()],
+                    Some(("/", s(locale, S::EnterCode))),
+                );
+                html(error.status(), page, None)
+            }
+        };
     }
     let blob = match state.db.store().open_blob(&session.sha256) {
         Ok(Some(blob)) => blob,
@@ -350,11 +382,15 @@ pub(crate) async fn opds_atom(
             xml_escape(&cover.media_type)
         ));
     }
+    // `length` only when known: a partner file may not announce its size.
+    let length = match session.size_bytes {
+        0 => String::new(),
+        size => format!(" length=\"{size}\""),
+    };
     xml.push_str(&format!(
-        "    <link rel=\"http://opds-spec.org/acquisition\" href=\"/d/{token}/{}\" type=\"{}\" length=\"{}\"/>\n",
+        "    <link rel=\"http://opds-spec.org/acquisition\" href=\"/d/{token}/{}\" type=\"{}\"{length}/>\n",
         xml_escape(&session.file_name),
         xml_escape(&session.media_type),
-        session.size_bytes
     ));
     xml.push_str("  </entry>\n</feed>\n");
     (

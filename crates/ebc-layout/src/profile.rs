@@ -421,8 +421,7 @@ impl PrintProfile {
     /// a given printer may still be larger at the bottom edge (12–15 mm on some old
     /// inkjets), which would clip the lower marks but not the card.
     ///
-    /// See [`new_page`](crate::new_page) for the one thing the page cannot express yet:
-    /// its media box is not always the whole sheet.
+    /// The PDF page is the sheet itself — see [`new_page`](crate::new_page).
     #[must_use]
     pub fn home(sheet: Sheet) -> Self {
         Self {

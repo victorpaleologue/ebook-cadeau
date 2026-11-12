@@ -141,7 +141,10 @@ impl<'a> PageContent<'a> {
             state: GraphicsState::default(),
             saved: Vec::new(),
         };
-        let margin = page.bleed + page.slug;
+        // The trim box is inset from the media box by bleed + slug horizontally and by
+        // bleed + vertical slug (the same slug unless the page says otherwise) vertically.
+        let margin_x = page.bleed + page.slug;
+        let margin_y = page.bleed + page.slug_v.unwrap_or(page.slug);
         // (x, y) mm, y down from the trim's top-left  →  points, y up from the media box's
         // bottom-left corner.
         this.content.transform([
@@ -149,8 +152,8 @@ impl<'a> PageContent<'a> {
             0.0,
             0.0,
             -(PT_PER_MM as f32),
-            round_pt(margin * PT_PER_MM),
-            round_pt((page.trim.h + margin) * PT_PER_MM),
+            round_pt(margin_x * PT_PER_MM),
+            round_pt((page.trim.h + margin_y) * PT_PER_MM),
         ]);
         for item in &page.items {
             this.item(item, 0)?;

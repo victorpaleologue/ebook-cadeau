@@ -217,12 +217,15 @@ fn page_boxes(page: &Page, number: usize) -> Result<[Rect; 3], PdfError> {
     if !(page.bleed.is_finite() && page.bleed >= 0.0) {
         return Err(invalid("the bleed must be zero or positive"));
     }
-    if !(page.slug.is_finite() && page.slug >= 0.0) {
+    // The slug may differ between the horizontal and the vertical direction (a trim
+    // centred on a sheet of paper): `slug` left and right, `slug_v` at the top and bottom.
+    let (slug_x, slug_y) = (page.slug, page.slug_v.unwrap_or(page.slug));
+    if !(slug_x.is_finite() && slug_x >= 0.0 && slug_y.is_finite() && slug_y >= 0.0) {
         return Err(invalid("the slug must be zero or positive"));
     }
-    let margin = page.bleed + page.slug;
-    let media_w = (w + 2.0 * margin) * PT_PER_MM;
-    let media_h = (h + 2.0 * margin) * PT_PER_MM;
+    let (margin_x, margin_y) = (page.bleed + slug_x, page.bleed + slug_y);
+    let media_w = (w + 2.0 * margin_x) * PT_PER_MM;
+    let media_h = (h + 2.0 * margin_y) * PT_PER_MM;
     // A hair of tolerance so that exactly 200 inches survives the unit conversion.
     let range = (MIN_PAGE_PT - 1.0e-6)..=(MAX_PAGE_PT + 1.0e-6);
     if !(range.contains(&media_w) && range.contains(&media_h)) {
@@ -230,14 +233,14 @@ fn page_boxes(page: &Page, number: usize) -> Result<[Rect; 3], PdfError> {
     }
     let pt = |mm: f64| round_pt(mm * PT_PER_MM);
     Ok([
-        Rect::new(0.0, 0.0, pt(w + 2.0 * margin), pt(h + 2.0 * margin)),
+        Rect::new(0.0, 0.0, pt(w + 2.0 * margin_x), pt(h + 2.0 * margin_y)),
         Rect::new(
-            pt(page.slug),
-            pt(page.slug),
-            pt(page.slug + 2.0 * page.bleed + w),
-            pt(page.slug + 2.0 * page.bleed + h),
+            pt(slug_x),
+            pt(slug_y),
+            pt(slug_x + 2.0 * page.bleed + w),
+            pt(slug_y + 2.0 * page.bleed + h),
         ),
-        Rect::new(pt(margin), pt(margin), pt(margin + w), pt(margin + h)),
+        Rect::new(pt(margin_x), pt(margin_y), pt(margin_x + w), pt(margin_y + h)),
     ])
 }
 
@@ -686,6 +689,36 @@ mod tests {
         // The trim box is exactly the trim size, wherever it sits on the sheet.
         assert!((f64::from(trim.x2 - trim.x1) - 230.0 * PT_PER_MM).abs() < 1.0e-3);
         assert!((f64::from(trim.y2 - trim.y1) - 178.0 * PT_PER_MM).abs() < 1.0e-3);
+    }
+
+    #[test]
+    fn page_boxes_follow_a_vertical_slug() {
+        // The poche spread centred on A4 landscape: 2 mm bleed, 31.5 mm of slug left and
+        // right, 14 mm above and below.
+        let mut page = Page::new(ebc_scene::Size::new(230.0, 178.0), 2.0, 31.5);
+        page.slug_v = Some(14.0);
+        let [media, bleed, trim] = page_boxes(&page, 1).expect("valid page");
+        let near = |got: f32, mm: f64| (f64::from(got) - mm * PT_PER_MM).abs() < 1.0e-3;
+        assert_eq!((media.x1, media.y1), (0.0, 0.0));
+        assert!(near(media.x2, 297.0) && near(media.y2, 210.0), "{media:?}");
+        assert!(near(bleed.x1, 31.5) && near(bleed.y1, 14.0), "{bleed:?}");
+        assert!(near(bleed.x2, 265.5) && near(bleed.y2, 196.0), "{bleed:?}");
+        assert!(near(trim.x1, 33.5) && near(trim.y1, 16.0), "{trim:?}");
+        assert!(near(trim.x2, 263.5) && near(trim.y2, 194.0), "{trim:?}");
+        // `Some(slug)` is the same page as `None`.
+        let plain = Page::new(ebc_scene::Size::new(230.0, 178.0), 3.0, 7.0);
+        let mut same = plain.clone();
+        same.slug_v = Some(7.0);
+        let (a, b) = (page_boxes(&plain, 1).expect("valid"), page_boxes(&same, 1).expect("valid"));
+        for (p, q) in a.iter().zip(&b) {
+            assert_eq!((p.x1, p.y1, p.x2, p.y2), (q.x1, q.y1, q.x2, q.y2));
+        }
+        // A hostile vertical slug is refused like a hostile slug.
+        for bad in [-1.0, f64::NAN, f64::INFINITY] {
+            let mut page = plain.clone();
+            page.slug_v = Some(bad);
+            assert!(matches!(page_boxes(&page, 3), Err(PdfError::InvalidPage { page: 3, .. })));
+        }
     }
 
     #[test]

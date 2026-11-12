@@ -292,6 +292,8 @@ fn check_page(format: &CardFormat, profile: &PrintProfile, g: &PageGeometry, ctx
     match (&profile.sheet, &g.sheet) {
         (None, None) => {
             assert_eq!(page.slug, profile.slug, "{ctx}");
+            assert_eq!(page.slug_v, None, "{ctx}: a press page has one slug");
+            assert_eq!((g.slug_mm, g.slug_v_mm), (profile.slug, profile.slug), "{ctx}");
             assert!(rect_close(&g.media, &g.trim.inflate(profile.bleed + profile.slug)), "{ctx}");
             assert!(rect_close(&g.mark_area, &g.media), "{ctx}");
         }
@@ -303,12 +305,14 @@ fn check_page(format: &CardFormat, profile: &PrintProfile, g: &PageGeometry, ctx
             assert!(close(s.sheet.center().y, g.trim.center().y), "{ctx}");
             assert!(close(g.media.center().x, s.sheet.center().x), "{ctx}");
             assert!(close(g.media.center().y, s.sheet.center().y), "{ctx}");
-            // The media box never exceeds the sheet and fills it in one direction at least.
-            assert!(s.sheet.contains_rect(&g.media, EPS), "{ctx}: {:?} vs {:?}", g.media, s.sheet);
-            let full_w = close(g.media.w, s.sheet.w);
-            let full_h = close(g.media.h, s.sheet.h);
-            assert!(full_w || full_h, "{ctx}: media {:?} sheet {:?}", g.media, s.sheet);
-            assert_eq!(s.media_is_sheet, full_w && full_h, "{ctx}");
+            // The page is the sheet: a slug per direction makes up the sheet's margins.
+            assert!(rect_close(&g.media, &s.sheet), "{ctx}: {:?} vs {:?}", g.media, s.sheet);
+            assert!(s.media_is_sheet, "{ctx}");
+            assert_eq!(page.slug, g.slug_mm, "{ctx}");
+            assert_eq!(page.slug_v, Some(g.slug_v_mm), "{ctx}");
+            assert!(g.slug_v_mm >= 0.0 && g.slug_v_mm.is_finite(), "{ctx}");
+            assert!(close(profile.bleed + g.slug_mm, (size.w - spread.w) / 2.0), "{ctx}");
+            assert!(close(profile.bleed + g.slug_v_mm, (size.h - spread.h) / 2.0), "{ctx}");
             // Bleed and marks are printable.
             assert!(rect_close(&s.printable, &s.sheet.inflate(-profile.printable_margin)));
             assert!(s.printable.contains_rect(&g.bleed, 1e-6), "{ctx}");
@@ -316,7 +320,11 @@ fn check_page(format: &CardFormat, profile: &PrintProfile, g: &PageGeometry, ctx
             // The sheet takes the orientation of the spread (a square spread counts as
             // landscape), so page, sheet and spread are all the same way round...
             assert_eq!(s.landscape, spread.w >= spread.h, "{ctx}");
-            assert_eq!(s.landscape, g.media.w >= g.media.h, "{ctx}");
+            if s.landscape {
+                assert!(g.media.w >= g.media.h - EPS, "{ctx}");
+            } else {
+                assert!(g.media.w <= g.media.h + EPS, "{ctx}");
+            }
             assert_eq!(s.duplex_flip(), g.duplex_flip(), "{ctx}");
             // ...and that is the orientation with the most room on its tighter side: the
             // other one never offers a wider band for marks.

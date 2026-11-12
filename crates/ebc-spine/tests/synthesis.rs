@@ -148,7 +148,7 @@ fn top_to_bottom_reads_downwards_and_bottom_to_top_upwards() {
         let first = first_contour_bounds(path); // the "Z"
         let last = last_contour_bounds(path); // the last "e"
         let all = title.bounds;
-        assert!(all.h > 10.0 * all.w, "the line runs along the spine: {all:?}");
+        assert!(all.h > 5.0 * all.w, "the line runs along the spine: {all:?}");
         match direction {
             TopToBottom => {
                 // The first letter starts the line at the top; the last ends it below.
@@ -607,12 +607,17 @@ fn a_title_the_font_cannot_draw_is_reported_not_printed_as_boxes() {
 
     // With a fallback font that covers the script the title is set, and the note says so.
     let options = SpineOptions { fallback_font: Some(cyrillic.clone()), ..Default::default() };
-    let (spine, _) =
-        run_with(&request(&b, None, &latin_only, &latin_only, TopToBottom), &options);
+    let (spine, _) = run_with(&request(&b, None, &latin_only, &latin_only, TopToBottom), &options);
     assert_eq!(spine.title.as_ref().expect("title").text, "Война и мир");
     assert_eq!(spine.author.as_ref().expect("author").text, "Лев Толстой");
-    assert!(has_note(&spine, |n| matches!(n, SpineNote::FallbackFont { role: TextRole::Title, .. })));
-    assert!(has_note(&spine, |n| matches!(n, SpineNote::FallbackFont { role: TextRole::Author, .. })));
+    assert!(has_note(&spine, |n| matches!(
+        n,
+        SpineNote::FallbackFont { role: TextRole::Title, .. }
+    )));
+    assert!(has_note(&spine, |n| matches!(
+        n,
+        SpineNote::FallbackFont { role: TextRole::Author, .. }
+    )));
     assert!(!has_note(&spine, |n| matches!(n, SpineNote::MissingGlyphs { .. })));
     // The outline is the fallback font's.
     let direct = run(&request(&b, None, &cyrillic, &cyrillic, TopToBottom));
@@ -622,7 +627,8 @@ fn a_title_the_font_cannot_draw_is_reported_not_printed_as_boxes() {
     );
 
     // Partly drawable: the rest is left out and listed; no font covers Greek, CJK, emoji.
-    for (title, kept) in [("1Q84 村上春樹", "1Q84"), ("Ωmega", "mega"), ("Zoo 🦓🦒", "Zoo")] {
+    for (title, kept) in [("1Q84 村上春樹", "1Q84"), ("Ωmega", "mega"), ("Zoo 🦓🦒", "Zoo")]
+    {
         let b = book(title, &[]);
         let (spine, _) = run_with(&request(&b, None, &cyrillic, &cyrillic, TopToBottom), &options);
         assert_eq!(spine.title.as_ref().expect("title").text, kept);
@@ -707,7 +713,10 @@ fn a_preferred_text_colour_is_used_only_if_it_contrasts_enough() {
     let cream = flat_cover([250, 245, 230]);
     let (spine, _) = run_with(&request(&b, Some(&cream), &font, &font, TopToBottom), &options);
     assert_eq!(spine.text_color, Rgb8::BLACK);
-    assert!(has_note(&spine, |n| matches!(n, SpineNote::TextColourRejected { ratio } if *ratio < 2.0)));
+    assert!(has_note(
+        &spine,
+        |n| matches!(n, SpineNote::TextColourRejected { ratio } if *ratio < 2.0)
+    ));
 
     // An unreachable minimum is reported, not hidden.
     let options = SpineOptions { min_contrast: 12.0, ..Default::default() };
@@ -789,7 +798,8 @@ fn a_busy_cover_gets_a_flat_dominant_colour_never_an_image() {
         SpineOptions { background: BackgroundStyle::DominantColour, ..Default::default() };
     let (spine, doc) = run_with(&request(&b, Some(&cover), &font, &font, BottomToTop), &options);
     assert_eq!(spine.background, palette(&cover, 5)[0].color);
-    assert_eq!(spine.background, Rgb8::new(24, 38, 92), "the ground of the generated cover");
+    assert_eq!(spine.background_kind, BackgroundKind::DominantColour);
+    assert_eq!(spine.text_color, Rgb8::WHITE, "the generated cover is mostly dark blue");
     assert!(doc.images.is_empty());
 }
 

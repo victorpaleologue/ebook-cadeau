@@ -276,9 +276,8 @@ pub(crate) fn adapt(
         if sides_plain && content_mm <= room {
             // Keep `W` millimetres of the source, centred on the content.
             let keep_px = (geom.width / mm_per_px).round().clamp(1.0, source_w);
-            let centre = analysis
-                .content
-                .map_or(source_w / 2.0, |(s, e)| fraction(s + e) / 2.0 * source_w);
+            let centre =
+                analysis.content.map_or(source_w / 2.0, |(s, e)| fraction(s + e) / 2.0 * source_w);
             let start = (centre - keep_px / 2.0).round().clamp(0.0, source_w - keep_px);
             let first = x0 + start as u32;
             let last = (first + keep_px as u32).min(x1);

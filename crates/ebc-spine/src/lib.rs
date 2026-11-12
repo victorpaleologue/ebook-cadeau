@@ -595,10 +595,9 @@ impl fmt::Display for SpineNote {
                      {percent:.1} % and its head and foot were filled with its end colours."
                 ),
             },
-            Self::ProvidedSpineIncompatible(why) => write!(
-                f,
-                "The spine supplied was not used ({why}); the spine was typeset instead."
-            ),
+            Self::ProvidedSpineIncompatible(why) => {
+                write!(f, "The spine supplied was not used ({why}); the spine was typeset instead.")
+            }
             Self::NoCover => write!(f, "No cover was given: the spine is plain white."),
             Self::ContinuationWithoutCover => write!(
                 f,
@@ -952,8 +951,7 @@ fn fit_lines(
         notes.push(SpineNote::TitleNotDrawable);
         return None;
     }
-    let Some(fit) = typeset::fit_title(&resolved.font, &resolved.text, language, geom, opts)
-    else {
+    let Some(fit) = typeset::fit_title(&resolved.font, &resolved.text, language, geom, opts) else {
         notes.push(SpineNote::NoRoomForText);
         return None;
     };

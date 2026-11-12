@@ -129,6 +129,92 @@ fn rectangle_clipped_image_and_rotated_content_land_where_expected() {
     }
 }
 
+/// A page whose slug differs between the horizontal and the vertical direction (a trim
+/// centred on a sheet of paper): poppler must report the boxes of that sheet and the
+/// content must sit where the trim box is, not where a uniform slug would put it.
+#[test]
+fn a_vertical_slug_moves_the_boxes_and_the_content_together() {
+    for standard in [PdfStandard::Plain, PdfStandard::X4] {
+        // (bleed, slug, vertical slug): taller margins, wider margins, vertical only.
+        for (bleed, slug, slug_v) in [(3.0, 7.0, 20.0), (2.0, 25.0, 4.0), (0.0, 0.0, 12.0)] {
+            let mut doc = base_doc(standard);
+            let mut page = Page::new(Size::new(100.0, 80.0), bleed, slug);
+            page.slug_v = Some(slug_v);
+            page.items = geometry_items(&mut doc);
+            doc.pages.push(page);
+            let name = format!("vslug-{}-{slug}-{slug_v}", name_of(standard));
+            let (mx, my) = (bleed + slug, bleed + slug_v);
+            let (w, h) = (100.0 + 2.0 * mx, 80.0 + 2.0 * my);
+
+            let pdf = write_pdf(&doc, &WriteOptions::default()).expect("writable");
+            let path = save("external-vslug", &format!("{name}.pdf"), &pdf);
+            if let Some((ok, stdout, stderr)) = run("pdfinfo", &["-box", &path]) {
+                assert!(ok, "pdfinfo failed: {stderr}");
+                let boxes = |key: &str| -> Vec<f64> {
+                    let prefix = format!("{key}:");
+                    let line = stdout
+                        .lines()
+                        .find(|l| l.starts_with(&prefix))
+                        .unwrap_or_else(|| panic!("no `{prefix}` in\n{stdout}"));
+                    line[prefix.len()..]
+                        .split_whitespace()
+                        .map(|n| n.parse().expect("number"))
+                        .collect()
+                };
+                assert_close(&boxes("MediaBox"), &[0.0, 0.0, pt(w), pt(h)], 0.01);
+                assert_close(&boxes("CropBox"), &[0.0, 0.0, pt(w), pt(h)], 0.01);
+                assert_close(
+                    &boxes("BleedBox"),
+                    &[pt(slug), pt(slug_v), pt(w - slug), pt(h - slug_v)],
+                    0.01,
+                );
+                assert_close(
+                    &boxes("TrimBox"),
+                    &[pt(mx), pt(my), pt(mx + 100.0), pt(my + 80.0)],
+                    0.01,
+                );
+            }
+
+            let Some(img) = render("external-vslug", &path, 1, 72) else { return };
+            let px = |mm: f64| (mm * 72.0 / 25.4).round() as u32;
+            assert!(
+                img.width().abs_diff(px(w)) <= 1 && img.height().abs_diff(px(h)) <= 1,
+                "{name}: {} x {} px",
+                img.width(),
+                img.height()
+            );
+            // Page millimetres (origin: top-left of the trim) to pixels, per axis.
+            let at = |x: f64, y: f64| {
+                let scale = 72.0 / 25.4;
+                let (col, row) =
+                    (((x + mx) * scale).floor() as u32, ((y + my) * scale).floor() as u32);
+                img.get_pixel(col.min(img.width() - 1), row.min(img.height() - 1)).0
+            };
+            // Red rectangle (10, 10) .. (40, 30): every corner and just outside each edge.
+            for (x, y) in [(25.0, 20.0), (11.0, 11.0), (39.0, 11.0), (11.0, 29.0), (39.0, 29.0)] {
+                assert!(is_red(at(x, y)), "{name}: red at ({x}, {y}): {:?}", at(x, y));
+            }
+            for (x, y) in [(9.0, 20.0), (41.0, 20.0), (25.0, 9.0), (25.0, 31.0), (25.0, 60.0)] {
+                assert!(is_white(at(x, y)), "{name}: white at ({x}, {y}): {:?}", at(x, y));
+            }
+            // Clipped image: visible in (60, 20) .. (80, 40) only.
+            for (x, y) in [(70.0, 30.0), (61.0, 21.0), (79.0, 39.0)] {
+                assert!(is_blue(at(x, y)), "{name}: blue at ({x}, {y}): {:?}", at(x, y));
+            }
+            for (x, y) in [(70.0, 19.0), (70.0, 41.0), (59.0, 30.0), (81.0, 30.0)] {
+                assert!(is_white(at(x, y)), "{name}: clipped away at ({x}, {y}): {:?}", at(x, y));
+            }
+            // Rotated bar: (28, 50) .. (32, 70).
+            for (x, y) in [(30.0, 60.0), (29.0, 51.0), (31.0, 69.0)] {
+                assert!(is_green(at(x, y)), "{name}: green at ({x}, {y}): {:?}", at(x, y));
+            }
+            for (x, y) in [(30.0, 48.5), (30.0, 71.5), (26.5, 60.0), (33.5, 60.0)] {
+                assert!(is_white(at(x, y)), "{name}: white at ({x}, {y}): {:?}", at(x, y));
+            }
+        }
+    }
+}
+
 #[test]
 fn images_are_upright_and_keep_their_colours() {
     // 2 x 2 quadrants: red | green over blue | white.

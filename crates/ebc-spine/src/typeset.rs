@@ -84,12 +84,15 @@ fn is_trailing_punctuation(c: char) -> bool {
 /// off. Nothing is ever added.
 pub(crate) fn title_of(book: &BookMeta) -> String {
     let title = normalise(&book.title);
-    let Some(subtitle) = book.subtitle.as_deref().map(normalise).filter(|s| !s.is_empty())
-    else {
+    let Some(subtitle) = book.subtitle.as_deref().map(normalise).filter(|s| !s.is_empty()) else {
         return title;
     };
     let Some(head) = title.strip_suffix(subtitle.as_str()) else { return title };
-    let separated = head.chars().next_back().is_some_and(is_trailing_punctuation);
+    // A space alone does not separate a subtitle ("Le Rouge et" + "le Noir" is one title):
+    // a punctuation mark must stand between the two.
+    let is_space = |c: char| c == ' ' || is_no_break_space(c);
+    let separated =
+        head.trim_end_matches(is_space).chars().next_back().is_some_and(is_trailing_punctuation);
     let head = head.trim_end_matches(is_trailing_punctuation);
     if separated && !head.is_empty() { head.to_owned() } else { title }
 }
@@ -102,10 +105,10 @@ pub(crate) fn author_candidates(book: &BookMeta) -> Vec<String> {
     if !all.is_empty() {
         out.push(all);
     }
-    if let Some(first) = book.authors().map(normalise).find(|name| !name.is_empty()) {
-        if !out.contains(&first) {
-            out.push(first);
-        }
+    if let Some(first) = book.authors().map(normalise).find(|name| !name.is_empty())
+        && !out.contains(&first)
+    {
+        out.push(first);
     }
     out
 }
@@ -296,10 +299,16 @@ fn main_part(text: &str) -> Option<&str> {
 /// Fits the title on one line, going down the ladder only as far as needed:
 ///
 /// 1. the whole title at the largest size in `min_size_pt..=max_size_pt` that fits;
-/// 2. the same with letter-spacing tightened (half, then all of `max_tightening_em`);
-/// 3. the title cut at its first subtitle separator;
+/// 2. the same with letter-spacing tightened (half, then all of `max_tightening_em`),
+///    at the minimum size;
+/// 3. the title cut at its first subtitle separator, at the largest size that fits;
 /// 4. the title truncated at a word boundary, with an ellipsis, at the minimum size;
-/// 5. the first word truncated at a grapheme boundary, with an ellipsis.
+/// 5. the first word truncated at a grapheme boundary, with an ellipsis, at the minimum
+///    size.
+///
+/// Steps 2, 4 and 5 are only reached by titles too long for the minimum size, and stay
+/// at it: a longer title is therefore never set larger than a shorter one (as long as
+/// neither has a subtitle separator).
 ///
 /// Returns `None` when not even one letter and an ellipsis fit at the minimum size (the
 /// spine is too narrow or too short), or when the text draws nothing.
@@ -328,17 +337,20 @@ pub(crate) fn fit_title(
     if let Some(run) = attempt(text, 0.0) {
         return Some(TitleFit { run, step: TitleStep::Whole });
     }
+    // From here on the title is too long for the minimum size: whatever is set in its
+    // place is set at the minimum size.
+    let at_minimum = |run: SetRun| run.with_size(opts.min_size_pt);
     if opts.max_tightening_em > 0.0 {
         for share in [0.5_f32, 1.0] {
             if let Some(run) = attempt(text, -opts.max_tightening_em * share) {
-                return Some(TitleFit { run, step: TitleStep::Tightened });
+                return Some(TitleFit { run: at_minimum(run), step: TitleStep::Tightened });
             }
         }
     }
-    if let Some(main) = main_part(text) {
-        if let Some(run) = attempt(main, 0.0) {
-            return Some(TitleFit { run, step: TitleStep::MainPart });
-        }
+    if let Some(main) = main_part(text)
+        && let Some(run) = attempt(main, 0.0)
+    {
+        return Some(TitleFit { run, step: TitleStep::MainPart });
     }
 
     let ellipsis = if font.missing_chars("…").is_empty() { "…" } else { "..." };
@@ -360,18 +372,19 @@ pub(crate) fn fit_title(
     }
     if lo >= 1 {
         let candidate = with_words(lo);
-        if candidate != ellipsis {
-            if let Some(run) = attempt(&candidate, 0.0) {
-                return Some(TitleFit { run, step: TitleStep::Truncated });
-            }
+        if candidate != ellipsis
+            && let Some(run) = attempt(&candidate, 0.0)
+        {
+            return Some(TitleFit { run: at_minimum(run), step: TitleStep::Truncated });
         }
     }
 
     // Not even the first word fits: cut it at a grapheme boundary.
     let first = words.first()?;
     let graphemes: Vec<&str> = first.graphemes(true).collect();
-    let with_graphemes =
-        |n: usize| -> String { format!("{}{ellipsis}", graphemes.get(..n).unwrap_or(&[]).concat()) };
+    let with_graphemes = |n: usize| -> String {
+        format!("{}{ellipsis}", graphemes.get(..n).unwrap_or(&[]).concat())
+    };
     let (mut lo, mut hi) = (0usize, graphemes.len());
     while hi - lo > 1 {
         let mid = lo + (hi - lo) / 2;
@@ -384,7 +397,8 @@ pub(crate) fn fit_title(
     if lo == 0 {
         return None;
     }
-    attempt(&with_graphemes(lo), 0.0).map(|run| TitleFit { run, step: TitleStep::TruncatedInWord })
+    attempt(&with_graphemes(lo), 0.0)
+        .map(|run| TitleFit { run: at_minimum(run), step: TitleStep::TruncatedInWord })
 }
 
 /// Fits an author line beside a title that has already been fitted. The title is never

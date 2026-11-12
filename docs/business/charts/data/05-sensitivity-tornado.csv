@@ -1,0 +1,13 @@
+input,role,low,high,cum_cash_36_at_low,cum_cash_36_at_high,cum_cash_36_base
+price_reseller_monthly_minimum,decision,99,499,1424.0901,12080.3193,3986.5084
+minimal_authors_new_month,uncertain,1,4,2312.9088,8133.7077,3986.5084
+price_author_plan,decision,29,99,2875.3563,6764.3888,3986.5084
+print_jacket_pack100,uncertain,0.6000,1.5000,5711.4536,1830.3270,3986.5084
+minimal_months_between_partners,uncertain,8,18,6403.6320,3013.7976,3986.5084
+minimal_first_partner_month,uncertain,9,18,5455.8652,2317.6212,3986.5084
+price_author_jacket,decision,1.5000,2.5000,2437.6515,5535.3654,3986.5084
+setup_counsel_before_reseller,uncertain,500,3000,4986.5084,2486.5084,3986.5084
+author_packs_per_year,uncertain,0.3000,1.0000,3409.3705,5429.3532,3986.5084
+author_annual_churn,uncertain,0.2500,0.5500,4781.1865,3243.9443,3986.5084
+print_variable_data_surcharge,uncertain,0.0000,0.3000,4417.7447,3124.0359,3986.5084
+reseller_annual_churn,uncertain,0.0500,0.3000,4464.2260,3288.2773,3986.5084

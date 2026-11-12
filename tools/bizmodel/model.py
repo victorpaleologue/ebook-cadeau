@@ -391,8 +391,8 @@ def partner_size(index: int) -> str:
 def demand(v: Mapping, level: str, scenario: str, months: int = MONTHS) -> list:
     """Monthly volumes for an investment level and a scenario.
 
-    Marketing money is spent only on channels that can use it (the consumer
-    generator, authors) and only up to their caps.
+    Marketing money is spent only on channels that earn it back (a consumer
+    generator with a paid option, authors) and only up to their caps.
     """
     sc = SCENARIOS[scenario]
     weights = seasonality_weights(v["season_december_share"])
@@ -400,12 +400,15 @@ def demand(v: Mapping, level: str, scenario: str, months: int = MONTHS) -> list:
     authors_on = "d" in sc.channels
     resellers_on = "c" in sc.channels
 
+    # Advertising is bought only for channels that earn it back: a free
+    # generator earns nothing per card, so no money is spent filling it.
+    consumer_earns = consumer_on and (sc.pdf_fee or "b" in sc.channels)
     budget = marketing_budget_month(v, level)
-    if consumer_on and authors_on:
+    if consumer_earns and authors_on:
         budget_authors = budget * v["mkt_split_authors"]
         budget_consumer = budget - budget_authors
     else:
-        budget_consumer = budget if consumer_on else 0.0
+        budget_consumer = budget if consumer_earns else 0.0
         budget_authors = budget if authors_on else 0.0
 
     consumer_cap = v["b2c_sam_cards_year"] * v["b2c_standalone_cap_share"] / 12.0
@@ -792,7 +795,8 @@ def annual_fixed_cash(v: Mapping, level: str, scenario: str) -> float:
     fixed = sum(fixed_costs_month(v, level, scenario, regime, cfe_due=True).values())
     people = people_costs_month(v, level)
     sc = SCENARIOS[scenario]
-    marketing = marketing_budget_month(v, level) if sc.channels & frozenset("abd") else 0.0
+    earns = sc.pdf_fee or bool(sc.channels & frozenset("bd"))
+    marketing = marketing_budget_month(v, level) if earns else 0.0
     return 12.0 * (fixed + people + marketing)
 
 
@@ -818,9 +822,18 @@ def break_even_volume(v: Mapping, level: str, channel: str, price: float | None 
 
 
 def steady_state_net(v: Mapping, level: str, reseller_cards_year: float, authors: float, scenario: str = "MIX") -> float:
-    """Yearly net cash at a given reseller volume and author base (pure metered fee)."""
+    """Yearly net cash at a given reseller volume and author base (pure metered fee).
+
+    A micro-entreprise whose service turnover passes the VAT franchise threshold
+    is computed with VAT, as in ``cash_flow``.
+    """
     regime = regime_for(level)
     paid = level != "minimal"
+    if regime == "micro_franchise":
+        services = reseller_cards_year * v["price_reseller_fee_per_card"] + authors * v["price_author_plan"]
+        goods = authors * v["author_packs_per_year"] * PACK_SIZE * v["price_author_jacket"]
+        if services > v["tax_vat_franchise_services"] or services + goods > v["tax_vat_franchise_total"]:
+            regime = "micro_vat"
     fee = unit_economics("c", v, regime, 0, paid_support=paid).contribution
     plan = unit_economics("d_plan", v, regime, 0).contribution
     jacket = unit_economics("d", v, regime, 0, paid_support=paid).contribution

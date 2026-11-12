@@ -164,6 +164,47 @@ impl FaceDescriptor {
     pub(crate) fn coverage(&self) -> usize {
         self.present.iter().filter(|&&p| p).count()
     }
+
+    /// The characters of the table this face is described over.
+    pub(crate) fn chars(&self) -> &[char] {
+        self.table.chars()
+    }
+
+    /// The mean record per character of `table` over the given faces (looked up by
+    /// character, so the faces may have been described over other tables).
+    pub(crate) fn centroid<'a>(
+        table: &Arc<CharTable>,
+        faces: impl Iterator<Item = &'a FaceDescriptor> + Clone,
+    ) -> Self {
+        let n = table.len();
+        let mut present = vec![false; n];
+        let mut records = vec![0u8; n * RECORD_LEN];
+        let mut sums = [0u32; RECORD_LEN];
+        for (slot, &ch) in table.chars().iter().enumerate() {
+            sums.iter_mut().for_each(|s| *s = 0);
+            let mut count = 0u32;
+            for face in faces.clone() {
+                let record = if Arc::ptr_eq(&face.table, table) {
+                    face.record_at(slot)
+                } else {
+                    face.record(ch)
+                };
+                if let Some(record) = record {
+                    count += 1;
+                    for (s, &b) in sums.iter_mut().zip(record) {
+                        *s += u32::from(b);
+                    }
+                }
+            }
+            if count > 0 {
+                present[slot] = true;
+                for (o, s) in records[slot * RECORD_LEN..(slot + 1) * RECORD_LEN].iter_mut().zip(&sums) {
+                    *o = ((s + count / 2) / count) as u8;
+                }
+            }
+        }
+        Self { table: Arc::clone(table), present, records }
+    }
 }
 
 /// Describes `ch` as drawn by `font`: features of the rendered glyph and its geometry in
@@ -351,33 +392,8 @@ impl FontIndex {
     }
 
     fn from_entries(table: Arc<CharTable>, entries: Vec<IndexEntry>) -> Self {
-        let n = table.len();
-        let mut sums = vec![0u32; n * RECORD_LEN];
-        let mut counts = vec![0u32; n];
-        for entry in &entries {
-            for slot in 0..n {
-                if let Some(record) = entry.descriptor.record_at(slot) {
-                    counts[slot] += 1;
-                    for (s, &b) in sums[slot * RECORD_LEN..].iter_mut().zip(record) {
-                        *s += u32::from(b);
-                    }
-                }
-            }
-        }
-        let mut records = vec![0u8; n * RECORD_LEN];
-        for slot in 0..n {
-            if counts[slot] > 0 {
-                for k in 0..RECORD_LEN {
-                    let i = slot * RECORD_LEN + k;
-                    records[i] = ((sums[i] + counts[slot] / 2) / counts[slot]) as u8;
-                }
-            }
-        }
-        let centroids = Arc::new(FaceDescriptor {
-            table: Arc::clone(&table),
-            present: counts.iter().map(|&c| c > 0).collect(),
-            records,
-        });
+        let centroids =
+            Arc::new(FaceDescriptor::centroid(&table, entries.iter().map(|e| &*e.descriptor)));
         Self { table, entries, centroids }
     }
 
@@ -403,10 +419,6 @@ impl FontIndex {
     #[must_use]
     pub fn chars(&self) -> &[char] {
         self.table.chars()
-    }
-
-    pub(crate) fn table(&self) -> &Arc<CharTable> {
-        &self.table
     }
 
     pub(crate) fn centroids(&self) -> &FaceDescriptor {

@@ -7,8 +7,8 @@
 #![allow(clippy::unwrap_used)]
 
 use ebc_layout::{
-    CardFormat, Fit, LayoutError, Marks, Panels, PrintProfile, Sheet, marks, new_page,
-    page_geometry, place_image, safe_rect,
+    CardFormat, Face, Fit, LayoutError, Marks, Panels, PrintProfile, Sheet, marks, new_page,
+    new_page_for, page_geometry, place_image, safe_rect,
 };
 use ebc_scene::{Item, Page, PdfStandard, Rect, Size};
 
@@ -24,21 +24,18 @@ fn sheet_around(spread: Size, sheet: Sheet) -> Rect {
 }
 
 /// The contract's own example: the default card printed at home on A4. The PDF page must
-/// be A4 landscape, 297 x 210 mm. `new_page` returns a 262 x 210 mm page instead.
+/// be A4 landscape, 297 x 210 mm. (When this test was written `new_page` returned a
+/// 262 x 210 mm page; see the note at the end of this comment.)
 ///
 /// Why it matters beyond the letter of the contract: the two faces only register if the
 /// spread is centred on the *physical* sheet. With a 262 mm wide page that is left to the
 /// PDF viewer's handling of a non-standard page size on A4 paper (centre, top-left, or
 /// scale to fit) instead of being fixed by the file.
 ///
-/// `ebc_scene::Page` has a single `slug` for all four sides, so this needs a per-axis slug
-/// or an explicit media rectangle there (and in `ebc-pdf`) before `new_page` can comply.
-///
-/// Ignored, not deleted: it is the acceptance test of that cross-crate change. Until then
-/// `home_page_is_the_closest_page_a_single_slug_can_describe` (below) pins what `new_page`
-/// returns instead, and why nothing better can be returned.
+/// `ebc_scene::Page` had a single `slug` for all four sides, so this needed a per-axis
+/// slug there (and in `ebc-pdf`) before `new_page` could comply. `Page::slug_v` is that
+/// change; this test and the next are its acceptance tests.
 #[test]
-#[ignore = "blocked on ebc-scene: Page has one slug for all four sides (see new_page docs)"]
 fn home_a4_page_is_a4_landscape() {
     let format = CardFormat::poche();
     let page = new_page(&format, &PrintProfile::home(Sheet::A4)).unwrap();
@@ -52,7 +49,6 @@ fn home_a4_page_is_a4_landscape() {
 
 /// Same for every preset on every named sheet it fits on.
 #[test]
-#[ignore = "blocked on ebc-scene: Page has one slug for all four sides (see new_page docs)"]
 fn home_media_box_is_the_sheet_for_every_preset_that_fits() {
     let mut wrong = Vec::new();
     let mut fitted = 0;
@@ -84,17 +80,12 @@ fn home_media_box_is_the_sheet_for_every_preset_that_fits() {
     );
 }
 
-/// What `new_page` returns for home profiles as long as `ebc_scene::Page` describes its
-/// media box with one `slug`: `MediaBox = trim.inflate(bleed + slug)` has the same margin
-/// around the spread on all four sides, so it can only be a sheet whose horizontal and
-/// vertical margins are equal — and no preset on any named sheet has that.
-///
-/// The page is then the largest box centred on the spread that lies inside the sheet: the
-/// sheet's full size in the tighter direction, narrower in the other, same centre. The
-/// `TrimBox` and `BleedBox` are exact, the geometry report carries the true sheet, and
-/// the marks stay inside the page and inside the printable area of the real sheet.
+/// The rest of the contract sentence, for the same twelve combinations: the `TrimBox` is
+/// the spread, centred in the sheet; the `BleedBox` is the spread plus the bleed; the
+/// marks stay inside the printable area. And why a vertical slug is needed at all: with
+/// one slug for all four sides no page is the sheet.
 #[test]
-fn home_page_is_the_closest_page_a_single_slug_can_describe() {
+fn home_page_is_the_sheet_with_the_spread_centred_and_printable_marks() {
     let mut fitted = 0;
     for (sheet_name, sheet) in Sheet::NAMED {
         for (format_name, format) in CardFormat::presets() {
@@ -106,52 +97,58 @@ fn home_page_is_the_closest_page_a_single_slug_can_describe() {
             let want = sheet_around(spread, sheet);
             let (mx, my) = (-want.x, -want.y);
 
-            // Why the page cannot be the sheet: for every slug the page's margins are
-            // equal, the sheet's are not (by 4.25 mm at least — A6 on Letter — and by
-            // 17.5 mm for poche on A4).
+            // The sheet's margins around the spread differ (by 4.25 mm at least — A6 on
+            // Letter — and by 17.5 mm for poche on A4), so no single slug describes it...
             assert!((mx - my).abs() > 4.0, "{ctx}: margins {mx} and {my}");
             for slug in [0.0, mx - profile.bleed, my - profile.bleed] {
                 let media = Page::new(spread, profile.bleed, slug).media_box();
                 assert!(!rect_close(media, want), "{ctx}: slug {slug}");
             }
+            // ...and the page carries one per direction.
+            let close = |a: f64, b: f64| (a - b).abs() < 1e-9;
+            assert!(close(page.slug, mx - profile.bleed), "{ctx}: slug {}", page.slug);
+            let slug_v = page.slug_v.expect("a home page has a vertical slug");
+            assert!(close(slug_v, my - profile.bleed), "{ctx}: vertical slug {slug_v}");
 
-            // The boxes that can be right are right.
+            let media = page.media_box();
+            assert!(rect_close(media, want), "{ctx}: {media:?}");
             assert_eq!(page.trim_box(), Rect::new(0.0, 0.0, spread.w, spread.h), "{ctx}");
             assert_eq!(page.bleed_box(), page.trim_box().inflate(profile.bleed), "{ctx}");
+            assert!(close(media.center().x, page.trim_box().center().x), "{ctx}");
+            assert!(close(media.center().y, page.trim_box().center().y), "{ctx}");
+
             let g = page_geometry(&format, &profile).unwrap();
             let placement = g.sheet.unwrap();
-            assert!(rect_close(placement.sheet, want), "{ctx}: the report has the true sheet");
-            assert!(placement.landscape && !placement.media_is_sheet, "{ctx}");
-
-            // The largest box centred on the spread inside the sheet.
-            let media = page.media_box();
-            let m = mx.min(my);
-            let largest = Rect::new(-m, -m, spread.w + 2.0 * m, spread.h + 2.0 * m);
-            assert!(rect_close(media, largest), "{ctx}: {media:?}");
-            assert!(want.contains_rect(&media, 1e-9), "{ctx}: the page exceeds the sheet");
-            let close = |a: f64, b: f64| (a - b).abs() < 1e-9;
-            assert!(close(media.center().x, want.center().x), "{ctx}");
-            assert!(close(media.center().y, want.center().y), "{ctx}");
-            assert!(close(media.w, want.w) || close(media.h, want.h), "{ctx}");
-
-            // Marks: inside the page and inside the printable area of the real sheet.
+            assert_eq!(g.media, media, "{ctx}: the report and the page agree");
+            assert!(placement.landscape && placement.media_is_sheet, "{ctx}");
+            // Marks: inside the page and inside the printable area of the sheet.
             assert!(media.contains_rect(&g.mark_area, 1e-9), "{ctx}");
             assert!(placement.printable.contains_rect(&g.mark_area, 1e-9), "{ctx}");
             assert!(
                 rect_close(placement.printable, want.inflate(-profile.printable_margin)),
                 "{ctx}"
             );
+            // Both faces get the same page.
+            for face in Face::BOTH {
+                let labelled = new_page_for(face, &format, &profile).unwrap();
+                assert_eq!(labelled.media_box(), media, "{ctx}");
+            }
         }
     }
     assert_eq!(fitted, 12);
 
-    // A sheet whose margins around the spread are equal *is* the page, exactly.
+    // A sheet whose margins around the spread are equal needs no second slug value, but
+    // gets the same treatment.
     let format = CardFormat::poche();
     let sheet = Sheet::Custom(Size::new(230.0 + 40.0, 178.0 + 40.0));
     let profile = PrintProfile::home(sheet);
     let page = new_page(&format, &profile).unwrap();
     assert!(rect_close(page.media_box(), Rect::new(-20.0, -20.0, 270.0, 218.0)));
     assert!(page_geometry(&format, &profile).unwrap().sheet.unwrap().media_is_sheet);
+    // Press pages are untouched: one slug, no vertical slug.
+    let press = new_page(&format, &PrintProfile::professional_eu()).unwrap();
+    assert_eq!(press.slug_v, None);
+    assert_eq!(press.media_box(), Rect::new(-13.0, -13.0, 256.0, 204.0));
 }
 
 /// Every name the contract lists, used the way the contract writes it. This is a compile

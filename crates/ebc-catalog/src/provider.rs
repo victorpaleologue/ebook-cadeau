@@ -5,6 +5,19 @@ use ebc_isbn::Isbn13;
 use ebc_model::{BookMeta, HttpRequest, HttpResponse, SourceRef};
 
 use crate::error::CatalogError;
+use crate::marc::Extracted;
+use crate::normalize::normalize_record;
+
+/// The licence class of a source, as defined in `docs/research/01-isbn-databases.md` §5.5.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SourceClass {
+    /// Class A — open: no key, a licence that permits commercial reuse and storage.
+    Open,
+    /// Class B — terms-bound: a free API whose terms limit storage, branding or use.
+    TermsBound,
+    /// Class C — contract: paid or negotiated access.
+    Contract,
+}
 
 /// Whether the terms of a source allow something.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -23,9 +36,11 @@ pub enum Permission {
 
 /// Static description of a source: identity, licence and etiquette.
 ///
-/// The values encode what `docs/research/notes/isbn-databases.*.md` found. Most licence and
-/// quota statements there are marked "from memory, not verified against the operator's live
-/// site": [`ProviderInfo::notes`] says so per source, and the crate README repeats the table.
+/// The values encode what `docs/research/01-isbn-databases.md` found. That document was not
+/// fact-checked and most licence and quota statements in it are marked "from memory, not
+/// verified against the operator's live site": [`ProviderInfo::notes`] says so per source,
+/// and the crate README repeats the table. All of it lives in one `static` per provider so
+/// that a correction is a one-line change.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderInfo {
     /// Stable machine identifier, e.g. `"bnf"`. Used in [`SourceRef::provider`].
@@ -38,7 +53,8 @@ pub struct ProviderInfo {
     pub data_licence: &'static str,
     /// Where the operator publishes its terms of use or API policy.
     pub terms_url: &'static str,
-    /// `true` if the source cannot be queried at all without an API key or account.
+    /// `true` if the source must not be queried without an API key or account, because it
+    /// refuses the request or because its terms (or our policy for it) say so.
     pub requires_key: bool,
     /// `true` only if the source is known to send CORS headers that let a browser page call
     /// it directly. `false` means "unknown or no": relay through a server.
@@ -60,6 +76,11 @@ pub struct ProviderInfo {
     pub hosts: &'static [&'static str],
     /// Caveats: what is unverified, quotas, etiquette.
     pub notes: &'static str,
+    /// Licence class (A open, B terms-bound, C contract).
+    pub class: SourceClass,
+    /// Whether [`default_providers`](crate::default_providers) includes the source without
+    /// being asked to. Sources the research ranks "optional", "hold" or "skip" are off.
+    pub default_enabled: bool,
 }
 
 impl ProviderInfo {
@@ -73,6 +94,22 @@ impl ProviderInfo {
             attribution: self.attribution.map(str::to_owned),
         }
     }
+}
+
+/// Turns a raw extracted record into the provider's answer for `isbn`: the queried ISBN
+/// becomes the record's ISBN (it is never lost), other ISBNs of the record become related
+/// ISBNs, the source is credited and every field is normalised.
+pub(crate) fn finalize(info: &ProviderInfo, isbn: &Isbn13, extracted: Extracted) -> BookMeta {
+    let Extracted { mut book, isbns, url } = extracted;
+    book.isbn13 = Some(*isbn);
+    for other in isbns {
+        if other != *isbn && !book.related_isbns.contains(&other) {
+            book.related_isbns.push(other);
+        }
+    }
+    book.sources.push(info.source_ref(url));
+    normalize_record(&mut book);
+    book
 }
 
 /// What a provider made of one HTTP response.

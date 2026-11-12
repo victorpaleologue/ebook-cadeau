@@ -117,6 +117,76 @@ fn poche_card_boxes_match_the_print_requirements_table() {
 }
 
 #[test]
+fn a_vertical_slug_gives_a_sheet_sized_page_with_the_trim_centred() {
+    // docs/research/03-print-requirements.md, section 2.2, column `home_a4`: the poche
+    // spread centred on A4 landscape with a 2 mm bleed. The sheet leaves 33.5 mm left and
+    // right of the trim and 16 mm above and below: slug 31.5 mm, vertical slug 14 mm.
+    let mut doc = base_doc(PdfStandard::Plain);
+    for _ in 0..2 {
+        let mut sheet = Page::new(Size::new(230.0, 178.0), 2.0, 31.5);
+        sheet.slug_v = Some(14.0);
+        // The bleed box, as artwork: its corners must land on the BleedBox.
+        sheet.items.push(Item::filled_rect(
+            Rect::new(-2.0, -2.0, 234.0, 182.0),
+            Color::cmyk(0.1, 0.0, 0.0, 0.0),
+        ));
+        doc.pages.push(sheet);
+    }
+    let bytes = write_pdf(&doc, &WriteOptions { compress: false, keep_layers: false }).expect("ok");
+    let pdf = parse(&bytes);
+    for n in 1..=2 {
+        let p = page(&pdf, n);
+        let a4_landscape = [0.0, 0.0, 841.890, 595.276];
+        assert_close(&get_numbers(&pdf, p, "MediaBox"), &a4_landscape, 1e-3);
+        assert_close(&get_numbers(&pdf, p, "CropBox"), &a4_landscape, 1e-3);
+        assert_close(&get_numbers(&pdf, p, "BleedBox"), &[89.291, 39.685, 752.598, 555.591], 1e-3);
+        assert_close(&get_numbers(&pdf, p, "TrimBox"), &[94.961, 45.354, 746.929, 549.921], 1e-3);
+        assert!(!p.has(b"ArtBox") && !p.has(b"Rotate") && !p.has(b"UserUnit"));
+        // The content origin is the trim's top-left corner: 33.5 mm from the left and
+        // 16 + 178 = 194 mm above the bottom of the media box.
+        let content = page_content(&pdf, n);
+        let first = content.lines().next().expect("non-empty content");
+        let numbers: Vec<f64> = first
+            .strip_suffix(" cm")
+            .expect("the stream starts with a cm operator")
+            .split(' ')
+            .map(|v| v.parse().expect("number"))
+            .collect();
+        assert_close(&numbers, &[pt(1.0), 0.0, 0.0, -pt(1.0), pt(33.5), pt(194.0)], 1e-3);
+        assert!(content.contains("-2 -2 m\n232 -2 l\n232 180 l\n-2 180 l\nh\nf"), "{content}");
+    }
+
+    // `slug_v: Some(slug)` writes the same file as `slug_v: None`, byte for byte.
+    let mut same = simple_doc(PdfStandard::X4);
+    same.pages[0].slug_v = Some(7.0);
+    assert_eq!(write(&same), write(&simple_doc(PdfStandard::X4)));
+    // A vertical slug smaller than the horizontal one, and one alone.
+    for (slug, slug_v, media) in [(20.0, 5.0, (276.0, 194.0)), (0.0, 10.0, (236.0, 204.0))] {
+        let mut doc = base_doc(PdfStandard::X4);
+        let mut uneven = Page::new(Size::new(230.0, 178.0), 3.0, slug);
+        uneven.slug_v = Some(slug_v);
+        doc.pages.push(uneven);
+        let pdf = parse(&write(&doc));
+        let p = page(&pdf, 1);
+        assert_close(
+            &get_numbers(&pdf, p, "MediaBox"),
+            &[0.0, 0.0, pt(media.0), pt(media.1)],
+            1e-3,
+        );
+        assert_close(
+            &get_numbers(&pdf, p, "BleedBox"),
+            &[pt(slug), pt(slug_v), pt(slug + 236.0), pt(slug_v + 184.0)],
+            1e-3,
+        );
+        assert_close(
+            &get_numbers(&pdf, p, "TrimBox"),
+            &[pt(slug + 3.0), pt(slug_v + 3.0), pt(slug + 233.0), pt(slug_v + 181.0)],
+            1e-3,
+        );
+    }
+}
+
+#[test]
 fn content_is_mapped_from_top_left_millimetres_to_bottom_left_points() {
     let doc = simple_doc(PdfStandard::X4);
     let pdf = write_pdf(&doc, &WriteOptions { compress: false, keep_layers: false }).expect("ok");

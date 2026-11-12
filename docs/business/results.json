@@ -1,0 +1,1956 @@
+{
+ "annual_fixed_cash": {
+  "funded": {
+   "A_fee": 219462.0,
+   "A_free": 171462.0,
+   "B_mailed": 219801.4,
+   "C_reseller": 171462.0,
+   "D_authors": 219562.0,
+   "MIX": 219562.0
+  },
+  "minimal": {
+   "A_fee": 1198.0,
+   "A_free": 1198.0,
+   "B_mailed": 1537.4,
+   "C_reseller": 1198.0,
+   "D_authors": 1298.0,
+   "MIX": 1298.0
+  },
+  "seed": {
+   "A_fee": 62922.0,
+   "A_free": 50922.0,
+   "B_mailed": 63261.4,
+   "C_reseller": 50922.0,
+   "D_authors": 63022.0,
+   "MIX": 63022.0
+  }
+ },
+ "break_even_units_per_year": {
+  "funded": {
+   "a": 172061.83,
+   "b": null,
+   "c": 590569.46,
+   "d": 505709.02
+  },
+  "minimal": {
+   "a": 932.54,
+   "b": 3864.76,
+   "c": 5146.05,
+   "d": 3232.88
+  },
+  "seed": {
+   "a": 49331.89,
+   "b": null,
+   "c": 175391.5,
+   "d": 145156.24
+  }
+ },
+ "generated_by": "tools/bizmodel/make_charts.py",
+ "horizon_months": 36,
+ "inputs_count": 97,
+ "monte_carlo": {
+  "distribution": "independent triangular over low / base / high",
+  "draws": 2000,
+  "seed": 20261112
+ },
+ "partner_year_income_at_base_attach": {
+  "large": 8054.4,
+  "mid": 3324.0,
+  "small": 2370.9
+ },
+ "partners_needed_at_base_attach": {
+  "salary": {
+   "large": 7.86,
+   "mid": 19.04,
+   "small": 26.7
+  },
+  "team": {
+   "large": 21.29,
+   "mid": 51.58,
+   "small": 72.32
+  }
+ },
+ "scenarios": {
+  "funded": {
+   "A_fee": {
+    "base": {
+     "authors_end": 0.0,
+     "cum_cash_12": -192124.4,
+     "cum_cash_24": -380155.37,
+     "cum_cash_36": -566366.39,
+     "cum_cash_end_valued": -566366.39,
+     "flags": {},
+     "founder_hours_total": 0.0,
+     "founder_value_total": 0.0,
+     "last_year_cards": 497.25,
+     "last_year_net_cash": -186211.02,
+     "last_year_paying_units": 497.25,
+     "last_year_revenue": 824.61,
+     "level": "funded",
+     "outlay_total": 568269.09,
+     "partners_end": 0.0,
+     "payback_month": null,
+     "peak_cash_need": 566366.39,
+     "roi_12": -1.0,
+     "roi_24": -1.0,
+     "roi_36": -1.0,
+     "roi_36_valued": -1.0,
+     "scenario": "A_fee",
+     "self_funding_month": null
+    },
+    "corner_adverse": {
+     "cum_cash_36": -739889.76,
+     "last_year_net_cash": -245038.49,
+     "peak_cash_need": 739889.76
+    },
+    "corner_favourable": {
+     "cum_cash_36": -461500.59,
+     "last_year_net_cash": -153153.53,
+     "payback_month": null,
+     "peak_cash_need": 461500.59
+    },
+    "label": "A'. Print-at-home, small fee",
+    "monte_carlo": {
+     "cum_cash_end": {
+      "p10": -672934.13,
+      "p50": -621299.52,
+      "p90": -552594.65
+     },
+     "draws": 2000,
+     "last_year_net_cash": {
+      "p10": -222754.04,
+      "p50": -203654.27,
+      "p90": -180853.49
+     },
+     "last_year_revenue": {
+      "p10": 692.28,
+      "p50": 1730.5,
+      "p90": 3628.55
+     },
+     "level": "funded",
+     "median_payback_month": null,
+     "peak_cash_need": {
+      "p10": 552594.65,
+      "p50": 621299.52,
+      "p90": 672934.13
+     },
+     "prob_last_year_positive": 0.0,
+     "prob_payback": 0.0,
+     "prob_positive_end": 0.0,
+     "scenario": "A_fee",
+     "seed": 20261112
+    }
+   },
+   "A_free": {
+    "base": {
+     "authors_end": 0.0,
+     "cum_cash_12": -174144.06,
+     "cum_cash_24": -345209.76,
+     "cum_cash_36": -516278.4,
+     "cum_cash_end_valued": -516278.4,
+     "flags": {},
+     "founder_hours_total": 0.0,
+     "founder_value_total": 0.0,
+     "last_year_cards": 2213.74,
+     "last_year_net_cash": -171068.64,
+     "last_year_paying_units": 0.0,
+     "last_year_revenue": 0.0,
+     "level": "funded",
+     "outlay_total": 516266.0,
+     "partners_end": 0.0,
+     "payback_month": null,
+     "peak_cash_need": 516278.4,
+     "roi_12": -1.0,
+     "roi_24": -1.0,
+     "roi_36": -1.0,
+     "roi_36_valued": -1.0,
+     "scenario": "A_free",
+     "self_funding_month": null
+    },
+    "corner_adverse": {
+     "cum_cash_36": -596873.19,
+     "last_year_net_cash": -197405.29,
+     "peak_cash_need": 596873.19
+    },
+    "corner_favourable": {
+     "cum_cash_36": -462201.79,
+     "last_year_net_cash": -153387.33,
+     "payback_month": null,
+     "peak_cash_need": 462201.79
+    },
+    "label": "A. Print-at-home, free",
+    "monte_carlo": {
+     "cum_cash_end": {
+      "p10": -547159.46,
+      "p50": -523935.3,
+      "p90": -503630.9
+     },
+     "draws": 2000,
+     "last_year_net_cash": {
+      "p10": -181338.73,
+      "p50": -173522.79,
+      "p90": -166786.06
+     },
+     "last_year_revenue": {
+      "p10": 0.0,
+      "p50": 0.0,
+      "p90": 0.0
+     },
+     "level": "funded",
+     "median_payback_month": null,
+     "peak_cash_need": {
+      "p10": 503630.9,
+      "p50": 523935.3,
+      "p90": 547159.46
+     },
+     "prob_last_year_positive": 0.0,
+     "prob_payback": 0.0,
+     "prob_positive_end": 0.0,
+     "scenario": "A_free",
+     "seed": 20261112
+    }
+   },
+   "B_mailed": {
+    "base": {
+     "authors_end": 0.0,
+     "cum_cash_12": -193279.61,
+     "cum_cash_24": -382407.68,
+     "cum_cash_36": -569815.05,
+     "cum_cash_end_valued": -569815.05,
+     "flags": {},
+     "founder_hours_total": 0.0,
+     "founder_value_total": 0.0,
+     "last_year_cards": 10442.25,
+     "last_year_net_cash": -187407.36,
+     "last_year_paying_units": 497.25,
+     "last_year_revenue": 2859.19,
+     "level": "funded",
+     "outlay_total": 569437.29,
+     "partners_end": 0.0,
+     "payback_month": null,
+     "peak_cash_need": 569815.05,
+     "roi_12": -1.0,
+     "roi_24": -1.0,
+     "roi_36": -1.0,
+     "roi_36_valued": -1.0,
+     "scenario": "B_mailed",
+     "self_funding_month": null
+    },
+    "corner_adverse": {
+     "cum_cash_36": -752605.8,
+     "last_year_net_cash": -249777.05,
+     "peak_cash_need": 752605.8
+    },
+    "corner_favourable": {
+     "cum_cash_36": -462900.0,
+     "last_year_net_cash": -153605.19,
+     "payback_month": null,
+     "peak_cash_need": 462900.0
+    },
+    "label": "B. Free generator + printed-and-posted card",
+    "monte_carlo": {
+     "cum_cash_end": {
+      "p10": -682330.44,
+      "p50": -629900.44,
+      "p90": -557058.56
+     },
+     "draws": 2000,
+     "last_year_net_cash": {
+      "p10": -226497.32,
+      "p50": -206864.13,
+      "p90": -182337.63
+     },
+     "last_year_revenue": {
+      "p10": 1985.42,
+      "p50": 4818.01,
+      "p90": 9334.69
+     },
+     "level": "funded",
+     "median_payback_month": null,
+     "peak_cash_need": {
+      "p10": 557058.56,
+      "p50": 629900.44,
+      "p90": 682330.44
+     },
+     "prob_last_year_positive": 0.0,
+     "prob_payback": 0.0,
+     "prob_positive_end": 0.0,
+     "scenario": "B_mailed",
+     "seed": 20261112
+    }
+   },
+   "C_reseller": {
+    "base": {
+     "authors_end": 0.0,
+     "cum_cash_12": -174566.87,
+     "cum_cash_24": -334839.58,
+     "cum_cash_36": -484369.6,
+     "cum_cash_end_valued": -484369.6,
+     "flags": {},
+     "founder_hours_total": 0.0,
+     "founder_value_total": 0.0,
+     "last_year_cards": 68363.41,
+     "last_year_net_cash": -149530.02,
+     "last_year_paying_units": 68363.41,
+     "last_year_revenue": 26110.14,
+     "level": "funded",
+     "outlay_total": 518166.0,
+     "partners_end": 8.27,
+     "payback_month": null,
+     "peak_cash_need": 484369.6,
+     "roi_12": -0.99,
+     "roi_24": -0.97,
+     "roi_36": -0.93,
+     "roi_36_valued": -0.93,
+     "scenario": "C_reseller",
+     "self_funding_month": null
+    },
+    "corner_adverse": {
+     "cum_cash_36": -595198.41,
+     "last_year_net_cash": -194442.26,
+     "peak_cash_need": 595198.41
+    },
+    "corner_favourable": {
+     "cum_cash_36": -159786.0,
+     "last_year_net_cash": 25259.69,
+     "payback_month": null,
+     "peak_cash_need": 245459.9
+    },
+    "label": "C. Reseller fee per card, monthly minimum",
+    "monte_carlo": {
+     "cum_cash_end": {
+      "p10": -518836.37,
+      "p50": -490642.99,
+      "p90": -462435.78
+     },
+     "draws": 2000,
+     "last_year_net_cash": {
+      "p10": -162399.72,
+      "p50": -149640.82,
+      "p90": -133256.9
+     },
+     "last_year_revenue": {
+      "p10": 18519.32,
+      "p50": 28809.55,
+      "p90": 45927.77
+     },
+     "level": "funded",
+     "median_payback_month": null,
+     "peak_cash_need": {
+      "p10": 463537.89,
+      "p50": 490850.86,
+      "p90": 518836.37
+     },
+     "prob_last_year_positive": 0.0,
+     "prob_payback": 0.0,
+     "prob_positive_end": 0.0,
+     "scenario": "C_reseller",
+     "seed": 20261112
+    }
+   },
+   "D_authors": {
+    "base": {
+     "authors_end": 500.0,
+     "cum_cash_12": -173879.01,
+     "cum_cash_24": -322264.79,
+     "cum_cash_36": -470650.57,
+     "cum_cash_end_valued": -470650.57,
+     "flags": {},
+     "founder_hours_total": 0.0,
+     "founder_value_total": 0.0,
+     "last_year_cards": 25000.0,
+     "last_year_net_cash": -148385.78,
+     "last_year_paying_units": 25000.0,
+     "last_year_revenue": 62083.33,
+     "level": "funded",
+     "outlay_total": 557805.43,
+     "partners_end": 0.0,
+     "payback_month": null,
+     "peak_cash_need": 470650.57,
+     "roi_12": -0.87,
+     "roi_24": -0.85,
+     "roi_36": -0.84,
+     "roi_36_valued": -0.84,
+     "scenario": "D_authors",
+     "self_funding_month": null
+    },
+    "corner_adverse": {
+     "cum_cash_36": -627096.69,
+     "last_year_net_cash": -202887.05,
+     "peak_cash_need": 627096.69
+    },
+    "corner_favourable": {
+     "cum_cash_36": -95631.63,
+     "last_year_net_cash": -17500.22,
+     "payback_month": null,
+     "peak_cash_need": 95631.63
+    },
+    "label": "D. Author / publisher plan and packs",
+    "monte_carlo": {
+     "cum_cash_end": {
+      "p10": -526641.84,
+      "p50": -489177.08,
+      "p90": -442158.22
+     },
+     "draws": 2000,
+     "last_year_net_cash": {
+      "p10": -165074.24,
+      "p50": -152399.41,
+      "p90": -135252.8
+     },
+     "last_year_revenue": {
+      "p10": 47866.18,
+      "p50": 77495.92,
+      "p90": 117767.26
+     },
+     "level": "funded",
+     "median_payback_month": null,
+     "peak_cash_need": {
+      "p10": 442158.22,
+      "p50": 489177.08,
+      "p90": 526641.84
+     },
+     "prob_last_year_positive": 0.0,
+     "prob_payback": 0.0,
+     "prob_positive_end": 0.0,
+     "scenario": "D_authors",
+     "seed": 20261112
+    }
+   },
+   "MIX": {
+    "base": {
+     "authors_end": 500.0,
+     "cum_cash_12": -174305.94,
+     "cum_cash_24": -311906.12,
+     "cum_cash_36": -438366.56,
+     "cum_cash_end_valued": -438366.56,
+     "flags": {},
+     "founder_hours_total": 0.0,
+     "founder_value_total": 0.0,
+     "last_year_cards": 95577.16,
+     "last_year_net_cash": -126460.44,
+     "last_year_paying_units": 93363.41,
+     "last_year_revenue": 88193.47,
+     "level": "funded",
+     "outlay_total": 559305.43,
+     "partners_end": 8.27,
+     "payback_month": null,
+     "peak_cash_need": 438366.56,
+     "roi_12": -0.87,
+     "roi_24": -0.82,
+     "roi_36": -0.78,
+     "roi_36_valued": -0.78,
+     "scenario": "MIX",
+     "self_funding_month": null
+    },
+    "corner_adverse": {
+     "cum_cash_36": -625767.95,
+     "last_year_net_cash": -200117.18,
+     "peak_cash_need": 625767.95
+    },
+    "corner_favourable": {
+     "cum_cash_36": 163886.91,
+     "last_year_net_cash": 125259.6,
+     "payback_month": 24,
+     "peak_cash_need": 57067.3
+    },
+    "label": "Mix: free generator + authors + resellers",
+    "monte_carlo": {
+     "cum_cash_end": {
+      "p10": -494904.19,
+      "p50": -453624.46,
+      "p90": -403952.89
+     },
+     "draws": 2000,
+     "last_year_net_cash": {
+      "p10": -143979.08,
+      "p50": -126554.94,
+      "p90": -104202.77
+     },
+     "last_year_revenue": {
+      "p10": 75109.96,
+      "p50": 108776.54,
+      "p90": 150368.65
+     },
+     "level": "funded",
+     "median_payback_month": null,
+     "peak_cash_need": {
+      "p10": 406533.57,
+      "p50": 454000.42,
+      "p90": 494904.19
+     },
+     "prob_last_year_positive": 0.0,
+     "prob_payback": 0.0,
+     "prob_positive_end": 0.0,
+     "scenario": "MIX",
+     "seed": 20261112
+    }
+   }
+  },
+  "minimal": {
+   "A_fee": {
+    "base": {
+     "authors_end": 0.0,
+     "cum_cash_12": -1483.91,
+     "cum_cash_24": -2202.73,
+     "cum_cash_36": -2858.53,
+     "cum_cash_end_valued": -59594.7,
+     "flags": {},
+     "founder_hours_total": 1621.03,
+     "founder_value_total": 56736.16,
+     "last_year_cards": 110.69,
+     "last_year_net_cash": -655.8,
+     "last_year_paying_units": 110.69,
+     "last_year_revenue": 220.27,
+     "level": "minimal",
+     "outlay_total": 3124.0,
+     "partners_end": 0.0,
+     "payback_month": null,
+     "peak_cash_need": 2858.53,
+     "roi_12": -0.97,
+     "roi_24": -0.95,
+     "roi_36": -0.92,
+     "roi_36_valued": -1.0,
+     "scenario": "A_fee",
+     "self_funding_month": null
+    },
+    "corner_adverse": {
+     "cum_cash_36": -6555.74,
+     "last_year_net_cash": -1760.42,
+     "peak_cash_need": 6555.74
+    },
+    "corner_favourable": {
+     "cum_cash_36": 2636.21,
+     "last_year_net_cash": 1838.74,
+     "payback_month": 23,
+     "peak_cash_need": 488.42
+    },
+    "label": "A'. Print-at-home, small fee",
+    "monte_carlo": {
+     "cum_cash_end": {
+      "p10": -3776.0,
+      "p50": -3177.41,
+      "p90": -2498.8
+     },
+     "draws": 2000,
+     "last_year_net_cash": {
+      "p10": -929.02,
+      "p50": -700.7,
+      "p90": -365.02
+     },
+     "last_year_revenue": {
+      "p10": 154.67,
+      "p50": 376.88,
+      "p90": 836.02
+     },
+     "level": "minimal",
+     "median_payback_month": null,
+     "peak_cash_need": {
+      "p10": 2596.09,
+      "p50": 3210.22,
+      "p90": 3780.54
+     },
+     "prob_last_year_positive": 0.01,
+     "prob_payback": 0.0,
+     "prob_positive_end": 0.0,
+     "scenario": "A_fee",
+     "seed": 20261112
+    }
+   },
+   "A_free": {
+    "base": {
+     "authors_end": 0.0,
+     "cum_cash_12": -1530.47,
+     "cum_cash_24": -2332.91,
+     "cum_cash_36": -3138.88,
+     "cum_cash_end_valued": -59838.88,
+     "flags": {},
+     "founder_hours_total": 1620.0,
+     "founder_value_total": 56700.0,
+     "last_year_cards": 2213.74,
+     "last_year_net_cash": -805.97,
+     "last_year_paying_units": 0.0,
+     "last_year_revenue": 0.0,
+     "level": "minimal",
+     "outlay_total": 3124.0,
+     "partners_end": 0.0,
+     "payback_month": null,
+     "peak_cash_need": 3138.88,
+     "roi_12": -1.0,
+     "roi_24": -1.0,
+     "roi_36": -1.0,
+     "roi_36_valued": -1.0,
+     "scenario": "A_free",
+     "self_funding_month": null
+    },
+    "corner_adverse": {
+     "cum_cash_36": -6789.02,
+     "last_year_net_cash": -1884.75,
+     "peak_cash_need": 6789.02
+    },
+    "corner_favourable": {
+     "cum_cash_36": -1323.95,
+     "last_year_net_cash": -311.39,
+     "payback_month": null,
+     "peak_cash_need": 1323.95
+    },
+    "label": "A. Print-at-home, free",
+    "monte_carlo": {
+     "cum_cash_end": {
+      "p10": -4228.3,
+      "p50": -3709.18,
+      "p90": -3229.09
+     },
+     "draws": 2000,
+     "last_year_net_cash": {
+      "p10": -1142.9,
+      "p50": -978.04,
+      "p90": -824.62
+     },
+     "last_year_revenue": {
+      "p10": 0.0,
+      "p50": 0.0,
+      "p90": 0.0
+     },
+     "level": "minimal",
+     "median_payback_month": null,
+     "peak_cash_need": {
+      "p10": 3229.09,
+      "p50": 3709.18,
+      "p90": 4228.3
+     },
+     "prob_last_year_positive": 0.0,
+     "prob_payback": 0.0,
+     "prob_positive_end": 0.0,
+     "scenario": "A_free",
+     "seed": 20261112
+    }
+   },
+   "B_mailed": {
+    "base": {
+     "authors_end": 0.0,
+     "cum_cash_12": -2006.22,
+     "cum_cash_24": -3134.93,
+     "cum_cash_36": -4278.81,
+     "cum_cash_end_valued": -61014.97,
+     "flags": {},
+     "founder_hours_total": 1621.03,
+     "founder_value_total": 56736.16,
+     "last_year_cards": 2324.43,
+     "last_year_net_cash": -1143.88,
+     "last_year_paying_units": 110.69,
+     "last_year_revenue": 763.74,
+     "level": "minimal",
+     "outlay_total": 4292.2,
+     "partners_end": 0.0,
+     "payback_month": null,
+     "peak_cash_need": 4278.81,
+     "roi_12": -0.99,
+     "roi_24": -0.99,
+     "roi_36": -1.0,
+     "roi_36_valued": -1.0,
+     "scenario": "B_mailed",
+     "self_funding_month": null
+    },
+    "corner_adverse": {
+     "cum_cash_36": -9208.64,
+     "last_year_net_cash": -2568.62,
+     "peak_cash_need": 9208.64
+    },
+    "corner_favourable": {
+     "cum_cash_36": 543.28,
+     "last_year_net_cash": 827.72,
+     "payback_month": 36,
+     "peak_cash_need": 800.93
+    },
+    "label": "B. Free generator + printed-and-posted card",
+    "monte_carlo": {
+     "cum_cash_end": {
+      "p10": -5950.42,
+      "p50": -5300.33,
+      "p90": -4644.28
+     },
+     "draws": 2000,
+     "last_year_net_cash": {
+      "p10": -1730.92,
+      "p50": -1484.21,
+      "p90": -1255.03
+     },
+     "last_year_revenue": {
+      "p10": 456.55,
+      "p50": 1008.72,
+      "p90": 2107.57
+     },
+     "level": "minimal",
+     "median_payback_month": null,
+     "peak_cash_need": {
+      "p10": 4644.6,
+      "p50": 5300.33,
+      "p90": 5950.42
+     },
+     "prob_last_year_positive": 0.0,
+     "prob_payback": 0.0,
+     "prob_positive_end": 0.0,
+     "scenario": "B_mailed",
+     "seed": 20261112
+    }
+   },
+   "C_reseller": {
+    "base": {
+     "authors_end": 0.0,
+     "cum_cash_12": -2872.71,
+     "cum_cash_24": -1808.64,
+     "cum_cash_36": 704.19,
+     "cum_cash_end_valued": -62865.66,
+     "flags": {},
+     "founder_hours_total": 1816.28,
+     "founder_value_total": 63569.84,
+     "last_year_cards": 3184.23,
+     "last_year_net_cash": 2512.83,
+     "last_year_paying_units": 3184.23,
+     "last_year_revenue": 4270.3,
+     "level": "minimal",
+     "outlay_total": 4624.0,
+     "partners_end": 2.57,
+     "payback_month": 33,
+     "peak_cash_need": 2872.71,
+     "roi_12": -0.95,
+     "roi_24": -0.47,
+     "roi_36": 0.15,
+     "roi_36_valued": -0.92,
+     "scenario": "C_reseller",
+     "self_funding_month": 13
+    },
+    "corner_adverse": {
+     "cum_cash_36": -7285.73,
+     "last_year_net_cash": -413.0,
+     "peak_cash_need": 7368.93
+    },
+    "corner_favourable": {
+     "cum_cash_36": 24258.9,
+     "last_year_net_cash": 19703.74,
+     "payback_month": 12,
+     "peak_cash_need": 967.77
+    },
+    "label": "C. Reseller fee per card, monthly minimum",
+    "monte_carlo": {
+     "cum_cash_end": {
+      "p10": -1800.68,
+      "p50": -502.82,
+      "p90": 1169.97
+     },
+     "draws": 2000,
+     "last_year_net_cash": {
+      "p10": 1494.05,
+      "p50": 2082.62,
+      "p90": 3156.33
+     },
+     "last_year_revenue": {
+      "p10": 3279.6,
+      "p50": 4022.41,
+      "p90": 5431.7
+     },
+     "level": "minimal",
+     "median_payback_month": 35.0,
+     "peak_cash_need": {
+      "p10": 2654.92,
+      "p50": 3352.72,
+      "p90": 4135.94
+     },
+     "prob_last_year_positive": 1.0,
+     "prob_payback": 0.32,
+     "prob_positive_end": 0.32,
+     "scenario": "C_reseller",
+     "seed": 20261112
+    }
+   },
+   "D_authors": {
+    "base": {
+     "authors_end": 37.62,
+     "cum_cash_12": -1131.41,
+     "cum_cash_24": -533.81,
+     "cum_cash_36": 573.2,
+     "cum_cash_end_valued": -56755.69,
+     "flags": {},
+     "founder_hours_total": 1637.97,
+     "founder_value_total": 57328.89,
+     "last_year_cards": 1737.38,
+     "last_year_net_cash": 1107.0,
+     "last_year_paying_units": 1737.38,
+     "last_year_revenue": 5177.39,
+     "level": "minimal",
+     "outlay_total": 3574.0,
+     "partners_end": 0.0,
+     "payback_month": 31,
+     "peak_cash_need": 1165.49,
+     "roi_12": -0.64,
+     "roi_24": -0.2,
+     "roi_36": 0.16,
+     "roi_36_valued": -0.93,
+     "scenario": "D_authors",
+     "self_funding_month": 4
+    },
+    "corner_adverse": {
+     "cum_cash_36": -7351.86,
+     "last_year_net_cash": -1898.49,
+     "peak_cash_need": 7351.86
+    },
+    "corner_favourable": {
+     "cum_cash_36": 21616.39,
+     "last_year_net_cash": 11413.93,
+     "payback_month": 5,
+     "peak_cash_need": 419.62
+    },
+    "label": "D. Author / publisher plan and packs",
+    "monte_carlo": {
+     "cum_cash_end": {
+      "p10": -2169.74,
+      "p50": -468.07,
+      "p90": 1899.51
+     },
+     "draws": 2000,
+     "last_year_net_cash": {
+      "p10": -151.37,
+      "p50": 653.36,
+      "p90": 1739.42
+     },
+     "last_year_revenue": {
+      "p10": 4134.87,
+      "p50": 6535.58,
+      "p90": 9898.44
+     },
+     "level": "minimal",
+     "median_payback_month": 27.0,
+     "peak_cash_need": {
+      "p10": 1123.5,
+      "p50": 1450.52,
+      "p90": 2202.82
+     },
+     "prob_last_year_positive": 0.85,
+     "prob_payback": 0.4,
+     "prob_positive_end": 0.4,
+     "scenario": "D_authors",
+     "seed": 20261112
+    }
+   },
+   "MIX": {
+    "base": {
+     "authors_end": 37.62,
+     "cum_cash_12": -2478.58,
+     "cum_cash_24": -23.35,
+     "cum_cash_36": 3986.51,
+     "cum_cash_end_valued": -60212.22,
+     "flags": {},
+     "founder_hours_total": 1834.25,
+     "founder_value_total": 64198.73,
+     "last_year_cards": 7135.35,
+     "last_year_net_cash": 4009.86,
+     "last_year_paying_units": 4921.61,
+     "last_year_revenue": 9447.69,
+     "level": "minimal",
+     "outlay_total": 5474.0,
+     "partners_end": 2.57,
+     "payback_month": 25,
+     "peak_cash_need": 2478.58,
+     "roi_12": -0.76,
+     "roi_24": -0.01,
+     "roi_36": 0.73,
+     "roi_36_valued": -0.86,
+     "scenario": "MIX",
+     "self_funding_month": 9
+    },
+    "corner_adverse": {
+     "cum_cash_36": -8263.8,
+     "last_year_net_cash": -658.53,
+     "peak_cash_need": 8316.55
+    },
+    "corner_favourable": {
+     "cum_cash_36": 47997.31,
+     "last_year_net_cash": 32028.26,
+     "payback_month": 5,
+     "peak_cash_need": 419.63
+    },
+    "label": "Mix: free generator + authors + resellers",
+    "monte_carlo": {
+     "cum_cash_end": {
+      "p10": 313.12,
+      "p50": 2573.64,
+      "p90": 5574.77
+     },
+     "draws": 2000,
+     "last_year_net_cash": {
+      "p10": 2493.25,
+      "p50": 3543.48,
+      "p90": 5106.17
+     },
+     "last_year_revenue": {
+      "p10": 8200.83,
+      "p50": 10759.79,
+      "p90": 14379.66
+     },
+     "level": "minimal",
+     "median_payback_month": 28.0,
+     "peak_cash_need": {
+      "p10": 2059.14,
+      "p50": 2878.49,
+      "p90": 3737.89
+     },
+     "prob_last_year_positive": 1.0,
+     "prob_payback": 0.93,
+     "prob_positive_end": 0.93,
+     "scenario": "MIX",
+     "seed": 20261112
+    }
+   }
+  },
+  "seed": {
+   "A_fee": {
+    "base": {
+     "authors_end": 0.0,
+     "cum_cash_12": -64325.58,
+     "cum_cash_24": -126386.32,
+     "cum_cash_36": -188384.5,
+     "cum_cash_end_valued": -289184.5,
+     "flags": {},
+     "founder_hours_total": 2880.0,
+     "founder_value_total": 100800.0,
+     "last_year_cards": 410.69,
+     "last_year_net_cash": -61998.18,
+     "last_year_paying_units": 410.69,
+     "last_year_revenue": 681.06,
+     "level": "seed",
+     "outlay_total": 189796.0,
+     "partners_end": 0.0,
+     "payback_month": null,
+     "peak_cash_need": 188384.5,
+     "roi_12": -0.99,
+     "roi_24": -0.99,
+     "roi_36": -0.99,
+     "roi_36_valued": -1.0,
+     "scenario": "A_fee",
+     "self_funding_month": null
+    },
+    "corner_adverse": {
+     "cum_cash_36": -224860.03,
+     "last_year_net_cash": -73695.26,
+     "peak_cash_need": 224860.03
+    },
+    "corner_favourable": {
+     "cum_cash_36": -119550.59,
+     "last_year_net_cash": -39453.53,
+     "payback_month": null,
+     "peak_cash_need": 119550.59
+    },
+    "label": "A'. Print-at-home, small fee",
+    "monte_carlo": {
+     "cum_cash_end": {
+      "p10": -203421.04,
+      "p50": -186998.02,
+      "p90": -170212.41
+     },
+     "draws": 2000,
+     "last_year_net_cash": {
+      "p10": -66833.65,
+      "p50": -61232.4,
+      "p90": -55341.04
+     },
+     "last_year_revenue": {
+      "p10": 466.61,
+      "p50": 904.23,
+      "p90": 1631.45
+     },
+     "level": "seed",
+     "median_payback_month": null,
+     "peak_cash_need": {
+      "p10": 170212.41,
+      "p50": 186998.02,
+      "p90": 203421.04
+     },
+     "prob_last_year_positive": 0.0,
+     "prob_payback": 0.0,
+     "prob_positive_end": 0.0,
+     "scenario": "A_fee",
+     "seed": 20261112
+    }
+   },
+   "A_free": {
+    "base": {
+     "authors_end": 0.0,
+     "cum_cash_12": -52754.06,
+     "cum_cash_24": -103279.76,
+     "cum_cash_36": -153808.4,
+     "cum_cash_end_valued": -254608.4,
+     "flags": {},
+     "founder_hours_total": 2880.0,
+     "founder_value_total": 100800.0,
+     "last_year_cards": 2213.74,
+     "last_year_net_cash": -50528.64,
+     "last_year_paying_units": 0.0,
+     "last_year_revenue": 0.0,
+     "level": "seed",
+     "outlay_total": 153796.0,
+     "partners_end": 0.0,
+     "payback_month": null,
+     "peak_cash_need": 153808.4,
+     "roi_12": -1.0,
+     "roi_24": -1.0,
+     "roi_36": -1.0,
+     "roi_36_valued": -1.0,
+     "scenario": "A_free",
+     "self_funding_month": null
+    },
+    "corner_adverse": {
+     "cum_cash_36": -189253.19,
+     "last_year_net_cash": -61865.29,
+     "peak_cash_need": 189253.19
+    },
+    "corner_favourable": {
+     "cum_cash_36": -120251.79,
+     "last_year_net_cash": -39687.33,
+     "payback_month": null,
+     "peak_cash_need": 120251.79
+    },
+    "label": "A. Print-at-home, free",
+    "monte_carlo": {
+     "cum_cash_end": {
+      "p10": -170106.35,
+      "p50": -154354.95,
+      "p90": -138713.24
+     },
+     "draws": 2000,
+     "last_year_net_cash": {
+      "p10": -55875.12,
+      "p50": -50635.38,
+      "p90": -45490.74
+     },
+     "last_year_revenue": {
+      "p10": 0.0,
+      "p50": 0.0,
+      "p90": 0.0
+     },
+     "level": "seed",
+     "median_payback_month": null,
+     "peak_cash_need": {
+      "p10": 138713.24,
+      "p50": 154354.95,
+      "p90": 170106.35
+     },
+     "prob_last_year_positive": 0.0,
+     "prob_payback": 0.0,
+     "prob_positive_end": 0.0,
+     "scenario": "A_free",
+     "seed": 20261112
+    }
+   },
+   "B_mailed": {
+    "base": {
+     "authors_end": 0.0,
+     "cum_cash_12": -65262.63,
+     "cum_cash_24": -128213.82,
+     "cum_cash_36": -191259.16,
+     "cum_cash_end_valued": -292059.16,
+     "flags": {},
+     "founder_hours_total": 2880.0,
+     "founder_value_total": 100800.0,
+     "last_year_cards": 8624.43,
+     "last_year_net_cash": -63045.34,
+     "last_year_paying_units": 410.69,
+     "last_year_revenue": 2361.45,
+     "level": "seed",
+     "outlay_total": 190964.2,
+     "partners_end": 0.0,
+     "payback_month": null,
+     "peak_cash_need": 191259.16,
+     "roi_12": -1.0,
+     "roi_24": -1.0,
+     "roi_36": -1.0,
+     "roi_36_valued": -1.0,
+     "scenario": "B_mailed",
+     "self_funding_month": null
+    },
+    "corner_adverse": {
+     "cum_cash_36": -229940.25,
+     "last_year_net_cash": -75438.54,
+     "peak_cash_need": 229940.25
+    },
+    "corner_favourable": {
+     "cum_cash_36": -120950.0,
+     "last_year_net_cash": -39905.19,
+     "payback_month": null,
+     "peak_cash_need": 120950.0
+    },
+    "label": "B. Free generator + printed-and-posted card",
+    "monte_carlo": {
+     "cum_cash_end": {
+      "p10": -207687.71,
+      "p50": -191333.17,
+      "p90": -174478.66
+     },
+     "draws": 2000,
+     "last_year_net_cash": {
+      "p10": -68375.69,
+      "p50": -62733.71,
+      "p90": -56913.17
+     },
+     "last_year_revenue": {
+      "p10": 1417.45,
+      "p50": 2444.37,
+      "p90": 4154.57
+     },
+     "level": "seed",
+     "median_payback_month": null,
+     "peak_cash_need": {
+      "p10": 174478.66,
+      "p50": 191333.17,
+      "p90": 207687.71
+     },
+     "prob_last_year_positive": 0.0,
+     "prob_payback": 0.0,
+     "prob_positive_end": 0.0,
+     "scenario": "B_mailed",
+     "seed": 20261112
+    }
+   },
+   "C_reseller": {
+    "base": {
+     "authors_end": 0.0,
+     "cum_cash_12": -53787.48,
+     "cum_cash_24": -100593.05,
+     "cum_cash_36": -142178.96,
+     "cum_cash_end_valued": -242978.96,
+     "flags": {},
+     "founder_hours_total": 2880.0,
+     "founder_value_total": 100800.0,
+     "last_year_cards": 22719.02,
+     "last_year_net_cash": -41585.91,
+     "last_year_paying_units": 22719.02,
+     "last_year_revenue": 10884.82,
+     "level": "seed",
+     "outlay_total": 155296.0,
+     "partners_end": 4.16,
+     "payback_month": null,
+     "peak_cash_need": 142178.96,
+     "roi_12": -0.99,
+     "roi_24": -0.96,
+     "roi_36": -0.92,
+     "roi_36_valued": -0.95,
+     "scenario": "C_reseller",
+     "self_funding_month": null
+    },
+    "corner_adverse": {
+     "cum_cash_36": -189508.25,
+     "last_year_net_cash": -60092.43,
+     "peak_cash_need": 189508.25
+    },
+    "corner_favourable": {
+     "cum_cash_36": 1159.96,
+     "last_year_net_cash": 47029.29,
+     "payback_month": 36,
+     "peak_cash_need": 65615.07
+    },
+    "label": "C. Reseller fee per card, monthly minimum",
+    "monte_carlo": {
+     "cum_cash_end": {
+      "p10": -159855.71,
+      "p50": -143336.16,
+      "p90": -125818.36
+     },
+     "draws": 2000,
+     "last_year_net_cash": {
+      "p10": -48270.47,
+      "p50": -41920.59,
+      "p90": -33688.74
+     },
+     "last_year_revenue": {
+      "p10": 7380.15,
+      "p50": 10605.84,
+      "p90": 17909.53
+     },
+     "level": "seed",
+     "median_payback_month": null,
+     "peak_cash_need": {
+      "p10": 126880.38,
+      "p50": 143835.35,
+      "p90": 159950.0
+     },
+     "prob_last_year_positive": 0.0,
+     "prob_payback": 0.0,
+     "prob_positive_end": 0.0,
+     "scenario": "C_reseller",
+     "seed": 20261112
+    }
+   },
+   "D_authors": {
+    "base": {
+     "authors_end": 500.0,
+     "cum_cash_12": -55344.96,
+     "cum_cash_24": -96029.81,
+     "cum_cash_36": -128317.04,
+     "cum_cash_end_valued": -229117.04,
+     "flags": {},
+     "founder_hours_total": 2880.0,
+     "founder_value_total": 100800.0,
+     "last_year_cards": 24040.09,
+     "last_year_net_cash": -32287.24,
+     "last_year_paying_units": 24040.09,
+     "last_year_revenue": 59699.56,
+     "level": "seed",
+     "outlay_total": 189907.79,
+     "partners_end": 0.0,
+     "payback_month": null,
+     "peak_cash_need": 128317.04,
+     "roi_12": -0.85,
+     "roi_24": -0.75,
+     "roi_36": -0.68,
+     "roi_36_valued": -0.79,
+     "scenario": "D_authors",
+     "self_funding_month": null
+    },
+    "corner_adverse": {
+     "cum_cash_36": -216770.5,
+     "last_year_net_cash": -69606.11,
+     "peak_cash_need": 216770.5
+    },
+    "corner_favourable": {
+     "cum_cash_36": 124425.3,
+     "last_year_net_cash": 75679.83,
+     "payback_month": 14,
+     "peak_cash_need": 14017.2
+    },
+    "label": "D. Author / publisher plan and packs",
+    "monte_carlo": {
+     "cum_cash_end": {
+      "p10": -161706.54,
+      "p50": -137399.89,
+      "p90": -106346.36
+     },
+     "draws": 2000,
+     "last_year_net_cash": {
+      "p10": -47541.45,
+      "p50": -37439.1,
+      "p90": -23818.6
+     },
+     "last_year_revenue": {
+      "p10": 39555.9,
+      "p50": 57274.41,
+      "p90": 85639.78
+     },
+     "level": "seed",
+     "median_payback_month": null,
+     "peak_cash_need": {
+      "p10": 106346.36,
+      "p50": 137399.89,
+      "p90": 161706.54
+     },
+     "prob_last_year_positive": 0.0,
+     "prob_payback": 0.0,
+     "prob_positive_end": 0.0,
+     "scenario": "D_authors",
+     "seed": 20261112
+    }
+   },
+   "MIX": {
+    "base": {
+     "authors_end": 500.0,
+     "cum_cash_12": -56382.51,
+     "cum_cash_24": -93354.61,
+     "cum_cash_36": -116712.4,
+     "cum_cash_end_valued": -217512.4,
+     "flags": {},
+     "founder_hours_total": 2880.0,
+     "founder_value_total": 100800.0,
+     "last_year_cards": 48972.85,
+     "last_year_net_cash": -23357.79,
+     "last_year_paying_units": 46759.11,
+     "last_year_revenue": 70584.38,
+     "level": "seed",
+     "outlay_total": 191407.79,
+     "partners_end": 4.16,
+     "payback_month": null,
+     "peak_cash_need": 117105.68,
+     "roi_12": -0.85,
+     "roi_24": -0.72,
+     "roi_36": -0.61,
+     "roi_36_valued": -0.74,
+     "scenario": "MIX",
+     "self_funding_month": null
+    },
+    "corner_adverse": {
+     "cum_cash_36": -217371.59,
+     "last_year_net_cash": -68026.42,
+     "peak_cash_need": 217371.59
+    },
+    "corner_favourable": {
+     "cum_cash_36": 215936.43,
+     "last_year_net_cash": 141170.32,
+     "payback_month": 14,
+     "peak_cash_need": 14017.26
+    },
+    "label": "Mix: free generator + authors + resellers",
+    "monte_carlo": {
+     "cum_cash_end": {
+      "p10": -151241.42,
+      "p50": -125975.13,
+      "p90": -94055.21
+     },
+     "draws": 2000,
+     "last_year_net_cash": {
+      "p10": -39481.57,
+      "p50": -27864.39,
+      "p90": -12708.16
+     },
+     "last_year_revenue": {
+      "p10": 50602.66,
+      "p50": 68927.27,
+      "p90": 98697.46
+     },
+     "level": "seed",
+     "median_payback_month": null,
+     "peak_cash_need": {
+      "p10": 96131.45,
+      "p50": 127053.93,
+      "p90": 151619.58
+     },
+     "prob_last_year_positive": 0.02,
+     "prob_payback": 0.0,
+     "prob_positive_end": 0.0,
+     "scenario": "MIX",
+     "seed": 20261112
+    }
+   }
+  }
+ },
+ "sweet_spot": {
+  "authors": [
+   0,
+   25,
+   50,
+   100,
+   200,
+   400
+  ],
+  "cards": [
+   0,
+   2500,
+   5000,
+   10000,
+   25000,
+   50000,
+   100000,
+   200000
+  ],
+  "cards_per_minimum": 8000.0,
+  "growth_threshold": 24000.0,
+  "net": [
+   [
+    -1298.0,
+    -716.0,
+    -134.0,
+    1030.0,
+    4522.0,
+    10342.0,
+    21982.0,
+    45382.0
+   ],
+   [
+    144.55,
+    726.55,
+    1308.55,
+    2472.55,
+    5964.55,
+    11784.55,
+    23424.55,
+    46573.25
+   ],
+   [
+    1587.1,
+    2169.1,
+    2751.1,
+    3915.1,
+    7407.1,
+    13227.1,
+    24867.1,
+    47764.5
+   ],
+   [
+    4472.2,
+    5054.2,
+    5636.2,
+    6800.2,
+    10292.2,
+    16112.2,
+    27752.2,
+    50147.0
+   ],
+   [
+    10242.4,
+    10824.4,
+    11406.4,
+    12570.4,
+    16062.4,
+    21882.4,
+    31572.0,
+    54912.0
+   ],
+   [
+    21782.8,
+    22364.8,
+    22946.8,
+    24110.8,
+    27602.8,
+    33422.8,
+    41102.0,
+    64442.0
+   ]
+  ],
+  "salary_threshold": 63300.0
+ },
+ "tornado_minimal_mix": [
+  {
+   "base": 200,
+   "base_value": 3986.51,
+   "high": 499,
+   "input": "price_reseller_monthly_minimum",
+   "low": 99,
+   "role": "decision",
+   "swing": 10656.23,
+   "unit": "EUR per reseller per month, excl. VAT",
+   "value_at_high": 12080.32,
+   "value_at_low": 1424.09
+  },
+  {
+   "base": 2,
+   "base_value": 3986.51,
+   "high": 4,
+   "input": "minimal_authors_new_month",
+   "low": 1,
+   "role": "uncertain",
+   "swing": 5820.8,
+   "unit": "new paying authors per month, unpaid acquisition",
+   "value_at_high": 8133.71,
+   "value_at_low": 2312.91
+  },
+  {
+   "base": 49,
+   "base_value": 3986.51,
+   "high": 99,
+   "input": "price_author_plan",
+   "low": 29,
+   "role": "decision",
+   "swing": 3889.03,
+   "unit": "EUR per author per year, incl. VAT",
+   "value_at_high": 6764.39,
+   "value_at_low": 2875.36
+  },
+  {
+   "base": 1.0,
+   "base_value": 3986.51,
+   "high": 1.5,
+   "input": "print_jacket_pack100",
+   "low": 0.6,
+   "role": "uncertain",
+   "swing": 3881.13,
+   "unit": "EUR per jacket, excl. VAT, runs of 100-500",
+   "value_at_high": 1830.33,
+   "value_at_low": 5711.45
+  },
+  {
+   "base": 12,
+   "base_value": 3986.51,
+   "high": 18,
+   "input": "minimal_months_between_partners",
+   "low": 8,
+   "role": "uncertain",
+   "swing": 3389.83,
+   "unit": "months",
+   "value_at_high": 3013.8,
+   "value_at_low": 6403.63
+  },
+  {
+   "base": 12,
+   "base_value": 3986.51,
+   "high": 18,
+   "input": "minimal_first_partner_month",
+   "low": 9,
+   "role": "uncertain",
+   "swing": 3138.24,
+   "unit": "simulation month of the first live reseller",
+   "value_at_high": 2317.62,
+   "value_at_low": 5455.87
+  },
+  {
+   "base": 2.0,
+   "base_value": 3986.51,
+   "high": 2.5,
+   "input": "price_author_jacket",
+   "low": 1.5,
+   "role": "decision",
+   "swing": 3097.71,
+   "unit": "EUR per jacket in a pack of 100, incl. VAT",
+   "value_at_high": 5535.37,
+   "value_at_low": 2437.65
+  },
+  {
+   "base": 1500,
+   "base_value": 3986.51,
+   "high": 3000,
+   "input": "setup_counsel_before_reseller",
+   "low": 500,
+   "role": "uncertain",
+   "swing": 2500.0,
+   "unit": "EUR one-off, paid when the first reseller goes live",
+   "value_at_high": 2486.51,
+   "value_at_low": 4986.51
+  },
+  {
+   "base": 0.5,
+   "base_value": 3986.51,
+   "high": 1.0,
+   "input": "author_packs_per_year",
+   "low": 0.3,
+   "role": "uncertain",
+   "swing": 2019.98,
+   "unit": "packs of 100 jackets per paying author per year",
+   "value_at_high": 5429.35,
+   "value_at_low": 3409.37
+  },
+  {
+   "base": 0.4,
+   "base_value": 3986.51,
+   "high": 0.55,
+   "input": "author_annual_churn",
+   "low": 0.25,
+   "role": "uncertain",
+   "swing": 1537.24,
+   "unit": "fraction of paying authors lost per year",
+   "value_at_high": 3243.94,
+   "value_at_low": 4781.19
+  },
+  {
+   "base": 0.1,
+   "base_value": 3986.51,
+   "high": 0.3,
+   "input": "print_variable_data_surcharge",
+   "low": 0.0,
+   "role": "uncertain",
+   "swing": 1293.71,
+   "unit": "EUR per jacket, excl. VAT",
+   "value_at_high": 3124.04,
+   "value_at_low": 4417.74
+  },
+  {
+   "base": 0.15,
+   "base_value": 3986.51,
+   "high": 0.3,
+   "input": "reseller_annual_churn",
+   "low": 0.05,
+   "role": "uncertain",
+   "swing": 1175.95,
+   "unit": "probability per year that a reseller stops",
+   "value_at_high": 3288.28,
+   "value_at_low": 4464.23
+  },
+  {
+   "base": 300,
+   "base_value": 3986.51,
+   "high": 500,
+   "input": "fix_rc_pro_year",
+   "low": 150,
+   "role": "uncertain",
+   "swing": 1050.0,
+   "unit": "EUR per year",
+   "value_at_high": 3386.51,
+   "value_at_low": 4436.51
+  },
+  {
+   "base": 0,
+   "base_value": 3986.51,
+   "high": 300,
+   "input": "fix_accountant_micro_year",
+   "low": 0,
+   "role": "uncertain",
+   "swing": 900.0,
+   "unit": "EUR per year",
+   "value_at_high": 3086.51,
+   "value_at_low": 3986.51
+  },
+  {
+   "base": 100,
+   "base_value": 3986.51,
+   "high": 300,
+   "input": "fix_epr_year",
+   "low": 0,
+   "role": "uncertain",
+   "swing": 900.0,
+   "unit": "EUR per year, only when printed cards are sold",
+   "value_at_high": 3386.51,
+   "value_at_low": 4286.51
+  }
+ ],
+ "tornado_seed_mix": [
+  {
+   "base": 8,
+   "base_value": -116712.4,
+   "high": 12,
+   "input": "seed_dev_days_month",
+   "low": 4,
+   "role": "decision",
+   "swing": 144000.0,
+   "unit": "freelance days per month",
+   "value_at_high": -188712.4,
+   "value_at_low": -44712.4
+  },
+  {
+   "base": 40,
+   "base_value": -116712.4,
+   "high": 80,
+   "input": "author_cac",
+   "low": 20,
+   "role": "uncertain",
+   "swing": 61115.31,
+   "unit": "EUR of marketing per extra paying author",
+   "value_at_high": -145153.46,
+   "value_at_low": -84038.15
+  },
+  {
+   "base": 500,
+   "base_value": -116712.4,
+   "high": 600,
+   "input": "labour_dev_day_rate",
+   "low": 400,
+   "role": "uncertain",
+   "swing": 57600.0,
+   "unit": "EUR per day, excl. VAT",
+   "value_at_high": -145512.4,
+   "value_at_low": -87912.4
+  },
+  {
+   "base": 49,
+   "base_value": -116712.4,
+   "high": 99,
+   "input": "price_author_plan",
+   "low": 29,
+   "role": "decision",
+   "swing": 57315.05,
+   "unit": "EUR per author per year, incl. VAT",
+   "value_at_high": -75773.07,
+   "value_at_low": -133088.13
+  },
+  {
+   "base": 1.0,
+   "base_value": -116712.4,
+   "high": 1.5,
+   "input": "print_jacket_pack100",
+   "low": 0.6,
+   "role": "uncertain",
+   "swing": 45024.92,
+   "unit": "EUR per jacket, excl. VAT, runs of 100-500",
+   "value_at_high": -141726.24,
+   "value_at_low": -96701.32
+  },
+  {
+   "base": 2.0,
+   "base_value": -116712.4,
+   "high": 2.5,
+   "input": "price_author_jacket",
+   "low": 1.5,
+   "role": "decision",
+   "swing": 40939.32,
+   "unit": "EUR per jacket in a pack of 100, incl. VAT",
+   "value_at_high": -96242.73,
+   "value_at_low": -137182.06
+  },
+  {
+   "base": 0.5,
+   "base_value": -116712.4,
+   "high": 1.0,
+   "input": "author_packs_per_year",
+   "low": 0.3,
+   "role": "uncertain",
+   "swing": 30408.5,
+   "unit": "packs of 100 jackets per paying author per year",
+   "value_at_high": -94992.04,
+   "value_at_low": -125400.54
+  },
+  {
+   "base": 0.4,
+   "base_value": -116712.4,
+   "high": 0.55,
+   "input": "author_annual_churn",
+   "low": 0.25,
+   "role": "uncertain",
+   "swing": 24466.97,
+   "unit": "fraction of paying authors lost per year",
+   "value_at_high": -128592.31,
+   "value_at_low": -104125.34
+  },
+  {
+   "base": 200,
+   "base_value": -116712.4,
+   "high": 499,
+   "input": "price_reseller_monthly_minimum",
+   "low": 99,
+   "role": "decision",
+   "swing": 23429.77,
+   "unit": "EUR per reseller per month, excl. VAT",
+   "value_at_high": -98355.6,
+   "value_at_low": -121785.37
+  },
+  {
+   "base": 1000,
+   "base_value": -116712.4,
+   "high": 2000,
+   "input": "seed_marketing_month",
+   "low": 500,
+   "role": "decision",
+   "swing": 22727.04,
+   "unit": "EUR per month",
+   "value_at_high": -104426.41,
+   "value_at_low": -127153.46
+  }
+ ],
+ "unit_economics": {
+  "company": {
+   "a": {
+    "contribution": 1.38,
+    "contribution_after_founder_time": 1.2,
+    "founder_minutes": 0.3,
+    "price": 1.99,
+    "steps": [
+     [
+      "Price paid",
+      1.99
+     ],
+     [
+      "VAT 20 %",
+      -0.33
+     ],
+     [
+      "Payment fee",
+      -0.28
+     ],
+     [
+      "Hosting",
+      -0.0
+     ]
+    ],
+    "unit": "paid PDF"
+   },
+   "b": {
+    "contribution": 0.1,
+    "contribution_after_founder_time": -0.08,
+    "founder_minutes": 0.3,
+    "price": 6.9,
+    "steps": [
+     [
+      "Price paid",
+      6.9
+     ],
+     [
+      "VAT 20 %",
+      -1.15
+     ],
+     [
+      "Print + envelope",
+      -2.99
+     ],
+     [
+      "Postage",
+      -2.31
+     ],
+     [
+      "Payment fee",
+      -0.35
+     ]
+    ],
+    "unit": "mailed card"
+   },
+   "c": {
+    "contribution": 0.3,
+    "contribution_after_founder_time": 0.29,
+    "founder_minutes": 0.02,
+    "price": 0.3,
+    "steps": [
+     [
+      "Price paid",
+      0.3
+     ],
+     [
+      "Hosting",
+      -0.0
+     ]
+    ],
+    "unit": "card generated at a reseller"
+   },
+   "d": {
+    "contribution": 0.53,
+    "contribution_after_founder_time": 0.36,
+    "founder_minutes": 0.3,
+    "price": 2.0,
+    "steps": [
+     [
+      "Price paid",
+      2.0
+     ],
+     [
+      "VAT 20 %",
+      -0.33
+     ],
+     [
+      "Print (pack of 100)",
+      -1.1
+     ],
+     [
+      "Payment fee",
+      -0.03
+     ]
+    ],
+    "unit": "jacket in a pack of 100"
+   },
+   "d_plan": {
+    "contribution": 39.85,
+    "contribution_after_founder_time": 39.85,
+    "founder_minutes": 0.0,
+    "price": 49.0,
+    "steps": [
+     [
+      "Price paid",
+      49.0
+     ],
+     [
+      "VAT 20 %",
+      -8.17
+     ],
+     [
+      "Payment fee",
+      -0.98
+     ]
+    ],
+    "unit": "author plan (one year)"
+   }
+  },
+  "micro_franchise": {
+   "a": {
+    "contribution": 1.28,
+    "contribution_after_founder_time": 1.11,
+    "founder_minutes": 0.3,
+    "price": 1.99,
+    "steps": [
+     [
+      "Price paid",
+      1.99
+     ],
+     [
+      "Payment fee",
+      -0.28
+     ],
+     [
+      "Hosting",
+      -0.0
+     ],
+     [
+      "Social charges (micro)",
+      -0.42
+     ]
+    ],
+    "unit": "paid PDF"
+   },
+   "b": {
+    "contribution": 0.4,
+    "contribution_after_founder_time": 0.22,
+    "founder_minutes": 0.3,
+    "price": 6.9,
+    "steps": [
+     [
+      "Price paid",
+      6.9
+     ],
+     [
+      "Print + envelope",
+      -2.99
+     ],
+     [
+      "Postage",
+      -2.31
+     ],
+     [
+      "Payment fee",
+      -0.35
+     ],
+     [
+      "Social charges (micro)",
+      -0.85
+     ]
+    ],
+    "unit": "mailed card"
+   },
+   "c": {
+    "contribution": 0.23,
+    "contribution_after_founder_time": 0.22,
+    "founder_minutes": 0.02,
+    "price": 0.3,
+    "steps": [
+     [
+      "Price paid",
+      0.3
+     ],
+     [
+      "Hosting",
+      -0.0
+     ],
+     [
+      "Social charges (micro)",
+      -0.06
+     ]
+    ],
+    "unit": "card generated at a reseller"
+   },
+   "d": {
+    "contribution": 0.4,
+    "contribution_after_founder_time": 0.23,
+    "founder_minutes": 0.3,
+    "price": 2.0,
+    "steps": [
+     [
+      "Price paid",
+      2.0
+     ],
+     [
+      "Print (pack of 100)",
+      -1.32
+     ],
+     [
+      "Payment fee",
+      -0.03
+     ],
+     [
+      "Social charges (micro)",
+      -0.25
+     ]
+    ],
+    "unit": "jacket in a pack of 100"
+   },
+   "d_plan": {
+    "contribution": 37.63,
+    "contribution_after_founder_time": 37.63,
+    "founder_minutes": 0.0,
+    "price": 49.0,
+    "steps": [
+     [
+      "Price paid",
+      49.0
+     ],
+     [
+      "Payment fee",
+      -0.98
+     ],
+     [
+      "Social charges (micro)",
+      -10.39
+     ]
+    ],
+    "unit": "author plan (one year)"
+   }
+  }
+ }
+}

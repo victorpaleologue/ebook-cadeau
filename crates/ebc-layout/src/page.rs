@@ -47,9 +47,9 @@ pub struct SheetPlacement {
     /// is high (every preset), portrait for a spread that is taller than wide — see
     /// [`page_geometry`].
     pub landscape: bool,
-    /// `true` when the page's media box equals the sheet. It can only do so when the
-    /// spread's left/right and top/bottom margins on the sheet are equal — see
-    /// [`new_page`] for why.
+    /// `true` when the page's media box equals the sheet (to within rounding). It always
+    /// is since [`ebc_scene::Page`] has a vertical slug; the field remains so that callers
+    /// can assert it instead of trusting it.
     pub media_is_sheet: bool,
 }
 
@@ -76,18 +76,26 @@ pub struct PageGeometry {
     pub trim: Rect,
     /// The bleed box: `trim` grown by the profile's bleed.
     pub bleed: Rect,
-    /// The media box of the [`Page`] returned by [`new_page`].
+    /// The media box of the [`Page`] returned by [`new_page`]: trim + bleed + slug for
+    /// press profiles, the sheet ([`SheetPlacement::sheet`]) for sheet-based profiles.
     pub media: Rect,
-    /// The rectangle marks must stay within: the media box for press profiles, and for
-    /// sheet-based profiles the media box shrunk by the printable margin.
+    /// The rectangle marks must stay within: the media box for press profiles; for
+    /// sheet-based profiles `trim` grown by the same distance on all four sides, as far
+    /// as the printable area allows on the tighter pair of sides.
     pub mark_area: Rect,
     /// Bleed on every side, in millimetres (`Page::bleed`).
     pub bleed_mm: f64,
-    /// Slug on every side, in millimetres (`Page::slug`). For sheet-based profiles it is
-    /// derived from the sheet, not taken from the profile.
+    /// Slug to the left and right of the bleed, in millimetres (`Page::slug`). For
+    /// sheet-based profiles it is derived from the sheet, not taken from the profile.
     pub slug_mm: f64,
+    /// Slug above and below the bleed, in millimetres. Equal to `slug_mm` for press
+    /// profiles (where `Page::slug_v` is `None`); for sheet-based profiles it is the
+    /// value of `Page::slug_v` and differs from `slug_mm` unless the sheet happens to
+    /// leave the same margin in both directions.
+    pub slug_v_mm: f64,
     /// How far from the trim edge marks may reach, in millimetres, on every side
-    /// (`mark_area` is `trim` grown by this).
+    /// (`mark_area` is `trim` grown by this). The same on all four sides, so that the
+    /// marks are the same whichever way the sheet is turned.
     pub mark_reach_mm: f64,
     /// The physical sheet, for sheet-based profiles.
     pub sheet: Option<SheetPlacement>,
@@ -106,13 +114,27 @@ impl PageGeometry {
     /// [`DuplexFlip::ShortEdge`] for a landscape page, [`DuplexFlip::LongEdge`] for a
     /// portrait one. A square page counts as landscape.
     ///
-    /// The page has the orientation of the spread, and so has the sheet of a sheet-based
-    /// profile, so this agrees with [`SheetPlacement::duplex_flip`]. For a press profile
-    /// the printer imposes the pages and the value only matters for an office-printer
-    /// proof.
+    /// For a sheet-based profile this is [`SheetPlacement::duplex_flip`] (the page is the
+    /// sheet). For a press profile the page has the orientation of the spread; the
+    /// printer imposes the pages and the value only matters for an office-printer proof.
     #[must_use]
     pub fn duplex_flip(&self) -> DuplexFlip {
-        DuplexFlip::for_landscape(self.media.w >= self.media.h)
+        self.sheet.map_or_else(
+            || DuplexFlip::for_landscape(self.media.w >= self.media.h),
+            |s| s.duplex_flip(),
+        )
+    }
+
+    /// The empty page these boxes describe. Press profiles get one slug for all four
+    /// sides; sheet-based profiles a horizontal and a vertical one, so that the media
+    /// box is the sheet.
+    fn page(&self) -> Page {
+        build_page(
+            self.trim.size(),
+            self.bleed_mm,
+            self.slug_mm,
+            self.sheet.map(|_| self.slug_v_mm),
+        )
     }
 }
 
@@ -145,8 +167,8 @@ pub fn page_geometry(
     let spread = format.spread();
     let bleed = profile.bleed;
 
-    let (slug, reach, sheet) = match profile.sheet {
-        None => (profile.slug, bleed + profile.slug, None),
+    let (slug, slug_v, reach, sheet) = match profile.sheet {
+        None => (profile.slug, None, bleed + profile.slug, None),
         Some(sheet) => {
             let margin = bleed + profile.printable_margin;
             let needed = Size::new(spread.w + 2.0 * margin, spread.h + 2.0 * margin);
@@ -162,26 +184,31 @@ pub fn page_geometry(
             // The spread is centred: equal margins left/right and top/bottom.
             let mx = (size.w - spread.w) / 2.0;
             let my = (size.h - spread.h) / 2.0;
-            // `ebc_scene::Page` has ONE slug for all four sides, so the media box can only
-            // follow the tighter of the two margins (see `new_page`).
-            let m = mx.min(my);
-            let slug = (m - bleed).max(0.0);
-            let reach = (m - profile.printable_margin).max(bleed);
+            // The page is the sheet: what the sheet leaves beyond the bleed is the slug,
+            // horizontally and vertically. (The fit test above lets a margin fall short
+            // of the bleed by a rounding error at most, hence the clamp.)
+            let slug = (mx - bleed).max(0.0);
+            let slug_v = (my - bleed).max(0.0);
+            // Marks reach equally far on all four sides: as far as the printable area
+            // allows on the tighter pair of sides.
+            let reach = (mx.min(my) - profile.printable_margin).max(bleed);
             let sheet_rect = Rect::new(-mx, -my, size.w, size.h);
             let placement = SheetPlacement {
                 sheet: sheet_rect,
                 printable: sheet_rect.inflate(-profile.printable_margin),
                 landscape,
-                media_is_sheet: (mx - my).abs() <= FIT_EPSILON_MM,
+                // Set below, once the page's media box is known.
+                media_is_sheet: false,
             };
-            (slug, reach, Some(placement))
+            (slug, Some(slug_v), reach, Some(placement))
         }
     };
 
     // Derive the boxes from the very `Page` the caller gets, so they agree bit for bit.
-    let page = Page::new(spread, bleed, slug);
+    let page = build_page(spread, bleed, slug, slug_v);
     let trim = page.trim_box();
     let media = page.media_box();
+    let sheet = sheet.map(|s| SheetPlacement { media_is_sheet: same_rect(media, s.sheet), ..s });
     // Guard against a last-bit overshoot of `trim.inflate(reach)` beyond the media box.
     let mark_area = trim.inflate(reach).intersect(&media).unwrap_or(trim);
     Ok(PageGeometry {
@@ -191,9 +218,24 @@ pub fn page_geometry(
         mark_area,
         bleed_mm: bleed,
         slug_mm: slug,
+        slug_v_mm: slug_v.unwrap_or(slug),
         mark_reach_mm: reach,
         sheet,
     })
+}
+
+/// The one place a card [`Page`] is built, so that [`page_geometry`] and [`new_page`]
+/// cannot disagree.
+fn build_page(trim: Size, bleed: f64, slug: f64, slug_v: Option<f64>) -> Page {
+    let mut page = Page::new(trim, bleed, slug);
+    page.slug_v = slug_v;
+    page
+}
+
+/// Whether two rectangles coincide to within [`FIT_EPSILON_MM`].
+fn same_rect(a: Rect, b: Rect) -> bool {
+    let close = |p: f64, q: f64| (p - q).abs() <= FIT_EPSILON_MM;
+    close(a.x, b.x) && close(a.y, b.y) && close(a.w, b.w) && close(a.h, b.h)
 }
 
 /// Creates the empty [`Page`] for one face of the card. Both faces use the same page.
@@ -201,51 +243,25 @@ pub fn page_geometry(
 /// * **Press profiles** (`profile.sheet == None`): `trim` = the spread, `bleed` and
 ///   `slug` from the profile, hence `TrimBox` = spread, `BleedBox` = spread + bleed,
 ///   `MediaBox` = spread + bleed + slug on every side.
-/// * **Sheet-based (home) profiles**: `trim` = the spread and `bleed` from the profile
-///   again, hence `TrimBox` = the spread and `BleedBox` = spread + bleed, centred on the
-///   sheet, which is used in the orientation of the spread (see [`page_geometry`]). The
-///   media box is the sheet whenever [`ebc_scene::Page`] can say so, and otherwise the
-///   closest page it can describe — see below.
+/// * **Sheet-based (home) profiles**: the page **is the sheet**. `trim` = the spread and
+///   `bleed` from the profile again, hence `TrimBox` = the spread and `BleedBox` =
+///   spread + bleed, both centred on the sheet; `slug` and `slug_v` are what the sheet
+///   leaves beyond the bleed horizontally and vertically, hence `MediaBox` = the sheet,
+///   used in the orientation of the spread (see [`page_geometry`]). The default card on
+///   A4 gives a 297 × 210 mm page with the 230 × 178 mm spread 33.5 mm from its left and
+///   right edges and 16 mm from its top and bottom edges (`slug` 31.5, `slug_v` 14 with
+///   the 2 mm bleed).
 ///
-/// # Known deviation: the media box is not always the whole sheet
-///
-/// `docs/architecture.md` wants `MediaBox` = the sheet for home profiles (A4 landscape
-/// for the default card). That **cannot be expressed** with today's [`ebc_scene::Page`]:
-/// its media box is `trim` grown by `bleed + slug` on all four sides alike, so with
-/// `trim` = the spread (which the `TrimBox` must be) the media box can only equal a sheet
-/// whose left/right margin around the spread equals its top/bottom margin, i.e. when
-/// `sheet.w − spread.w == sheet.h − spread.h`. A 230 × 178 mm poche spread centred on A4
-/// landscape has 33.5 mm left and right but 16 mm above and below; no preset on any named
-/// sheet has equal margins.
-///
-/// What is returned instead is the best page a single slug allows: the **largest box
-/// centred on the spread that lies inside the sheet**. It has the sheet's full size in
-/// the tighter direction, is narrower than the sheet in the other, and its centre is the
-/// sheet's centre — 262 × 210 mm instead of 297 × 210 mm for poche on A4, 267.9 × 215.9 mm
-/// instead of 279.4 × 215.9 mm on US Letter. [`SheetPlacement::media_is_sheet`] tells
-/// whether the page is exactly the sheet; [`SheetPlacement::sheet`] is always the true
-/// sheet rectangle. Marks are kept inside both the page and the printable area of the
-/// real sheet. (The alternative, a page *larger* than the sheet in one direction, was
-/// rejected: print dialogs shrink oversized pages, which would change the scale.)
-///
-/// What this costs: the two sides only register if the spread is centred on the physical
-/// paper. With an off-size page that is left to the PDF viewer and the printer driver. A
-/// viewer that centres a smaller page on the paper at "actual size" gives exactly the
-/// intended result; one that anchors it to a corner shifts each side by half the missing
-/// width (17.5 mm for poche on A4), in opposite directions once the sheet is turned:
-/// 35 mm between the two sides. **This has not been tested on real viewers or printers.**
-///
-/// The fix is outside this crate: [`ebc_scene::Page`] needs a slug per axis (or an
-/// explicit media box) and `ebc-pdf` has to write it; this function then only has to pass
-/// on [`SheetPlacement::sheet`], which [`page_geometry`] already computes. Until then a
-/// host that can set the `MediaBox` itself should use that rectangle.
+/// Because the file itself fixes where the spread lies on the paper, the two sides
+/// register when the sheet is printed at 100 % ("actual size") and turned over on the
+/// edge [`SheetPlacement::duplex_flip`] names. A "fit to page" print scales the card;
+/// that is what the scale ruler is for.
 ///
 /// # Errors
 /// As [`page_geometry`]; notably [`LayoutError::DoesNotFit`] when the spread plus bleed
 /// plus printable margin exceeds the sheet (e.g. A5 covers on A4).
 pub fn new_page(format: &CardFormat, profile: &PrintProfile) -> Result<Page, LayoutError> {
-    let g = page_geometry(format, profile)?;
-    Ok(Page::new(g.trim.size(), g.bleed_mm, g.slug_mm))
+    Ok(page_geometry(format, profile)?.page())
 }
 
 /// [`new_page`] with the page labelled `"outside"` or `"inside"` ([`Face::label`]).
@@ -323,16 +339,14 @@ mod tests {
         assert!(rect_close(s.sheet, Rect::new(-33.5, -16.0, 297.0, 210.0)));
         // 6.35 mm unprintable on every side: 284.3 x 197.3 mm printable.
         assert!(rect_close(s.printable, Rect::new(-27.15, -9.65, 284.3, 197.3)));
-        // KNOWN DEVIATION from docs/architecture.md (see `new_page`): the page is not the
-        // whole sheet. Top/bottom margin (16 mm) is the tighter one: the media box has
-        // the sheet's full height and is centred on the same point, but is narrower.
-        assert!(!s.media_is_sheet);
-        assert!(rect_close(g.media, Rect::new(-16.0, -16.0, 262.0, 210.0)));
-        assert!(close(g.media.h, s.sheet.h));
-        assert!(close(g.media.center().x, s.sheet.center().x));
-        assert!(close(g.media.center().y, s.sheet.center().y));
-        assert!(s.sheet.contains_rect(&g.media, 1e-9));
-        assert!(close(page.slug, 14.0));
+        // The page IS the sheet: A4 landscape, 33.5 mm left and right of the spread and
+        // 16 mm above and below — a 31.5 mm slug and a 14 mm vertical slug beyond the
+        // 2 mm bleed.
+        assert!(s.media_is_sheet);
+        assert!(rect_close(g.media, Rect::new(-33.5, -16.0, 297.0, 210.0)));
+        assert!(rect_close(g.media, s.sheet));
+        assert!(close(page.slug, 31.5) && close(g.slug_mm, 31.5));
+        assert!(close(page.slug_v.unwrap(), 14.0) && close(g.slug_v_mm, 14.0));
         // Marks may reach 9.65 mm from the trim: the printable limit above and below.
         assert!(close(g.mark_reach_mm, 9.65));
         assert!(close(g.mark_band_mm(), 7.65));
@@ -346,16 +360,59 @@ mod tests {
         let s = g.sheet.unwrap();
         assert!(s.landscape);
         assert!(rect_close(s.sheet, Rect::new(-24.7, -18.95, 279.4, 215.9)));
-        assert!(rect_close(g.media, Rect::new(-18.95, -18.95, 267.9, 215.9)));
-        assert!(close(g.media.h, 215.9));
-        assert!(s.sheet.contains_rect(&g.media, 1e-9));
+        // US Letter landscape, 11 x 8.5 in.
+        assert!(s.media_is_sheet);
+        assert!(rect_close(g.media, Rect::new(-24.7, -18.95, 279.4, 215.9)));
+        assert!(close(g.slug_mm, 22.7) && close(g.slug_v_mm, 16.95));
+        let page = new_page(&f, &p).unwrap();
+        assert_eq!(page.media_box(), g.media);
+        assert!(close(page.slug_v.unwrap(), 16.95));
+        // Marks reach as far as the tighter (vertical) margin allows, on every side.
         assert!(close(g.mark_reach_mm, 12.6));
+        assert!(rect_close(g.mark_area, Rect::new(-12.6, -12.6, 255.2, 203.2)));
         // A quarter-inch frame on Letter: 266.7 x 203.2 mm printable.
         assert!(close(s.printable.w, 266.7) && close(s.printable.h, 203.2));
     }
 
     #[test]
-    fn media_box_is_exactly_the_sheet_when_margins_are_equal() {
+    fn media_box_is_the_sheet_for_every_preset_on_every_named_sheet() {
+        let mut fitted = 0;
+        for (sheet_name, sheet) in Sheet::NAMED {
+            for (name, f) in CardFormat::presets() {
+                let p = PrintProfile::home(sheet);
+                let Ok(g) = page_geometry(&f, &p) else { continue };
+                fitted += 1;
+                let s = g.sheet.unwrap();
+                let size = sheet.landscape();
+                assert!(s.media_is_sheet, "{name} on {sheet_name}");
+                assert!(rect_close(g.media, s.sheet), "{name} on {sheet_name}: {:?}", g.media);
+                assert!(close(g.media.w, size.w) && close(g.media.h, size.h));
+                // The spread is centred on it.
+                assert!(close(g.media.center().x, g.trim.center().x));
+                assert!(close(g.media.center().y, g.trim.center().y));
+                assert_eq!(new_page(&f, &p).unwrap().media_box(), g.media);
+                // Sheet margin = bleed + slug, per direction.
+                assert!(close(-s.sheet.x, g.bleed_mm + g.slug_mm), "{name} on {sheet_name}");
+                assert!(close(-s.sheet.y, g.bleed_mm + g.slug_v_mm), "{name} on {sheet_name}");
+            }
+        }
+        // poche and a6 on A4 and Letter, all four presets on A3 and SRA3.
+        assert_eq!(fitted, 12);
+    }
+
+    #[test]
+    fn press_pages_keep_a_single_slug() {
+        for p in [PrintProfile::professional_eu(), PrintProfile::upload_eu()] {
+            let page = new_page(&CardFormat::poche(), &p).unwrap();
+            assert_eq!(page.slug_v, None, "{}", p.name);
+            assert_eq!(page, Page::new(Size::new(230.0, 178.0), p.bleed, p.slug));
+            let g = page_geometry(&CardFormat::poche(), &p).unwrap();
+            assert_eq!((g.slug_mm, g.slug_v_mm), (p.slug, p.slug));
+        }
+    }
+
+    #[test]
+    fn equal_margins_give_equal_slugs() {
         // 210 x 123 mm spread on A4 landscape: 43.5 mm on every side.
         let f = CardFormat::custom(Size::new(100.0, 123.0), 10.0).unwrap();
         let g = page_geometry(&f, &PrintProfile::home(Sheet::A4)).unwrap();
@@ -363,6 +420,7 @@ mod tests {
         assert!(s.media_is_sheet);
         assert!(rect_close(g.media, s.sheet));
         assert!(rect_close(g.media, Rect::new(-43.5, -43.5, 297.0, 210.0)));
+        assert!(close(g.slug_mm, 41.5) && close(g.slug_v_mm, 41.5));
         // Same on Letter landscape (279.4 x 215.9): spread 179.4 x 115.9, 50 mm all round.
         let f = CardFormat::custom(Size::new(84.7, 115.9), 10.0).unwrap();
         let g = page_geometry(&f, &PrintProfile::home(Sheet::Letter)).unwrap();
@@ -435,7 +493,8 @@ mod tests {
         let s = g.sheet.unwrap();
         assert!(!s.landscape);
         assert!(rect_close(s.sheet, Rect::new(-50.0, -18.5, 210.0, 297.0)));
-        assert!(close(g.media.h, 297.0));
+        // The page is A4 portrait.
+        assert!(rect_close(g.media, s.sheet) && s.media_is_sheet);
 
         // Spread 110 x 195: it would fit A4 landscape too, with 7.5 mm above and below
         // and no room for a single mark. In portrait it has 50 mm on every side.
@@ -486,8 +545,8 @@ mod tests {
 
     #[test]
     fn page_sheet_and_spread_always_have_the_same_orientation() {
-        // Otherwise a print dialog that auto-rotates the (off-size) page would put it on
-        // the paper the other way round and the duplex instruction would be wrong.
+        // Otherwise a print dialog that auto-rotates the page would put it on the paper
+        // the other way round and the duplex instruction would be wrong.
         for sheet in [Sheet::A4, Sheet::Letter, Sheet::A3, Sheet::Sra3] {
             for w in (50..=300).step_by(25) {
                 for h in (50..=300).step_by(25) {
@@ -497,8 +556,8 @@ mod tests {
                     let s = g.sheet.unwrap();
                     let spread = f.spread();
                     assert_eq!(s.landscape, spread.w >= spread.h, "{f:?} on {sheet:?}");
-                    assert_eq!(s.landscape, g.media.w >= g.media.h, "{f:?} on {sheet:?}");
-                    assert_eq!(s.landscape, s.sheet.w >= s.sheet.h, "{f:?} on {sheet:?}");
+                    assert_eq!(s.landscape, g.media.w > g.media.h, "{f:?} on {sheet:?}");
+                    assert_eq!(s.landscape, s.sheet.w > s.sheet.h, "{f:?} on {sheet:?}");
                     assert_eq!(s.duplex_flip(), g.duplex_flip(), "{f:?} on {sheet:?}");
                 }
             }
@@ -557,9 +616,9 @@ mod tests {
         let mut p = PrintProfile::professional_eu();
         p.sheet = Some(Sheet::Sra3);
         let g = page_geometry(&CardFormat::a5(), &p).unwrap();
-        // 450 x 320 sheet, 306 x 210 spread: margins 72 and 55 mm.
-        assert!(close(g.slug_mm, 52.0));
-        assert!(close(g.media.h, 320.0));
+        // 450 x 320 sheet, 306 x 210 spread: margins 72 and 55 mm, 3 mm of them bleed.
+        assert!(close(g.slug_mm, 69.0) && close(g.slug_v_mm, 52.0));
+        assert!(rect_close(g.media, Rect::new(-72.0, -55.0, 450.0, 320.0)));
         assert!(close(g.mark_reach_mm, 55.0));
     }
 }

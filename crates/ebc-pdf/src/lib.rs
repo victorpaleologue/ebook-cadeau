@@ -4,7 +4,8 @@
 //! printer can take as it is:
 //!
 //! * **Page boxes** — `MediaBox` (= `CropBox`), `BleedBox` and `TrimBox` from
-//!   [`ebc_scene::Page`]'s trim, bleed and slug, with the scene's top-left/y-down
+//!   [`ebc_scene::Page`]'s trim, bleed and slug (per direction when the page has a
+//!   `slug_v`, e.g. a trim centred on an A4 sheet), with the scene's top-left/y-down
 //!   millimetres mapped to PDF points.
 //! * **Vector content** — paths (fill, even-odd fill, stroke, dashes, caps, joins),
 //!   clipping groups and transforms.

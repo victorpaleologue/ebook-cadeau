@@ -124,7 +124,7 @@ impl RightsBasis {
     /// [`CoversError::NoRightsBasis`] for [`RightsBasis::None`] on any route;
     /// [`CoversError::RouteNotAllowed`] when the basis does not open the route
     /// (`promo_all_media` and `user_private_copy` on a professional order).
-    pub const fn gate(self, route: PrintRoute) -> Result<Grant, CoversError> {
+    pub fn gate(self, route: PrintRoute) -> Result<Grant, CoversError> {
         use Condition as C;
         let grant = |placement, conditions| Grant { placement, conditions };
         match (self, route) {

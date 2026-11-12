@@ -56,10 +56,10 @@ pub(crate) fn dominant(cover: &Pixmap) -> Rgb8 {
 ///    the largest swatch if none qualifies.
 pub(crate) fn auto_flat(cover: &Pixmap) -> (Rgb8, BackgroundKind) {
     let mean = edge_mean(cover);
-    if edge_uniformity(cover, BINDING_EDGE, EDGE_STRIP_FRACTION) >= UNIFORM_EDGE_THRESHOLD {
-        if let Some(colour) = mean {
-            return (colour, BackgroundKind::EdgeColour);
-        }
+    if edge_uniformity(cover, BINDING_EDGE, EDGE_STRIP_FRACTION) >= UNIFORM_EDGE_THRESHOLD
+        && let Some(colour) = mean
+    {
+        return (colour, BackgroundKind::EdgeColour);
     }
     if let Some(colour) = has_uniform_border(cover) {
         return (colour, BackgroundKind::BorderColour);

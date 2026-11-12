@@ -85,8 +85,8 @@
 //!   cut and fold guides and a scale ruler, all kept inside the printable area. Two
 //!   things the composer must do for it: print the duplex instruction
 //!   ([`SheetPlacement::duplex_flip`] — "flip on the short edge" for every preset), and
-//!   call [`check_marks_fit`]. See [`new_page`] for the one thing [`ebc_scene::Page`]
-//!   cannot express there: the page is not always the whole sheet.
+//!   call [`check_marks_fit`]. The PDF page is the sheet itself (`MediaBox` = A4
+//!   landscape for the default card), with the spread centred on it — see [`new_page`].
 //!
 //! # Seeing it
 //!

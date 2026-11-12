@@ -332,9 +332,18 @@ pub struct Page {
     pub trim: Size,
     /// Bleed beyond the trim on every side, in millimetres (`BleedBox = trim + bleed`).
     pub bleed: f64,
-    /// Extra margin beyond the bleed on every side, reserved for printer's marks
-    /// (`MediaBox = trim + bleed + slug`). Zero when no marks are drawn.
+    /// Extra margin beyond the bleed, reserved for printer's marks
+    /// (`MediaBox = trim + bleed + slug`). Zero when no marks are drawn. It applies to all
+    /// four sides, unless [`slug_v`](Self::slug_v) is set: then to the left and right only.
     pub slug: f64,
+    /// Extra margin beyond the bleed at the **top and bottom**, when it differs from
+    /// [`slug`](Self::slug); `None` means the same as `slug`.
+    ///
+    /// This is what lets a page be a sheet of paper with the trim centred on it: a
+    /// 230 × 178 mm trim centred on A4 landscape (297 × 210 mm) with a 2 mm bleed has
+    /// `slug = 31.5` and `slug_v = Some(14.0)`. The trim stays centred in the media box;
+    /// off-centre placements cannot be expressed.
+    pub slug_v: Option<f64>,
     /// The page content, painted in order.
     pub items: Vec<Item>,
     /// Optional human-readable name, e.g. `"outside"` or `"inside"`.
@@ -342,10 +351,10 @@ pub struct Page {
 }
 
 impl Page {
-    /// Creates an empty page.
+    /// Creates an empty page with the same slug on all four sides (`slug_v` is `None`).
     #[must_use]
     pub fn new(trim: Size, bleed: f64, slug: f64) -> Self {
-        Self { trim, bleed, slug, items: Vec::new(), label: None }
+        Self { trim, bleed, slug, slug_v: None, items: Vec::new(), label: None }
     }
 
     /// The trim box in page coordinates (always at the origin).
@@ -360,10 +369,13 @@ impl Page {
         self.trim_box().inflate(self.bleed)
     }
 
-    /// The media box (full sheet incl. marks area) in page coordinates.
+    /// The media box (full sheet incl. marks area) in page coordinates: the trim box
+    /// grown by `bleed + slug` to the left and right and by `bleed + slug_v` (or
+    /// `bleed + slug` when `slug_v` is `None`) at the top and bottom.
     #[must_use]
     pub fn media_box(&self) -> Rect {
-        self.trim_box().inflate(self.bleed + self.slug)
+        let slug_v = self.slug_v.unwrap_or(self.slug);
+        self.trim_box().inflate_xy(self.bleed + self.slug, self.bleed + slug_v)
     }
 }
 
@@ -424,6 +436,30 @@ mod tests {
         assert_eq!(page.media_box(), Rect::new(-10.0, -10.0, 250.0, 198.0));
         assert!(page.media_box().contains_rect(&page.bleed_box(), 0.0));
         assert!(page.bleed_box().contains_rect(&page.trim_box(), 0.0));
+    }
+
+    #[test]
+    fn a_vertical_slug_makes_the_media_box_a_sheet_around_a_centred_trim() {
+        // The poche spread centred on A4 landscape, 2 mm bleed: 33.5 mm of sheet left and
+        // right of the trim, 16 mm above and below.
+        let mut page = Page::new(Size::new(230.0, 178.0), 2.0, 31.5);
+        assert_eq!(page.slug_v, None);
+        // One slug: the same margin on all four sides, so not A4.
+        assert_eq!(page.media_box(), Rect::new(-33.5, -33.5, 297.0, 245.0));
+        page.slug_v = Some(14.0);
+        assert_eq!(page.media_box(), Rect::new(-33.5, -16.0, 297.0, 210.0));
+        // Trim and bleed do not depend on the slugs, and the trim stays centred.
+        assert_eq!(page.trim_box(), Rect::new(0.0, 0.0, 230.0, 178.0));
+        assert_eq!(page.bleed_box(), Rect::new(-2.0, -2.0, 234.0, 182.0));
+        assert_eq!(page.media_box().center(), page.trim_box().center());
+        assert!(page.media_box().contains_rect(&page.bleed_box(), 0.0));
+        // `Some(slug)` and `None` are the same page geometry.
+        page.slug_v = Some(31.5);
+        assert_eq!(page.media_box(), Page::new(page.trim, 2.0, 31.5).media_box());
+        // A vertical slug only: the bleed box touches the media box left and right.
+        let mut page = Page::new(Size::new(100.0, 50.0), 3.0, 0.0);
+        page.slug_v = Some(10.0);
+        assert_eq!(page.media_box(), Rect::new(-3.0, -13.0, 106.0, 76.0));
     }
 
     #[test]

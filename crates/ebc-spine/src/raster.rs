@@ -131,7 +131,10 @@ pub(crate) fn downscale(img: &Pixmap, x0: u32, x1: u32, max_w: usize, max_h: usi
         let fw = max_w.max(1) as f64 / sw as f64;
         let fh = max_h.max(1) as f64 / sh as f64;
         let f = fw.min(fh).min(1.0);
-        (((sw as f64 * f).round() as usize).clamp(1, sw), ((sh as f64 * f).round() as usize).clamp(1, sh))
+        (
+            ((sw as f64 * f).round() as usize).clamp(1, sw),
+            ((sh as f64 * f).round() as usize).clamp(1, sh),
+        )
     };
     let mut out = Raster::new(dw, dh);
     let mut sums = vec![0u32; dw * 3];

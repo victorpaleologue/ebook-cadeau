@@ -1,0 +1,29 @@
+channel,step,eur_per_unit
+a,Price paid,1.9900
+a,Payment fee,-0.2798
+a,Hosting,-0.0036
+a,Social charges (micro),-0.4219
+a,Cash contribution,1.2847
+a,Founder time,-0.1750
+a,After founder time,1.1097
+b,Price paid,6.9000
+b,Print + envelope,-2.9900
+b,Postage,-2.3100
+b,Payment fee,-0.3535
+b,Social charges (micro),-0.8487
+b,Cash contribution,0.3978
+b,Founder time,-0.1750
+b,After founder time,0.2228
+c,Price paid,0.3000
+c,Hosting,-0.0036
+c,Social charges (micro),-0.0636
+c,Cash contribution,0.2328
+c,Founder time,-0.0117
+c,After founder time,0.2211
+d,Price paid,2.0000
+d,Print (pack of 100),-1.3200
+d,Payment fee,-0.0325
+d,Social charges (micro),-0.2460
+d,Cash contribution,0.4015
+d,Founder time,-0.1750
+d,After founder time,0.2265

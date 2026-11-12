@@ -213,7 +213,7 @@ pub(crate) struct CardArgs {
     /// Draw a fresh code from the system's secure random source and print it
     #[arg(long)]
     pub(crate) random_code: bool,
-    /// Address of the redemption service, e.g. https://ebk.example
+    /// Address of the redemption service, e.g. `https://ebk.example`
     #[arg(long, value_name = "URL")]
     pub(crate) base_url: String,
 
@@ -233,7 +233,7 @@ pub(crate) struct CardArgs {
     #[arg(long, value_name = "TAG", default_value = "fr")]
     pub(crate) locale: String,
 
-    /// Card format: poche, a6, digest, a5, or WIDTHxHEIGHT[xSPINE] in millimetres
+    /// Card format: poche, a6, digest, a5, or `WIDTHxHEIGHT[xSPINE]` in millimetres
     #[arg(long, value_name = "FORMAT", default_value = "poche")]
     pub(crate) format: String,
     /// Print profile: upload (PDF/X-4, bleed, no marks), pro (the same with crop and

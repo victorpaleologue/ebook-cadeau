@@ -24,6 +24,7 @@ NOT_WASM=(
     ebc-demo-stores   # demo/stores        — fictional eBook stores (HTTP servers)
     ebc-demo-printer  # demo/printer       — fictional print-on-demand API (HTTP server)
     ebc-demo-ereaders # demo/ereaders      — simulated e-readers (HTTP clients)
+    ebc-demo-integration # demo/integration — end-to-end journeys and the ebc-demo binary (tokio)
 )
 
 if [[ "${1:-}" == "--print-excludes" ]]; then

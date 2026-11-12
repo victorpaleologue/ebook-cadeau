@@ -1,121 +1,110 @@
-# Project status — 2026-11-12, 05:45 UTC
+# Project status — 2026-11-12
 
-**The build was interrupted.** Around 01:30 UTC the account's usage limit was reached and all
-17 background jobs (4 research workflows, 13 build units) stopped mid-flight. Nothing written
-to disk was lost; this page says exactly how far each piece got. No new agents were launched
-after the limit reset — see "How to resume" for the choice that is yours to make.
+Everything the original request asked for exists in a first version. This page says how far
+each piece goes, what is verified, and what is not. Earlier versions of this page (the
+interrupted overnight build) are in the git history.
 
-## What works today
+## Checks
 
-- The workspace **compiles** (all 20 crates, all targets) and the pure libraries build for
-  `wasm32-unknown-unknown`.
-- `cargo fmt --all -- --check` is clean.
-- `cargo test --workspace`: **945 pass, 128 fail**. The failures are listed per crate below;
-  most are reviewer-written tests demonstrating defects whose fixes never ran.
-- `cargo clippy --workspace --all-targets -- -D warnings` fails in `ebc-demo-stores`,
-  `ebc-demo-ereaders`, and in test code of `ebc-model`, `ebc-pdf`, `ebc-qr`, `ebc-text`.
-- `cargo deny check` fails on two "unmaintained" advisories (see Decisions).
-- **No card PDF can be generated end to end yet**: the composer (`ebc-card`) is not written.
+Run on the whole workspace, locally, at the commit that introduced this page:
 
-## Crates
+| Check | Result |
+|---|---|
+| `cargo fmt --all -- --check` | clean |
+| `cargo clippy --workspace --all-targets --locked -- -D warnings` | clean |
+| `cargo test --workspace --locked` | **1 814 passed, 0 failed**, 19 ignored (opt-in live and reference tests) |
+| `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps` | clean |
+| `scripts/wasm-crates.sh build` (all pure libraries for `wasm32-unknown-unknown`) | clean |
+| `cargo deny check` | advisories, bans, licences, sources: ok |
+| `e2e/run.sh` (9 Playwright tests in Chromium) | 9 passed, about 10 s |
+| `node --test web/tests/*.test.mjs` and `web/tests/browser-smoke.mjs` | 9 passed; 31 browser checks passed |
 
-Stages: **I** implemented · **R** reviewed by two sparring agents · **F** findings fixed ·
-**V** independently verified. A dash means the stage did not run.
+CI on GitHub runs the same checks (`docs/ci.md`); see the Actions tab for the run of this commit.
+The `e2e`, `print-check` and the sparring review (`claude-review.yml`, needs a secret) have not
+run on GitHub before this commit.
 
-| Crate | Stage | Tests pass / fail | State |
-|---|---|---|---|
-| `ebc-scene` | I (by hand) | 18 / 0 | Stable contract |
-| `ebc-isbn` | I – – – | 43 / 0 | ISBN-10/13, hyphenation table, extraction. Never reviewed |
-| `ebc-model` | I – – – | 58 / 0 | Book, gift, HTTP types. **Gift code is still the v0.1 format** (see Open inconsistencies) |
-| `ebc-i18n` | I – – – | 43 / 1 | 7 locales, spine direction. Never reviewed |
-| `ebc-color` | I R – – | 96 / 6 | Palette, contrast, CIEDE2000. 4 audit findings unfixed |
-| `ebc-qr` | I R – – | 54 / 3 | QR for print, vector output. Findings unfixed (URL upper-casing edge cases) |
-| `ebc-text` | I – – – | 127 / 6 | Shaping, fitting, outlines, raster. Review died; failing tests are the breaker's |
-| `ebc-layout` | I R – – | 88 / 12 | Formats, marks, profiles. **11 findings unfixed**, incl. "home-profile page is not the sheet" |
-| `ebc-pdf` | I – – – | 118 / 0 | PDF/X writer; validated in its own tests with qpdf/poppler/gs. Never reviewed |
-| `ebc-preflight` | partial | 98 / 79 | Implementer stopped mid-way; one shared fixture helper fails 39 tests |
-| `ebc-catalog` | partial | 0 / 0 | ~2 700 lines, compiles, no tests, providers incomplete |
-| `ebc-covers` | partial | 0 / 0 | ~2 600 lines (sniffing, placeholder, quality, upscale), no tests |
-| `ebc-fontid` | partial | 0 / 0 | ~2 600 lines (components, descriptors, index), no tests, no evaluation |
-| `ebc-spine` | partial | 0 / 0 | ~1 000 lines, compiles, no tests |
-| `ebc-server` | partial | 0 / 0 | ~2 400 lines (config, codes, device detection, rate limiting, uploads); **no routes yet** |
-| `ebc-card`, `ebc-cli`, `ebc-wasm` | not started | – | Skeletons only |
-| `demo/stores` | I – – – | 102 / 6 | Two fictional stores ("Septante", "Grande Enseigne"). Built against API v0.1 |
-| `demo/printer` | I – – – | 24 / 14 | Fictional printer; failures follow `ebc-preflight` |
-| `demo/ereaders` | I – – – | 75 / 1 | Simulated e-readers, OPDS client, mail sink. Built against API v0.1 |
-| `web/`, `e2e/`, `tools/` | not started | – | Empty |
+## What exists
 
-Recovered for whoever continues: implementer reports in `docs/status/implement-reports/`,
-reviewer findings (with evidence and suggested fixes) in `docs/status/review-findings/`.
-
-## Research (`docs/research/`)
-
-Intended pipeline per topic: independent researchers → synthesis → adversarial fact-check →
-corrections applied. **Only one document completed it.**
-
-| Document | Stage reached | Caveat |
+| Area | Where | State |
 |---|---|---|
-| `01-isbn-databases` | synthesised | Not fact-checked |
-| `02-cover-sources` | fact-checked, corrections **not applied** | Read with `factcheck/cover-sources.md` |
-| `03-print-requirements` | synthesised | Not fact-checked |
-| `04-printers` | fact-checked, corrections **not applied** | Read with `factcheck/printers.md`; prices are not quotes |
-| `05-ereader-distribution-ux` | synthesised | Not fact-checked; device facts largely from memory |
-| `06-terminology` | synthesised | Not fact-checked; needs native-speaker review |
-| `07-legal-covers-and-reseller-rights` | complete | The fact-checker had no web access: nothing confirmed at source |
-| `08-legal-fonts-and-genai` | fact-checked, corrections **not applied** | Read with `factcheck/legal-fonts-genai.md` |
-| `09-legal-gifting-and-commerce` | corrections **partially** applied | Status line says "fact-checked" but the editor stopped mid-way |
-| `10` font identification, `11` spine design | researcher notes only | See `notes/font-id-tech.*.md`, `notes/spine-design.*.md` |
-| `12-market-and-business-inputs` | fact-checked, corrections **not applied** | Read with `factcheck/market-business.md` |
+| ISBN parsing, hyphenation, extraction | `crates/ebc-isbn` | done |
+| Domain model, 12-letter gift code, pair code | `crates/ebc-model` | done |
+| Strings in fr, en, de, es, it, nl, pt | `crates/ebc-i18n` | done; **no native-speaker review** |
+| Colour, contrast, palettes | `crates/ebc-color` | done |
+| QR for print (vector, alphanumeric claim URL) | `crates/ebc-qr` | done |
+| Fonts: shaping, fitting, outlines (harfrust + read-fonts) | `crates/ebc-text` | done; hostile fonts bounded |
+| Formats, bleed, marks, print profiles, A4/Letter sheets | `crates/ebc-layout` | done |
+| PDF/X writer | `crates/ebc-pdf` | done |
+| Preflight | `crates/ebc-preflight` | done |
+| ISBN databases (13 sources, sans-IO) | `crates/ebc-catalog` | done; **never run against the live services** |
+| Cover discovery, rights basis, robots/TDM, sniffing | `crates/ebc-covers` | done; **never run against the live services** |
+| Font identification (classical, image-only) | `crates/ebc-fontid` | done; evaluated on synthetic covers only (`docs/research/fontid-eval.md`) |
+| 10 mm spine (typeset by default) | `crates/ebc-spine` | done |
+| Card composer (outside + inside, rights gate) | `crates/ebc-card` | done; samples in `docs/samples/` |
+| Command line `ebc` | `crates/ebc-cli` | done |
+| Browser bindings (3.8 MiB wasm, 1.5 MiB gzip) | `crates/ebc-wasm` | done |
+| Card designer web app | `web/` | done |
+| Web service: redemption pages, creator and partner APIs, OPDS, pairing, send-to-device | `crates/ebc-server` | done |
+| Fictional stores "Septante" and "Grande Enseigne", printer, e-readers | `demo/` | done |
+| 21 Rust end-to-end journeys + `ebc-demo` binary | `demo/integration` | done |
+| 9 browser end-to-end tests | `e2e/` | done |
+| Business model, charts | `tools/bizmodel/`, `docs/business/` | done; inputs are estimates |
+| Research 01–12 | `docs/research/` | all written; fact-check status per document below |
+| CI, Dependabot, daily audit, sparring review | `.github/`, `.claude/` | written; see "Owner actions" |
 
-Two limits apply to all of it. Web search was rate-limited for part of the night, so several
-researchers worked only from primary documents on `raw.githubusercontent.com` and tagged
-claims as single-source `[V1]` or from memory `[M]`. And the legal documents are material to
-brief a lawyer, not legal advice.
+## Research status
 
-## Not done at all
+| Document | Status |
+|---|---|
+| 01 ISBN databases, 03 print requirements, 05 e-reader UX, 06 terminology | fact-checked |
+| 02 cover sources, 04 printers, 07 legal covers, 08 legal fonts and AI, 09 legal gifting, 12 market | fact-check corrections applied (the fact-check had limited web access) |
+| 10 font identification (incl. training plan), 11 spine design | synthesised from researcher notes, **not fact-checked** |
 
-Card composer and its samples · CLI · wasm bindings and web app · integration and
-end-to-end tests · business model and ROI charts · font corpus and training kit ·
-whole-repo adversarial review · any CI run on GitHub.
+The legal documents are material to brief a lawyer, not legal advice. Most legal authorities
+in 07–09 and every vendor price except La Poste's remain unverified at source.
 
-## Decisions taken without you (veto any)
+## Known gaps and approximations
 
-1. **Gift code**: 12 letters from 20 consonants, `XXXX-XXXX-XXXX` (docs only so far).
-   Rationale in `research/notes/ereader-ux.ux.md` §3: digits cost a keyboard layer switch on
-   e-ink and phone keyboards and bring 0/O, 1/I confusion.
-2. **Pairing code** 6 letters with a global failure budget; **explicit device chooser** on
-   every gift page, because user-agent sniffing broke twice in 2024–2026.
-3. **Demo store names** are fictional ("Septante", "Grande Enseigne") with a visible notice;
-   the 7switch-like and Fnac/Kobo-like archetypes are named only in documentation.
-4. **`jpeg-encoder` (IJG licence)** accepted as a test-only dependency in `deny.toml`.
-5. **`ttf-parser` and `rustybuzz` are flagged unmaintained** (RUSTSEC-2026-0192, -0206).
-   The plan was to migrate to `skrifa` + `harfrust`; the migration did not run, and the
-   advisories are deliberately **not** suppressed, so the `deny` job stays red.
+- **No colour management.** Covers are embedded as sRGB; the card ground uses a naive CMYK
+  conversion, so in PDF/X files a faint box can show around the cover.
+- **Spine sizes**: `ebc-spine` uses 7–14 pt; research 08 now recommends 9–13 pt with an 8 pt
+  floor for outlined text. Direction falls back to the site locale where research 11 says
+  top-to-bottom for unknown languages; no two-line spine; no right-to-left or CJK setting.
+- **Font identification** is the classical v0; the learned embedding (research 10, training
+  plan) is not built. Connected scripts and stencils are not recognised.
+- **Server storage** is one JSON snapshot rewritten per change; uploads are buffered in memory;
+  rate-limit state is in memory.
+- **Mailed cards**: the cheapest postal API (research 04) takes one image per card, so the
+  four-panel card would go by letter with the A4 PDF; no real printer has seen a card.
+- **Devices**: e-reader behaviour is simulated (user agents, JavaScript off, mail sink, LCP
+  shape only), not tested on hardware.
+- **Partner card options**: a partner cannot yet choose output profile, spine style or ground.
+- `docs/api.md` does not yet list `cover_rights`, the 422 rights codes and a few fields the
+  server accepts (they are documented in `crates/ebc-server/README.md`).
 
-## Open inconsistencies
+## Decisions taken without the owner (veto any)
 
-- `docs/api.md` and `docs/architecture.md` describe the **v0.2** code format; `ebc-model`
-  still implements **v0.1** (10 Crockford symbols). `demo/stores` and `demo/ereaders` were
-  built against v0.1; the partial server against v0.2.
-- `ebc-layout` home profiles do not make the PDF page equal to the sheet (reviewer finding).
-- `ebc-fontid/Cargo.toml` declared two examples that were never written; the declarations
-  were removed so the workspace parses.
+1. Gift code: 12 letters from 20 consonants (`XXXX-XXXX-XXXX`) — no digits.
+2. Pair code: 6 letters with a global failure budget; explicit device chooser on every gift page.
+3. Conservative rights defaults: typographic card unless a rights basis is declared; covers
+   never cropped by default; looked-up covers never printed; no generative lettering.
+4. Fictional demo store names with a visible notice.
+5. Bundled output profile: basICColor "ISO Coated v2 300 %" (FOGRA39L, zlib licence, same file
+   as Scribus ships). ECI's own profiles may not be bundled.
+6. `jpeg-encoder` (IJG licence) accepted as a test-only dependency.
+7. Font stack migrated from the unmaintained `ttf-parser`/`rustybuzz` to `harfrust`/`read-fonts`.
 
-## How to resume
+## Owner actions
 
-The orchestration is saved in `tools/orchestration/` (`ebc-research.workflow.js`,
-`ebc-build.workflow.js`): each unit has its full brief, and the build script already
-contains the briefs for the units that never started (card, font-stack migration, CLI,
-wasm + web).
+- **Secrets** (sparring review): `ANTHROPIC_API_KEY` or `CLAUDE_CODE_OAUTH_TOKEN`.
+- **Settings**: allow auto-merge and squash merging; create labels `dependencies`, `rust`,
+  `github-actions`, `javascript`; protect `main` requiring `ci-ok`.
+- **Network** for live validation of the catalogue: allow the provider hosts, then
+  `EBC_LIVE=1 cargo test -p ebc-catalog --features client -- --ignored`.
+- **Reviews**: a lawyer on `docs/research/07`–`09`; native speakers on the UI strings; a real
+  printer quote and a test print.
 
-Cost basis: the session's usage counter read about **$579** when the limit hit, for roughly
-75 agent runs, i.e. about $7–8 per run.
+## How the work was done
 
-| Option | What it does | Rough size |
-|---|---|---|
-| **A. Full plan** | Finish the 5 partial crates, fix and verify every reviewed crate, review the unreviewed ones, build card / CLI / wasm + web, integration and e2e tests, business model, complete the research pipeline, whole-repo review | ~100 agent runs — about as much again as already spent |
-| **B. Lean** | No sparring reviews, no research completion: fix failing tests, finish server + spine + card + CLI so a card PDF comes out end to end, minimal web page, business model | ~30 agent runs |
-| **C. Stop** | Keep this state | — |
-
-Suggested order inside A or B: `ebc-model` code v0.2 → `ebc-preflight` → `ebc-layout`
-findings → `ebc-spine` → `ebc-card` (first end-to-end PDF) → server → the rest.
+The orchestration scripts used are in `tools/orchestration/`. Reviewer findings and reports
+from the interrupted first night are kept in `docs/status/` for traceability.

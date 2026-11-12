@@ -11,6 +11,7 @@
 //! | `EBC_DEMO_PRINTER_PORT` | `8103` | printer |
 //! | `EBC_DEMO_KINDLE_ADDRESS` | `demo@kindle.com` | device address of the mail sink |
 //! | `EBC_DEMO_PRINTER_TICK_MS` | `2000` | time between two steps of a print order (`0` = manual) |
+//! | `EBC_WEB_DIR` | unset | directory of the static card designer, served at `/app/` (e.g. `web`) |
 //!
 //! A port set to `0` is chosen by the operating system (the table shows it). See
 //! `demo/README.md`.
@@ -58,6 +59,12 @@ async fn run() -> Result<(), String> {
         .mail_device(DeviceProfile::kindle_paperwhite(), &kindle_address);
     if tick_ms > 0 {
         builder = builder.printer_tick(Duration::from_millis(tick_ms));
+    }
+    // Serve the card designer at /app/ when EBC_WEB_DIR is set, as the real server does.
+    if let Some(web_dir) = env("EBC_WEB_DIR") {
+        builder = builder.server_config(move |config| {
+            config.web_dir = Some(std::path::PathBuf::from(web_dir));
+        });
     }
     let world = builder.start().await.map_err(|e| e.to_string())?;
     // In a demo the recipient has already approved our sender (the step Send to Kindle

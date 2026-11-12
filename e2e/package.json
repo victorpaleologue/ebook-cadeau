@@ -1,0 +1,16 @@
+{
+  "name": "ebook-cadeau-e2e",
+  "private": true,
+  "description": "Real-browser end-to-end tests of eBook Cadeau against the demo constellation (see README.md).",
+  "license": "BSD-3-Clause",
+  "type": "module",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "test": "node --test --test-reporter=spec --test-concurrency=4 --test-timeout=180000 tests/*.test.mjs"
+  },
+  "devDependencies": {
+    "playwright": "1.63.0"
+  }
+}

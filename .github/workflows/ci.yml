@@ -153,19 +153,84 @@ jobs:
           echo "::add-matcher::.github/actionlint-matcher.json"
           "$ACTIONLINT" -color
       - name: Lint the helper scripts
-        run: shellcheck scripts/*.sh
+        run: shellcheck scripts/*.sh e2e/*.sh
 
-  # ------------------------------------------------------------------------------------------
-  # PLACEHOLDER — jobs to add when the code they exercise exists (see docs/ci.md, "Adding the
-  # e2e and print-check jobs"). Do not invent commands here before that.
-  #
-  #   e2e:          Playwright end-to-end tests in e2e/ (needs e2e/package.json, the wasm
-  #                 package built into web/pkg, and the server + demo binaries).
-  #   print-check:  generate the reference cards with the `ebc` CLI, run `ebc-preflight` plus
-  #                 qpdf / poppler / ghostscript on them, upload the PDFs as an artifact.
-  #
-  # When you add one: give it `name: <id>`, add its id to `needs:` of `ci-ok` below.
-  # ------------------------------------------------------------------------------------------
+  # Real-browser journeys (Playwright + Chromium) against the demo constellation: the two
+  # fictional stores, phones and e-reader browsers without JavaScript, the card designer.
+  # Everything is described in e2e/README.md; e2e/run.sh is the single entry point.
+  e2e:
+    name: e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install the toolchain pinned in rust-toolchain.toml
+        run: rustup toolchain install --no-self-update || rustup show
+      - uses: Swatinem/rust-cache@v2
+        with:
+          # Also caches ~/.cargo/bin, hence the wasm-bindgen CLI installed below.
+          save-if: ${{ github.event_name == 'push' }}
+      # The card's QR code is decoded with pdftoppm + zbarimg; in CI a missing tool fails
+      # the run instead of skipping the check (EBC_E2E_REQUIRE_TOOLS below).
+      - name: Install PDF and barcode tools
+        run: bash scripts/install-print-tools.sh
+      - name: Install the wasm-bindgen CLI of the version in Cargo.lock
+        run: |
+          version="$(awk '/^name = "wasm-bindgen"$/ { getline; gsub(/version = |"/, ""); print; exit }' Cargo.lock)"
+          if [[ "$(wasm-bindgen --version 2>/dev/null | awk '{ print $2 }')" != "$version" ]]; then
+            cargo install wasm-bindgen-cli --version "$version" --locked --force
+          fi
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: e2e/package-lock.json
+      - name: Install Playwright (the version pinned in e2e/package-lock.json) and Chromium
+        working-directory: e2e
+        run: |
+          npm ci
+          npx playwright install --with-deps chromium
+      - name: Build and run the end-to-end tests
+        env:
+          EBC_E2E_REQUIRE_TOOLS: "1"
+        run: bash e2e/run.sh
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: e2e-artifacts
+          path: e2e/artifacts
+          retention-days: 14
+
+  # Sample cards for every format x print profile (and a cover image on every profile),
+  # checked by our preflight and by independent tools. Explained in e2e/print-check.sh.
+  print-check:
+    name: print-check
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Install the toolchain pinned in rust-toolchain.toml
+        run: rustup toolchain install --no-self-update || rustup show
+      - uses: Swatinem/rust-cache@v2
+        with:
+          save-if: ${{ github.event_name == 'push' }}
+      - name: Install PDF and barcode tools
+        run: bash scripts/install-print-tools.sh
+      - name: Compose the sample cards and check them (ebc preflight, qpdf, pdffonts, gs, pdfinfo)
+        run: bash e2e/print-check.sh target/print-check
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: reference-cards
+          path: |
+            target/print-check/*.pdf
+            target/print-check/*.txt
+          if-no-files-found: error
+          retention-days: 14
 
   ci-ok:
     name: ci-ok
@@ -180,6 +245,8 @@ jobs:
       - docs
       - deny
       - actionlint
+      - e2e
+      - print-check
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:

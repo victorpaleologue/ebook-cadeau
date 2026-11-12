@@ -15,7 +15,10 @@
 //!   the `ofl/` and `apache/` directories of github.com/google/fonts) — and only if its
 //!   embedding bits allow bundling; the rest is refused and listed on standard error.
 //!   The gallery is built with `FontIndex::build_checked`. Keep a downloaded corpus out
-//!   of the repository (for example under `target/`).
+//!   of the repository: `python3 -I crates/ebc-fontid/scripts/fetch-eval-corpus.py`
+//!   puts the corpus of `docs/research/fontid-eval.md` (233 files of 138 google/fonts
+//!   families, `scripts/eval-corpus.txt`) in `target/fontid-corpus`. With the
+//!   `METADATA.pb` files there, a family hold-out by category is also measured.
 //! * `--only-bundled-covers`: with a corpus, draw covers with the bundled fonts only
 //!   (the corpus fonts are distractors).
 //! * `--rerank-top K`: candidates passed to the render-and-compare stage (default 5).

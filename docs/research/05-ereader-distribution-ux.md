@@ -1,6 +1,6 @@
 # From paper to e-reader: what devices can do, and the most immediate redemption UX
 
-_Status: draft — research date 2026-11-12_
+_Status: fact-checked — research date 2026-11-12_
 
 ## How to read this document
 
@@ -12,6 +12,7 @@ _Status: draft — research date 2026-11-12_
 - The notes rest on about 115 cited primary documents fetched directly from GitHub (specifications, source code, issue trackers, manuals). Everything about what a vendor or a retailer does today (Amazon, Kobo, Fnac, PocketBook, Vivlio, tolino, Apple, Google) is from the researchers' memory.
 - In this pass, seven primary documents were read or re-read on GitHub (send2ereader `index.js` and issues #28, #63, #70, #76; ZXing's Android `ResultHandler.java`; Android's `Uri.java`), and QR sizes and the check-symbol construction were recomputed locally.
 - Facts that other agents found by search are reused from sibling documents and marked "via doc 12" or "via doc 09". Their URLs were not re-opened here.
+- **Fact-check pass (2026-11-12, `factcheck/ereader-distribution-ux.md`).** Twelve fresh web searches (eight in extended mode) re-verified the load-bearing claims; those are marked **[FC]**. The main change: **Kobo OS 6.0 now reads Readium LCP** on four current models, released first outside France. Corrections are written in place and listed in the Verification log at the end. PocketBook/Vivlio browser behaviour, `.acsm` handling and the OPDS/LCP specification details were not re-checked.
 
 **Markers.**
 
@@ -34,7 +35,7 @@ No marker was upgraded without new evidence. New evidence changed two things com
 
 ### Verdict on the current scheme, "file upload → QR code → download"
 
-1. **It aims at the wrong device.** A QR code is read by a phone camera, and no mainstream e-ink reader has a camera [M]. A scan puts the file on the phone. Among French digital readers, 48 % read on a smartphone, 34 % on a liseuse and 33 % on a tablet [V1, via doc 12: [SGDL](https://www.sgdl.org/sgdl-accueil/le-guide-pratique/ressources-documentaires/barometres-et-observatoire/4867-barometre-sgdl-sofia-sne-2026-des-usages-dachat-et-de-lecture-des-livres-imprimes-numeriques-et-audio)]. The phone is the right first stop, but one reader in three then needs a second hop.
+1. **It aims at the wrong device.** A QR code is read by a phone camera, and no mainstream e-ink reader has a camera [M]. A scan puts the file on the phone. Among French digital readers, 48 % read on a smartphone, 34 % on a liseuse and 33 % on a tablet (Baromètre SGDL-Sofia-SNE 2026, Médiamétrie, 14.4 million digital readers) [V2, FC: [SGDL](https://www.sgdl.org/sgdl-accueil/le-guide-pratique/ressources-documentaires/barometres-et-observatoire/4867-barometre-sgdl-sofia-sne-2026-des-usages-dachat-et-de-lecture-des-livres-imprimes-numeriques-et-audio), [Bookelis](https://www.bookelis.com/barometre-lecture-france-2026-autoedition/)]. The phone is the right first stop, but one reader in three then needs a second hop.
 2. **A raw file is the wrong payload for most titles.** Kindle does not open EPUB natively [V2]. No third party can add a title to a Kindle or Kobo account library [M, high]. A title sold with DRM cannot be handed over as a file at all. Doc 09 also limits file hosting to files the uploader may distribute (own work, public domain in France, open licence, licensed distributor).
 3. **It is the only scheme that needs no partner, and it works** in the browsers of Kobo [V2], Kobo-based tolino [V1] and, by belief only, PocketBook and Vivlio [M]. It stays in the product as one lane of three, always behind a gift page. The QR code never points at a file.
 
@@ -61,8 +62,8 @@ Sources for each [V1]/[V2] cell are in §2.5. Line-ups are as recalled for 2026 
 
 | Family | Camera / QR | Built-in browser | Download from the browser | Other wireless routes | USB |
 |---|---|---|---|---|---|
-| **Amazon Kindle** (Kindle, Paperwhite, Colorsoft, Scribe) | None [M] | Yes, "Web Browser" in the ⋮ menu [V1]; engine reportedly Chromium-based from firmware 5.16.4 (2023) [M] | Kindle formats only: azw3, mobi [V2]; azw, prc, txt [M]. **Not EPUB** [V2]. PDF download reported failing [V1] | Send to Kindle: e-mail, web, apps; EPUB accepted and converted [V2] | MTP on 2024+ models [V1]; mass storage before |
-| **Rakuten Kobo** (Clara BW/Colour, Libra Colour, Sage, Elipsa 2E) | None [M] | Yes, Nickel browser, a QtWebKit fork [V1]; labelled beta [M] | Yes: EPUB, KEPUB, PDF are added to the library [V2] | Dropbox (firmware 4.18+), Google Drive (4.36+) on selected models [V1 for firmware, M for models]; Instapaper (4.43+), OverDrive [V1] | Mass storage [V2] |
+| **Amazon Kindle** (Kindle, Paperwhite, Colorsoft, Scribe) | None [M] | Yes, "Web Browser" in the ⋮ menu [V1]; Chromium-based from firmware 5.16.4 (2023), not on every device at once [V2, FC: [MobileRead](https://www.mobileread.com/forums/showthread.php?t=357173&highlight=chromium), [Liliputing](https://liliputing.com/amazons-kindle-web-browser-is-actually-usable-now/)] | Kindle formats only: azw3, mobi [V2]; azw, prc, txt [M]. **Not EPUB** [V2]. PDF download reported failing [V1] | Send to Kindle: e-mail, web, apps; EPUB accepted and converted [V2] | MTP on 2024+ models [V1]; mass storage before |
+| **Rakuten Kobo** (Clara BW/Colour, Libra Colour, Sage, Elipsa 2E) | None [M] | Yes, Nickel browser, a QtWebKit fork [V1]; labelled beta [M] | Yes: EPUB, KEPUB, PDF are added to the library [V2] | Dropbox (firmware 4.18+), Google Drive (4.36+) on selected models [V1 for firmware]; Libra Colour yes, Clara BW and Clara Colour no (officially) [FC: [Kobo US](https://us.kobobooks.com/products/kobo-libra-colour), [review](https://whatsyourtech.ca/?p=51220)]; Instapaper (4.43+), OverDrive [V1] | Mass storage [V2] |
 | **tolino** shine 5, shine color, vision color (2024+, Kobo firmware) | None [M] | Yes; user agent contains `eReader` [V1] | Yes, confirmed by a user in 2024-08 [V1] | tolino cloud: upload through the bookseller's web reader [V1, old sources] | Mass storage, detected as Kobo [V1] |
 | **tolino**, older Android models (Vision 4 HD) | None [M] | Yes | Download completes, file reported "damaged" [V1] | tolino cloud [V1, old sources] | Mass storage [M] |
 | **PocketBook** (Verse, Era, InkPad) | None [M] | Yes, WebKit-based [M] | Yes [M] | Send-to-PocketBook e-mail (`@pbsync.com`) [V1]; PocketBook Cloud, Dropbox [M] | Mass storage [M] |
@@ -76,7 +77,7 @@ Sources for each [V1]/[V2] cell are in §2.5. Line-ups are as recalled for 2026 
 | Family | Formats without DRM | DRM and licences | Account library sync | OPDS in stock firmware |
 |---|---|---|---|---|
 | **Kindle** | KFX, AZW3, AZW, MOBI, PDF, TXT [V1]; **no EPUB**, not even by USB [V2] | Amazon only [M] | Amazon account [M] | No; KOReader only on jailbroken units [V1] |
-| **Kobo** | EPUB 2/3, KEPUB, PDF, TXT, CBZ/CBR [V1]; MOBI, RTF, HTML [M]. Plain `.epub` uses the older Adobe engine, `.kepub.epub` the Kobo WebKit engine [V2] | Kobo DRM [V1]; Adobe via a computer [M]; **no LCP** [M] | Kobo account; in France through a linked Fnac account [M] | No [M]; KOReader [V1] |
+| **Kobo** | EPUB 2/3, KEPUB, PDF, TXT, CBZ/CBR [V1]; MOBI, RTF, HTML [M]. Plain `.epub` uses the older Adobe engine, `.kepub.epub` the Kobo WebKit engine [V2] | Kobo DRM [V1]; Adobe via a computer [M]; **Readium LCP since Kobo OS 6.0** on Clara BW, Clara Colour, Libra Colour, Elipsa 2E — optional update, first released in Canada, the UK, Ireland, Australia, New Zealand and Spain, **not yet France** [FC; the draft's "no LCP" is outdated] | Kobo account; in France through a linked Fnac account [M] | No [M]; KOReader [V1] |
 | **tolino** 2024+ | EPUB, PDF, TXT [V1 for the older driver] | Adobe; LCP or tolino DRM [M, low] | Bookseller account + tolino cloud [M] | No [M] |
 | **PocketBook** | EPUB, PDF, FB2, MOBI, DJVU, RTF, CHM, DOC(X), TXT [V1, older drivers] | Adobe on the device, LCP [M] | PocketBook Cloud [M] | Unclear [M]; KOReader without jailbreak [V1] |
 | **Vivlio** | As PocketBook [M] | Adobe, LCP [M]; Vivlio staff co-authored an LCP note [V1] | Bookseller account (Vivlio network) [M] | Unknown |
@@ -109,7 +110,7 @@ This is the answer to "what is actually available directly from e-readers", in o
 | 3 | **Open a typed URL and download a file** | Kindle formats only [V2] | Yes [V2] | Yes [V1] | Yes [M] | The no-partner rail (lanes S2, S3, R3) |
 | 4 | Read from a cloud folder | No | Selected models [V1/M] | tolino cloud [V1] | Cloud, Dropbox [M] | Help-page tip only |
 | 5 | Receive by a device e-mail address | Yes, sender must be approved [V1] | No | No | Yes [V1] | Secondary option |
-| 6 | Open a licence file (`.lcpl`, `.acsm`) fetched by the browser | No | Unknown; no LCP [M] | Unknown | Believed yes [M] | Lane R2, untested |
+| 6 | Open a licence file (`.lcpl`, `.acsm`) fetched by the browser | No | `.lcpl`: possible on Kobo OS 6.0 models where released (library loans as `.lcpl` load directly, per reports) [FC], untested from the browser; not in France yet | Unknown | Believed yes; Vivlio/PocketBook read LCP [FC, secondary] | Lane R2, untested |
 | 7 | USB transfer from a computer | Not EPUB [V2] | Yes [V2] | Yes [V1] | Yes [M] | Last fallback |
 
 What no stock e-reader does: scan a QR code [M]; redeem a third party's code on the device (believed: account website only [M]); follow a link sent from another device; speak OPDS [M].
@@ -119,10 +120,11 @@ What no stock e-reader does: scan a QR code [M]; redeem a third party's code on 
 **Kindle**
 
 - No native EPUB: "Kindle devices still do not natively support epub files… Send to Kindle… converts the epub file to an Amazon format… It's still not possible to use a USB cable to transfer an epub" [V2: [Standard Ebooks](https://raw.githubusercontent.com/standardebooks/web/master/www/help/how-to-use-our-ebooks.php), [calibre FAQ](https://raw.githubusercontent.com/kovidgoyal/calibre/master/manual/faq.rst)]. "Amazon converts that epub into azw3" [V1: [kindle-send](https://raw.githubusercontent.com/nikhil1raghav/kindle-send/main/README.md)].
-- Send to Kindle by e-mail: the sender must be on the account's approved list; AZW3/KF8 are refused; "Amazon recently started sending confirmation emails that you have to click on… before the book is actually delivered" [V1: calibre FAQ; approved list also in the [calibre wizard](https://raw.githubusercontent.com/kovidgoyal/calibre/master/src/calibre/gui2/wizard/send_email.py)]. Standard Ebooks confirms the AZW3 refusal [V2]. calibre warns that "Amazon's EPUB intake is very flawed, they will reject a number of EPUB files that work everywhere else" [V1]; Calibre-Web-Automated ships an "EPUB Fixer" for this [V1: [CWA README](https://raw.githubusercontent.com/crocodilestick/Calibre-Web-Automated/main/README.md)]. Limits (50 MB by e-mail, 200 MB by web or app) and the channel list are [M].
+- Send to Kindle by e-mail: the sender must be on the account's approved list; AZW3/KF8 are refused; "Amazon recently started sending confirmation emails that you have to click on… before the book is actually delivered" [V1: calibre FAQ; approved list also in the [calibre wizard](https://raw.githubusercontent.com/kovidgoyal/calibre/master/src/calibre/gui2/wizard/send_email.py)]. Standard Ebooks confirms the AZW3 refusal [V2]. calibre warns that "Amazon's EPUB intake is very flawed, they will reject a number of EPUB files that work everywhere else" [V1]; Calibre-Web-Automated ships an "EPUB Fixer" for this [V1: [CWA README](https://raw.githubusercontent.com/crocodilestick/Calibre-Web-Automated/main/README.md)]. Limits: 50 MB per e-mail (up to 25 attachments) and 200 MB per file by web or app; up to 15 approved senders [FC, third-party guides]. Amazon's help page says a document e-mailed to a Send to Kindle address can trigger a request to **verify within 48 hours**, avoidable with a harder-to-guess Send to Kindle address; a 2025 forum answer says the verification is expected for e-mail, not for the Send to Kindle app [FC: [Amazon help](https://www.amazon.com/gp/help/customer/display.html?nodeId=G98WYFZBRHWGZACA), [Amazon forum](https://www.amazonforum.com/s/question/0D56Q0000DyRrDgSQK/how-to-stop-getting-email-verify-request)].
+- **Since 20 January 2026**, verified purchasers of DRM-free Kindle titles can download EPUB and PDF files from Manage Your Content and Devices; publishers opt in; borrowed titles excluded [FC: [Good e-Reader](https://goodereader.com/blog/kindle/amazon-will-let-you-download-your-e-books-in-epub-in-2026), [Kindlepreneur](https://kindlepreneur.com/amazon-drm-epub-downloads/)]. A recipient on another device may thus receive an Amazon-bought DRM-free EPUB; the redemption design is unchanged, the upload gate of doc 09 is affected.
 - Browser download: tap an `.azw3` link, then "OK"; this "won't add the ebook to your Kindle library, but your Kindle will remember your reading position", and shows no cover [V1: Standard Ebooks]. send2ereader converts EPUB to MOBI with KindleGen for Kindle and strips every file-name character outside `[.\w\-"'()]` [V1: [index.js](https://raw.githubusercontent.com/daniel-j/send2ereader/master/index.js), [upload.html](https://raw.githubusercontent.com/daniel-j/send2ereader/master/static/upload.html)]. calibre drops `Content-Disposition` for `Kindle/3` user agents because non-ASCII file names break the download [V1: [legacy.py](https://raw.githubusercontent.com/kovidgoyal/calibre/master/src/calibre/srv/legacy.py)]. KindleGen is discontinued [V1].
 - 2024+ hardware uses MTP; Colorsoft and newer hide covers of side-loaded books unless marked as personal documents [V1: [calibre changelog](https://raw.githubusercontent.com/kovidgoyal/calibre/master/Changelog.txt), FAQ]. Format list from the [calibre Kindle driver](https://raw.githubusercontent.com/kovidgoyal/calibre/master/src/calibre/devices/kindle/driver.py) [V1].
-- User-agent regression: a "Kindle 11th gen 2024, firmware 5.18.6" sees "the same web as in a laptop" on send.djazz.se (issue opened 2025-12-29); a second report on 2026-03-24; the workaround is the explicit `/receive` URL [V1: [#63](https://github.com/daniel-j/send2ereader/issues/63), [#70](https://github.com/daniel-j/send2ereader/issues/70), both re-read in this pass]. **Neither issue quotes the user-agent string**, so the string of current Kindles is unknown.
+- User-agent regression: a "Kindle 11th gen 2024, firmware 5.18.6" sees "the same web as in a laptop" on send.djazz.se (issue opened 2025-12-29); a second report on 2026-03-24; the workaround is the explicit `/receive` URL [V1: [#63](https://github.com/daniel-j/send2ereader/issues/63), [#70](https://github.com/daniel-j/send2ereader/issues/70), both re-read in this pass]. **Neither issue quotes the user-agent string**, so the string of current Kindles is unknown; the fact-check found no source for it either, only a community tool that changes the Kindle browser's **desktop** user agent, which fits the "same web as a laptop" report [FC].
 - Old Kindles (1, 2, DX) cannot reach non-standard ports such as 8080 [V1: calibre FAQ].
 - Code redemption on the device: none; Amazon codes are redeemed on the account website [M].
 
@@ -179,8 +181,8 @@ What no stock e-reader does: scan a QR code [M]; redeem a third party's code on 
 | **Cultura, E.Leclerc, Vivlio store** | Same Vivlio back end [M, medium] | as above | Unknown. If Decitre's feature is a platform feature, the others could switch it on (inference) | — | R1 | [M] |
 | **7switch** (Immatériel) | Own store; account library with re-download [M] | Mostly none or watermark ("tatouage numérique"); some DRM titles [M] | Unknown | — | R1 or R3 | [M, medium] |
 | **leslibraires.fr, Mollat, independents** | ePagine, Numilog or in-house [M, low] | mixed | Unknown | — | R1 / R2 | [M, low] |
-| **Kobo (kobo.com)** | Account library; KEPUB sync | Kobo DRM, Adobe or none | No native gifting; value gift cards only. Title codes only through partners (Walmart 2018; some Humble bundles [M]) | — | — | [V1 via sibling, low authority] |
-| **Apple Books** | Apple Account library | Apple | Yes, "Gift This Book", scheduled date [M] | E-mail "Redeem"; same country storefront [M] | S1 | [M, medium-high] |
+| **Kobo (kobo.com)** | Account library; KEPUB sync | Kobo DRM, Adobe, LCP since Kobo OS 6.0 [FC], or none | No native gifting found (the fact-check found no announcement of a title-gift feature; doc 09's checker recalled one in English-speaking markets, unconfirmed); value gift cards only. Title codes only through partners (Walmart 2018; some Humble bundles [M]) | — | — | [V1 via sibling, low authority] |
+| **Apple Books** | Apple Account library | Apple | Yes: in the Livres app, item → "Offrir" → personalise and send; "may not be available in all regions" [FC, Apple support text quoted in an Apple Community answer, 2022; France not stated explicitly] | Recipient gets a link by message or e-mail [FC]; same-country storefront [M] | S1 | [V1] |
 | **Google Play Books** | Google account library | Google / Adobe export | Yes, "Buy as gift" in a list of countries; France not recalled [M] | E-mail with a code; same country [M] | S1 | [M, medium] |
 | **Thalia, Hugendubel** (tolino alliance, DE/AT) | Shop account + tolino cloud [M] | Mostly watermark [M] | **Yes**, "Verschenken" / "eBooks verschenken" on eBook pages | Mechanics (e-mail or code) not confirmed. A print-it-yourself voucher at one shop is recalled [M, low] | S1 | [V2, via doc 12: [Hugendubel](https://www.hugendubel.de/de/shortcut/ebooksverschenken), [heise](https://www.heise.de/tipps-tricks/E-Books-verschenken-so-klappt-s-7476189.html), [test.de](https://www.test.de/E-Books-Nuetzliche-Tipps-und-Tricks-5391265-0/)] |
 | **bol.com** (NL/BE) | Kobo partner; Kobo library [M] | — | "ebook cadeau geven" existed; status unknown | — | — | [M, low-medium] |
@@ -253,7 +255,7 @@ The terminology notes hold the full analysis; French has no settled verb for "re
 | **Send-to-PocketBook** (`@pbsync.com`) | PocketBook, maybe Vivlio [M] | Exists [V1] | ASCII short file names, no commas [V1]; sender confirmation [M] | Secondary option |
 | **Cloud links** (Dropbox/Drive on Kobo, tolino cloud, PocketBook Cloud, Send2Boox) | Selected devices | Zero typing once set up | Needs the user's cloud already linked; model lists [M]; an integration would need access to the user's cloud | Help-page tip only; no integration |
 | **OPDS** (`opds://`, shelf) | Thorium, KOReader, PocketBook Reader app, others [V1 for the first two] | Standard post-purchase handoff [V1, draft] | No stock Kindle or Kobo firmware [M, high]; no "gift" relation [V1] | Kept as a secondary link for app users |
-| **Readium LCP** (`.lcpl` + passphrase) | LCP apps and e-readers; not Kindle, not Kobo [M] | A licence file that points to the book; provider-defined passphrase allowed; licence status gives "gift opened" [V1] | Browser apps cannot implement it [V1]; certification needed for production [V2] | Lane R2, issued by the reseller |
+| **Readium LCP** (`.lcpl` + passphrase) | LCP apps and e-readers; not Kindle; Kobo since Kobo OS 6.0 on four models, outside France first [FC] | A licence file that points to the book; provider-defined passphrase allowed; licence status gives "gift opened" [V1] | Browser apps cannot implement it [V1]; certification needed for production [V2] | Lane R2, issued by the reseller |
 | **Adobe ACSM** | Kobo (via computer), PocketBook/Vivlio, tolino [M] | Legacy coverage | Third account (Adobe ID), expiring token, desktop software [M, high] | Last resort inside R2 |
 | **USB from a computer** | Everything except EPUB on Kindle [V2] | Always works | Six actions, a cable, a computer | Printed nowhere; help page |
 
@@ -299,13 +301,13 @@ Consequences for a gift (analysis on verified facts):
 
 From memory [M, high]: an `.acsm` file is a short-lived fulfilment token; an Adobe-RMSDK reader authorised with an Adobe ID exchanges it for an encrypted file bound to that ID. Kindle does not support it. The only evidence read in this run is indirect: a calibre plugin whose stated purpose is to "turn ACSM files into EPUB or PDF files without the need for Adobe Digital Editions" [V1: [README](https://raw.githubusercontent.com/Leseratte10/acsm-calibre-plugin/master/README.md)]. For a gift it is the worst rail: a third account, desktop software or on-device activation, and an expiring token.
 
-The landscape, all [M] unless marked: Adobe ADE works on Kobo (through a computer), PocketBook/Vivlio, tolino, Bookeen, Aldiko and the PocketBook app; not on Kindle, Apple Books or Thorium. Readium LCP covers EPUB 2/3, PDF and audiobooks [V1: lcp-specs README]; readers include Thorium [V1], PocketBook/Vivlio/tolino/Bookeen devices and the Aldiko, Cantook, Vivlio and PocketBook apps; not Kindle, not Kobo. Kindle and Kobo DRM are closed and bound to the account. Design consequence: a card can carry (a) a claim on a file for DRM-free titles, (b) a claim on an account entitlement for closed ecosystems, or (c) for LCP, a claim on a licence.
+The landscape, all [M] unless marked: Adobe ADE works on Kobo (through a computer), PocketBook/Vivlio, tolino, Bookeen, Aldiko and the PocketBook app; not on Kindle, Apple Books or Thorium. Readium LCP covers EPUB 2/3, PDF and audiobooks [V1: lcp-specs README]; readers include Thorium [V1], PocketBook/Vivlio/tolino/Bookeen devices and the Aldiko, Cantook, Vivlio and PocketBook apps; not Kindle; **Kobo since Kobo OS 6.0** (Clara BW, Clara Colour, Libra Colour, Elipsa 2E; first countries Canada, UK, Ireland, Australia, New Zealand, Spain) [FC: [Kobo staff post](https://www.threads.com/@mtamblyn/post/DfXW-aInzAr/lcp-at-last-kobo-ereaders-with-kobo-os-now-support-readium-lcp-protected/), [IDBoox](https://www.idboox.com/news-livres/les-liseuses-kobo-accueillent-enfin-readium-lcp-pour-faciliter-la-lecture-et-lemprunt-debooks/)]; Vivlio and PocketBook devices read LCP [FC, LCP promoters' pages]. Kindle and Kobo DRM are closed and bound to the account. Design consequence: a card can carry (a) a claim on a file for DRM-free titles, (b) a claim on an account entitlement for closed ecosystems, or (c) for LCP, a claim on a licence.
 
 ### 4.5 Send to Kindle and other mail-in addresses
 
 - EPUB sent to `@kindle.com` is accepted and converted [V2]; MOBI by e-mail was dropped; AZW3 is refused [V2] (§2.5).
-- The service e-mailing the recipient's Kindle costs the recipient three things: finding the `@kindle.com` address, adding our sender address to the approved list, and possibly a confirmation click [V1]. That is too much for a gift. It stays available, never first.
-- The route through the Kindle app's share sheet on the phone, and Amazon's Send to Kindle web page, are believed to avoid the approved-sender step [M]. They are the recommended Kindle routes, pending a test.
+- The service e-mailing the recipient's Kindle costs the recipient three things: finding the `@kindle.com` address, adding our sender address to the approved list, and possibly a verification click within 48 hours [V2, FC]. That is too much for a gift. It stays available, never first.
+- The route through the Kindle app's share sheet on the phone, and Amazon's Send to Kindle web page, are believed to avoid the approved-sender step [M]; a 2025 forum answer says the verification e-mail is not expected for the app route [FC, forum-grade]. They are the recommended Kindle routes, pending a test.
 - Send-to-PocketBook needs a random ASCII file name without commas [V1].
 
 ### 4.6 Cloud links
@@ -1074,3 +1076,34 @@ Numbers marked "(proposal)" are design choices, not measured or legal thresholds
 53. The end-to-end suite covers the 17 scenarios of §8.3. Scenario 3 asserts at most 4 actions and host + 12 typed characters on the e-reader; scenario 9 asserts zero characters typed on e-ink.
 54. The fake 7switch, fake Fnac, fake store with gifting, fake LCP server (test profile only) and fake mail-in services implement §8.2. The fake LCP server is labelled as a test profile everywhere.
 55. A written hands-on protocol (Kobo Clara, a Vivlio, a current Kindle, one iPhone, one Android phone) covers §9 questions 1, 2, 3, 4 and 7. No device name is added to card text or marketing copy until its row has passed.
+
+**Added after the fact-check** (items 1–55 keep their numbers)
+
+56. Lane R2 (`.lcpl` licence download) may be offered to the `kobo` class only behind a per-country flag, off for France until Kobo OS 6.0 with LCP is released there and a `.lcpl` downloaded by the Kobo browser has been seen to open on a device. Vivlio/PocketBook remain the French e-ink target for R2.
+57. The Kindle e-mail route explains, before the user sends, that Amazon may e-mail a verification request to be confirmed within 48 hours; the app and web routes stay listed first.
+58. Send to Kindle constants are data: 50 MB per e-mail, 200 MB by web or app; the 50 MB upload cap stays aligned with the e-mail limit.
+
+---
+
+## Verification log
+
+Fact-check of 2026-11-12. Method: 12 fresh web searches (8 extended) written from the claims; result summaries only, vendor pages not opened. Full table with sources: `factcheck/ereader-distribution-ux.md`.
+
+| # | Claim | Verdict | Change made |
+|---|---|---|---|
+| 1 | 48 % smartphone, 34 % e-reader, 33 % tablet | CONFIRMED | [V2]; sample size added (§1) |
+| 2 | Send to Kindle takes EPUB; MOBI dropped; AZW3 refused | CONFIRMED | Marked [FC] |
+| 3 | Send to Kindle 50 MB / 200 MB | CONFIRMED (secondary) | [M] replaced (§2.5); implication 58 |
+| 4 | Approved senders; confirmation click | CONFIRMED, stronger | 48-hour verification (§2.5, §4.5); implication 57 |
+| 5 | Kindle browser Chromium from 5.16.4 | CONFIRMED | §2.1 |
+| 6 | Kindle browser saves only Kindle formats | UNSUPPORTED by search | Kept on the primary files |
+| 7 | Current Kindle user agent unknown | CONFIRMED (still unknown) | §2.5 note |
+| 8 | Kobo has no LCP | **OUTDATED** | Kobo OS 6.0 LCP (§2.2, §2.4, §4.1, §4.4); implication 56 |
+| 9 | Vivlio/PocketBook read LCP | CONFIRMED (secondary) | §2.4, §4.4 |
+| 10 | Kobo cloud on selected models | CONFIRMED for Libra Colour and Clara | §2.1 |
+| 11 | Kindle DRM-free EPUB/PDF downloads (omitted) | CONFIRMED | Added to §2.5 |
+| 12 | No Kobo title gifting | UNSUPPORTED either way | §3.1 note |
+| 13 | Apple Books gifting | PARTLY CONFIRMED | §3.1 |
+| 14–16 | Amazon same-country gifts; tolino/Kobo user agents; cameras | Not re-searched | Kept |
+
+Not re-checked: PocketBook and Vivlio browser downloads and user agents, on-device `.acsm`, tolino cloud, Boox, reMarkable, Bookeen, the OPDS and LCP specification details, TLS support of e-reader browsers, Google Play Books gifting.

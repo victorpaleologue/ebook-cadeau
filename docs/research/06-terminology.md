@@ -1,6 +1,8 @@
 # What to call it: "eBook cadeau" and its equivalents per website language
 
-_Status: draft — research date 2026-11-12_
+_Status: fact-checked — research date 2026-11-12_
+
+> **Fact-check pass (2026-11-12, `factcheck/terminology.md`).** Eight fresh web searches re-verified the sourced choices behind the recommended strings; those are marked **[FC]**. Changes: « liseuse » now rests on the *Journal officiel* (2007); Duden lists only „E-Book"; Fnac writes « ebook »; Thalia's button is „Artikel verschenken"; two code-based e-book gift precedents added (Spain, Netherlands). No recommended string changed. Italian, Portuguese and Nordic retailer wording, and the native acceptability of every drafted string, remain unverified. See the Verification log at the end.
 
 > **Read this first.** No web search could be run for this topic. The two researchers sent 12 queries and all were refused (the workflow's shared budget of 200 searches was already spent). Six more were attempted for this synthesis and were refused too. **No bookseller page, trademark register, official terminology database or keyword tool was opened by anyone.** The 25-search and two-source rules were not met.
 
@@ -35,7 +37,7 @@ No marker was upgraded in this synthesis. Every link below is either a file the 
 4. **Never use a stored-value word** for the object or the option: carte/chèque/bon cadeau, Gutschein, Geschenkkarte, cadeaubon, cadeaukaart, tarjeta/cheque regalo, buono/carta regalo, gift card, voucher, book token (§4). They promise a balance and bring validity rules into the reader's mind. A lint must enforce this.
 5. **The redemption button uses a plain first-person verb**: « Récupérer mon livre », "Get my book". French, Dutch and Polish have no settled word for "redeem" (three verbs in three products each) [V2]. German, Spanish, Italian, Portuguese and the Nordic languages do (einlösen, canjear, riscattare, resgatar…) [V2]: put that verb in help pages and page metadata, where people search for it, not on the button.
 6. **The typed fallback is a "code" in every language.** "Passphrase" has 14 different translations in one app [V1]; "voucher code" turns into a discount-coupon word in half the languages [V1].
-7. **The device noun is settled in French (« liseuse », five corpora [V2]); the book noun is not settled anywhere.** Retailers write a trade form (ebook, eBook); dictionaries and public bodies write another (livre numérique, E-Book, libro electrónico). The noun is therefore a per-reseller setting with two styles, `trade` and `official` (§1.4).
+7. **The device noun is settled in French (« liseuse », five corpora [V2]; the term recommended in the *Journal officiel* of 2 May 2007, mandatory for the administration [FC]); the book noun is not settled anywhere.** Retailers write a trade form (ebook, eBook); dictionaries and public bodies write another (livre numérique, E-Book, libro electrónico). The noun is therefore a per-reseller setting with two styles, `trade` and `official` (§1.4).
 8. **Default to register-neutral wording**: infinitive instructions on the card, first-person buttons. Where a pronoun is unavoidable: FR vous, NL je, ES tú, IT tu, PT formal third person; German has no safe default and takes du/Sie from the reseller [M].
 9. **Whether the code is a "voucher" for VAT is a tax question, separate from the wording.** The contract and the invoice can use the legal term if the VAT adviser wants it; the card and the screens never do (§4.2).
 10. **Every recommended string is [M] and needs a native reviewer.** The weakest: all Portuguese, the Italian button, the German du/Sie choice, and the help sentences drafted for this document.
@@ -62,7 +64,7 @@ Support for these choices:
 | fr « Offrir cet ebook » | Decitre page title « Offrir un ebook », button « Offrir » ([Decitre](https://www.decitre.fr/offrir-un-ebook), [Decitre FAQ](https://www.decitre.fr/faq/numerique/offrir-un-ebook)) | [V2-sib] for the pattern; the exact string is [M] |
 | de „eBook verschenken" | Hugendubel/Thalia „Verschenken", „eBooks verschenken" ([Hugendubel](https://www.hugendubel.de/de/shortcut/ebooksverschenken), [heise](https://www.heise.de/tipps-tricks/E-Books-verschenken-so-klappt-s-7476189.html)) | [V2-sib] for the pattern |
 | fr « Récupérer mon livre » | Signal's French button on a received gift is « Récupérer » ([file](https://raw.githubusercontent.com/signalapp/Signal-Android/main/app/src/main/res/values-fr/strings.xml)) | [V1] for the verb |
-| fr « liseuse » | calibre, KOReader, calibre-web, Open Library, Readest (§2.2) | [V2] |
+| fr « liseuse » | calibre, KOReader, calibre-web, Open Library, Readest (§2.2); *Journal officiel* 2 May 2007 via FranceTerme, OQLF record ([OQLF](https://vitrinelinguistique.oqlf.gouv.qc.ca/fiche-gdt/fiche/26540160/liseuse)) | [V2, FC] |
 | nl "e-book", "e-reader" | OpenTaal word list and LanguageTool rule (§2.7) | [V2] |
 | "Code" as the label | Uniform across every file read; "passphrase" is not (§2.9) | [V1] |
 | All other cells | Researcher's native-usage judgment | [M] |
@@ -99,10 +101,10 @@ Shop-counter questions that every buyer knows and that work as a checkbox label 
 
 | Lang | eBook, `trade` | eBook, `official` | e-reader, `trade` | e-reader, `official` | Default |
 |---|---|---|---|---|---|
-| fr | ebook (Decitre [V2-sib]); eBook / Ebook (Kobo, Fnac [M]) | livre numérique (statute title [V2-sib]; calibre [V1]) | liseuse | liseuse [V2] | `official` for running text, `trade` inside the option label |
+| fr | ebook (Decitre [V2-sib]; Fnac product labels "ebook (ePub)" [FC]) | livre numérique (statute title [V2-sib]; calibre [V1]; Fnac's URL category `/livre-numerique/` [FC]). Not « livre électronique »: the 2007 official record uses it for the **device** [FC] | liseuse | liseuse [V2, FC: JO 2007] | `official` for running text, `trade` inside the option label |
 | en | eBook | e-book (en-GB dictionary [V1]) | eReader (Kobo) / e-reader | e-reader | `trade` for the book, hyphenated "e-reader" for the device |
-| de | eBook (Hugendubel „eBooks" [V2-sib]) | E-Book (LanguageTool rule [V1]; three corpora [V2]) | eReader | E-Reader (two corpora), E-Book-Reader (one) [V1 per file] | `trade` |
-| es | eBook | libro electrónico (three corpora, [V1] per file) | eReader | lector de libros electrónicos [V2] | `trade` |
+| de | eBook (Hugendubel „eBooks" [V2-sib]) | E-Book (LanguageTool rule [V1]; three corpora [V2]; Duden „E-Book, das", in the Rechtschreibduden since 2004, variant „E-Buch"; no Duden entry for „eBook" [FC]) | eReader | E-Reader (two corpora), E-Book-Reader (one) [V1 per file] | `trade` |
+| es | eBook (Casa del Libro labels "eBook EPUB con DRM" [FC]) | libro electrónico (three corpora, [V1] per file) | eReader | lector de libros electrónicos [V2] | `trade` |
 | it | eBook | e-book (calibre, Foliate) / ebook (dictionary) [V1] | eReader | lettore di e-book [V1] | `trade` |
 | nl | e-book (bol.com writes "ebook" [M]) | e-book (OpenTaal [V1]); e-boek [V2] | e-reader | e-reader [V2] | `official` (same word) |
 | pt | eBook | livro digital (pt-PT), e-book (pt-BR) [V1/V2] | eReader | leitor de livros digitais [V2] | `trade` |
@@ -148,7 +150,7 @@ Languages not shipped. The table gives a glossary to hand to a translator. The d
 
 ### 1.6 Contradictions between the notes, and how they are resolved
 
-1. **German noun.** The usage note proposes „E-Book" as the default (LanguageTool rule [V1], three of four reading-software corpora [V2], Duden [M]). The naming note writes „eBook" in every German string. **We keep „eBook"** as the default: the resellers this product targets write it (Hugendubel „eBooks verschenken" [V2-sib]), the LibreOffice dictionary accepts it [V1], the LanguageTool rule that was read targets „EBook", „EBook Reader" and „E Books" [V1] (whether it also flags „eBook" was not checked), and the project name uses the same casing. „E-Book" ships as the `official` style for publishers, libraries and the press.
+1. **German noun.** The usage note proposes „E-Book" as the default (LanguageTool rule [V1], three of four reading-software corpora [V2], Duden [M]). The naming note writes „eBook" in every German string. **We keep „eBook"** as the default — knowingly against Duden, which lists only „E-Book" [FC]: the resellers this product targets write it (Hugendubel „eBooks verschenken" [V2-sib]), the LibreOffice dictionary accepts it [V1], the LanguageTool rule that was read targets „EBook", „EBook Reader" and „E Books" [V1] (whether it also flags „eBook" was not checked), and the project name uses the same casing. „E-Book" ships as the `official` style for publishers, libraries and the press.
 2. **Spanish and Portuguese nouns.** The usage note proposes « libro electrónico » or "eBook" (es) and "ebook" (pt-PT); the naming note writes "eBook". **We keep "eBook"**: the product lives in retail, and one casing across es, it, pt, de, en reduces the number of variants. The verified native forms ship as the `official` style.
 3. **French print wording.** The naming note's primary print line is « Scannez le code pour recevoir votre livre » (vous), but its own convention, and the UX note's card text, use the infinitive so that the card does not choose tu or vous on behalf of the giver. **We keep the infinitive** (« Scanner ce code… »), in every language that allows it.
 4. **German button.** The naming note has „Mein eBook abholen"; its buttons in the five other languages say "my book". **We keep „Mein Buch abholen"**: it matches the others and removes the eBook/E-Book spelling question from a hard-coded string.
@@ -189,8 +191,8 @@ Files: [Shopify fr](https://raw.githubusercontent.com/Shopify/dawn/main/locales/
 | Function | Quoted string | Where | Tag |
 |---|---|---|---|
 | Gift one title (retailer) | « Offrir un ebook … en 2 clics »; button « Offrir »; message and send date; delivered by e-mail | Decitre / Furet du Nord ([Decitre](https://www.decitre.fr/offrir-un-ebook), [Decitre FAQ](https://www.decitre.fr/faq/numerique/offrir-un-ebook), [Liseuses.net](https://www.liseuses.net/offrir-des-ebooks-avec-tea/)) | [V2-sib] |
-| Gift one title (retailer) | « Acheter pour d'autres personnes » | Amazon.fr ([Amazon.fr help](https://www.amazon.fr/gp/help/customer/display.html?nodeId=GVWGP284MQ6ZRM59), [IDBoox](https://www.idboox.com/news-livres/amazon-on-peut-enfin-offrir-un-livre-numerique-kindle/); also [KDP help](https://kdp.amazon.com/fr_FR/help/topic/G200652260)) | [V2-sib] |
-| Gift one title (retailer) | No « offrir » function found; users fall back on gift cards | Kobo by Fnac ([Dealabs](https://www.dealabs.com/discussions/carte-cadeau-kobo-ou-fnac-2273026); a low-authority guide says the same: [ebook-enligne.fr](https://ebook-enligne.fr/blog/offrir-ebook-guide-cadeau-numerique/)) | [V1-sib], negative finding |
+| Gift one title (retailer) | « Acheter pour d'autres personnes » (fact-check: Amazon's French KDP help ties Amazon.fr to prepaid eBooks "un ou plusieurs exemplaires" sent to others and says a **single**-copy gift exists only on Amazon.com and Amazon.in, per search summary — conflicting with the sources here; unresolved) | Amazon.fr ([KDP help](https://kdp.amazon.com/fr_FR/help/topic/G200652260), [Amazon.fr help](https://www.amazon.fr/gp/help/customer/display.html?nodeId=GVWGP284MQ6ZRM59), [IDBoox](https://www.idboox.com/news-livres/amazon-on-peut-enfin-offrir-un-livre-numerique-kindle/); also [KDP help](https://kdp.amazon.com/fr_FR/help/topic/G200652260)) | [V2-sib] |
+| Gift one title (retailer) | No « offrir » function found; users fall back on gift cards; a customer review says Fnac ebooks cannot be given [FC, [Avis Vérifiés](https://www.avis-verifies.com/avis-clients/fnac.com?p=1eo0ng)] | Kobo by Fnac ([Dealabs](https://www.dealabs.com/discussions/carte-cadeau-kobo-ou-fnac-2273026); a low-authority guide says the same: [ebook-enligne.fr](https://ebook-enligne.fr/blog/offrir-ebook-guide-cadeau-numerique/)) | [V1-sib], negative finding |
 | Gift one title (retailer) | 7switch, Cultura: not known. One sibling note has an unconfirmed recollection of an « offrir » option at 7switch | — | [M, low] |
 | Generic gift checkbox | « Je veux envoyer ce produit comme cadeau »; recipient = « destinataire » | Shopify | [V1] |
 | Gift-card noun | « carte-cadeau » (with a non-breaking hyphen, U+2011) | Shopify | [V2] with Odoo |
@@ -246,7 +248,7 @@ Files: [Shopify de](https://raw.githubusercontent.com/Shopify/dawn/main/locales/
 
 | Function | Quoted string | Where | Tag |
 |---|---|---|---|
-| Gift one title (retailer) | „Verschenken", „Artikel verschenken", „eBooks verschenken" | Hugendubel / Thalia, tolino alliance ([Hugendubel](https://www.hugendubel.de/de/shortcut/ebooksverschenken), [heise](https://www.heise.de/tipps-tricks/E-Books-verschenken-so-klappt-s-7476189.html), [test.de](https://www.test.de/E-Books-Nuetzliche-Tipps-und-Tricks-5391265-0/)) | [V2-sib] |
+| Gift one title (retailer) | „Verschenken", „Artikel verschenken" (Thalia's button, then „Verschenken" [FC]), „eBooks verschenken"; stored value: „Geschenkkarte oder Gutscheincode einlösen" (Thalia) [FC] | Hugendubel / Thalia, tolino alliance ([Hugendubel](https://www.hugendubel.de/de/shortcut/ebooksverschenken), [heise](https://www.heise.de/tipps-tricks/E-Books-verschenken-so-klappt-s-7476189.html), [test.de](https://www.test.de/E-Books-Nuetzliche-Tipps-und-Tricks-5391265-0/)) | [V2-sib] |
 | Gift one title (platform) | Amazon.de „Für andere kaufen" | recalled | [M, medium-high] |
 | Generic gift checkbox | „Ich möchte dies als Geschenk senden"; recipient = „Empfänger" | Shopify | [V1] |
 | Gift-card noun | „Geschenkgutschein"; „Gutschein" | Shopify | split with Odoo |
@@ -507,7 +509,9 @@ All of §3.2 to §3.4 is [M]. The legal rules are well established; their applic
 | Dropcards, Distro Print | "download cards", "drop cards" | Active | [V1-sib] ([Dropcards](https://www.dropcards.com/pricing/)) |
 | Bookwire (DE) | „Download-Codes" | Active | [V1-sib] ([Bookwire](https://bookwire.net/faq-download-codes)) |
 | Decitre / Furet du Nord | « Offrir un ebook », button « Offrir » — e-mail only | Active | [V2-sib] (§2.2) |
-| Hugendubel / Thalia | „Verschenken", „eBooks verschenken" — e-mail | Active | [V2-sib] (§2.4) |
+| Hugendubel / Thalia | „Verschenken", „eBooks verschenken"; Thalia's button „Artikel verschenken", then „Verschenken" — e-mail with a personal message | Active | [V2-sib] (§2.4); [FC: [heise](https://www.heise.de/tipps-tricks/E-Books-verschenken-so-klappt-s-7476189.html)] |
+| Casa del Libro (ES) | Prepaid eBook cards sold in shops, usable "para regalar"; Adobe-DRM compatible | Older (about 2015); eBook sales now through Vivlio Casa del Libro | [FC: [Muy Computer](https://www.muycomputer.com/?p=33805), [Todo eReaders](https://www.todoereaders.com/en/how-to-use-an-ebook-download-card.html)] |
+| Dutch bookshops via downloadkado.nl | E-book gift = e-mail with a unique access code, redeemed on downloadkado.nl | Active | [FC: [Hoeksteen boekhandel](https://www.hoeksteenboekhandel.nl/digitale-producten/)] |
 | Amazon.fr | « Acheter pour d'autres personnes » | Active | [V2-sib] (§2.2) |
 
 Two observations [analysis]. Every earlier physical product was named "card" plus "code"; none used the book-jacket idea, so the object deserves its own word per language (§1.3, "name for the printed object"). The living retailer flows are all named with the verb of giving, which is the vocabulary buyers already meet.
@@ -1044,3 +1048,34 @@ Legal instruments cited from memory, without link: Code de la propriété intell
 17. **Third-party names.** Device and shop names (Kindle, Kobo, tolino, Vivlio, PocketBook) may appear in compatibility text only; never in `product_name`, never as logos. Add them to a second lint list applied to `product_name` and `checkout_option`.
 18. **Standalone-site pages.** One how-to page per language whose title and H1 use the verb query: « Offrir un ebook », „eBook verschenken", "E-book cadeau doen", « Regalar un eBook », « Regalare un eBook », "Gift an eBook", « Oferecer um eBook ». Do not use the noun phrases of the `reads_as_free` list in titles.
 19. **Review gate.** Record, per locale, whether a native reviewer has signed off (§6). Until then show the locale as "beta" in the standalone UI, and keep the strings in data files (not in code) so that a reviewer can change them without a rebuild of the logic.
+
+**Added after the fact-check** (items 1–19 keep their numbers)
+
+20. The French lint (`§5.3`) also flags « livre électronique » when it names the book: the official 2007 record uses it for the device. « livre numérique » (official) and « ebook » (trade) stay the two book nouns.
+21. The German module documents that „eBook" deviates from Duden („E-Book") on purpose, and the `official` style uses „E-Book".
+
+---
+
+## Verification log
+
+Fact-check of 2026-11-12. Method: 8 fresh web searches (standard mode) written from the claims; result summaries and URLs only. Full table: `factcheck/terminology.md`.
+
+| # | Claim | Verdict | Change made |
+|---|---|---|---|
+| 1 | fr « liseuse » settled | CONFIRMED, stronger (JO 2007) | §1.1 item 7, §1.2, §1.4 |
+| 2 | fr « livre numérique » official | PARTLY | « livre électronique » trap noted; implication 20 |
+| 3 | fr trade « ebook » | CONFIRMED for Fnac | §1.4 |
+| 4 | No gift at Kobo by Fnac | CONFIRMED (second weak source) | §2.2 |
+| 5 | Decitre « Offrir un ebook » | Not re-found | Kept [V2-sib] |
+| 6 | Amazon.fr « Acheter pour d'autres personnes » | PARTLY (single-copy gift contradicted by KDP help) | §2.2 note |
+| 7 | de „Verschenken" (Thalia) | CONFIRMED | §2.4, §3.5 |
+| 8 | Duden „E-Book" vs trade „eBook" | CONFIRMED | §1.4, §1.6; implication 21 |
+| 9 | de „einlösen" | CONFIRMED | §2.4 |
+| 10 | es trade „eBook" | CONFIRMED | §1.4; Casa del Libro precedent in §3.5 |
+| 11 | nl "code verzilveren"; stored-value words | CONFIRMED | downloadkado.nl precedent in §3.5 |
+| 12 | nl "e-book" spelling | UNSUPPORTED by search | Kept on OpenTaal |
+| 13 | it retailer wording | UNSUPPORTED | Kept [M] |
+| 14 | fr « Offrir » at Apple Books | CONFIRMED | — |
+| 15 | Stored-value nouns to ban | CONFIRMED | — |
+
+No recommended string changed. Not re-checked: Italian, Portuguese, Polish and Nordic retailer wording; trademark registers and domains (§3); native acceptability of every drafted string (§6).

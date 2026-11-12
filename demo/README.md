@@ -53,7 +53,7 @@ A port set to `0` is picked by the operating system. Test hooks are on: `GET {st
 
 A walk-through:
 
-1. Open Septante, put a book in the cart, check out, tick **"C'est pour offrir"**, pay
+1. Open Septante, put a book in the cart, check out, tick **"Offrir cet ebook"** (under the heading "C'est pour offrir ?"), pay
    (any e-mail address; no card is asked for).
 2. The order page shows the claim URL, the code (`XXXX-XXXX-XXXX`) and the printable card
    (PDF, composed by the server with the store's cover): print it duplex at 100 %, flip

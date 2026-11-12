@@ -10,7 +10,7 @@ automated adversarial review works. Everything described here lives in `.github/
 - [4. Dependency updates](#4-dependency-updates)
 - [5. The sparring review](#5-the-sparring-review)
 - [6. One-time repository setup](#6-one-time-repository-setup)
-- [7. Adding the e2e and print-check jobs](#7-adding-the-e2e-and-print-check-jobs)
+- [7. The e2e and print-check jobs](#7-the-e2e-and-print-check-jobs)
 - [8. Versions confirmed, and things to double-check](#8-versions-confirmed-and-things-to-double-check)
 - [9. Troubleshooting](#9-troubleshooting)
 
@@ -18,7 +18,7 @@ automated adversarial review works. Everything described here lives in `.github/
 
 | Workflow | Trigger | What it does | Gates a merge? |
 |---|---|---|---|
-| `ci.yml` | push to `main` and `claude/**`, every pull request, merge queue, manual | fmt, clippy, tests, wasm build, docs, cargo-deny, actionlint; summarised by the job **`ci-ok`** | **Yes** — make `ci-ok` a required check |
+| `ci.yml` | push to `main` and `claude/**`, every pull request, merge queue, manual | fmt, clippy, tests, wasm build, docs, cargo-deny, actionlint, browser end-to-end tests, print check; summarised by the job **`ci-ok`** | **Yes** — make `ci-ok` a required check |
 | `claude-review.yml` | pull request opened / updated / marked ready (not drafts, not Dependabot, not forks), manual with a PR number | sparring review: prosecutors, defenders, judge; inline comments + summary; job **`spar`** fails on a blocking finding | Yes, if you make `spar` a required check |
 | `dependabot-auto-merge.yml` | pull requests opened by Dependabot | turns on auto-merge (squash) for patch/minor updates and all GitHub Actions updates | No — it relies on `ci-ok` being required |
 | `audit.yml` | daily at 05:17 UTC, manual | `cargo deny check advisories`; opens / updates / closes an issue | No — it reports |
@@ -39,7 +39,9 @@ Independent jobs, run in parallel:
 | `wasm` | `bash scripts/wasm-crates.sh build --locked` | `cargo build --workspace --target wasm32-unknown-unknown` minus the host-only crates; the exclude list lives **only** in `scripts/wasm-crates.sh` |
 | `docs` | `RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --locked` | |
 | `deny (advisories)`, `deny (bans licenses sources)` | `cargo deny check <checks>` via `EmbarkStudios/cargo-deny-action` | configuration in `deny.toml`; two matrix legs so that a new advisory is not confused with a licence problem |
-| `actionlint` | `actionlint` (pinned release, with shellcheck), then `shellcheck scripts/*.sh` | lints every workflow, including the shell in `run:` steps, and the helper scripts; annotations through `.github/actionlint-matcher.json` (copied from actionlint, MIT) |
+| `actionlint` | `actionlint` (pinned release, with shellcheck), then `shellcheck scripts/*.sh e2e/*.sh` | lints every workflow, including the shell in `run:` steps, and the helper scripts; annotations through `.github/actionlint-matcher.json` (copied from actionlint, MIT) |
+| `e2e` | print tools, `wasm-bindgen` CLI (version from `Cargo.lock`), `npm ci` + `npx playwright install --with-deps chromium` in `e2e/`, then `EBC_E2E_REQUIRE_TOOLS=1 bash e2e/run.sh` | real-browser journeys against the demo constellation (section 7); uploads `e2e/artifacts` (screenshots, PDFs, EPUBs) when it fails |
+| `print-check` | print tools, then `bash e2e/print-check.sh target/print-check` | sample cards for every format × profile checked by `ebc preflight`, `qpdf --check`, `pdffonts`, `gs`, `pdfinfo -box`; uploads them as `reference-cards` |
 | **`ci-ok`** | — | `needs` every job above and fails if any of them failed, was cancelled or was skipped. **This is the only check branch protection needs.** |
 
 Details worth knowing:
@@ -96,6 +98,8 @@ cargo clippy --workspace --all-targets --locked -- -D warnings
 scripts/install-print-tools.sh --check        # verifies the tools are on PATH, installs nothing
 cargo test --workspace --locked
 scripts/wasm-crates.sh build --locked
+e2e/run.sh                                    # browser end-to-end tests (e2e/README.md)
+e2e/print-check.sh                            # sample cards + print tools
 RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps --locked
 cargo deny check                              # or: cargo deny check advisories | bans | licenses | sources
 actionlint                                    # run from the repository root
@@ -349,75 +353,48 @@ are on `main`; step 4 needs each check to have run at least once before it can b
    *Read repository contents permission*: every workflow asks for what it needs. *Allow GitHub
    Actions to create and approve pull requests* is not needed.
 
-## 7. Adding the e2e and print-check jobs
+## 7. The e2e and print-check jobs
 
-`ci.yml` contains a placeholder comment where these jobs go. They are not written yet because
-the things they would run do not exist yet (`e2e/package.json`, a card-generating CLI command).
-When they do:
+Both are ordinary, unconditional jobs listed in `ci-ok`'s `needs`, with no extra
+`permissions`. Each runs one script that also works locally, so a red job is reproduced
+with the same command.
 
-1. Add the job to `ci.yml` with `name:` equal to its id, `timeout-minutes`, and no extra
-   `permissions` (the workflow default `contents: read` is enough).
-2. Add its id to `needs:` of `ci-ok`. Nothing changes in the repository settings.
-3. If a job must be conditional (`if:`), its result becomes `skipped`, which `ci-ok` treats as
-   a failure on purpose. Either make the job unconditional and skip *inside* it, or exclude
-   that job explicitly in `ci-ok`'s condition.
-4. Enable the matching commented stanza in `.github/dependabot.yml` (`npm` in `/e2e`).
+**`e2e`** (`e2e/run.sh`, documented in `e2e/README.md`). Builds `ebc-demo`, `ebc-server`
+and `ebc` in the debug profile and `web/pkg` with `scripts/build-wasm.sh`, then runs the
+Node test files in `e2e/tests/` (`node --test`, files in parallel, each with its own
+constellation on ports chosen by the system):
 
-Skeletons — the lines marked `TODO` are the project-specific commands to fill in:
+| File | What a browser checks |
+|---|---|
+| `septante.test.mjs` | gift checkout at the DRM-free store and its wording; the card PDF's QR code decoded (`pdftoppm` + `zbarimg`) = the claim URL upper-cased; a phone (Pixel 7) reads the gift page, downloads the EPUB, gets a pair code; a Kobo and a PocketBook with JavaScript off redeem the printed code and the pair code (no script, < 30 kB, no sideways scrolling) |
+| `grande-enseigne.test.mjs` | gift checkout at the ecosystem store; the recipient (iPhone 15) follows the signed redirect, creates an account, accepts the book; library and buyer's order page updated |
+| `designer.test.mjs` | the card designer at `/app/`: preview of both sides, PDF passes `ebc preflight`, QR code decoded, language switch, phone width, accessibility audit |
+| `audit.test.mjs` | the home-made accessibility audit finds what it should |
 
-```yaml
-  e2e:
-    name: e2e
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - name: Install the toolchain pinned in rust-toolchain.toml
-        run: rustup toolchain install --no-self-update || rustup show
-      - uses: Swatinem/rust-cache@v2
-        with:
-          save-if: ${{ github.event_name == 'push' }}
-      - uses: actions/setup-node@v7
-        with:
-          node-version: 22
-          cache: npm
-          cache-dependency-path: e2e/package-lock.json
-      # TODO: build the wasm package into web/pkg and the server + demo binaries
-      # TODO: install the e2e dependencies and browsers, then run the Playwright tests
-      - uses: actions/upload-artifact@v7
-        if: failure()
-        with:
-          name: playwright-report
-          path: e2e/playwright-report
-          retention-days: 14
+Playwright is the only npm dependency, pinned in `e2e/package.json` and
+`e2e/package-lock.json`; CI installs it with `npm ci` and the browser with
+`npx playwright install --with-deps chromium` (never needed in the development container,
+where both are preinstalled). `EBC_E2E_REQUIRE_TOOLS=1` makes a missing print tool fail
+the run instead of skipping the QR-code check. On failure the job uploads `e2e/artifacts`
+(screenshots of every key screen, the card PDF and its rendered pages, the EPUBs). The
+`wasm-bindgen` CLI is installed by `cargo install` only when the cached one (rust-cache
+keeps `~/.cargo/bin`) is not the version in `Cargo.lock`; the first run pays a few minutes
+for it.
 
-  print-check:
-    name: print-check
-    runs-on: ubuntu-latest
-    timeout-minutes: 20
-    steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-      - name: Install the toolchain pinned in rust-toolchain.toml
-        run: rustup toolchain install --no-self-update || rustup show
-      - uses: Swatinem/rust-cache@v2
-        with:
-          save-if: ${{ github.event_name == 'push' }}
-      - name: Install PDF and barcode tools
-        run: bash scripts/install-print-tools.sh
-      # TODO: generate the reference cards with the `ebc` CLI into target/print-check/
-      # TODO: run ebc-preflight and the external tools (qpdf --check, pdfinfo -box, …) on them
-      - uses: actions/upload-artifact@v7
-        if: always()
-        with:
-          name: reference-cards
-          path: target/print-check/*.pdf
-          if-no-files-found: error
-          retention-days: 14
-```
+**`print-check`** (`e2e/print-check.sh`). Composes typographic cards for every format
+(`poche`, `a6`, `digest`, `a5`) × profile (`upload`, `pro`, `home-a4`, `home-letter`,
+`home-a3`) with a fixed code and creation time, plus a card with a 300 ppi cover image
+(drawn by ghostscript) on every profile, and checks each with `ebc preflight` (format and
+profile given), `qpdf --check`, `pdffonts` (all embedded), `gs` (renders without a
+message), `pdfinfo -box` (two pages, bleed around the trim box for professional files).
+`digest` and `a5` on A4/Letter must be *refused* by `ebc card` (they do not fit the
+sheet), and a 91 ppi cover must be refused by preflight (`IMAGE_LOW_RES`) — the checks
+prove something only if they can fail. The PDFs and per-file reports are uploaded as
+`reference-cards` on every run.
+
+Still to do by hand: enable the commented `npm` stanza for `/e2e` in
+`.github/dependabot.yml` so that Playwright updates arrive as pull requests (keep the
+version in `e2e/package.json` exact).
 
 ## 8. Versions confirmed, and things to double-check
 
@@ -434,7 +411,7 @@ was read directly from its repository at the tag used, and the Dependabot option
 | `dependabot/fetch-metadata` | `@v3` | `v3` tag (3.1.0), no `v4`; outputs `update-type`, `package-ecosystem`, `dependency-names` read in `action.yml`; `package-ecosystem` is taken from the branch name (source read) |
 | `anthropics/claude-code-action` | `@v1` | `v1` tag, no `v2`; inputs `prompt`, `claude_args`, `anthropic_api_key`, `claude_code_oauth_token`, `github_token` and output `structured_output` read in `action.yml`; behaviour (base-branch restore of `.claude/`, inline-comment server, `claude_args` parsing, permission checks) read in its sources |
 | `actions/upload-artifact` | `@v7` | `v7` tag (7.0.2), no `v8`; inputs `name`, `path`, `retention-days`, `if-no-files-found` |
-| `actions/setup-node` | `@v7` (skeleton in section 7 only) | `v7` tag (7.1.0), no `v8`; inputs `node-version`, `cache`, `cache-dependency-path` |
+| `actions/setup-node` | `@v7` (job `e2e`) | `v7` tag (7.1.0), no `v8`; inputs `node-version`, `cache`, `cache-dependency-path` |
 | `actions/cache` | not used (`rust-cache` covers it) | latest major is `v6` (6.1.0) |
 | `rhysd/actionlint` | 1.7.12, via its download script pinned to the same tag | the CI step was executed locally; the release binary lints the four workflows cleanly |
 | Dependabot `rust-toolchain` ecosystem | `package-ecosystem: rust-toolchain` | listed in GitHub's supported-ecosystems table, enabled on github.com; updates `channel = "1.xx.y"` |
@@ -472,12 +449,20 @@ against the real repository.
    the key; a mismatch only means a cold (slower) pre-build.
 7. **Labels and settings** from section 6: nothing was changed in the repository settings.
    At the time of writing `main` is unprotected and auto-merge is off.
+8. **`e2e` and `print-check`** (added 2026-11-12). `e2e/run.sh` and `e2e/print-check.sh`
+   pass locally (Playwright 1.63.0 with Chromium, poppler, zbar, qpdf, ghostscript), with
+   `npm ci` checked too; the jobs themselves have not run on GitHub. Watch the first run
+   for `npx playwright install --with-deps` on the runner image, the duration of the first
+   `cargo install wasm-bindgen-cli` (cached afterwards), and that `gs` on the runner prints
+   nothing on the sample cards (a newer ghostscript may warn where the local one does not).
 
 ## 9. Troubleshooting
 
 | Symptom | Cause and fix |
 |---|---|
 | `error: the lock file … needs to be updated but --locked was passed` | `Cargo.lock` is stale or not committed. Run any cargo build locally and commit `Cargo.lock`. |
+| `e2e` fails | download the `e2e-artifacts` artifact: the screenshots show the page the failing step was on; reproduce with `e2e/run.sh tests/<file>`. A `NOTE` about `/app/` is expected while `ebc-demo` ignores `EBC_WEB_DIR` (`e2e/README.md`). |
+| `print-check` fails | the line `FAIL <kind> <format> <profile>` names the check; the matching `.txt` in the `reference-cards` artifact holds the tool output. |
 | `test` fails in "Install PDF and barcode tools" | an apt package is unavailable on the runner image; fix the list in `scripts/install-print-tools.sh` (the only place it lives). |
 | `wasm` fails on a crate that is host-only by design | add its package name to `NOT_WASM` in `scripts/wasm-crates.sh`. |
 | `deny (bans licenses sources)` fails after adding a crate | the crate (or one it pulls in) has a licence outside the policy, or is banned. Replace it, or add a justified entry to `exceptions` in `deny.toml`. |

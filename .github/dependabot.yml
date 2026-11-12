@@ -82,27 +82,27 @@ updates:
   # docs/ci.md if the auto-merge rules must differ for it.
   # ---------------------------------------------------------------------------------------
 
-  # Playwright end-to-end tests: enable when e2e/package.json exists.
-  # - package-ecosystem: npm
-  #   directory: /e2e
-  #   schedule:
-  #     interval: weekly
-  #     day: monday
-  #     time: "06:00"
-  #     timezone: Europe/Paris
-  #   cooldown:
-  #     default-days: 7
-  #   open-pull-requests-limit: 3
-  #   groups:
-  #     playwright-minor-patch:
-  #       update-types:
-  #         - minor
-  #         - patch
-  #   commit-message:
-  #     prefix: deps(e2e)
-  #   labels:
-  #     - dependencies
-  #     - javascript
+  # Playwright end-to-end tests (e2e/package.json).
+  - package-ecosystem: npm
+    directory: /e2e
+    schedule:
+      interval: weekly
+      day: monday
+      time: "06:00"
+      timezone: Europe/Paris
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
+    groups:
+      playwright-minor-patch:
+        update-types:
+          - minor
+          - patch
+    commit-message:
+      prefix: deps(e2e)
+    labels:
+      - dependencies
+      - javascript
 
   # Static frontend: enable when web/package.json exists.
   # - package-ecosystem: npm

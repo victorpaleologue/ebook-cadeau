@@ -1,6 +1,6 @@
 # Professional print requirements for the gift-card PDF
 
-_Status: draft — research date 2026-11-12_
+_Status: fact-checked — research date 2026-11-12_
 
 **Scope.** What the PDF generator must produce so that the jacket card (back | 10 mm spine | front, QR code inside) is accepted by European online printers, by a local print shop working from a quote, and by a home printer. Printer selection and prices are in the printers notes; what may be done to a cover image is in `07-legal-covers-and-reseller-rights.md`.
 
@@ -10,6 +10,7 @@ _Status: draft — research date 2026-11-12_
 
 - This document synthesises two researcher notes: `notes/print-requirements.prepress.md` (24 searches) and `notes/print-requirements.folding.md` (25 searches). Both researchers ran out of the shared search budget. No page was read in full (WebFetch is blocked): every sourced figure comes from a search-result extract.
 - For this synthesis four further searches were attempted (ECI licence text, profile ink limits, PDF/X OutputIntent keys, QR print sizing). **All four were refused: the budget was exhausted. Nothing new was verified on the web here.** No marker was upgraded.
+- **Fact-check pass (2026-11-12, `factcheck/print-requirements.md`).** Eleven fresh web searches and a direct reading of primary files: the Ubuntu `icc-profiles` and `icc-profiles-free` packages (licence files, ICC headers, ECI information sheets) and the Scribus repository (basICColor profile and licence). Claims re-verified there are marked **[FC]**; corrections are written in place and listed in the Verification log at the end. Not re-checked: Exaprint, Printoclock, Saxoprint, Helloprint, BoD, Bookvault, Lulu; mark conventions; §6–§8.
 - Gaps were filled, where possible, from sibling notes already in the repository: `notes/ereader-ux.ux.md` (QR facts read from library documentation), `notes/printers.web2print.md` and `notes/printers.print-api.md` (which products exist), `notes/printers.esg.md` (stock and finishing), and document 07 (cover integrity rules). Their markers are kept as they were.
 - Every printer surveyed says the product data sheet or template overrides its general guide, for example Flyeralarm: "achten Sie stets auf die Vorgaben im jeweiligen Produkt-Datenblatt" ([Flyeralarm checklist](https://www.flyeralarm.com/blog/wp-content/uploads/Flyeralarm_Checkliste_Druckdatenerstellung-1.pdf)) [V2]. Every number below is a default to confirm per product before a printer profile is switched on.
 - The sections on ICC licences, PDF/X dictionary keys, crop-mark geometry and QR sizing rest largely on memory. They are flagged, and listed again in §11.
@@ -23,14 +24,14 @@ _Status: draft — research date 2026-11-12_
 1. **No catalogue product matches the object exactly.** No EU online printer or print API was found that sells, as a configurable product, a book-trim card with two creases 10 mm apart (three notes agree: folding, web2print, print-api) [V1]. The nearest stock product is the presentation folder with a 10 mm capacity spine [V2]. The generator therefore needs three outputs: an upload file without marks, a file with marks plus a dimensioned plan for quote jobs, and a home-print sheet.
 2. **Bleed is not uniform in Europe**: 1, 2, 3, 3.175 and 5 mm are all published [V2]. Bleed is a per-printer parameter; 3 mm is the default.
 3. **Most online printers reject printer's marks** (Pixartprinting, Flyeralarm, Printoclock, Bookvault, BoD, Lulu) [V1 to V2 per printer]. They expect a page of exactly trim + bleed. Marks are for traditional and local printers only.
-4. **PDF flavour and colour condition are split**: PDF/X-4, PDF/X-3:2002, PDF/X-1a:2001 and "PDF 1.3"; FOGRA39 versus FOGRA51 [V2]. One content subset satisfies all of them: CMYK and grey only, no transparency, no layers, no spot colour, fonts embedded. Only the label and the output intent change per printer.
+4. **PDF flavour and colour condition are split**: PDF/X-4 (Onlineprinters names PDF/X-4:2010 [FC]), PDF/X-3:2002, PDF/X-1a:2001 and "PDF 1.3"; FOGRA39 versus FOGRA51 [V2]. One content subset satisfies all of them: CMYK and grey only, no transparency, no layers, no spot colour, fonts embedded. Only the label and the output intent change per printer.
 5. **Total ink: 300 % is the common ceiling** [V2]. Text, codes and the QR symbol are 100 % K.
 6. **Minimums agree across printers**: 6 pt type, 0.25 pt positive lines, 0.5 pt reversed lines, 300 ppi images [V2].
 7. **Cover resolution is the main prepress risk.** A retailer thumbnail 500 to 800 px wide gives about 112 to 203 ppi on the front panel [calc]. The cover must be sourced at 1,200 px wide or more, or the card falls back to the typographic layout.
 8. **A 10 mm spine is about twice the threshold for spine text** (consensus 5 mm, range 4 to 6 mm) [V2]. With 2 mm clear on each side the text band is 6 mm. Creases drift by about ±1 mm [V1].
 9. **Only the pocket formats can be printed at home.** A6, 108 × 177 and 110 × 178 mm are the only trims of §7 whose spread fits A4 at 100 % with bleed and cut ticks; all three also fit US Letter [calc]. The poche 110 × 178 mm, the standard French pocket size [V1], is the default format.
 10. **Cover handling is fixed by document 07**: no crop, no stretch, no artwork in the bleed, spine and other panels built from our own material. This is why the default layout insets the cover on a flat ground, and why the bleed is always a flat colour.
-11. **Unverified and load-bearing**: the ECI profile licence, the exact PDF/X keys, mark geometry and every QR size figure are [M]. They need one verification pass before a profile is bundled or a constant is frozen (§11).
+11. **Verified in the fact-check, with one reversal**: the **ECI profiles' licence forbids alteration and charging for distribution** (Heidelberg/ECI terms; Debian ships them in non-free), so they must not be bundled; the **basICColor build of ISO Coated v2 300 % is zlib-licensed** (Scribus) and is the one `ebc-card` bundles [FC]. Profile ink limits and ICC versions, the PDF/X-4 embedding rule, the 4-module quiet zone and GS1's 0.396 / 0.495 mm module figures are confirmed [FC]. Still [M]: the remaining PDF/X keys and mark geometry (§11).
 
 ### 1.2 The default print profile
 
@@ -55,7 +56,7 @@ Default = the upload profile for a professional printer (`upload_eu`), poche for
 | TrimBox | the flat trim, on every page | — | [V1] and [M]; §2.2 |
 | PDF label | PDF/X-4 | PDF/X-1a:2001, PDF/X-3:2002; plain PDF for home | §3.2 |
 | PDF content | CMYK and grey only; no transparency, layers, spot colour, annotation or script | tagged sRGB images only in profiles with `allow_rgb` | §3.2 |
-| Output intent | FOGRA39, "ISO Coated v2 300% (ECI)", profile embedded | FOGRA51 (PSO Coated v3), FOGRA52 (PSO Uncoated v3) | §3.1 [V2 for the conditions]; identifiers [M] |
+| Output intent | FOGRA39, "ISO Coated v2 300%" — the zlib-licensed basICColor build, profile embedded | FOGRA51 (PSO Coated v3), FOGRA52 (PSO Uncoated v3), supplied per printer | §3.1 [V2 for the conditions]; §3.5 [FC] for the files and licences; identifiers [M] |
 | Total ink | 300 % or less | 260 % (Onlineprinters express), 270 % (Lulu) | §4.3 [V2] |
 | Text, typed code, QR symbol | 100 % K only | — | §4.3 [V2] |
 | Large black solids | K100 + C30 M30 Y30 (190 %) | K100 alone when the solid crosses a crease | Exaprint [V1]; the crease rule is a house rule |
@@ -64,7 +65,7 @@ Default = the upload profile for a professional printer (`upload_eu`), poche for
 | Minimum line weight | 0.25 pt positive; 0.5 pt reversed | — | [V2] |
 | Fonts | embedded subsets; spine title as outlines | outline all text (Printoclock) | §4.4 [V1 each] |
 | Image resolution at final size | 300 ppi target; warning below 250; error below 150 | home: 200 / 150 / 100 | target [V2]; thresholds are house rules |
-| QR symbol | 33 mm box including a 4-module quiet zone; version 4 or lower; level M, raised to Q when free | box 26 to 40 mm; module 0.5 mm or more, error below 0.4 mm | §5: quiet zone [V2]; sizes [M] |
+| QR symbol | 33 mm box including a 4-module quiet zone; version 4 or lower; level M, raised to Q when free | box 26 to 40 mm; module 0.5 mm or more, error below 0.4 mm | §5: quiet zone [V2, FC]; module thresholds = GS1 POS minimum and target [FC] |
 | QR position | inside page, on white, 5 mm or more from trim and creases | — | house rule |
 | Stock, professional | 300 g/m² board, grain parallel to the spine, two creases, delivered flat, no lamination | 250 to 350 g/m² | §6.5 [V1], [M] |
 | Finishing | none | if any: 1.5 mm clear of each crease | §6.1 [V2] |
@@ -106,7 +107,7 @@ The repository already has these three profiles (`crates/ebc-layout/src/profile.
 | 15 | Pages for a 10 mm softcover spine | folding note: 150 to 250 [calc from published formulas] | web2print note: "100+" [M]; print-api note: 150 to 200 [M] | 150 to 250 | The only figure computed from sourced formulas |
 | 16 | Fonts | Pixartprinting: embed, do not outline | Printoclock: outline | embed subsets; outline flag per printer | Embedding satisfies every printer but Printoclock. An outlined spine title is vector art to a preflight and is accepted everywhere |
 | 17 | Default PDF label | X-4: Onlineprinters, Saxoprint, Gelato | X-3:2002 Flyeralarm; X-1a or X-3 Bookvault; PDF 1.3 Exaprint | X-4 by default, label per printer | §3.2 |
-| 18 | Default output condition | FOGRA39: Flyeralarm, Exaprint, Pixartprinting | FOGRA51: Onlineprinters, Saxoprint | FOGRA39 | France first: the printer with confirmed production in France (Exaprint) and Pixartprinting name it. FOGRA51 is a per-printer option |
+| 18 | Default output condition | FOGRA39: Flyeralarm, Exaprint, Pixartprinting | FOGRA51: Onlineprinters, Saxoprint | FOGRA39 | France first: the printer with confirmed production in France (Exaprint) and Pixartprinting name it. FOGRA51 is a per-printer option. Fact-check: only Flyeralarm's FOGRA39 was re-confirmed; Pixartprinting's rests on per-product instructions and one anecdote, Exaprint's on a nine-year-old guide. FOGRA39 stays the default because a freely licensed profile exists for it (§3.5), not because the French printers are proven to run it |
 | 19 | Helloprint safety margin | help centre: 3 mm | blog: 5 mm | 5 mm | Satisfies both |
 | 20 | KDP bleed | prepress note: 3.2 mm | folding note: 0.125 in | 3.175 mm | The same value; 0.125 in is exact |
 | 21 | Which trims print on A4 at 100 % | folding note, summary: only 110 × 178 | folding note, table: A6 and 108 × 177 also fit | A6, 108 × 177 and 110 × 178 fit; 110 × 178 is the default | The table is the arithmetic; the summary overstated it. Recomputed in §7 |
@@ -159,8 +160,8 @@ Rules:
 | Printer | Bleed, per side | Safety margin from trim | Marks in the file? | Sources, confidence |
 |---|---|---|---|---|
 | Pixartprinting (IT) | 3 mm for perfect-bound and wire-o books; otherwise per product template (green line = bleed, magenta = cut, red = safe area) | "safe area" per template; says a 1 to 2 mm mechanical cutting shift is normal | No crop or registration marks | [instructions article](https://support.pixartprinting.com/hc/en-us/articles/26076155387026-What-do-I-find-in-the-instructions), [perfect binding spec](https://www.pixartprinting.co.uk/printing-magazines-books-catalogues/special-finish-perfect-binding/), [wire-o spec](https://www.pixartprinting.co.uk/printing-magazines-books-catalogues/special-finish-wire-o-binding/): bleed [V2]; "no marks" [V1], exact page not pinned (surfaced with the [flyer guide](https://www.pixartprinting.co.uk/blog/how-to-create-an-effective-flyer-the-complete-guide-from-idea-to-print/)) |
-| Onlineprinters (DE) | 2 mm on flyers and postcards (DL flyer: data 10.9 × 21.4 cm for a 10.5 × 21 cm trim); 10 mm on large format | 4 mm on flyers and postcards | not found | [DL flyer](https://www.onlineprinters.ie/p/flyers-leaflets-dl-printed-on-one-side), [A5 postcard](https://www.onlineprinters.ie/p/exklusive-postcards-a5), [A6 insert](https://www.onlineprinters.ie/p/inserts-exclusive-4-4-colour-printing-a6) [V2] |
-| Flyeralarm (DE) | 1 mm on small formats; 1 to 10 mm depending on format | per data sheet; frames and outlines at least 4 mm from the edge | No: "please do not create folding or cutting marks within the artwork format"; its InDesign tutorial says to select none of the marks | [UK artwork requirements](https://www.flyeralarm.com/images/upload/content/_pdf/uk/Artwork_Requirements_UK.pdf), [bleed tutorial](https://www.flyeralarm.com/blog/en/tutorial-setting-up-bleeds-in-indesign-cc-illustrator-cc-and-scribus-1-4-5/), [PDF tutorial](https://www.flyeralarm.com/blog/en/creating-print-ready-pdf-with-indesign/) [V2] |
+| Onlineprinters (DE) | 2 mm on flyers and postcards (DL flyer: data 10.9 × 21.4 cm for a 10.5 × 21 cm trim); 10 mm on large format; 2 mm "unless specified otherwise" on its PDF-creation page [FC] | 4 mm on flyers and postcards; 4 mm general rule [FC] | not found | [DL flyer](https://www.onlineprinters.ie/p/flyers-leaflets-dl-printed-on-one-side), [A5 postcard](https://www.onlineprinters.ie/p/exklusive-postcards-a5), [A6 insert](https://www.onlineprinters.ie/p/inserts-exclusive-4-4-colour-printing-a6) [V2] |
+| Flyeralarm (DE) | 1 mm on small formats; 1 to 10 mm depending on format (fact-check: data sheets give a product-specific bleed, e.g. 3 or 4 mm; the 1 mm figure was not seen again — read the product's data sheet) | per data sheet; frames and outlines at least 4 mm from the edge | No: "please do not create folding or cutting marks within the artwork format"; its InDesign tutorial says to select none of the marks | [UK artwork requirements](https://www.flyeralarm.com/images/upload/content/_pdf/uk/Artwork_Requirements_UK.pdf), [bleed tutorial](https://www.flyeralarm.com/blog/en/tutorial-setting-up-bleeds-in-indesign-cc-illustrator-cc-and-scribus-1-4-5/), [PDF tutorial](https://www.flyeralarm.com/blog/en/creating-print-ready-pdf-with-indesign/) [V2] |
 | Saxoprint (DE) | 2 mm standard; 3 mm for packaging, folders, calendars; 5 mm for brochures (preflight minimum) | at least 3 mm; UK error page: 5 to 7 mm from the data edge when bleed is 2 mm; 10 mm from a binding edge | not found | [Druckdatenanleitung, May 2024](https://api.saxoprint.de/media-by-file-name/Druckdatenanleitung-1.pdf), [UK artwork instructions](https://www.saxoprint.co.uk/service-help/artwork-instructions), [FAQ](https://www.saxoprint.de/service-und-hilfe/faq), [pages and covers](https://www.saxoprint.co.uk/service-help/error-diagnosis/pages-and-covers) [V2] |
 | Exaprint (FR) | "fonds perdus" 2 mm minimum (charte, labels article); blog says at least 3 mm | "zone tranquille" 3 mm on most products, 5 mm on stapled brochures, 10 mm on "dos collé" | not found | [charte PAO](https://www.exaprint.fr/imprimerie-en-ligne/charte-pao), [fond perdu article](https://blog.exaprint.fr/cadres-impression-contraintes-et-astuces/), [6 erreurs](https://blog.exaprint.fr/6-erreurs-courantes-a-eviter-en-impression/): zone tranquille [V2]; bleed 2 or 3 mm, see §1.4 row 2 |
 | Printoclock (FR) | 2 mm (FAQ) or 5 mm (template table, most formats) | "marge technique" 2 mm; 5 mm for "dos carré collé" | No "traits de coupe", no colour bar, no "hirondelles", no white margins | [FAQ](https://support.printoclock.com/article/comment-faire-mon-fichier-dimpression), [bien réaliser son fichier](https://www.printoclock.com/bien-realiser-son-fichier), [fond perdu](https://www.printoclock.com/fond-perdu), [technical specs 63](https://www.printoclock.com/technical-specs-html/63) [V1 each]; bleed: §1.4 row 3 |
@@ -221,11 +222,11 @@ Magenta means "crease" at Papeo and "cut" at Pinguindruck. A fixed colour would 
 
 | Printer | PDF standard or version | Colour and output condition | Total ink | Black rules | Sources, confidence |
 |---|---|---|---|---|---|
-| Onlineprinters | PDF/X-4:2008; identical page sizes; no password | CMYK; FOGRA51 (PSO Coated v3) for coated, FOGRA52 for uncoated | 300 % in normal production, 260 % for rush or express | black text under 12 pt is set to overprint automatically | [PDF settings FAQ](https://onlineprinters.ie/c/faq/settings-print-pdf), product pages of §2.3, [Überdrucken](https://www.onlineprinters.de/c/druckdaten/ueberdrucken) [V1 each]; the ink figure is from an onlineprinters.de page surfaced in the same search, exact page not pinned [V1] |
-| Flyeralarm | PDF/X-3:2002 (no transparency); PDF/X-4 on some data sheets | "ISO Coated V2 300% (ECI)" in general, "ISO Coated V2 (ECI)" for large-format digital; the profile must be set as output intent | 300 %, implied by the profile | — | [checklist](https://www.flyeralarm.com/blog/wp-content/uploads/Flyeralarm_Checkliste_Druckdatenerstellung-1.pdf), [UK requirements](https://www.flyeralarm.com/images/upload/content/_pdf/uk/Artwork_Requirements_UK.pdf), [PDF/X article](https://flyeralarm.com/blog/en?p=24986) [V2] |
+| Onlineprinters | PDF/X-4:2010 where possible (corrected by the fact-check from X-4:2008; [PDF creation](https://www.onlineprinters.ie/c/print-files/pdf-creation)); identical page sizes; no password | CMYK; FOGRA51 (PSO Coated v3) for coated, FOGRA52 (PSO Uncoated v3) for uncoated [FC] | 300 % in normal production, 260 % for rush or express (not found again in the fact-check: unconfirmed) | black text under 12 pt is set to overprint automatically | [PDF settings FAQ](https://onlineprinters.ie/c/faq/settings-print-pdf), product pages of §2.3, [Überdrucken](https://www.onlineprinters.de/c/druckdaten/ueberdrucken) [V1 each]; the ink figure is from an onlineprinters.de page surfaced in the same search, exact page not pinned [V1] |
+| Flyeralarm | PDF/X-3:2002 (no transparency); the checklist says "PDF/X-3 or PDF/X-4, see the data sheet" [FC] | "ISO Coated V2 300% (ECI)" in general, "ISO Coated V2 (ECI)" for large-format digital; the profile must be set as output intent | 300 %, implied by the profile | — | [checklist](https://www.flyeralarm.com/blog/wp-content/uploads/Flyeralarm_Checkliste_Druckdatenerstellung-1.pdf), [UK requirements](https://www.flyeralarm.com/images/upload/content/_pdf/uk/Artwork_Requirements_UK.pdf), [PDF/X article](https://flyeralarm.com/blog/en?p=24986) [V2] |
 | Saxoprint | PDF/X-4 preferred, or PDF 1.6; avoid layers (Optional Content); keep native transparency | CMYK; PSO Coated v3 (FOGRA51) for coated | 300 % guaranteed maximum in offset | black text 100 % K, not four-colour | [guide 2024](https://api.saxoprint.de/media-by-file-name/Druckdatenanleitung-1.pdf), [UK instructions](https://www.saxoprint.co.uk/service-help/artwork-instructions), [colours](https://www.saxoprint.de/service-und-hilfe/fehlerdiagnose/farben) [V2 for the PDF flavour; V1 for ink and profile] |
-| Exaprint | "PDF 1.3 optimal" | an old guide names ISO Coated V2 300 %; Exaprint supplies its own profiles | 300 %, excess corrected automatically | rich black for solids = K100 + C30 M30 Y30; text in K only; K100 always overprints | [Guide PAO PDF](https://static.exaprint.fr/marketing/cms/exaprint/guidePAO/GuidePAO-telechargement.pdf), [assistance PAO](https://www.exaprint.fr/page/assistance-pao), [conseils PAO](https://www.exaprint.fr/conseils-pao/), [brochure errors](https://blog.exaprint.fr/impression-brochure-erreurs-pao/): ink [V2]; the guide PDF is roughly 9 years old |
-| Pixartprinting | PDF at 1:1 scale, not password-protected | CMYK, FOGRA39; non-CMYK files are converted automatically with a separation profile; Pantone not used in process printing | not found | text 100 % K; tints never below 5 % | [perfect binding spec](https://www.pixartprinting.co.uk/printing-magazines-books-catalogues/special-finish-perfect-binding/), [CMYK article](https://support.pixartprinting.com/hc/en-us/articles/360017440400-What-does-CMYK-mean), [inks advice](https://www.pixartprinting.co.uk/blog/inks-advices/), [2017 third-party checklist](https://printicom.wordpress.com/2017/07/06/final-checklist-before-uploading-your-documents/) [V2 for FOGRA39] |
+| Exaprint | "PDF 1.3 optimal" | an old guide names ISO Coated V2 300 %; Exaprint supplies its own profiles | 300 %, excess corrected automatically (not found in the fact-check; other French printers publish 280 to 330 %) | rich black for solids = K100 + C30 M30 Y30; text in K only; K100 always overprints | [Guide PAO PDF](https://static.exaprint.fr/marketing/cms/exaprint/guidePAO/GuidePAO-telechargement.pdf), [assistance PAO](https://www.exaprint.fr/page/assistance-pao), [conseils PAO](https://www.exaprint.fr/conseils-pao/), [brochure errors](https://blog.exaprint.fr/impression-brochure-erreurs-pao/): ink [V2]; the guide PDF is roughly 9 years old |
+| Pixartprinting | PDF at 1:1 scale, not password-protected | CMYK, FOGRA39 per the researchers; Pixartprinting says the profile is given in each product's PDF instructions and that it converts non-CMYK files with a CMYK profile; Pantone not used in process printing | not found | text 100 % K; tints never below 5 % | [perfect binding spec](https://www.pixartprinting.co.uk/printing-magazines-books-catalogues/special-finish-perfect-binding/), [CMYK article](https://support.pixartprinting.com/hc/en-us/articles/360017440400-What-does-CMYK-mean), [inks advice](https://www.pixartprinting.co.uk/blog/inks-advices/), [2017 third-party checklist](https://printicom.wordpress.com/2017/07/06/final-checklist-before-uploading-your-documents/) [V1 for FOGRA39, downgraded by the fact-check: only an anecdotal mention found] |
 | Printoclock | PDF, JPEG or TIFF; flatten images, outline fonts | CMJN preferred, RVB accepted | no number; warns against heavy ink, especially black solids | — | [bien réaliser son fichier](https://www.printoclock.com/bien-realiser-son-fichier) [V1] |
 | Bookvault | PDF/X-1a:2001 or PDF/X-3:2002; transparency flattened | not found | not found | — | [PDF/X article](https://help.bookvault.app/what-is-pdf/x-1a2001-and-pdf/x-32002), [validation checks](https://help.bookvault.app/what-does-the-bookvault-file-validation-check-for) [V2] |
 | Lulu | print-ready PDF, fonts embedded, layers flattened, single cover spread, no password | CMYK "Coated GRACoL 2006" (a US condition) | never above 270 % | — | [guide](https://assets.lulu.com/media/guides/en/lulu-book-creation-guide.pdf), [cover upload](https://help.lulu.com/en/support/solutions/articles/64000282777-upload-your-cover-file) [V1] |
@@ -266,7 +267,7 @@ Transparency is forbidden by PDF/X-3:2002 (Flyeralarm) and must be flattened for
 
 ### 3.3 Output intent and PDF/X keys
 
-Verified this session: which conditions printers ask for (§3.1), the exact Flyeralarm wording "ISO Coated V2 300% (ECI)", and that the profile must be present as the PDF output intent [V2]. **Everything else in this subsection is [M]** and must be checked against ISO 15930 and the ICC characterisation registry before release.
+Verified this session: which conditions printers ask for (§3.1), the exact Flyeralarm wording "ISO Coated V2 300% (ECI)", and that the profile must be present as the PDF output intent [V2]. Verified in the fact-check: PDF/X-4 always requires the output-intent ICC profile embedded (PDF Association); in PDF in general `DestOutputProfile` is "required if OutputConditionIdentifier does not specify a standard production condition; optional otherwise" (PDF reference), and PDF/X-1a files with only a registered identifier circulate in practice [FC]. **Everything else in this subsection is [M]** and must be checked against ISO 15930 and the ICC characterisation registry before release.
 
 OutputIntent dictionary:
 
@@ -310,27 +311,29 @@ A CMYK output profile is specific to a paper class. FOGRA39 and FOGRA51 are coat
 
 ### 3.5 ICC profiles and their licences
 
-**All of this subsection is [M].** No search could be run on licence terms in either the research session or this synthesis.
+**Rewritten by the fact-check.** The draft was [M]; the licence files shipped with the Ubuntu packages `icc-profiles` 2.1-2 (multiverse) and `icc-profiles-free` 2.0.1+dfsg-1.1 (main), the ECI information sheets inside them, and the Scribus repository were read directly [FC].
 
 | Profile (file) | Characterisation | Paper | Total ink | Use |
 |---|---|---|---|---|
-| ISO Coated v2 300% (ECI), `ISOcoated_v2_300_eci.icc` | FOGRA39L | coated, ISO 12647-2:2004 paper types 1 and 2 | 300 % | **default output intent** |
-| ISO Coated v2 (ECI), `ISOcoated_v2_eci.icc` | FOGRA39L | same | 330 % | not used: exceeds the 300 % ceiling |
-| PSO Coated v3, `PSOcoated_v3.icc` | FOGRA51 | premium coated, ISO 12647-2:2013 PS1, M1 measurement | 300 % | Onlineprinters, Saxoprint |
-| PSO Uncoated v3 (FOGRA52), `PSOuncoated_v3_FOGRA52.icc` | FOGRA52 | wood-free uncoated, PS5 | 300 % | uncoated board at printers that name it |
+| ISO Coated v2 300% (ECI), `ISOcoated_v2_300_eci.icc` | FOGRA39L | coated, ISO 12647-2:2004 paper types 1 and 2 | 300 % [FC] | reference condition of the default; **the ECI file itself is not bundled** (licence below) |
+| ISO Coated v2 300% (basICColor), `ISOcoated_v2_300_bas.icc` | FOGRA39L | same | 300 % | **default output intent, bundled in `ebc-card`** (zlib licence) |
+| ISO Coated v2 (ECI), `ISOcoated_v2_eci.icc` | FOGRA39L | same | 330 % [FC] | not used: exceeds the 300 % ceiling |
+| PSO Coated v3, `PSOcoated_v3.icc` | FOGRA51 | premium coated, ISO 12647-2:2013 | 300 % [FC] | Onlineprinters, Saxoprint; supplied per printer |
+| PSO Uncoated v3 (FOGRA52), `PSOuncoated_v3_FOGRA52.icc` | FOGRA52 | wood-free uncoated | 300 % [FC] | uncoated board at printers that name it; supplied per printer |
 
 | Source | Licence as recalled | Decision |
 |---|---|---|
-| ECI (eci.org) | Free of charge; shipped with a zlib/libpng-style licence text: use, alteration and redistribution permitted, origin not to be misrepresented, altered versions marked, notice kept. Compatible with a BSD-3-Clause repository if the licence file travels with the profile | Use these, **after reading the licence file inside the ECI download**. Until then, do not commit them and do not serve them from our host |
-| basICColor variants of the same characterisations | The prepress note recalls no explicit redistribution grant. I recall that Debian ships basICColor-built files such as `ISOcoated_v2_300_bas.icc` in its free archive (package `icc-profiles-free`), which would imply a free licence. The two recollections disagree | Unresolved. The Debian package's copyright file is the quickest check |
+| ECI (eci.org) — `ISOcoated_v2_300_eci.icc`, `ISOcoated_v2_eci.icc` | **Corrected by the fact-check (the draft recalled a zlib-style licence: wrong).** Debian records **Heidelberg's licence** (2003): free use and redistribution provided the licence always travels with the profiles; "explicitly prohibited to charge any kind of remuneration for the distribution"; "not allowed to edit these PROFILES or to change the entries in the profile tags". The `PSO_*_eci` profiles carry an ECI notice: "may be used, embedded, exchanged, and shared without restriction. It may not be altered or sold without written permission of ECI". Debian ships them in **non-free** (Ubuntu: multiverse) because alteration is forbidden. The licence of `PSOcoated_v3.icc` and `PSOuncoated_v3_FOGRA52.icc` is not stated in that copyright file [FC] | **Do not bundle or serve them.** Their terms are not on the repository's permissive list. A printer that insists on an ECI file gets it from the user or operator at run time (`CardRequest::output_profile`); embedding a profile in a PDF is its intended use |
+| basICColor build, `ISOcoated_v2_300_bas.icc` | **Resolved by the fact-check.** Distributed by Scribus with a zlib/libpng licence, "Copyright (c) 2007-2010, basICColor GmbH": use, alteration and redistribution permitted, commercial use included, origin not to be misrepresented. The file in `crates/ebc-card/assets/icc/` is byte-identical to Scribus's (SHA-256 `b424c77f…7e886`). The draft's recollection that Debian's `icc-profiles-free` ships it is wrong for the current package, which holds no CMYK printing profile [FC] | **Bundled as the default** (already done in `ebc-card`), with its licence file next to it |
+| Free characterisation data, `FOGRA39L.ti3` (and FOGRA28L–FOGRA40L) | In `icc-profiles-free`, Zlib licence (Kai-Uwe Behrmann) [FC] | A permissive route to build our own profiles if ever needed; the profiling tool's own licence then matters |
 | Adobe (Coated FOGRA39 and others) | Free download; redistribution only under Adobe's separate bundling licence | Do not bundle |
 | CC0 "Compact ICC Profiles" already in `assets/icc/` | Public domain. The CMYK one is a US SWOP-compatible profile (CGATS TR 001) | Tests and last-resort fallback only. It is not a European condition and no surveyed EU printer names it |
 
 Practical points:
 
 - Embedding the profile in the PDF's output intent is the profile's intended use. Serving the `.icc` file to the browser is redistribution, so the licence check applies to the web application, not only to the repository.
-- Each ECI CMYK profile is about 1.8 to 2.4 MB [M]. Load it on demand, when the user chooses a professional output, and cache it. The home path does not need it.
-- The ECI offset profiles are ICC version 2 files [M], so they can be embedded in PDF 1.3 (X-1a, X-3) and PDF 1.6 (X-4) files alike. Check the header version at load time.
+- The ECI CMYK profiles are 1.83 MB (ISO Coated v2 300 %) and 2.20 MB (PSO Coated and Uncoated v3) [FC]; the bundled basICColor file is 1.05 MB. Load a profile on demand, when the user chooses a professional output, and cache it. The home path does not need it.
+- The ECI offset profiles are ICC version 2.4 files, class `prtr` [FC], so they can be embedded in PDF 1.3 (X-1a, X-3) and PDF 1.6 (X-4) files alike. Check the header version at load time.
 - If the licence check fails, the fallback is the tagged-sRGB PDF/X-4 path of §3.4 for printers that accept it, and a PDF/X-1a or X-3 file that names the registered condition without embedding the profile for the others. That second form is permitted by the standard [M] but some printer preflights will reject it, and the cover could then not be converted properly. It is a degraded mode.
 
 ### 3.6 Seed data for per-printer profiles
@@ -426,14 +429,14 @@ A 260 % or 270 % limit cannot be met by a 300 % profile. For those two cases the
 
 | Fact | Source | Conf. |
 |---|---|---|
-| The quiet zone is 4 modules: "the minimum according to the specs"; a second library defaults to four light modules | [python-qrcode README](https://raw.githubusercontent.com/lincolnloop/python-qrcode/main/README.rst), [segno docs](https://raw.githubusercontent.com/heuer/segno/master/docs/make.rst) (via `notes/ereader-ux.ux.md`) | [V2]; the ISO/IEC 18004 text itself was not read |
+| The quiet zone is 4 modules: "the minimum according to the specs"; a second library defaults to four light modules; GS1's POS table gives a 4X quiet zone on all four sides | [python-qrcode README](https://raw.githubusercontent.com/lincolnloop/python-qrcode/main/README.rst), [segno docs](https://raw.githubusercontent.com/heuer/segno/master/docs/make.rst) (via `notes/ereader-ux.ux.md`); [GS1 NZ fact sheet](https://www.gs1nz.org/assets/Resources/Services/GS1NZ-fact-sheet-2D-barcodes-for-retail-things-you-need-to-know.pdf) | [V2, FC]; the ISO/IEC 18004 text itself was not read |
 | Error-correction levels recover about 7 % (L), 15 % (M), 25 % (Q), 30 % (H) | python-qrcode README | [V1] |
 | Alphanumeric mode covers digits, upper-case A to Z, space and `$%*+-./:`; lower case forces byte mode | [segno modes](https://raw.githubusercontent.com/heuer/segno/master/docs/qrcode-modes.rst); [BIP-173](https://raw.githubusercontent.com/bitcoin/bips/master/bip-0173.mediawiki) recommends upper case inside QR codes | [V1 each] |
 | An encoder can raise the error-correction level at no cost when the version does not change | [Nayuki README](https://raw.githubusercontent.com/nayuki/QR-Code-generator/master/Readme.markdown), segno docs | [V2] |
 | ZXing parses an upper-case `HTTPS://` payload as a URL | [URIResultParser.java](https://raw.githubusercontent.com/zxing/zxing/master/core/src/main/java/com/google/zxing/client/result/URIResultParser.java) | [V1]; stock iOS and Android cameras untested [M] |
 | Fine elements and black text should be K only; positive detail 0.25 pt or more; cutting shift 1 to 2 mm | §3.1, §4.1, §2.3 | [V2], [V2], [V1] |
-| Module size of at least 0.4 mm for phone scanning (GS1: about 0.396 mm minimum, 0.495 mm target) | prepress note | [M] |
-| Symbol width of about one tenth of the scanning distance | prepress note, UX note | [M] |
+| Module size of at least 0.4 mm (GS1 General Specifications §5.12.3.1 for QR codes with GS1 Digital Link at retail POS: X-dimension 0.396 mm minimum, 0.495 mm target, 0.990 mm maximum; for POS plus general distribution the target is 0.990 mm). These are retail-scanner figures, not phone-camera measurements | [GS1 UK](https://www.gs1uk.org/knowledge-hub/qr-codes-powered-by-gs1/how-big-should-a-qr-code-powered-by-gs1-be), [GS1 reference](https://ref-pd.gs1.org/sme-guidance/solution-provider-2d-readiness/), GS1 NZ (above) | [FC] (was [M]) |
+| Symbol width of about one tenth of the scanning distance, for a front-on scan in good light; about 2 cm is the common close-range floor | [QRStuff](https://www.qrstuff.com/blog/?p=69), [Uniqode](https://www.uniqode.com/blog/qr-code-best-practices/how-to-perfectly-size-your-qr-codes), [QR Code Generator](https://www.qr-code-generator.com/blog/qr-code-distance/) | [FC, vendor guides] (was [M]) |
 | Symbol contrast grades of ISO/IEC 15415 (40 % for grade C, 70 % for grade A) | prepress note | [M] |
 
 Symbol versions for our payloads, computed with an encoder in the UX note [calc]:
@@ -460,7 +463,7 @@ Symbol versions for our payloads, computed with an encoder in the UX note [calc]
    | 4 | 33 + 8 = 41 | 0.80 mm | 26.6 mm | 20.5 mm |
 
    All [calc]. The 33 mm default satisfies both notes: symbol of 25 mm or more (prepress) and 20 mm or more (UX).
-6. **Module size**: error below 0.4 mm, warning below 0.5 mm [M]. At 0.5 mm a module is about 6 device dots at 300 dpi [calc].
+6. **Module size**: error below 0.4 mm, warning below 0.5 mm — GS1's POS minimum and target [FC]. At 0.5 mm a module is about 6 device dots at 300 dpi [calc].
 7. **Ink**: dark modules 0/0/0/100, drawn as vector rectangles merged into a single filled path (adjacent rectangles drawn separately can show hairline gaps in some renderers [M]). Light modules and quiet zone are paper white, 0/0/0/0. Never a four-colour black, never a reversed (light on dark) symbol.
 8. **Place**: on the inside page, never on the cover panel (document 07, rule 7), never on or across the spine. Box edges 5 mm or more from the trim and from each crease.
 9. **Clear text**: print the host and the typed code next to the symbol. It is the fallback without a phone and an accessibility requirement (`notes/legal-gifting-commerce.commerce.md`).
@@ -507,7 +510,7 @@ Platform cover templates (as of 2026-11):
 
 | Platform | Bleed | Spine width formula | Spine text allowed from | Spine text side margin | Hinge and other |
 |---|---|---|---|---|---|
-| Amazon KDP paperback | 0.125 in (3.2 mm) top, bottom, outside; cover text 0.125 in or more inside the trim ([KDP help](https://kdp.amazon.com/en_US/help/topic/G201953020)) [V2] | pages × 0.002252 in (0.0572 mm) for white and standard colour; 0.002347 in (0.0596 mm) for premium colour ([KDP help](https://kdp.amazon.com/en_US/help/topic/G201953020)) [V1]; cream 0.0025 in per third parties ([kdpeasy](https://www.kdpeasy.com/fr/tools/calculateur-dos-kdp)) [V1] | 79 pages; KDP pages are inconsistent ("at least 79", "more than 79", Cover Creator says 80) ([KDP help](https://kdp.amazon.com/en_US/help/topic/A1L46HVPPIYTE), [ebookpbook](https://www.ebookpbook.com/2026/06/24/book-spine-text-requirements/)) [V2] | 0.0625 in (1.6 mm) each side [M], not confirmed by search | 0.4 in (10 mm) between the spine and the safe area on front and back ([KDP help](https://kdp.amazon.com/en_US/help/topic/G201953020)) [V1]; probably the hardcover hinge [M] |
+| Amazon KDP paperback | 0.125 in (3.2 mm) top, bottom, outside; cover text 0.125 in or more inside the trim ([KDP help](https://kdp.amazon.com/en_US/help/topic/G201953020)) [V2] | pages × 0.002252 in (0.0572 mm) for white and standard colour; 0.002347 in (0.0596 mm) for premium colour ([KDP help](https://kdp.amazon.com/en_US/help/topic/G201953020)) [V1]; cream 0.0025 in per third parties ([kdpeasy](https://www.kdpeasy.com/fr/tools/calculateur-dos-kdp)) [V1] | 79 pages; KDP pages are inconsistent ("at least 79", "more than 79", Cover Creator says 80) ([KDP help](https://kdp.amazon.com/en_US/help/topic/A1L46HVPPIYTE), [ebookpbook](https://www.ebookpbook.com/2026/06/24/book-spine-text-requirements/)) [V2] | 0.0625 in (1.6 mm) each side per third-party guides only, which add 0.0625 in of fold variance, i.e. lettering 0.125 in (3.2 mm) inside each fold [FC] | 0.4 in (10 mm) between the spine and the safe area on front and back ([KDP help](https://kdp.amazon.com/en_US/help/topic/G201953020)) [V1]; probably the hardcover hinge [M] |
 | Lulu paperback | 0.125 in ([M] in the folding note; [V2] in the prepress note, §2.3) | pages / 444 + 0.06 in; pages / 460 + 0.06 in for magazine and comic paper ([Lulu API help](https://help.api.lulu.com/en/support/solutions/articles/64000254616-how-is-spine-width-calculated-)) [V1] | No spine text at 80 pages or fewer ([Lulu Book Creation Guide](https://assets.lulu.com/media/guides/en/lulu-book-creation-guide.pdf), read through a [Scribd copy](https://www.scribd.com/document/615961952/lulu-book-creation-guide)) [V1] | 0.125 in (3.2 mm) to each spine edge (same guide) [V1] | Text spanning the full spine is risky: small shifts push it onto the covers; spine width differs between Lulu's own network and its distribution partners ([Lulu help](https://help.lulu.com/en/support/solutions/articles/64000255462)) [V1] |
 | IngramSpark | 0.125 in (3 mm) ([Ingram cover bleed sheet](https://marketing.ingramcontent.com/mrkng/documents/publishers/Cover-Bleed-Dimensions.pdf)) [V1] | Template generator only ([IngramSpark help](https://help.ingramspark.com/hc/en-us/articles/35303841585933-Cover-Template-Generator)) | Paperback 48 pages, hardcover 18 pages ([IngramSpark help](https://help.ingramspark.com/hc/en-us/articles/35306346735245-Cover-File-Creation), [ebookpbook](https://www.ebookpbook.com/2026/06/24/book-spine-text-requirements/)) [V2] | Spine of 0.35 in (9 mm) or more: 0.0625 in; thinner: 0.03125 in (about 1 mm) ([IngramSpark blog](https://www.ingramspark.com/blog/file-requirements-for-print-books), [Ingram dust-jacket template](https://marketing.ingramcontent.com/mrkng/documents/publishers/Dust-Jacket-Template.pdf)) [V2] | All text 0.25 in (6 mm) or more from the trim; duplex covers keep the spine + 0.0625 in each side white for the glue; a 0.5 in (13 mm) hinge is quoted for Ingram covers [V1] |
 | BoD (DE/FR) | **5 mm** on the four outer sides ([BoD cover guide, about 11 years old](https://www.yumpu.com/de/document/view/41877228/wie-gestalte-ich-das-buchcover-richtig-bod)) [V1] | Online *Umschlagsberechnung*; minimum 24 pages (same guide) | 80 pages or a **5 mm** spine (same guide) [V1] | not found | Keep text 8 mm away from the fold area next to the spine (same guide) [V1] |
@@ -528,7 +531,7 @@ French, Swiss and German printers on spine text:
 Synthesis:
 
 - "No spine text below about 5 mm" is the consensus, range 4 to 6 mm (KDP's 79 pages is about 4.5 mm, Lulu's 80 pages about 6.1 mm [calc]) [V2]. A 10 mm spine is about twice the threshold and matches Bookvault's comfortable figure.
-- Side margins for spine text: 1.5 mm (EPFL), 1.6 mm (IngramSpark, spines of 9 mm or more), 3.2 mm (Lulu) [V1 each]. On 10 mm these leave a band of 7 mm, 6.8 mm and 3.6 mm [calc]. **We keep 2 mm each side and a 6 mm band.**
+- Side margins for spine text: 1.5 mm (EPFL), 1.6 mm (IngramSpark, spines of 9 mm or more), 3.2 mm (Lulu; also KDP in practice per third-party guides [FC]) [V1 each]. On 10 mm these leave a band of 7 mm, 6.8 mm and 3.6 mm [calc]. **We keep 2 mm each side and a 6 mm band** — a house rule: the book platforms' 3.2 mm protects glued spines, which the card does not have.
 - Tolerance: generic spine guides quote about ±1 mm (result set including [pdfpress](https://www.pdfpress.app/blog/spine-width-calculator-guide) and [bookdesigner.ai](https://www.bookdesigner.ai/guides/book-spine-width); exact page not pinned) [V1]. Pixartprinting states a 1 to 2 mm cutting shift [V1].
 - Hinge zones (5 mm at Infoprint, 8 mm at BoD, 10 to 13 mm on hardcovers at KDP and Ingram; [Mixam](https://mixam.co.uk/support/hardcoversetup) adds 5 mm each side) exist because of glue. The card has no glue, so no hinge zone applies. Optional "paperback look" hinge creases 6 mm outside the spine (EPFL) would respect the 5 mm spacing rule; they are not part of the default.
 
@@ -671,7 +674,7 @@ Observations [calc]:
 | Point | Finding | Conf. |
 |---|---|---|
 | Unprintable margins | Model-specific: 4.23 mm per side on one HP LaserJet ([HP forum](https://h30434.www3.hp.com/t5/LaserJet-Printing/What-does-the-quot-Wide-A4-quot-setting-do-HP-Laserjet/td-p/6862566)); 3.37 mm left and right on A4 for a Lexmark inkjet, 6.35 mm on other sizes ([Lexmark Z52 manual](https://www.manualslib.com/manual/291880/Lexmark-Z52.html?page=50)); HP forum: "some 3 mm, some 5 mm" ([HP forum](https://h30434.www3.hp.com/t5/Inkjet-Printing/Minimum-Margins-Envy-5030/m-p/7329955)). Range **3 to 6.35 mm** | V2 |
-| Bottom edge | Older inkjets have a larger bottom margin than the sides (an old HP manual in the results); 12 to 15 mm on some models [M] | V1 / M |
+| Bottom edge | Inkjets often have a larger bottom (trailing-edge) margin than the sides: 10.9 mm on an HP OfficeJet, 11.7 mm in an HP Color Inkjet manual, 17 mm on a DeskJet (user report); Epson sheets give 3 mm sides and 5 mm top and bottom ([Epson XP-520](https://files.support.epson.com/docid/cpd4/cpd41235/source/specifications/references/xp520/spex_printable_area_xp520.html), [HP manual](https://www.manualowl.com/m/Hewlett-Packard/Color-Inkjet-cp1160/Manual/91639?page=205), [Inkscape forum](https://alpha.inkscape.org/vectors/www.inkscapeforum.com/viewtopicdd6e.html?t=3335)). A4 borderless is usually unsupported outside photo media | [FC] |
 | Laser versus inkjet | Laser printers usually allow smaller margins; borderless printing is an inkjet feature and cannot be assumed ([Label Planet](https://labelplanet.co.uk/glossary/printer-margins)) | V1 |
 | Paper | 160 to 200 g/m² matt card is the practical ceiling of most home printers; 120 g works but will not stand well | M |
 | Duplex registration | 1 to 2 mm between front and back on home printers | M |
@@ -683,7 +686,7 @@ Observations [calc]:
 |---|---|
 | Page | A4 landscape, 297 × 210 mm; boxes in §2.2 |
 | Spread position | centred: 33.5 mm from the left and right sheet edges, 16 mm from top and bottom |
-| Printable frame assumed | 6.35 mm on every side; nothing we draw may lie outside it |
+| Printable frame assumed | 6.35 mm on every side; nothing we draw may lie outside it. Fact-check: not a safe bound for the trailing edge (up to 17 mm), which falls on a short edge of the sheet where 33.5 mm is free |
 | Bleed | 2 mm of ground colour |
 | Cut guides | corner ticks from the bleed edge outward, 5 mm, 0.5 pt, light grey (K only) |
 | Fold guides | at both creases, above and below, same length, dashed, light grey |
@@ -693,7 +696,7 @@ Observations [calc]:
 | Inside page | white ground; all content 5 mm or more inside the trim and away from the creases |
 | Resolution thresholds | 200 ppi target, warning below 150, error below 100 |
 
-A lower margin of 15 mm on an old inkjet still leaves the trim area intact (16 mm free at the bottom), but clips the bottom bleed and ticks [calc].
+Corrected by the fact-check [calc]: the paper is fed portrait, so the printer's large trailing-edge margin (up to about 17 mm) lies on a **short** edge of the A4 sheet, which is a left or right edge of the landscape layout, where 33.5 mm is free. The spread, its bleed and its ticks are not clipped. The draft's statement that a 15 mm lower margin clips the bottom bleed assumed the landscape bottom was the printer's trailing edge; that holds only for a driver that does not rotate landscape output.
 
 ### 9.3 Instructions to give the user
 
@@ -972,8 +975,8 @@ All retrieved as search-result summaries on 2026-11-12 unless stated. Links mark
 
 19. All professional outputs use the content subset of §3.2. Violations are errors raised by the writer, not silently repaired.
 20. Write the page content and file structure with PDF 1.3 features only, whatever the label. The label (PDF/X-4 by default, PDF/X-1a:2001, PDF/X-3:2002) changes only the header version, the version markers and the metadata.
-21. Always embed the output-intent profile. Default: FOGRA39 with "ISO Coated v2 300% (ECI)"; FOGRA51 and FOGRA52 by profile. Check the profile header on load: CMYK, output class, ICC version 2.
-22. Load the output profile on demand, when a professional output is requested; do not link it into the WebAssembly binary. Do not commit or serve the ECI profiles until their licence file has been read and stored next to them. The CC0 SWOP-compatible profile in `assets/icc/` is for tests only and must never be the output intent of an order sent to a European printer.
+21. Always embed the output-intent profile. Default: FOGRA39 with the zlib-licensed "ISO Coated v2 300%" basICColor profile (corrected by the fact-check: not the ECI file, see item 39); FOGRA51 and FOGRA52 by profile. Check the profile header on load: CMYK, output class, ICC version 2.
+22. Load the output profile on demand, when a professional output is requested; do not link it into the WebAssembly binary. Do not commit or serve the ECI profiles until their licence file has been read and stored next to them. The CC0 SWOP-compatible profile in `assets/icc/` is for tests only and must never be the output intent of an order sent to a European printer. (Fact-check: the licence has now been read — ECI's files may not be altered or sold and must not be bundled; see item 39.)
 23. Convert cover images with a real ICC transform to the output-intent space (relative colorimetric with black-point compensation by default). If the profile is unavailable, write the image as tagged sRGB in a PDF/X-4 file only for profiles with `allow_rgb`; otherwise refuse the professional output and say why. Never apply the naive conversion to a cover.
 24. Write text, the typed code, the QR symbol and thin rules directly as 0/0/0/100, and white as 0/0/0/0. Convert flat colours through the ICC transform, then set channels below 2.5 % to 0 and channels from 2.5 % to 5 % to 5 %, then reduce C, M and Y if the total exceeds the profile's ink limit.
 25. Default ink limit 300 %. Keep the 260 % and 270 % profiles disabled until an ink-limiting transform exists.
@@ -996,3 +999,39 @@ All retrieved as search-result summaries on 2026-11-12 unless stated. Links mark
 36. Do not implement folder-product templates until a printer's template has been obtained. When one is, store it as per-product data: panel size, spine width, flap outline, bleed.
 37. A printer profile moves to `confirmed` only after the product template has been compared with our page (M1) and one printed proof has passed the manual list of §10.2. Record the date and the result in the profile record.
 38. Before release, resolve open questions 2, 3 and 4 of §11 (ICC licence, PDF/X keys, QR sizes): each is a constant or an asset in the code that currently rests on memory.
+
+**Added after the fact-check** (existing numbers above are unchanged)
+
+39. Never bundle or serve ECI's own ICC files: their Heidelberg/ECI terms forbid alteration and charging for distribution. The default output intent is the zlib-licensed basICColor "ISO Coated v2 300%" (FOGRA39) profile; FOGRA51/FOGRA52 profiles and any ECI file are supplied at run time by the operator or user, with the printer profile naming the condition.
+40. The Onlineprinters printer profile writes the PDF/X-4 label and records "PDF/X-4:2010" as the printer's stated version; Flyeralarm accepts PDF/X-3:2002 or PDF/X-4 according to the product data sheet. Pixartprinting's FOGRA39 and Exaprint's 300 % / PDF 1.3 values stay flagged "unconfirmed" in the seed data.
+41. Home sheet: the content keeps at least 17 mm from both short edges of the A4 sheet (satisfied by the centred poche spread, 33.5 mm free) and 6.35 mm from the long edges; the print instructions keep "landscape, actual size".
+42. QR module thresholds cite GS1 General Specifications §5.12.3.1 (POS minimum 0.396 mm, target 0.495 mm) and stay at 0.4 mm (error) and 0.5 mm (warning).
+
+---
+
+## Verification log
+
+Fact-check of 2026-11-12. Method: 11 fresh web searches (standard mode) written from the claims; Ubuntu packages `icc-profiles` 2.1-2 and `icc-profiles-free` 2.0.1+dfsg-1.1 downloaded from the Ubuntu archive and read locally (copyright files, changelog, ICC headers, ECI information sheets); Scribus's `ISOcoated_v2_300_bas.txt` and `.icc` read on `raw.githubusercontent.com` and hashed. Full table with every source: `factcheck/print-requirements.md`.
+
+| # | Claim | Verdict | Change made |
+|---|---|---|---|
+| 1 | Per-printer bleed; Onlineprinters 2 mm bleed, 4 mm safety | CONFIRMED | Marked [FC] in §2.3 |
+| 2 | Flyeralarm bleed 1 mm on small formats | PARTLY | Data sheet values (3 or 4 mm) noted |
+| 3 | Online printers reject marks | UNSUPPORTED in this pass | Kept as the researchers recorded |
+| 4 | Onlineprinters PDF/X-4:2008; FOGRA51/52 | PARTLY (version outdated) | X-4:2010; implication 40 |
+| 5 | Onlineprinters 300 % / 260 % | UNSUPPORTED | Flagged unconfirmed |
+| 6 | Flyeralarm ISO Coated v2 300 %, PDF/X-3:2002 | CONFIRMED with nuance | X-3 or X-4 per data sheet |
+| 7 | Pixartprinting FOGRA39 [V2] | PARTLY | Downgraded to V1 |
+| 8 | Exaprint 300 %, PDF 1.3, rich black | UNSUPPORTED | Flagged |
+| 9 | FOGRA39 default because French printers run it | PARTLY | Reason restated (§1.4 row 18) |
+| 10 | ECI profiles under a zlib-style licence | **WRONG** | §3.5 rewritten; finding 11; implication 39 |
+| 11 | basICColor profile licence unresolved; Debian ships it | Licence RESOLVED (zlib, Scribus); Debian claim WRONG | §3.5; bundled file hash matches |
+| 12 | Profile ink limits, ICC v2, file sizes | CONFIRMED | Figures sourced |
+| 13 | PDF/X-4 embeds the profile; X-1a/X-3 may omit it | CONFIRMED / PARTLY | §3.3 |
+| 14 | QR quiet zone 4 modules | CONFIRMED | §5.1 |
+| 15 | QR module 0.4 / 0.5 mm, GS1 0.396 / 0.495 | CONFIRMED with context | §5.1, §5.2 rule 6, implication 42 |
+| 16 | QR size ≈ distance / 10 | CONFIRMED (vendor guides) | §5.1 |
+| 17 | Home margins 3–6.35 mm; 15 mm bottom margin clips the bleed | PARTLY / WRONG | §9.1, §9.2; implication 41 |
+| 18 | KDP spine text from 79 pages; 0.0625 in margin | CONFIRMED / PARTLY | §6.3 |
+
+Not re-checked: Exaprint, Printoclock, Saxoprint, Helloprint, BoD, Bookvault and Lulu figures; mark geometry (dashed fold ticks, offset = bleed); the ISO 15930 and ISO/IEC 18004 texts; §6.1–§6.2 (creasing, crease spacing) and §7–§8 (trims, catalogue products); the licence of the PSO v3 profiles.

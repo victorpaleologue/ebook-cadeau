@@ -53,7 +53,7 @@ impl Rng {
     fn format(&mut self) -> CardFormat {
         CardFormat::custom(
             Size::new(self.edgy(50.0, 300.0), self.edgy(50.0, 300.0)),
-            self.edgy(3.0, 40.0),
+            self.edgy(CardFormat::SPINE_MIN_MM, CardFormat::SPINE_MAX_MM),
         )
         .unwrap()
     }
@@ -305,9 +305,9 @@ fn marks_keep_their_promises_at_the_limits_of_validity() {
 /// Directed corners that random sampling is unlikely to hit together.
 #[test]
 fn directed_extremes() {
-    let smallest = CardFormat::custom(Size::new(50.0, 50.0), 3.0).unwrap();
+    let smallest = CardFormat::custom(Size::new(50.0, 50.0), CardFormat::SPINE_MIN_MM).unwrap();
     let largest = CardFormat::custom(Size::new(300.0, 300.0), 40.0).unwrap();
-    let flat = CardFormat::custom(Size::new(300.0, 50.0), 3.0).unwrap();
+    let flat = CardFormat::custom(Size::new(300.0, 50.0), CardFormat::SPINE_MIN_MM).unwrap();
     let tall = CardFormat::custom(Size::new(50.0, 300.0), 40.0).unwrap();
     let mut profiles = Vec::new();
     for style in [MarkStyle::Press, MarkStyle::Guide] {

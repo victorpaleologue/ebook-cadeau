@@ -690,6 +690,7 @@ name = "ebc-color"
 version = "0.1.0"
 dependencies = [
  "ebc-scene",
+ "thiserror",
 ]
 
 [[package]]

@@ -80,8 +80,9 @@ pub const NEAR_BLACK_LSTAR: f64 = 5.0;
 ///
 /// * a colour darker than [`NEAR_BLACK_LSTAR`] becomes [`Color::BLACK`] (K 100 only), so
 ///   "almost black" never turns into a three-plate build that needs perfect registration;
-/// * every other colour is converted with [`to_cmyk_naive`] and then capped with
-///   [`limit_total_ink`] at `max_ink_percent` (a NaN limit means "no cap").
+/// * every other colour is converted with [`to_cmyk_naive`], then capped at
+///   `max_ink_percent` and cleaned of tints under 5 % by [`finish_flat`] (a NaN limit
+///   means "no cap").
 ///
 /// The result is therefore no longer an exact inverse of [`Color::to_srgb_approx`] for the
 /// colours it changes. Equally uncalibrated (no ICC profile).
@@ -98,7 +99,73 @@ pub fn to_cmyk_ink_safe(c: Rgb8, max_ink_percent: f32) -> Color {
     if Lab::from_rgb8(c).l < NEAR_BLACK_LSTAR {
         return Color::BLACK;
     }
-    limit_total_ink(to_cmyk_naive(c), max_ink_percent)
+    finish_flat(to_cmyk_naive(c), max_ink_percent)
+}
+
+/// A process channel below this fraction (2.5 %) of a flat colour is dropped by
+/// [`clean_tints`].
+pub const TINT_DROP_BELOW: f32 = 0.025;
+/// The lightest tint a flat colour may carry on a process channel: 5 %
+/// (Pixartprinting: "tints never below 5 %"; `docs/research/03-print-requirements.md`
+/// §3.4 and §4.3). [`clean_tints`] raises channels from 2.5 % up to it.
+pub const MIN_TINT: f32 = 0.05;
+
+/// Cleans the light tints of a flat CMYK colour (house rule of
+/// `docs/research/03-print-requirements.md` §3.4, implication 24): every channel below
+/// [`TINT_DROP_BELOW`] (2.5 %) becomes 0, every channel from 2.5 % up to [`MIN_TINT`]
+/// (5 %) becomes 5 %. Tints that light print unreliably or not at all. Other colours
+/// are returned unchanged.
+///
+/// ```
+/// use ebc_color::clean_tints;
+/// use ebc_scene::Color;
+/// assert_eq!(clean_tints(Color::cmyk(0.02, 0.04, 0.2, 0.0)), Color::cmyk(0.0, 0.05, 0.2, 0.0));
+/// ```
+#[must_use]
+pub fn clean_tints(color: Color) -> Color {
+    let Color::Cmyk { c, m, y, k } = color else {
+        return color;
+    };
+    let clean = |v: f32| {
+        if v.is_nan() || v < TINT_DROP_BELOW {
+            0.0
+        } else if v < MIN_TINT {
+            MIN_TINT
+        } else {
+            v
+        }
+    };
+    Color::cmyk(clean(c), clean(m), clean(y), clean(k))
+}
+
+/// The last step for every flat process colour (grounds, spine fills): the total ink is
+/// capped with [`limit_total_ink`], the tints are cleaned with [`clean_tints`], and, if
+/// raising a tint to 5 % pushed the total back over the limit, the excess is taken off
+/// the heaviest of C, M and Y. The result has no channel strictly between 0 and 5 % and
+/// respects the limit (a NaN limit means "no cap").
+///
+/// ```
+/// use ebc_color::finish_flat;
+/// use ebc_scene::Color;
+/// let c = finish_flat(Color::cmyk(0.9, 0.9, 0.9, 0.9), 300.0);
+/// assert!(c.total_ink_percent().is_some_and(|ink| ink <= 300.001));
+/// ```
+#[must_use]
+pub fn finish_flat(color: Color, max_ink_percent: f32) -> Color {
+    let cleaned = clean_tints(limit_total_ink(color, max_ink_percent));
+    let Color::Cmyk { c, m, y, k } = cleaned else {
+        return cleaned;
+    };
+    let limit = max_ink_percent / 100.0;
+    let excess = c + m + y + k - limit;
+    if limit.is_nan() || excess <= 1e-6 {
+        return cleaned;
+    }
+    let mut channels = [c, m, y];
+    let heaviest = (0..3).fold(0, |best, i| if channels[i] > channels[best] { i } else { best });
+    let reduced = channels[heaviest] - excess;
+    channels[heaviest] = if reduced >= MIN_TINT { reduced } else { 0.0 };
+    Color::cmyk(channels[0], channels[1], channels[2], k)
 }
 
 /// The colour as an sRGB [`Color::Rgb`], left to the printer's colour management.
@@ -254,7 +321,7 @@ mod tests {
                             assert!(ink <= limit + 1e-3, "{rgb}: {ink} > {limit}");
                         }
                         if rgb.to_lab().l >= NEAR_BLACK_LSTAR {
-                            assert_eq!(safe, limit_total_ink(to_cmyk_naive(rgb), limit));
+                            assert_eq!(safe, finish_flat(to_cmyk_naive(rgb), limit));
                         } else {
                             assert_eq!(safe, Color::BLACK);
                         }
@@ -312,6 +379,39 @@ mod tests {
         // Hand-built out-of-range components (bypassing the clamping constructors).
         let wild = Color::Rgb { r: f32::NAN, g: 9.0, b: -4.0 };
         assert_eq!(from_scene_color(&wild), Rgb8::new(0, 255, 0));
+    }
+
+    #[test]
+    fn flat_colours_carry_no_tint_under_five_percent() {
+        assert_eq!(
+            clean_tints(Color::cmyk(0.024, 0.025, 0.049, 0.05)),
+            Color::cmyk(0.0, 0.05, 0.05, 0.05)
+        );
+        assert_eq!(
+            clean_tints(Color::cmyk(f32::NAN, 0.3, 0.0, 1.0)),
+            Color::cmyk(0.0, 0.3, 0.0, 1.0)
+        );
+        assert_eq!(clean_tints(Color::gray(0.99)), Color::gray(0.99));
+        for limit in [200.0_f32, 260.0, 300.0, f32::NAN] {
+            for r in (0..=255u16).step_by(15) {
+                for g in (0..=255u16).step_by(15) {
+                    for b in (0..=255u16).step_by(15) {
+                        let rgb = Rgb8::new(r as u8, g as u8, b as u8);
+                        let (c, m, y, k) = parts(to_cmyk_ink_safe(rgb, limit));
+                        for v in [c, m, y, k] {
+                            assert!(v == 0.0 || v >= MIN_TINT, "{rgb}: {v}");
+                        }
+                        if !limit.is_nan() {
+                            assert!((c + m + y + k) * 100.0 <= limit + 1e-3, "{rgb}");
+                        }
+                    }
+                }
+            }
+        }
+        // Raising a tint to 5 % at the limit takes the excess off the heaviest plate.
+        let (c, m, y, k) = parts(finish_flat(Color::cmyk(0.03, 0.9, 0.9, 0.9), 270.0));
+        assert_eq!((c, k), (MIN_TINT, 0.9));
+        assert!(((c + m + y + k) - 2.7).abs() < 1e-5 && m.min(y) >= MIN_TINT);
     }
 
     #[test]

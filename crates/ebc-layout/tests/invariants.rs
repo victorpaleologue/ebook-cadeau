@@ -54,7 +54,8 @@ impl Rng {
             let x = self.range(lo, hi);
             if snap { x.round().clamp(lo, hi) } else { x }
         };
-        let (w, h, s) = (v(50.0, 300.0), v(50.0, 300.0), v(3.0, 40.0));
+        let (w, h, s) =
+            (v(50.0, 300.0), v(50.0, 300.0), v(CardFormat::SPINE_MIN_MM, CardFormat::SPINE_MAX_MM));
         CardFormat::custom(Size::new(w, h), s).unwrap()
     }
 

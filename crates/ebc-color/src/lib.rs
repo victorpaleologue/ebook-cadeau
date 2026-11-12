@@ -9,7 +9,9 @@
 //! * *Which colour can I set the title in so that it stays readable?* —
 //!   [`contrast_ratio`] (WCAG 2.x), [`pick_text_color`], [`ensure_contrast`].
 //! * *How different are two colours to the eye?* — [`delta_e2000`] (CIEDE2000).
-//! * *How do I hand a colour to the PDF writer?* — [`to_cmyk_naive`], [`to_scene_rgb`].
+//! * *How do I hand a colour to the PDF writer?* — [`SrgbToCmyk`] (colour-managed, through
+//!   the printer's ICC profile: see [`icc`]), [`finish_flat`], [`to_cmyk_naive`],
+//!   [`to_scene_rgb`].
 //!
 //! It is pure Rust, depends only on `ebc-scene` (images are [`ebc_scene::Pixmap`]s), performs
 //! no I/O and compiles to `wasm32-unknown-unknown`.
@@ -27,12 +29,14 @@
 //!
 //! # Colour-management caveat
 //!
-//! Inputs are assumed to be sRGB. [`to_cmyk_naive`] is **not** a colour-managed conversion:
+//! Inputs are assumed to be sRGB. The colour-managed conversion is [`SrgbToCmyk`], built
+//! from a printer's CMYK ICC profile ([`CmykProfile`]); use it for covers and grounds in
+//! print files. [`to_cmyk_naive`] is **not** a colour-managed conversion:
 //! it is the textbook device formula with grey-component replacement, good for text, rules
 //! and flat tints where a predictable, K-only black matters more than a colorimetric match.
 //! It can reach 299.6 % total ink and turns near-black tints into three-plate builds; for
 //! text and marks use [`to_cmyk_ink_safe`], which snaps near-blacks to K and caps the ink.
-//! Cover photographs must stay RGB (or be converted with an ICC profile elsewhere).
+//! Cover photographs go through [`SrgbToCmyk`] or stay RGB, never through it.
 //!
 //! # Example
 //!
@@ -55,18 +59,20 @@
 mod cmyk;
 mod contrast;
 mod delta_e;
+pub mod icc;
 mod lab;
 mod palette;
 mod rgb;
 
 pub use cmyk::{
-    NEAR_BLACK_LSTAR, from_scene_color, limit_total_ink, to_cmyk_gcr, to_cmyk_ink_safe,
-    to_cmyk_naive, to_scene_rgb,
+    MIN_TINT, NEAR_BLACK_LSTAR, TINT_DROP_BELOW, clean_tints, finish_flat, from_scene_color,
+    limit_total_ink, to_cmyk_gcr, to_cmyk_ink_safe, to_cmyk_naive, to_scene_rgb,
 };
 pub use contrast::{
     black_or_white, contrast_ratio, ensure_contrast, pick_text_color, relative_luminance,
 };
 pub use delta_e::{delta_e2000, delta_e2000_lab};
+pub use icc::{CmykProfile, IccError, RenderingIntent, SrgbToCmyk};
 pub use lab::Lab;
 pub use palette::{
     BorderOptions, EDGE_BUSY_SIGMA, Edge, MAX_PALETTE_SIZE, PALETTE_MERGE_DELTA_E, Swatch,

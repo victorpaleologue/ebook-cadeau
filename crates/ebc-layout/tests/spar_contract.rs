@@ -170,7 +170,8 @@ fn the_contract_surface_exists_and_behaves() {
     let folds: [f64; 2] = custom.fold_x();
     assert_eq!(folds, [120.0, 128.0]);
 
-    // The contract's `PrintProfile` is a plain struct with exactly these fields.
+    // The contract's `PrintProfile` is a plain struct with exactly these fields
+    // (`allow_rgb` added since).
     let profile = PrintProfile {
         name: "house".to_owned(),
         bleed: 3.0,
@@ -184,6 +185,9 @@ fn the_contract_surface_exists_and_behaves() {
         max_total_ink_percent: 300.0,
         sheet: None,
         printable_margin: 0.0,
+        // Added after this test was written (docs/research/03-print-requirements.md §3.4,
+        // implication 23): professional output is CMYK and grey only.
+        allow_rgb: false,
     };
     // `professional_eu()` is that profile but for the two safety margins: when this test
     // was written they were 4 mm and 1.5 mm; docs/research/03-print-requirements.md (§1.4

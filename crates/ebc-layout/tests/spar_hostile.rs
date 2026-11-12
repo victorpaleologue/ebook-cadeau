@@ -210,7 +210,8 @@ fn info_entries_read_back_consistently() {
         } else {
             CardFormat::custom(
                 Size::new(50.0 + 250.0 * unit(&mut rng), 50.0 + 250.0 * unit(&mut rng)),
-                3.0 + 37.0 * unit(&mut rng),
+                CardFormat::SPINE_MIN_MM
+                    + (CardFormat::SPINE_MAX_MM - CardFormat::SPINE_MIN_MM) * unit(&mut rng),
             )
             .unwrap()
         };

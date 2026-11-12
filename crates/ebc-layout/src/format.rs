@@ -122,14 +122,20 @@ impl CardFormat {
     pub const COVER_MIN_MM: f64 = 50.0;
     /// Largest accepted cover width or height.
     pub const COVER_MAX_MM: f64 = 300.0;
-    /// Smallest accepted spine width. Below about 5 mm a spine cannot carry a title
-    /// (see [`CardFormat::spine_can_carry_text`]), below 3 mm two creases merge into one.
-    pub const SPINE_MIN_MM: f64 = 3.0;
+    /// Smallest accepted spine width: two parallel creases are never closer than 5 mm
+    /// (`docs/research/03-print-requirements.md` §6.2, printing.com's folder guide, and
+    /// implication 6); a narrower spine cannot be creased as two hinges.
+    pub const SPINE_MIN_MM: f64 = 5.0;
     /// Largest accepted spine width.
     pub const SPINE_MAX_MM: f64 = 40.0;
     /// Printers' consensus threshold below which no text should be set on a spine
     /// (4–6 mm depending on the printer; 5 mm is the usual figure).
     pub const SPINE_TEXT_MIN_MM: f64 = 5.0;
+    /// Widest spine the profiles validate for spine **text**
+    /// (`docs/research/03-print-requirements.md`, implication 6: "spine width 5 to 15 mm
+    /// when the spine carries text"). Wider spines are accepted, but the card composer
+    /// warns that the one-line spine setting was not designed for them.
+    pub const SPINE_TEXT_MAX_MM: f64 = 15.0;
     /// Names accepted by [`CardFormat::by_name`], in the order of [`CardFormat::presets`].
     pub const PRESET_NAMES: [&'static str; 4] = ["poche", "a6", "digest", "a5"];
 
@@ -229,11 +235,12 @@ impl CardFormat {
         Ok(())
     }
 
-    /// Whether the spine is wide enough to carry a title
-    /// (≥ [`SPINE_TEXT_MIN_MM`](Self::SPINE_TEXT_MIN_MM)).
+    /// Whether the spine is in the range validated for a title:
+    /// [`SPINE_TEXT_MIN_MM`](Self::SPINE_TEXT_MIN_MM) to
+    /// [`SPINE_TEXT_MAX_MM`](Self::SPINE_TEXT_MAX_MM).
     #[must_use]
     pub fn spine_can_carry_text(&self) -> bool {
-        self.spine_width >= Self::SPINE_TEXT_MIN_MM
+        (Self::SPINE_TEXT_MIN_MM..=Self::SPINE_TEXT_MAX_MM).contains(&self.spine_width)
     }
 
     /// Size of the flat card: `2 × cover.w + spine_width` by `cover.h`. This is the trim
@@ -411,7 +418,7 @@ mod tests {
     #[test]
     fn custom_accepts_the_limits_and_rejects_just_beyond() {
         let ok = |w, h, s| CardFormat::custom(Size::new(w, h), s);
-        assert!(ok(50.0, 50.0, 3.0).is_ok());
+        assert!(ok(50.0, 50.0, 5.0).is_ok());
         assert!(ok(300.0, 300.0, 40.0).is_ok());
         assert!(matches!(
             ok(49.999, 100.0, 10.0),
@@ -421,7 +428,7 @@ mod tests {
             ok(100.0, 300.001, 10.0),
             Err(LayoutError::CoverOutOfRange { dimension: "height", .. })
         ));
-        assert!(matches!(ok(100.0, 100.0, 2.999), Err(LayoutError::SpineOutOfRange { .. })));
+        assert!(matches!(ok(100.0, 100.0, 4.999), Err(LayoutError::SpineOutOfRange { .. })));
         assert!(matches!(ok(100.0, 100.0, 40.001), Err(LayoutError::SpineOutOfRange { .. })));
     }
 
@@ -450,13 +457,16 @@ mod tests {
             "cover width of 20 mm is outside the supported range 50..=300 mm"
         );
         let e = CardFormat::poche().with_spine(1.0).unwrap_err();
-        assert_eq!(e.to_string(), "spine width of 1 mm is outside the supported range 3..=40 mm");
+        assert_eq!(e.to_string(), "spine width of 1 mm is outside the supported range 5..=40 mm");
     }
 
     #[test]
     fn spine_text_threshold() {
-        assert!(!CardFormat::poche().with_spine(4.9).unwrap().spine_can_carry_text());
+        // Narrower than 5 mm is not a valid spine at all (two creases need 5 mm).
+        assert!(CardFormat::poche().with_spine(4.9).is_err());
         assert!(CardFormat::poche().with_spine(5.0).unwrap().spine_can_carry_text());
+        assert!(CardFormat::poche().with_spine(15.0).unwrap().spine_can_carry_text());
+        assert!(!CardFormat::poche().with_spine(15.1).unwrap().spine_can_carry_text());
     }
 
     #[test]

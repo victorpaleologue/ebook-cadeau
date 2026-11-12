@@ -119,12 +119,12 @@ fn lightness(y: f64) -> f64 {
 }
 
 /// The CIELAB companding function f(t).
-fn lab_f(t: f64) -> f64 {
+pub(crate) fn lab_f(t: f64) -> f64 {
     if t > EPSILON { cbrt_newton(t) } else { (KAPPA * t + 16.0) / 116.0 }
 }
 
 /// Inverse of [`lab_f`].
-fn lab_f_inv(f: f64) -> f64 {
+pub(crate) fn lab_f_inv(f: f64) -> f64 {
     let cube = f * f * f;
     if cube > EPSILON { cube } else { (116.0 * f - 16.0) / KAPPA }
 }
@@ -166,7 +166,7 @@ fn fifth_root_newton(x: f64) -> f64 {
 }
 
 /// The sRGB electro-optical transfer function: encoded value (0–1) → linear light (0–1).
-fn srgb_eotf(v: f64) -> f64 {
+pub(crate) fn srgb_eotf(v: f64) -> f64 {
     if v <= 0.040_45 {
         v / 12.92
     } else {

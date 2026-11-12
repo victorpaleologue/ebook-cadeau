@@ -175,7 +175,8 @@ mod tests {
             assert_eq!(spine_safe_rect(&CardFormat::poche(), &p), CardFormat::poche().spine());
         }
         // A 3 mm spine with a 2 mm spine margin collapses to its centre line.
-        let thin = CardFormat::poche().with_spine(3.0).unwrap();
+        // Built directly: a 3 mm spine no longer validates, but the helper must cope.
+        let thin = CardFormat { spine_width: 3.0, ..CardFormat::poche() };
         let r = spine_safe_rect(&thin, &PrintProfile::home(Sheet::A4));
         assert_eq!(r.w, 0.0);
         assert_eq!(r.center().x, thin.spine().center().x);

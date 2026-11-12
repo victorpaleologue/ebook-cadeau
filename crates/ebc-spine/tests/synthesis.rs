@@ -10,8 +10,8 @@ use ebc_layout::{CardFormat, PrintProfile, spine_safe_rect};
 use ebc_model::BookMeta;
 use ebc_scene::{Color, Document, Item, PathSeg, Pixmap, Point, Rect, Transform};
 use ebc_spine::{
-    BackgroundKind, BackgroundPaint, BackgroundStyle, SpineDesign, SpineError, SpineNote,
-    SpineOptions, SpineRequest, SpineSource, TextRole, design, design_with, text_area,
+    BackgroundKind, BackgroundPaint, BackgroundStyle, MIN_OUTLINED_PT, SpineDesign, SpineError,
+    SpineNote, SpineOptions, SpineRequest, SpineSource, TextRole, design, design_with, text_area,
 };
 use ebc_text::{ShapeOptions, outline_bounds, shape};
 
@@ -96,7 +96,8 @@ fn every_preset_and_a_range_of_spine_widths_keep_text_in_the_band() {
     let book = book("Les Fleurs du mal", &["Charles Baudelaire"]);
     let font = sans();
     let mut previous = 0.0;
-    for width in [3.0, 4.0, 5.0, 6.0, 8.0, 10.0, 15.0, 25.0, 40.0] {
+    // 5 mm is the narrowest valid spine (two creases need 5 mm between them).
+    for width in [5.0, 6.0, 7.0, 8.0, 10.0, 15.0, 25.0, 40.0] {
         for (name, format) in CardFormat::presets() {
             let format = format.with_spine(width).expect("a valid spine width");
             let profile = PrintProfile::professional_eu();
@@ -115,12 +116,13 @@ fn every_preset_and_a_range_of_spine_widths_keep_text_in_the_band() {
             match &spine.title {
                 Some(title) => {
                     assert!(area.contains_rect(&title.bounds, EPS), "{name} {width}");
-                    assert!(title.size_pt >= 7.0 && title.size_pt <= 14.0);
+                    // Never below the 8 pt floor of outlined text, never above 13 pt.
+                    assert!(title.size_pt >= MIN_OUTLINED_PT && title.size_pt <= 13.0);
                 }
                 None => {
-                    // 3 and 4 mm spines have no band left between two 2 mm margins;
-                    // 5 mm leaves 1 mm, not enough for 7 pt capitals.
-                    assert!(width <= 5.0, "{name} {width}: no title");
+                    // A 5 mm spine leaves a 1 mm band between two 2 mm margins and a
+                    // 6 mm one 2 mm: not enough for 8 pt letters with ascenders.
+                    assert!(width <= 6.0, "{name} {width}: no title");
                     assert!(has_note(&spine, |n| *n == SpineNote::NoRoomForText));
                     assert_eq!(spine.items.len(), 1, "background only");
                     assert_eq!(spine.title_size_pt, 0.0);
@@ -132,7 +134,7 @@ fn every_preset_and_a_range_of_spine_widths_keep_text_in_the_band() {
             }
         }
     }
-    assert_eq!(previous, 14.0, "wide spines reach the maximum size");
+    assert_eq!(previous, 13.0, "wide spines reach the maximum size");
 }
 
 // ----- direction --------------------------------------------------------------------------
@@ -268,7 +270,7 @@ fn tops_of_the_letters_point_to_the_front_cover_when_reading_downwards() {
     let bounds = |text: &str, direction| {
         let book = BookMeta::titled(text);
         let spine = run(&request(&book, None, &font, &font, direction));
-        assert_eq!(spine.title_size_pt, 14.0);
+        assert_eq!(spine.title_size_pt, 13.0);
         title_bounds(&spine)
     };
     let (x, b, p) = (bounds("x", TopToBottom), bounds("b", TopToBottom), bounds("p", TopToBottom));
@@ -357,7 +359,8 @@ fn author_and_title_are_centred_together_along_the_spine() {
             BottomToTop => author.bounds.y - title.bounds.bottom(),
         };
         assert!((gap - 6.0).abs() < 1e-6, "{direction:?}: gap {gap}");
-        assert!((author.size_pt - 0.7 * title.size_pt).abs() < 1e-6);
+        assert!((author.size_pt - 0.75 * title.size_pt).abs() < 1e-6);
+        assert!(author.size_pt >= MIN_OUTLINED_PT);
         assert!(author.item < title.item);
     }
 }
@@ -399,13 +402,13 @@ fn longer_titles_never_get_larger_and_never_leave_the_live_length() {
         let area = text_area(&req, &SpineOptions::default()).expect("valid");
         assert!(area.contains_rect(&title.bounds, EPS), "{n} words: {:?}", title.bounds);
         assert!(title.size_pt <= previous + 1e-9, "{n} words: {} > {previous}", title.size_pt);
-        assert!((7.0..=14.0).contains(&title.size_pt));
+        assert!((9.0..=13.0).contains(&title.size_pt));
         previous = title.size_pt;
         sizes.push(title.size_pt);
     }
-    assert_eq!(sizes[0], 14.0, "a short title is set at the maximum size");
-    assert_eq!(*sizes.last().expect("sizes"), 7.0, "the longest is truncated at the minimum");
-    assert!(sizes.iter().any(|s| *s > 7.0 && *s < 14.0), "sizes in between are used");
+    assert_eq!(sizes[0], 13.0, "a short title is set at the maximum size");
+    assert_eq!(*sizes.last().expect("sizes"), 9.0, "the longest is truncated at the minimum");
+    assert!(sizes.iter().any(|s| *s > 9.0 && *s < 13.0), "sizes in between are used");
 }
 
 #[test]
@@ -438,7 +441,7 @@ fn the_ladder_tightens_then_cuts_the_subtitle_then_truncates() {
     // Far too long: truncated at a word boundary with an ellipsis, at the minimum size.
     let spine = fit(LONG);
     let title = spine.title.as_ref().expect("title");
-    assert_eq!(title.size_pt, 7.0);
+    assert_eq!(title.size_pt, 9.0);
     let kept = title.text.strip_suffix('…').expect("ends with an ellipsis");
     assert!(LONG.starts_with(kept), "a prefix of the title: {kept}");
     let rest = &LONG[kept.len()..];
@@ -454,7 +457,7 @@ fn the_ladder_tightens_then_cuts_the_subtitle_then_truncates() {
     let spine = fit(&with_subtitle);
     assert_eq!(spine.title.as_ref().expect("title").text, "Robinson Crusoé");
     assert!(has_note(&spine, |n| matches!(n, SpineNote::TitleShortened { .. })));
-    assert_eq!(spine.title_size_pt, 14.0);
+    assert_eq!(spine.title_size_pt, 13.0);
 }
 
 #[test]
@@ -547,7 +550,7 @@ fn the_author_gives_way_to_a_long_title() {
         assert_eq!(dropped, spine.author.is_none(), "{n} words");
         if reduced {
             seen_reduced = true;
-            assert!(spine.title_size_pt >= 9.0 && spine.title_size_pt < 14.0);
+            assert!(spine.title_size_pt >= 11.0 && spine.title_size_pt < 13.0);
             assert!(spine.author.is_some());
             assert!(!seen_dropped, "reduction comes before dropping");
         }
@@ -1046,4 +1049,50 @@ fn a_provided_source_is_not_needed_for_the_default() {
     assert!(matches!(req.source, SpineSource::Synthesize));
     assert_eq!(SpineOptions::default().background, BackgroundStyle::Auto);
     assert_eq!(BackgroundStyle::default(), BackgroundStyle::Auto);
+}
+
+// ----- the 8 pt floor of outlined and reversed text ---------------------------------------
+
+/// `docs/research/03-print-requirements.md` §4.4 and implication 27: outlined text, and
+/// reversed text, 8 pt or more. Whatever the title, author, width and options, nothing is
+/// set smaller; an author that would be smaller is left out.
+#[test]
+fn no_text_is_set_below_the_outlined_floor_even_when_options_ask_for_less() {
+    let font = serif();
+    let navy = flat_cover([18, 28, 70]);
+    let loose = SpineOptions {
+        min_size_pt: 6.0,
+        author_min_size_pt: 5.0,
+        min_title_size_with_author_pt: 6.0,
+        ..SpineOptions::default()
+    };
+    let words: Vec<&str> = LONG.split(' ').collect();
+    for width in [5.0, 6.0, 7.0, 10.0, 15.0] {
+        let format = CardFormat::poche().with_spine(width).expect("valid width");
+        let profile = PrintProfile::professional_eu();
+        let rect = format.outside().with_bleed(profile.bleed).spine;
+        for n in [1, 3, 8, 20, words.len()] {
+            let b = book(&words[..n].join(" "), &["Marie-Hélène de La Tour-Dupont"]);
+            for opts in [SpineOptions::default(), loose.clone()] {
+                let req = SpineRequest {
+                    rect,
+                    bleed: profile.bleed,
+                    safe_margin: profile.spine_safe_margin,
+                    ..request(&b, Some(&navy), &font, &font, BottomToTop)
+                };
+                let (spine, _) = run_with(&req, &opts);
+                for text in spine.title.iter().chain(spine.author.iter()) {
+                    assert!(text.size_pt >= MIN_OUTLINED_PT, "{width} mm, {n} words: {text:?}");
+                }
+                assert!(
+                    !has_note(&spine, |n| matches!(n, SpineNote::SmallReversedText { .. })),
+                    "{width} mm, {n} words"
+                );
+                if width >= 10.0 {
+                    let title = spine.title.as_ref().expect("a 10 mm spine has a title");
+                    assert!(title.size_pt >= 9.0 || opts.min_size_pt < 9.0, "{title:?}");
+                }
+            }
+        }
+    }
 }

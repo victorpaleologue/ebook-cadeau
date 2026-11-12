@@ -71,6 +71,11 @@
 //!   [`SpineOptions::min_title_size_with_author_pt`]); tightened letter-spacing; the
 //!   title cut at its first subtitle separator; truncation at a word boundary with an
 //!   ellipsis. Text is never invented, re-cased or stacked.
+//! * **Sizes**: the title is set at 9–13 pt (`docs/research/08-legal-fonts-and-genai.md`),
+//!   the author at three quarters of the title. Nothing is ever set below
+//!   [`MIN_OUTLINED_PT`] (8 pt), the floor for outlined and for reversed text
+//!   (`docs/research/03-print-requirements.md` §4.4): the author is left out first; on
+//!   a spine too narrow for a 9 pt letter the title may use 8 pt.
 //! * Characters the font cannot draw are left out and reported (never a `.notdef` box);
 //!   [`SpineOptions::fallback_font`] is tried first.
 //!
@@ -246,10 +251,13 @@ pub struct SpineOptions {
     pub text_color: Option<Rgb8>,
     /// Minimum WCAG 2 contrast ratio between text and background. Default 4.5.
     pub min_contrast: f64,
-    /// Smallest title size, in points. Default 7.
+    /// Smallest title size, in points. Default 9 (`docs/research/08-legal-fonts-and-genai.md`:
+    /// spine titles 9–13 pt). Where not even one letter fits across the band at this
+    /// size (spines narrower than about 6 mm), the title may go down to
+    /// [`MIN_OUTLINED_PT`], never below it: values under that floor are raised to it.
     pub min_size_pt: f64,
     /// Largest title size, in points (the band between the safe margins usually limits
-    /// the size first). Default 14.
+    /// the size first). Default 13.
     pub max_size_pt: f64,
     /// Letter-spacing that may be removed to make a long title fit, in em. Default 0.02.
     pub max_tightening_em: f32,
@@ -258,16 +266,18 @@ pub struct SpineOptions {
     pub end_margin: f64,
     /// Set the author's name when there is room. Default `true`.
     pub show_author: bool,
-    /// Author size as a fraction of the title size. Default 0.7.
+    /// Author size as a fraction of the title size. Default 0.75.
     pub author_scale: f64,
-    /// Smallest author size, in points; below it the author is left out. Default 6.
+    /// Smallest author size, in points; below it the author is left out. Default 8, and
+    /// never less than [`MIN_OUTLINED_PT`] (smaller values are raised to it).
     pub author_min_size_pt: f64,
     /// Space between author and title, in millimetres. Default 6.
     pub author_gap: f64,
     /// Largest share of the usable length the author may take. Default 0.35.
     pub author_max_share: f64,
     /// The title may be made smaller to leave room for the author, but not below this
-    /// size in points: then the author is left out instead. Default 9.
+    /// size in points: then the author is left out instead. Default 11 (with the
+    /// default `author_scale` the author is then 8.25 pt, just above the floor).
     pub min_title_size_with_author_pt: f64,
     /// A font tried when the title or author font lacks a character. Default `None`.
     pub fallback_font: Option<Font>,
@@ -287,16 +297,16 @@ impl Default for SpineOptions {
             background_paint: BackgroundPaint::Rgb,
             text_color: None,
             min_contrast: 4.5,
-            min_size_pt: 7.0,
-            max_size_pt: 14.0,
+            min_size_pt: 9.0,
+            max_size_pt: 13.0,
             max_tightening_em: 0.02,
             end_margin: 8.0,
             show_author: true,
-            author_scale: 0.7,
-            author_min_size_pt: 6.0,
+            author_scale: 0.75,
+            author_min_size_pt: MIN_OUTLINED_PT,
             author_gap: 6.0,
             author_max_share: 0.35,
-            min_title_size_with_author_pt: 9.0,
+            min_title_size_with_author_pt: 11.0,
             fallback_font: None,
             image_ppi: 300.0,
             min_provided_ppi: 150.0,
@@ -917,8 +927,16 @@ struct Lines {
 const MAX_TITLE_CHARS: usize = 2_000;
 /// Longest author line considered, in characters.
 const MAX_AUTHOR_CHARS: usize = 500;
-/// Light-on-dark text below this size gets a [`SpineNote::SmallReversedText`].
-const MIN_REVERSED_PT: f64 = 8.0;
+/// The smallest size at which spine text is set, in points: the spine is drawn as
+/// outlines, often reversed (light on a darker ground), and outlined or reversed text
+/// keeps strokes thick enough to print only from 8 pt
+/// (`docs/research/03-print-requirements.md` §4.4 and implication 27). Every size option
+/// below it is raised to it; an author that does not fit at it is left out, and a title
+/// that does not fit at it is shortened (or the spine gets no text).
+pub const MIN_OUTLINED_PT: f64 = 8.0;
+/// Light-on-dark text below this size would get a [`SpineNote::SmallReversedText`]; with
+/// the [`MIN_OUTLINED_PT`] floor no typeset text is that small any more.
+const MIN_REVERSED_PT: f64 = MIN_OUTLINED_PT;
 
 fn missing_notes(resolved: &typeset::Resolved, role: TextRole, notes: &mut Vec<SpineNote>) {
     if resolved.fallback_used {
@@ -951,9 +969,31 @@ fn fit_lines(
         notes.push(SpineNote::TitleNotDrawable);
         return None;
     }
-    let Some(fit) = typeset::fit_title(&resolved.font, &resolved.text, language, geom, opts) else {
+    // The title's size range, with the floor of outlined and reversed text; where not
+    // even one letter fits at the preferred minimum (a narrow spine), the floor itself.
+    let floor = opts.min_size_pt.max(MIN_OUTLINED_PT);
+    let sized = SpineOptions {
+        min_size_pt: floor,
+        max_size_pt: opts.max_size_pt.max(floor),
+        ..opts.clone()
+    };
+    let fit =
+        typeset::fit_title(&resolved.font, &resolved.text, language, geom, &sized).or_else(|| {
+            let at_floor = SpineOptions { min_size_pt: MIN_OUTLINED_PT, ..sized.clone() };
+            (floor > MIN_OUTLINED_PT)
+                .then(|| {
+                    typeset::fit_title(&resolved.font, &resolved.text, language, geom, &at_floor)
+                })
+                .flatten()
+        });
+    let Some(fit) = fit else {
         notes.push(SpineNote::NoRoomForText);
         return None;
+    };
+    let opts = &SpineOptions {
+        author_min_size_pt: opts.author_min_size_pt.max(MIN_OUTLINED_PT),
+        min_size_pt: floor,
+        ..opts.clone()
     };
     match fit.step {
         TitleStep::Whole => {}

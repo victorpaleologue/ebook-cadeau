@@ -319,9 +319,9 @@ fn target_layout(cx: &Ctx) -> Vec<Target> {
 ///
 /// Each target is centred on its side of the spread, so the set is symmetric and the
 /// targets of the two faces coincide when the sheet is turned over. The top and bottom
-/// targets sit between the two fold marks: they shrink with the spine and are left out
-/// when the spine is narrower than about 4.1 mm (the default 10 mm spine has full-size
-/// targets on all four sides).
+/// targets sit between the two fold marks: they shrink with the spine (and would be left
+/// out below about 4.1 mm, narrower than any valid spine; the default 10 mm spine has
+/// full-size targets on all four sides).
 #[must_use]
 pub fn registration_target_centers(format: &CardFormat, profile: &PrintProfile) -> Vec<Point> {
     Ctx::new(format, profile)
@@ -858,12 +858,14 @@ mod tests {
         assert!((b.x - (116.0 - 0.5 - half_stroke)).abs() < 1e-9, "{b:?}");
         // The side targets keep their full size.
         assert_eq!(l[0], (Point::new(-11.5, 89.0), Point::new(-4.5, 89.0)));
-        // 4 mm spine: no room for a legible target between the folds.
-        let f = CardFormat::poche().with_spine(4.0).unwrap();
-        let c = registration_target_centers(&f, &p);
-        assert_eq!(c, vec![Point::new(-8.0, 89.0), Point::new(232.0, 89.0)]);
-        assert_eq!(registration_targets(&f, &p).len(), 2);
-        assert_eq!(all_lines(&registration_targets(&f, &p)).len(), 4);
+        // 5 mm, the narrowest valid spine (two creases need 5 mm): still four targets.
+        let f = CardFormat::poche().with_spine(5.0).unwrap();
+        assert_eq!(registration_target_centers(&f, &p).len(), 4);
+        // A 4 mm spine is no longer a valid format (it used to lose the top and bottom
+        // targets); built directly, it gets no marks at all instead of a panic.
+        let f = CardFormat { spine_width: 4.0, ..CardFormat::poche() };
+        assert!(registration_target_centers(&f, &p).is_empty());
+        assert!(registration_targets(&f, &p).is_empty());
     }
 
     #[test]

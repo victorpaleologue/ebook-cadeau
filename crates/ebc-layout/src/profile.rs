@@ -344,6 +344,14 @@ pub struct PrintProfile {
     /// Width of the border of the [`sheet`](Self::sheet) the printer cannot print on, in
     /// millimetres. Marks stay inside it. Ignored when `sheet` is `None`.
     pub printable_margin: f64,
+    /// Whether the file may carry RGB (tagged sRGB images) at all. `true` for print at
+    /// home (plain PDF, sRGB images passed through); `false` for the professional
+    /// profiles, whose content is CMYK and grey only
+    /// (`docs/research/03-print-requirements.md` §3.2, §3.4, implication 23). Set it for
+    /// a printer that says it converts RGB itself: a card composer may then fall back to
+    /// tagged sRGB when it cannot convert to the output profile. Preflight takes its
+    /// colour expectation from this flag.
+    pub allow_rgb: bool,
 }
 
 impl PrintProfile {
@@ -364,6 +372,7 @@ impl PrintProfile {
     /// | PDF | PDF/X-4 |
     /// | images | 300 ppi target, warning below 250 ppi, error below 150 ppi |
     /// | total ink | 300 % |
+    /// | colour | CMYK and grey only (`allow_rgb = false`) |
     ///
     /// Many web-to-print portals (Pixartprinting, Flyeralarm, Printoclock, Bookvault, …)
     /// explicitly want **no** marks: use [`PrintProfile::upload_eu`] for those.
@@ -382,6 +391,7 @@ impl PrintProfile {
             max_total_ink_percent: 300.0,
             sheet: None,
             printable_margin: 0.0,
+            allow_rgb: false,
         }
     }
 
@@ -418,6 +428,7 @@ impl PrintProfile {
     /// | printable margin | [`HOME_PRINTABLE_MARGIN_MM`]: 6.35 mm (0.25 in), the usual hardware margin of laser printers and of inkjets on Letter |
     /// | PDF | plain PDF (no PDF/X claims, no output intent needed) |
     /// | images | 200 ppi target, warning below 150 ppi, error below 100 ppi |
+    /// | colour | sRGB images and colours allowed (`allow_rgb = true`) |
     ///
     /// Values from `docs/research/03-print-requirements.md` §9.2; the unprintable margin of
     /// a given printer may still be larger at the bottom edge (12–15 mm on some old
@@ -439,6 +450,7 @@ impl PrintProfile {
             max_total_ink_percent: 300.0,
             sheet: Some(sheet),
             printable_margin: HOME_PRINTABLE_MARGIN_MM,
+            allow_rgb: true,
         }
     }
 
@@ -597,6 +609,8 @@ mod tests {
         assert_eq!(p.min_ppi, 150.0);
         assert_eq!(p.max_total_ink_percent, 300.0);
         assert_eq!(p.sheet, None);
+        assert!(!p.allow_rgb, "professional output is CMYK and grey only");
+        assert!(!PrintProfile::upload_eu().allow_rgb);
         assert_eq!(p.warn_ppi(), 250.0);
         let m = p.marks;
         // Crop and fold marks only: no surveyed printer asks for targets or a colour bar.
@@ -623,6 +637,7 @@ mod tests {
             assert_eq!(p.printable_margin, HOME_PRINTABLE_MARGIN_MM);
             assert_eq!((p.target_ppi, p.warn_ppi(), p.min_ppi), (200.0, 150.0, 100.0));
             assert_eq!(p.standard, PdfStandard::Plain);
+            assert!(p.allow_rgb, "home printers work in RGB");
             assert_eq!(p.sheet, Some(sheet));
             assert!(p.marks.crop && p.marks.fold && !p.marks.registration && !p.marks.color_bar);
             assert!(p.marks.scale_ruler);

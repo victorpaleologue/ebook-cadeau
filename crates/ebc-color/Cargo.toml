@@ -10,6 +10,7 @@ authors.workspace = true
 
 [dependencies]
 ebc-scene.workspace = true
+thiserror.workspace = true
 
 [lints]
 workspace = true

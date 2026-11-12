@@ -3,7 +3,7 @@
 //! The composer uses this to verify its own output (nothing may be painted over the
 //! cover), and tests and tools can use it to check that text stays inside safe areas.
 
-use ebc_scene::{Document, FontId, Item, Point, Rect, Transform, pt_to_mm};
+use ebc_scene::{Document, FontId, Item, Path, PathSeg, Point, Rect, Transform, pt_to_mm};
 use ebc_text::{Font, ShapedGlyph, ShapedText, outline_bounds};
 
 /// Computes the bounding boxes of the items of one document, parsing each font at most
@@ -89,7 +89,8 @@ impl<'a> Inspector<'a> {
 
     /// The bounding boxes of every leaf item of a page (groups are descended into, with
     /// their clips and transforms applied), in painting order, each with the name of the
-    /// innermost layer it belongs to.
+    /// innermost layer it belongs to. A path with several sub-paths gives one leaf per
+    /// sub-path.
     pub fn leaves(&mut self, page_index: usize) -> Vec<Leaf> {
         let mut out = Vec::new();
         if let Some(page) = self.doc.pages.get(page_index) {
@@ -130,22 +131,40 @@ impl<'a> Inspector<'a> {
             }
             return;
         }
-        let Some(bounds) = self.bounds(item) else { return };
-        let bounds = transform_rect(&ctm, bounds);
-        let bounds = match clip {
-            Some(c) => match bounds.intersect(&c) {
-                Some(visible) => visible,
-                None => return,
-            },
-            None => bounds,
-        };
         let kind = match item {
             Item::Path { .. } => LeafKind::Path,
             Item::Image { .. } => LeafKind::Image,
             Item::Glyphs { .. } => LeafKind::Text,
             Item::Group { .. } => return,
         };
-        out.push(Leaf { bounds, kind, layer: layer.map(str::to_owned) });
+        // A path with several sub-paths (the eight crop marks, the modules of a QR code,
+        // the letters of an outlined word) is one leaf per sub-path: the box around all
+        // of them would cover what lies between them.
+        let pieces: Vec<Rect> = match item {
+            Item::Path { path, fill, stroke } if path.segs.len() > 1 => {
+                let grow = stroke.as_ref().map(|s| pt_to_mm(s.width_pt.max(0.0)) / 2.0);
+                if grow.is_none() && fill.is_none() {
+                    return;
+                }
+                subpaths(path)
+                    .iter()
+                    .filter_map(|sub| outline_bounds(sub).or_else(|| sub.control_bounds()))
+                    .map(|b| b.inflate(grow.unwrap_or(0.0)))
+                    .collect()
+            }
+            _ => self.bounds(item).into_iter().collect(),
+        };
+        for bounds in pieces {
+            let bounds = transform_rect(&ctm, bounds);
+            let bounds = match clip {
+                Some(c) => match bounds.intersect(&c) {
+                    Some(visible) => visible,
+                    None => continue,
+                },
+                None => bounds,
+            };
+            out.push(Leaf { bounds, kind, layer: layer.map(str::to_owned) });
+        }
     }
 }
 
@@ -177,6 +196,21 @@ pub fn item_bounds(doc: &Document, item: &Item) -> Option<Rect> {
     Inspector::new(doc).bounds(item)
 }
 
+/// The sub-paths of a path: a new one starts at every `MoveTo`.
+fn subpaths(path: &Path) -> Vec<Path> {
+    let mut out: Vec<Path> = Vec::new();
+    for seg in &path.segs {
+        match seg {
+            PathSeg::MoveTo(_) => out.push(Path { segs: vec![*seg] }),
+            _ => match out.last_mut() {
+                Some(current) => current.segs.push(*seg),
+                None => out.push(Path { segs: vec![*seg] }),
+            },
+        }
+    }
+    out
+}
+
 /// The axis-aligned box of a rectangle mapped through a transform.
 fn transform_rect(t: &Transform, r: Rect) -> Rect {
     let corners = [
@@ -198,7 +232,7 @@ fn transform_rect(t: &Transform, r: Rect) -> Rect {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ebc_scene::{Color, Path, Stroke};
+    use ebc_scene::{Color, Stroke};
 
     #[test]
     fn paths_images_and_groups() {
@@ -245,5 +279,15 @@ mod tests {
         assert_eq!(leaves[1].layer.as_deref(), Some("marks"));
         assert_eq!(leaves[1].bounds, Rect::new(2.0, 2.0, 3.0, 3.0));
         assert!(Inspector::new(&doc).leaves(7).is_empty());
+
+        // Two far-apart strokes in one path are two leaves, not one box around both.
+        let mut marks = Path::new();
+        marks.move_to(-10.0, 0.0).line_to(-5.0, 0.0);
+        marks.move_to(105.0, 0.0).line_to(110.0, 0.0);
+        doc.pages[0].items.push(Item::stroke(marks, Stroke::solid(Color::BLACK, 0.0)));
+        let leaves = Inspector::new(&doc).leaves(0);
+        assert_eq!(leaves.len(), 4);
+        assert_eq!(leaves[2].bounds, Rect::new(-10.0, 0.0, 5.0, 0.0));
+        assert_eq!(leaves[3].bounds, Rect::new(105.0, 0.0, 5.0, 0.0));
     }
 }

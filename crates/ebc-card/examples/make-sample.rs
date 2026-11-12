@@ -28,6 +28,7 @@ use ebc_card::{
 use ebc_layout::{CardFormat, PrintProfile};
 use ebc_model::{BookMeta, Contributor, GiftCode, Locale};
 
+#[allow(dead_code, unreachable_pub)]
 #[path = "../tests/common/art.rs"]
 mod art;
 

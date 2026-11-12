@@ -113,7 +113,11 @@ async fn deliver(state: AppState, id: String) {
             Ok(response) => {
                 tracing::warn!(event = %id, attempt, status = %response.status(), "webhook refused");
             }
-            Err(error) => tracing::warn!(event = %id, attempt, %error, "webhook not delivered"),
+            Err(error) => {
+                // Webhook URLs may carry credentials or tokens in their query: not logged.
+                let error = error.without_url();
+                tracing::warn!(event = %id, attempt, %error, "webhook not delivered");
+            }
         }
         if attempt < policy.max_attempts {
             tokio::time::sleep(policy.delay_after(attempt)).await;

@@ -186,6 +186,34 @@ pub struct Config {
     /// `EBC_RATE_CREATE_PER_10MIN` (addition to the contract): uploads and gift creations
     /// per client on the open creator API (0 disables the limit).
     pub rate_create_per_10min: u32,
+    /// `EBC_RATE_CREATE_GLOBAL_PER_10MIN`: uploads and gift creations on the open creator
+    /// API from all clients together before every further one gets `429` (0 = off).
+    pub rate_create_global_per_10min: u32,
+    /// `EBC_RATE_PARTNER_FAIL_PER_10MIN`: failed partner authentications (bad or stale
+    /// signature, unknown partner) per client network before `/api/partner/*` answers
+    /// `429` without reading anything (0 = off).
+    pub rate_partner_fail_per_10min: u32,
+    /// `EBC_ANON_STORAGE_QUOTA_MB`: bytes all anonymous (creator API) uploads may occupy
+    /// together; beyond, uploads answer `507 storage_quota_exceeded` (0 = no quota).
+    pub anonymous_storage_quota_bytes: u64,
+    /// `EBC_MAX_INFLIGHT_BODY_MB`: request-body bytes held in memory by all requests
+    /// together; beyond, a request answers `503 server_busy` (at least 1 MiB).
+    pub max_inflight_body_bytes: usize,
+    /// `EBC_RETENTION_DAYS`: how long a cancelled or expired gift keeps its record before
+    /// it is anonymised (names, message, files and upload record removed). Names and
+    /// message of a cancelled gift are blanked at once.
+    pub retention_secs: i64,
+    /// `EBC_HEADER_TIMEOUT_SECS`: time a client has to send the request line and headers
+    /// (also bounds idle keep-alive connections).
+    pub header_read_timeout_secs: u64,
+    /// `EBC_REQUEST_TIMEOUT_SECS`: time a request may take until its response starts,
+    /// body upload included (`408` beyond).
+    pub request_timeout_secs: u64,
+    /// `EBC_BODY_IDLE_TIMEOUT_SECS`: longest pause between two pieces of a request body.
+    pub body_idle_timeout_secs: u64,
+    /// `EBC_MAX_CONNECTIONS`: open connections served at once; further ones wait in the
+    /// listen backlog.
+    pub max_connections: u32,
     /// `EBC_WEB_DIR`: directory of the static web app served at `/app/`.
     pub web_dir: Option<PathBuf>,
     /// `EBC_TRUST_PROXY`: honour `X-Forwarded-For` for client identification.
@@ -207,8 +235,11 @@ pub struct Config {
     pub partner_clock_skew_secs: i64,
     /// How long an `Idempotency-Key` is remembered, in seconds.
     pub idempotency_ttl_secs: i64,
-    /// How long an upload may stay unattached to a gift before it is deleted, in seconds.
+    /// How long a partner upload may stay unattached to a gift before it is deleted, in
+    /// seconds.
     pub upload_orphan_ttl_secs: i64,
+    /// `EBC_ANON_UPLOAD_TTL_MIN`: the same for anonymous (creator API) uploads, in seconds.
+    pub anonymous_upload_orphan_ttl_secs: i64,
     /// Webhook retry policy.
     pub webhook: WebhookPolicy,
     /// Time allowed for a call to the print provider or a reseller licence endpoint.
@@ -230,6 +261,16 @@ impl std::fmt::Debug for Config {
             .field("printer_url", &self.printer_url)
             .field("rate_unknown_per_10min", &self.rate_unknown_per_10min)
             .field("rate_unknown_global_per_10min", &self.rate_unknown_global_per_10min)
+            .field("rate_create_per_10min", &self.rate_create_per_10min)
+            .field("rate_create_global_per_10min", &self.rate_create_global_per_10min)
+            .field("rate_partner_fail_per_10min", &self.rate_partner_fail_per_10min)
+            .field("anonymous_storage_quota_bytes", &self.anonymous_storage_quota_bytes)
+            .field("max_inflight_body_bytes", &self.max_inflight_body_bytes)
+            .field("retention_secs", &self.retention_secs)
+            .field("header_read_timeout_secs", &self.header_read_timeout_secs)
+            .field("request_timeout_secs", &self.request_timeout_secs)
+            .field("body_idle_timeout_secs", &self.body_idle_timeout_secs)
+            .field("max_connections", &self.max_connections)
             .field("web_dir", &self.web_dir)
             .field("trust_proxy", &self.trust_proxy)
             .finish_non_exhaustive()
@@ -257,6 +298,15 @@ impl Config {
             rate_unknown_per_10min: 10,
             rate_unknown_global_per_10min: 500,
             rate_create_per_10min: 120,
+            rate_create_global_per_10min: 2_000,
+            rate_partner_fail_per_10min: 30,
+            anonymous_storage_quota_bytes: 10 * 1024 * 1024 * 1024,
+            max_inflight_body_bytes: 256 * 1024 * 1024,
+            retention_secs: 30 * 86_400,
+            header_read_timeout_secs: 30,
+            request_timeout_secs: 300,
+            body_idle_timeout_secs: 30,
+            max_connections: 1_024,
             web_dir: None,
             trust_proxy: false,
             max_upload_bytes: 50 * 1024 * 1024,
@@ -268,6 +318,7 @@ impl Config {
             partner_clock_skew_secs: 300,
             idempotency_ttl_secs: 24 * 3600,
             upload_orphan_ttl_secs: 24 * 3600,
+            anonymous_upload_orphan_ttl_secs: 3600,
             webhook: WebhookPolicy::default(),
             outbound_timeout_ms: 15_000,
         }
@@ -368,6 +419,34 @@ impl Config {
             number("EBC_RATE_UNKNOWN_GLOBAL_PER_10MIN", config.rate_unknown_global_per_10min)?;
         config.rate_create_per_10min =
             number("EBC_RATE_CREATE_PER_10MIN", config.rate_create_per_10min)?;
+        config.rate_create_global_per_10min =
+            number("EBC_RATE_CREATE_GLOBAL_PER_10MIN", config.rate_create_global_per_10min)?;
+        config.rate_partner_fail_per_10min =
+            number("EBC_RATE_PARTNER_FAIL_PER_10MIN", config.rate_partner_fail_per_10min)?;
+        const MIB: u64 = 1024 * 1024;
+        if get("EBC_ANON_STORAGE_QUOTA_MB").is_some() {
+            let mb = number("EBC_ANON_STORAGE_QUOTA_MB", 0)?;
+            config.anonymous_storage_quota_bytes = u64::from(mb) * MIB;
+        }
+        let positive = |name: &str, default: u32| -> Result<u32, ServerError> {
+            match number(name, default)? {
+                0 => Err(ServerError::Config(format!("{name} must be at least 1"))),
+                value => Ok(value),
+            }
+        };
+        if get("EBC_MAX_INFLIGHT_BODY_MB").is_some() {
+            let mb = positive("EBC_MAX_INFLIGHT_BODY_MB", 1)?;
+            config.max_inflight_body_bytes =
+                usize::try_from(u64::from(mb) * MIB).unwrap_or(usize::MAX);
+        }
+        let days = number("EBC_RETENTION_DAYS", 30)?;
+        config.retention_secs = i64::from(days) * 86_400;
+        let minutes = positive("EBC_ANON_UPLOAD_TTL_MIN", 60)?;
+        config.anonymous_upload_orphan_ttl_secs = i64::from(minutes) * 60;
+        config.header_read_timeout_secs = u64::from(positive("EBC_HEADER_TIMEOUT_SECS", 30)?);
+        config.request_timeout_secs = u64::from(positive("EBC_REQUEST_TIMEOUT_SECS", 300)?);
+        config.body_idle_timeout_secs = u64::from(positive("EBC_BODY_IDLE_TIMEOUT_SECS", 30)?);
+        config.max_connections = positive("EBC_MAX_CONNECTIONS", 1_024)?;
         config.web_dir = get("EBC_WEB_DIR").map(PathBuf::from);
         config.trust_proxy = match get("EBC_TRUST_PROXY").as_deref() {
             None | Some("0" | "false" | "no" | "off") => false,
@@ -405,6 +484,17 @@ impl Config {
             warnings.push(format!("EBC_PUBLIC_URL host {host:?} is long to type on an e-reader"));
         }
         warnings
+    }
+
+    /// What [`Db::purge`](crate::store::Db::purge) drops, and when.
+    #[must_use]
+    pub fn purge_policy(&self) -> crate::store::PurgePolicy {
+        crate::store::PurgePolicy {
+            idempotency_ttl_secs: self.idempotency_ttl_secs,
+            upload_orphan_ttl_secs: self.upload_orphan_ttl_secs,
+            anonymous_upload_orphan_ttl_secs: self.anonymous_upload_orphan_ttl_secs,
+            retention_secs: self.retention_secs,
+        }
     }
 
     /// The partner with this id, if configured.
@@ -560,6 +650,16 @@ mod tests {
         assert_eq!(config.pair_ttl_secs, 900);
         assert_eq!(config.max_download_sessions, 10);
         assert_eq!(config.partner_clock_skew_secs, 300);
+        assert_eq!(config.retention_secs, 30 * 86_400);
+        assert_eq!(config.anonymous_upload_orphan_ttl_secs, 3_600);
+        assert_eq!(config.header_read_timeout_secs, 30);
+        assert_eq!(config.request_timeout_secs, 300);
+        assert_eq!(config.body_idle_timeout_secs, 30);
+        assert_eq!(config.max_connections, 1_024);
+        assert_eq!(config.max_inflight_body_bytes, 256 * 1024 * 1024);
+        assert_eq!(config.anonymous_storage_quota_bytes, 10 * 1024 * 1024 * 1024);
+        assert_eq!(config.rate_create_global_per_10min, 2_000);
+        assert_eq!(config.rate_partner_fail_per_10min, 30);
         // A development secret was generated and is stable across restarts.
         assert!(config.code_secret.len() >= 32);
         let again =
@@ -607,6 +707,11 @@ mod tests {
             ("EBC_TRUST_PROXY", "maybe"),
             ("EBC_SEND_DOMAINS", "kindle.com, not a domain"),
             ("EBC_PARTNERS", "/nonexistent/partners.toml"),
+            ("EBC_HEADER_TIMEOUT_SECS", "0"),
+            ("EBC_MAX_CONNECTIONS", "0"),
+            ("EBC_MAX_INFLIGHT_BODY_MB", "0"),
+            ("EBC_RETENTION_DAYS", "-3"),
+            ("EBC_ANON_STORAGE_QUOTA_MB", "lots"),
         ] {
             let result = Config::from_lookup(env(&[secret, (name, value)]));
             assert!(result.is_err(), "{name}={value} should be refused");
@@ -626,8 +731,31 @@ mod tests {
             ("EBC_RATE_UNKNOWN_GLOBAL_PER_10MIN", "40"),
             ("EBC_WEB_DIR", "/srv/web"),
             ("EBC_TRUST_PROXY", "1"),
+            ("EBC_RETENTION_DAYS", "7"),
+            ("EBC_ANON_UPLOAD_TTL_MIN", "15"),
+            ("EBC_ANON_STORAGE_QUOTA_MB", "100"),
+            ("EBC_MAX_INFLIGHT_BODY_MB", "64"),
+            ("EBC_HEADER_TIMEOUT_SECS", "10"),
+            ("EBC_REQUEST_TIMEOUT_SECS", "60"),
+            ("EBC_BODY_IDLE_TIMEOUT_SECS", "5"),
+            ("EBC_MAX_CONNECTIONS", "64"),
+            ("EBC_RATE_CREATE_GLOBAL_PER_10MIN", "0"),
+            ("EBC_RATE_PARTNER_FAIL_PER_10MIN", "5"),
         ]))
         .unwrap();
+        assert_eq!(config.retention_secs, 7 * 86_400);
+        assert_eq!(config.anonymous_upload_orphan_ttl_secs, 900);
+        assert_eq!(config.anonymous_storage_quota_bytes, 100 * 1024 * 1024);
+        assert_eq!(config.max_inflight_body_bytes, 64 * 1024 * 1024);
+        assert_eq!(
+            (config.header_read_timeout_secs, config.request_timeout_secs),
+            (10, 60)
+        );
+        assert_eq!((config.body_idle_timeout_secs, config.max_connections), (5, 64));
+        assert_eq!(
+            (config.rate_create_global_per_10min, config.rate_partner_fail_per_10min),
+            (0, 5)
+        );
         assert_eq!(config.bind, "0.0.0.0:9000");
         assert_eq!(config.smtp_url.as_deref(), Some("smtp://127.0.0.1:2525"));
         assert_eq!(config.send_from, "cadeau@ebk.example");

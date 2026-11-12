@@ -86,6 +86,23 @@ impl RateLimiter {
         self.verdict(&mut state, client, now)
     }
 
+    /// When the global budget is spent: the seconds until it frees up again; `None` while
+    /// there is room (or the global budget is disabled). Records nothing.
+    ///
+    /// Used where *every* client must be refused while the service is under attack, not
+    /// only those that already failed: pair codes (6 letters, a far smaller space than
+    /// gift codes) and the open creation API.
+    #[must_use]
+    pub fn global_exhausted(&self, now: i64) -> Option<u64> {
+        if self.global_limit == 0 {
+            return None;
+        }
+        let mut state = self.lock();
+        prune(&mut state.global, now);
+        (state.global.len() >= self.global_limit as usize)
+            .then(|| retry_after(state.global.front().copied(), now))
+    }
+
     /// Records one unknown code from `client` and returns the verdict that applies to this
     /// very attempt: [`Verdict::Blocked`] with `global: true` if the global budget was
     /// already exhausted (the wrong guess gets `429`), otherwise [`Verdict::Allowed`] with
@@ -237,10 +254,15 @@ mod tests {
             Verdict::Blocked { retry_after_secs: 595, global: true }
         );
         assert!(limiter.check("fresh", T0 + 6).is_blocked());
+        // The strict check refuses everybody, even a client that never failed.
+        assert_eq!(limiter.global_exhausted(T0 + 6), Some(595));
+        assert_eq!(limiter.check("never-seen", T0 + 6), Verdict::Allowed { remaining: Some(10) });
         // Sustained guessing keeps the service in that state…
         assert!(limiter.record_failure("bot-9", T0 + 300).is_blocked());
         // …and it recovers once the window has slid past the burst.
         assert_eq!(limiter.check("bot-0", T0 + 601), Verdict::Allowed { remaining: Some(10) });
+        assert_eq!(limiter.global_exhausted(T0 + 901), None);
+        assert_eq!(RateLimiter::new(1, 0).global_exhausted(T0), None);
         assert_eq!(
             limiter.record_failure("late", T0 + 901),
             Verdict::Allowed { remaining: Some(9) }

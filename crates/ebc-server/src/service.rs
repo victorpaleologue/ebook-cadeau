@@ -723,6 +723,8 @@ impl AppState {
     async fn fetch_licence(&self, gift: &GiftRecord, url: &str) -> Result<Bytes, ClaimError> {
         let target = self.signed_store_url(gift, url).ok_or(ClaimError::StoreUnavailable)?;
         let mut response = self.http.get(target).send().await.map_err(|error| {
+            // The URL carries `ebc_sig`, a valid store signature: never log it.
+            let error = error.without_url();
             tracing::warn!(gift = %gift.id, %error, "licence request failed");
             ClaimError::StoreUnavailable
         })?;

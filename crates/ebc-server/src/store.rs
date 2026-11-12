@@ -144,6 +144,14 @@ pub struct GiftRecord {
     /// Times at which the file was sent to a device address (addresses are not kept).
     #[serde(default)]
     pub sends: Vec<i64>,
+    /// When the gift was cancelled (retention of cancelled gifts runs from here).
+    #[serde(default)]
+    pub ended_at: Option<i64>,
+    /// When the record was anonymised after the retention period (`EBC_RETENTION_DAYS`):
+    /// names, message, sendings and files are gone; id, status, dates and code hash stay
+    /// so that the code keeps answering `410` and the partner can still read the status.
+    #[serde(default)]
+    pub anonymised_at: Option<i64>,
 }
 
 impl GiftRecord {
@@ -155,6 +163,26 @@ impl GiftRecord {
         } else {
             self.status
         }
+    }
+
+    /// Whether the retention period of a cancelled or expired gift is over at `now`.
+    #[must_use]
+    pub fn retention_over(&self, now: i64, retention_secs: i64) -> bool {
+        let ended = match self.status_at(now) {
+            GiftStatus::Cancelled => self.ended_at,
+            GiftStatus::Expired => self.expires_at,
+            _ => None,
+        };
+        ended.is_some_and(|at| now.saturating_sub(at) >= retention_secs)
+    }
+
+    /// Forgets the personal data of the gift: names and message (the book stays, it is
+    /// not about a person). Files are handled by the caller.
+    pub fn forget_personal_data(&mut self) {
+        self.giver_name = None;
+        self.recipient_name = None;
+        self.message = None;
+        self.sends.clear();
     }
 
     /// Whether the gift may be shown and claimed at `now` (reveal date reached).
@@ -247,7 +275,7 @@ pub enum IdempotentOutcome {
     },
 }
 
-/// A remembered `Idempotency-Key`.
+/// A remembered `Idempotency-Key`, or a used request signature (a nonce).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct IdempotencyRecord {
     /// SHA-256 of the request body.
@@ -256,6 +284,34 @@ pub struct IdempotencyRecord {
     pub created_at: i64,
     /// What to answer on replay.
     pub outcome: IdempotentOutcome,
+    /// When the record may be forgotten; `None`: after the idempotency TTL. Signature
+    /// records only need to outlive the timestamp window of the signature.
+    #[serde(default)]
+    pub expires_at: Option<i64>,
+}
+
+impl IdempotencyRecord {
+    /// Whether the record still counts at `now`.
+    #[must_use]
+    pub fn is_live(&self, now: i64, idempotency_ttl_secs: i64) -> bool {
+        match self.expires_at {
+            Some(at) => now < at,
+            None => now.saturating_sub(self.created_at) < idempotency_ttl_secs,
+        }
+    }
+}
+
+/// What [`Db::purge`] drops, and when (all in seconds).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PurgePolicy {
+    /// Lifetime of a remembered `Idempotency-Key`.
+    pub idempotency_ttl_secs: i64,
+    /// Lifetime of a partner upload never attached to a gift.
+    pub upload_orphan_ttl_secs: i64,
+    /// Lifetime of an anonymous upload never attached to a gift.
+    pub anonymous_upload_orphan_ttl_secs: i64,
+    /// Time a cancelled or expired gift is kept before it is anonymised.
+    pub retention_secs: i64,
 }
 
 /// A webhook event not yet acknowledged by the partner.
@@ -308,15 +364,17 @@ impl Db {
                 g.cover.as_ref().is_some_and(|c| c.sha256 == sha256)
                     || g.card_pdf.as_ref().is_some_and(|c| c.sha256 == sha256)
                     || (g.status != GiftStatus::Cancelled
+                        && g.anonymised_at.is_none()
                         && matches!(&g.delivery, Delivery::HostedFile { sha256: s, .. } if s == sha256))
             })
     }
 
     /// Drops what has expired at `now`: download sessions, pair codes, idempotency keys
-    /// older than `idempotency_ttl`, uploads never attached to a gift within
-    /// `upload_orphan_ttl`. Returns the blobs that may now be unused (check with
-    /// [`blob_in_use`](Self::blob_in_use) before deleting).
-    pub fn purge(&mut self, now: i64, idempotency_ttl: i64, upload_orphan_ttl: i64) -> Vec<String> {
+    /// and used signatures, uploads never attached to a gift in time; blanks names and
+    /// message of cancelled gifts and anonymises cancelled or expired gifts whose
+    /// retention period is over (their files go too). Returns the blobs that may now be
+    /// unused (check with [`blob_in_use`](Self::blob_in_use) before deleting).
+    pub fn purge(&mut self, now: i64, policy: &PurgePolicy) -> Vec<String> {
         let mut candidates = Vec::new();
         self.sessions.retain(|_, session| {
             let keep = session.expires_at > now;
@@ -326,15 +384,55 @@ impl Db {
             keep
         });
         self.pairs.retain(|_, pair| pair.expires_at > now);
-        self.idempotency.retain(|_, record| now - record.created_at < idempotency_ttl);
+        self.idempotency.retain(|_, record| record.is_live(now, policy.idempotency_ttl_secs));
+        let mut dropped_uploads = Vec::new();
+        for gift in self.gifts.values_mut() {
+            if gift.status == GiftStatus::Cancelled {
+                gift.forget_personal_data();
+            }
+            if gift.anonymised_at.is_some() || !gift.retention_over(now, policy.retention_secs) {
+                continue;
+            }
+            gift.forget_personal_data();
+            gift.anonymised_at = Some(now);
+            if let Delivery::HostedFile { sha256, .. } = &gift.delivery {
+                candidates.push(sha256.clone());
+            }
+            for blob in [gift.cover.take(), gift.card_pdf.take()].into_iter().flatten() {
+                candidates.push(blob.sha256);
+            }
+            dropped_uploads.extend(gift.upload_id.clone());
+            let id = gift.id.clone();
+            self.sessions.retain(|_, session| session.gift_id != id);
+            self.pairs.retain(|_, pair| pair.gift_id != id);
+        }
+        for upload_id in dropped_uploads {
+            if let Some(upload) = self.uploads.remove(&upload_id) {
+                candidates.push(upload.sha256);
+            }
+        }
         self.uploads.retain(|_, upload| {
-            let keep = upload.gift_id.is_some() || now - upload.created_at < upload_orphan_ttl;
+            let ttl = if upload.partner.is_some() {
+                policy.upload_orphan_ttl_secs
+            } else {
+                policy.anonymous_upload_orphan_ttl_secs
+            };
+            let keep = upload.gift_id.is_some() || now.saturating_sub(upload.created_at) < ttl;
             if !keep {
                 candidates.push(upload.sha256.clone());
             }
             keep
         });
         candidates
+    }
+
+    /// Bytes held by anonymous (creator API) uploads, attached or not.
+    #[must_use]
+    pub fn anonymous_upload_bytes(&self) -> u64 {
+        self.uploads
+            .values()
+            .filter(|upload| upload.partner.is_none())
+            .fold(0u64, |sum, upload| sum.saturating_add(upload.size_bytes))
     }
 }
 
@@ -666,8 +764,17 @@ mod tests {
             card_pdf: None,
             print_orders: Vec::new(),
             sends: Vec::new(),
+            ended_at: None,
+            anonymised_at: None,
         }
     }
+
+    const POLICY: PurgePolicy = PurgePolicy {
+        idempotency_ttl_secs: 1000,
+        upload_orphan_ttl_secs: 10,
+        anonymous_upload_orphan_ttl_secs: 10,
+        retention_secs: 30,
+    };
 
     #[test]
     fn file_store_round_trips_the_snapshot_and_files() {
@@ -755,7 +862,7 @@ mod tests {
         db.uploads.insert("attached".to_owned(), upload(0, Some("g_1")));
         db.uploads.insert("fresh".to_owned(), upload(95, None));
 
-        let candidates = db.purge(100, 1000, 10);
+        let candidates = db.purge(100, &POLICY);
         assert_eq!(db.sessions.keys().collect::<Vec<_>>(), ["live"]);
         assert_eq!(db.pairs.keys().collect::<Vec<_>>(), ["live"]);
         assert_eq!(db.uploads.keys().collect::<Vec<_>>(), ["attached", "fresh"]);
@@ -763,6 +870,106 @@ mod tests {
         // The live session still needs the first file; the attached upload the second.
         assert!(db.blob_in_use(SHA));
         assert!(db.blob_in_use(&"ab".repeat(32)));
+    }
+
+    #[test]
+    fn retention_blanks_cancelled_gifts_and_anonymises_ended_ones_with_their_files() {
+        let mut db = Db::default();
+        let personal = |mut g: GiftRecord| {
+            g.giver_name = Some("Camille".to_owned());
+            g.recipient_name = Some("Sacha".to_owned());
+            g.message = Some("Bon anniversaire".to_owned());
+            g.sends = vec![90];
+            g
+        };
+        let mut cancelled = personal(gift("g_cancelled"));
+        cancelled.status = GiftStatus::Cancelled;
+        cancelled.ended_at = Some(100);
+        let mut expired = personal(gift("g_expired"));
+        expired.expires_at = Some(100);
+        expired.upload_id = Some("u_1".to_owned());
+        expired.cover = Some(BlobRef {
+            sha256: "cd".repeat(32),
+            size_bytes: 1,
+            media_type: "image/png".to_owned(),
+        });
+        let mut live = personal(gift("g_live"));
+        if let Delivery::HostedFile { sha256, .. } = &mut live.delivery {
+            *sha256 = "ef".repeat(32);
+        }
+        db.gifts.insert(cancelled.id.clone(), cancelled);
+        db.gifts.insert(expired.id.clone(), expired);
+        db.gifts.insert(live.id.clone(), live);
+        db.uploads.insert(
+            "u_1".to_owned(),
+            UploadRecord {
+                id: "u_1".to_owned(),
+                sha256: SHA.to_owned(),
+                size_bytes: 4,
+                media_type: "application/epub+zip".to_owned(),
+                file_name: Some("le-horla.epub".to_owned()),
+                rights_basis: RightsBasis::PublicDomain,
+                partner: None,
+                created_at: 0,
+                gift_id: Some("g_expired".to_owned()),
+            },
+        );
+        assert_eq!(db.anonymous_upload_bytes(), 4);
+
+        // Within the retention period: cancelled gifts lose names and message at once,
+        // expired ones keep everything.
+        assert!(db.purge(110, &POLICY).is_empty());
+        let named = |db: &Db, id: &str| db.gifts[id].giver_name.is_some();
+        assert!(!named(&db, "g_cancelled") && db.gifts["g_cancelled"].message.is_none());
+        assert!(named(&db, "g_expired") && named(&db, "g_live"));
+        assert!(db.blob_in_use(SHA));
+
+        // After it: anonymised, files released, the live gift untouched.
+        let candidates = db.purge(130, &POLICY);
+        let expired = &db.gifts["g_expired"];
+        assert_eq!(expired.anonymised_at, Some(130));
+        assert!(expired.giver_name.is_none() && expired.recipient_name.is_none());
+        assert!(expired.message.is_none() && expired.sends.is_empty() && expired.cover.is_none());
+        assert!(candidates.contains(&SHA.to_owned()) && candidates.contains(&"cd".repeat(32)));
+        assert!(db.uploads.is_empty() && db.anonymous_upload_bytes() == 0);
+        assert!(!db.blob_in_use(SHA), "the expired gift's file may be deleted");
+        assert_eq!(db.gifts["g_cancelled"].anonymised_at, Some(130));
+        assert!(named(&db, "g_live") && db.gifts["g_live"].anonymised_at.is_none());
+        // Idempotent.
+        assert!(db.purge(200, &POLICY).is_empty());
+    }
+
+    #[test]
+    fn anonymous_uploads_are_dropped_sooner_than_partner_uploads() {
+        let mut db = Db::default();
+        let upload = |id: &str, partner: Option<&str>| UploadRecord {
+            id: id.to_owned(),
+            sha256: "ab".repeat(32),
+            size_bytes: 1,
+            media_type: "application/pdf".to_owned(),
+            file_name: None,
+            rights_basis: RightsBasis::OwnWork,
+            partner: partner.map(str::to_owned),
+            created_at: 0,
+            gift_id: None,
+        };
+        db.uploads.insert("anon".to_owned(), upload("anon", None));
+        db.uploads.insert("partner".to_owned(), upload("partner", Some("septante")));
+        let policy = PurgePolicy { anonymous_upload_orphan_ttl_secs: 5, ..POLICY };
+        let _ = db.purge(6, &policy);
+        assert_eq!(db.uploads.keys().collect::<Vec<_>>(), ["partner"]);
+    }
+
+    #[test]
+    fn signature_records_expire_on_their_own_clock() {
+        let record = |expires_at| IdempotencyRecord {
+            body_sha256: String::new(),
+            created_at: 100,
+            outcome: IdempotentOutcome::Response { status: 200, body: "{}".to_owned() },
+            expires_at,
+        };
+        assert!(record(None).is_live(1099, 1000) && !record(None).is_live(1100, 1000));
+        assert!(record(Some(701)).is_live(700, 1000) && !record(Some(701)).is_live(701, 1000));
     }
 
     #[test]

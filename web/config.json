@@ -1,0 +1,11 @@
+{
+  "server": null,
+  "base_url": null,
+  "print_orders": false,
+  "catalog": {
+    "base_urls": {},
+    "enable": [],
+    "disable": [],
+    "contact_email": null
+  }
+}

@@ -187,8 +187,7 @@ pub fn fontid_identify(
     title: &str,
     index: Option<Vec<u8>>,
 ) -> Result<String, JsError> {
-    api::fontid::fontid_identify(cover, region_json, title, non_empty(index).as_deref())
-        .map_err(js)
+    api::fontid::fontid_identify(cover, region_json, title, non_empty(index).as_deref()).map_err(js)
 }
 
 /// See [`api::book::gift_code_from_random`].

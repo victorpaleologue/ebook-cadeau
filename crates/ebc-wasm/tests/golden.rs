@@ -32,7 +32,10 @@ fn golden_cards_render_deterministically() {
         assert_eq!(digest.len(), 64, "{name}");
         assert!(CASES.iter().any(|(case, _, _)| *case == name));
     }
-    assert_eq!(sha256_hex(b"abc"), "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+    assert_eq!(
+        sha256_hex(b"abc"),
+        "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad"
+    );
 }
 
 #[test]
@@ -56,4 +59,3 @@ fn golden_cards_are_what_they_claim() {
     assert!(count(&pdfx.pdf, b"GTS_PDFX") >= 1);
     assert!(!pdfx.warnings_json.contains("fallback_output_profile"));
 }
-

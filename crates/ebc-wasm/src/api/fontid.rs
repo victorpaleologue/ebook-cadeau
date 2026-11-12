@@ -305,10 +305,14 @@ mod tests {
             assert!(region["w"].as_u64().expect("a region") > 200, "{region}");
             let matches = v["matches"].as_array().expect("matches");
             assert!(!matches.is_empty());
-            assert!(matches.iter().all(|m| m["licence"].as_str().is_some_and(|l| l.contains("OFL"))), "{matches:?}");
+            assert!(
+                matches.iter().all(|m| m["licence"].as_str().is_some_and(|l| l.contains("OFL"))),
+                "{matches:?}"
+            );
             assert_eq!(v["suggestion"]["title_font"], expected, "{}", v["matches"]);
             // The same answer for a region drawn by the user around the title.
-            let drawn = fontid_identify(&cover, &region.to_string(), "Les Vagues", None).expect("region");
+            let drawn =
+                fontid_identify(&cover, &region.to_string(), "Les Vagues", None).expect("region");
             assert_eq!(value(&drawn)["suggestion"]["title_font"], expected);
         }
     }
@@ -317,7 +321,10 @@ mod tests {
     #[test]
     fn hostile_input_is_refused_not_fatal() {
         const { assert!(AVAILABLE) };
-        assert_eq!(fontid_identify(b"junk", "", "Title", None).expect_err("junk").code, "cover_decode");
+        assert_eq!(
+            fontid_identify(b"junk", "", "Title", None).expect_err("junk").code,
+            "cover_decode"
+        );
         let blank = super::super::cover::tests::png(120, 180, |_, _| [255, 255, 255]);
         let v = value(&fontid_identify(&blank, "", "Title", None).expect("blank"));
         assert_eq!(v["available"], true);
@@ -326,7 +333,10 @@ mod tests {
         // A region outside the image, a region of nonsense, a corrupt index.
         let outside = r#"{"x": 100000, "y": 100000, "w": 5, "h": 5}"#;
         assert!(fontid_identify(&blank, outside, "Title", None).is_ok());
-        assert_eq!(fontid_identify(&blank, "{\"x\": -1}", "Title", None).expect_err("bad").code, "invalid_json");
+        assert_eq!(
+            fontid_identify(&blank, "{\"x\": -1}", "Title", None).expect_err("bad").code,
+            "invalid_json"
+        );
         assert_eq!(
             fontid_identify(&blank, "", "Title", Some(b"not an index")).expect_err("index").code,
             "invalid_font_index"
@@ -340,9 +350,18 @@ mod tests {
     #[cfg(feature = "fontid")]
     #[test]
     fn title_faces_stand_for_their_families() {
-        assert_eq!(title_font_for("Spectral", "assets/fonts/Spectral-Italic.ttf"), Some("spectral_semibold"));
-        assert_eq!(title_font_for("Bebas Neue", "assets/fonts/BebasNeue-Regular.ttf"), Some("bebas_neue"));
-        assert_eq!(title_font_for("Atkinson Hyperlegible", "x/AtkinsonHyperlegible-Regular.ttf"), Some("atkinson_bold"));
+        assert_eq!(
+            title_font_for("Spectral", "assets/fonts/Spectral-Italic.ttf"),
+            Some("spectral_semibold")
+        );
+        assert_eq!(
+            title_font_for("Bebas Neue", "assets/fonts/BebasNeue-Regular.ttf"),
+            Some("bebas_neue")
+        );
+        assert_eq!(
+            title_font_for("Atkinson Hyperlegible", "x/AtkinsonHyperlegible-Regular.ttf"),
+            Some("atkinson_bold")
+        );
         assert_eq!(title_font_for("Courier Prime", ""), Some("courier_prime_bold"));
         assert_eq!(title_font_for("Helvetica", "https://example.org/h.ttf"), None);
     }

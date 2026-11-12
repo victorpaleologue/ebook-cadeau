@@ -50,11 +50,17 @@ impl ApiError {
 pub const MAX_JSON_BYTES: usize = 4 * 1024 * 1024;
 
 /// Parses a JSON argument called `what`.
-pub(crate) fn from_json<T: DeserializeOwned>(what: &'static str, json: &str) -> Result<T, ApiError> {
+pub(crate) fn from_json<T: DeserializeOwned>(
+    what: &'static str,
+    json: &str,
+) -> Result<T, ApiError> {
     if json.len() > MAX_JSON_BYTES {
         return Err(ApiError::new(
             "invalid_json",
-            format!("{what}: {} bytes of JSON, more than the {MAX_JSON_BYTES} accepted", json.len()),
+            format!(
+                "{what}: {} bytes of JSON, more than the {MAX_JSON_BYTES} accepted",
+                json.len()
+            ),
         ));
     }
     serde_json::from_str(json).map_err(|e| ApiError::new("invalid_json", format!("{what}: {e}")))
@@ -101,9 +107,18 @@ mod tests {
         assert_eq!(err.code, "invalid_json");
         assert!(err.to_string().starts_with("[invalid_json] list:"));
         let huge = format!("[{}0]", "0,".repeat(MAX_JSON_BYTES / 2 + 1));
-        assert_eq!(from_json::<Vec<u8>>("list", &huge).expect_err("too large").code, "invalid_json");
-        assert_eq!(from_json_or_default::<Vec<u8>>("list", "  ").expect("default"), Vec::<u8>::new());
-        assert_eq!(from_json_or_default::<Vec<u8>>("list", "null").expect("default"), Vec::<u8>::new());
+        assert_eq!(
+            from_json::<Vec<u8>>("list", &huge).expect_err("too large").code,
+            "invalid_json"
+        );
+        assert_eq!(
+            from_json_or_default::<Vec<u8>>("list", "  ").expect("default"),
+            Vec::<u8>::new()
+        );
+        assert_eq!(
+            from_json_or_default::<Vec<u8>>("list", "null").expect("default"),
+            Vec::<u8>::new()
+        );
         assert_eq!(from_json_or_default::<Vec<u8>>("list", "[1]").expect("parsed"), vec![1]);
     }
 }

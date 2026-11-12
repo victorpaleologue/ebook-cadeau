@@ -16,15 +16,18 @@
 # Requirements: the wasm32-unknown-unknown target and a wasm-bindgen CLI of exactly the
 # version of the `wasm-bindgen` crate in Cargo.lock (the two must match).
 #
-# Size budget. Measured on 2026-11-12 (rustc 1.9x, no wasm-opt): 4.1 MB raw, 1.9 MB gzip.
-# What is inside, roughly: the five bundled OFL fonts (0.5 MB, barely compressible), text
+# Size budget. Measured on 2026-11-12 (rustc 1.9x, wasm-bindgen 0.2.130, no wasm-opt,
+# default features incl. font identification): 3.78 MiB raw, 1.49 MiB gzip -9.
+# What is inside, roughly: the bundled OFL fonts (about 0.5 MB, barely compressible), text
 # shaping (harfrust) and font parsing, the JPEG/PNG/WebP decoders, the PDF writer with its
-# font subsetter, the thirteen catalogue parsers, the ISBN range table and the font index.
-# The budget leaves about 20 % of headroom over that measurement, so that an ordinary
-# change passes and a new heavy dependency (or the 1 MB ICC profile slipping back in
-# through ebc-card's default features) fails the build:
-MAX_RAW_BYTES=$((5 * 1024 * 1024))          # 5.0 MiB
-MAX_GZIP_BYTES=$((2400 * 1024))             # 2.4 MiB — what a visitor downloads
+# font subsetter, the catalogue parsers, the ISBN range table and the font-identification
+# index. The budget leaves about 20 % of headroom over that measurement, so that an
+# ordinary change passes and a new heavy dependency (or the 1 MB FOGRA39 profile slipping
+# back in through ebc-card's default features) fails the build. The gzip figure is what a
+# visitor downloads once (the server or a CDN compresses it); 1.8 MiB is about 1.5 s on a
+# 10 Mbit/s line, acceptable for a tool that then composes every card locally.
+MAX_RAW_BYTES=$((4608 * 1024))              # 4.5 MiB
+MAX_GZIP_BYTES=$((1843 * 1024))             # 1.8 MiB
 set -euo pipefail
 
 cd "$(dirname "${BASH_SOURCE[0]}")/.."

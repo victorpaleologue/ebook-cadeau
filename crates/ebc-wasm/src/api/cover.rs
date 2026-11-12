@@ -385,20 +385,15 @@ pub(crate) fn decode_scaled(bytes: &[u8], max_side: u32) -> Result<Analysed, Api
     let mut decoder = reader.into_decoder().map_err(|e| decode_error(e.to_string()))?;
     let (width, height) = decoder.dimensions();
     check(width, height)?;
-    let orientation =
-        decoder.orientation().unwrap_or(image::metadata::Orientation::NoTransforms);
-    let mut image =
-        DynamicImage::from_decoder(decoder).map_err(|e| decode_error(e.to_string()))?;
+    let orientation = decoder.orientation().unwrap_or(image::metadata::Orientation::NoTransforms);
+    let mut image = DynamicImage::from_decoder(decoder).map_err(|e| decode_error(e.to_string()))?;
     image.apply_orientation(orientation);
     let (width, height) = (image.width(), image.height());
     check(width, height)?;
 
     let max_side = max_side.max(1);
-    let small = if width.max(height) > max_side {
-        image.thumbnail(max_side, max_side)
-    } else {
-        image
-    };
+    let small =
+        if width.max(height) > max_side { image.thumbnail(max_side, max_side) } else { image };
     let mut rgba = small.into_rgba8();
     for px in rgba.pixels_mut() {
         let alpha = u32::from(px[3]);
@@ -478,8 +473,7 @@ const EDGE_STRIP: f32 = 0.04;
 const ANALYSIS_SIDE_PX: u32 = 512;
 
 fn edge_dto(image: &Pixmap, edge: Edge) -> (EdgeDto, Rgb8) {
-    let color =
-        edge_palette(image, edge, EDGE_STRIP, 1).first().map_or(Rgb8::WHITE, |s| s.color);
+    let color = edge_palette(image, edge, EDGE_STRIP, 1).first().map_or(Rgb8::WHITE, |s| s.color);
     let uniformity = edge_uniformity(image, edge, EDGE_STRIP);
     let dto = EdgeDto {
         color: color.to_hex(),
@@ -645,11 +639,20 @@ pub(crate) mod tests {
         assert!(!v["reasons"].as_array().expect("reasons").is_empty());
 
         for junk in [&b""[..], b"GIF", b"<svg xmlns='http://www.w3.org/2000/svg'/>", &[0xff; 64]] {
-            assert_eq!(cover_probe(junk, "poche", "upload_eu").expect_err("junk").code, "not_an_image");
+            assert_eq!(
+                cover_probe(junk, "poche", "upload_eu").expect_err("junk").code,
+                "not_an_image"
+            );
         }
         let ok = png(10, 10, |_, _| [0, 0, 0]);
-        assert_eq!(cover_probe(&ok, "folio", "upload_eu").expect_err("format").code, "unknown_format");
-        assert_eq!(cover_probe(&ok, "poche", "press").expect_err("profile").code, "unknown_profile");
+        assert_eq!(
+            cover_probe(&ok, "folio", "upload_eu").expect_err("format").code,
+            "unknown_format"
+        );
+        assert_eq!(
+            cover_probe(&ok, "poche", "press").expect_err("profile").code,
+            "unknown_profile"
+        );
         assert_eq!(
             cover_probe(&ok, "poche", &"home_".repeat(100)).expect_err("profile").code,
             "unknown_profile"
@@ -672,7 +675,8 @@ pub(crate) mod tests {
             <script type="application/ld+json">{"@type":"Book","isbn":"9782070360024",
               "image":"https://cdn.example.org/horla-large.jpg"}</script>
             </head><body><img src=x onerror=alert(1)></body></html>"#;
-        let v = value(&scrape_extract(html, "https://editeur.example.org/livre/horla").expect("page"));
+        let v =
+            value(&scrape_extract(html, "https://editeur.example.org/livre/horla").expect("page"));
         let images = v["images"].as_array().expect("images");
         assert!(images.iter().any(|i| i["url"] == "https://editeur.example.org/img/horla.jpg"));
         assert!(images.iter().any(|i| i["via"] == "json_ld"));
@@ -680,7 +684,13 @@ pub(crate) mod tests {
         // Hostile input: empty, binary, enormous, a denied host.
         assert!(scrape_extract("", "").is_ok());
         assert!(scrape_extract("\0\u{feff}<<<>>>", "not a url").is_ok());
-        assert!(scrape_extract(&"<meta property=og:image content=x>".repeat(50_000), "https://a.example").is_ok());
+        assert!(
+            scrape_extract(
+                &"<meta property=og:image content=x>".repeat(50_000),
+                "https://a.example"
+            )
+            .is_ok()
+        );
         let denied = value(
             &scrape_extract(
                 r#"<meta property="og:image" content="https://m.media-amazon.com/images/I/1.jpg">"#,
@@ -703,8 +713,12 @@ pub(crate) mod tests {
         assert_eq!(v["spine"]["from"], "binding_edge");
         assert_eq!(v["spine"]["text"], "#ffffff");
         assert!(v["spine"]["contrast"].as_f64().expect("ratio") >= 4.5);
-        let shares: f64 =
-            v["palette"].as_array().expect("palette").iter().filter_map(|s| s["share"].as_f64()).sum();
+        let shares: f64 = v["palette"]
+            .as_array()
+            .expect("palette")
+            .iter()
+            .filter_map(|s| s["share"].as_f64())
+            .sum();
         assert!((shares - 1.0).abs() < 1e-3);
         assert_eq!(v["text_regions_available"], crate::api::fontid::AVAILABLE);
     }

@@ -241,11 +241,13 @@ fn prepare(
     icc: Option<&[u8]>,
 ) -> Result<Prepared, ApiError> {
     let dto: CardRequestDto = from_json("request", request_json)?;
-    let code = GiftCode::parse(&dto.code).map_err(|e| ApiError::new("invalid_code", e.to_string()))?;
+    let code =
+        GiftCode::parse(&dto.code).map_err(|e| ApiError::new("invalid_code", e.to_string()))?;
     let locale = match dto.locale.as_deref() {
         None => Locale::default(),
-        Some(tag) if tag.len() <= 35 => Locale::from_tag(tag)
-            .ok_or_else(|| ApiError::new("unknown_locale", "expected fr, en, de, es, it, nl or pt"))?,
+        Some(tag) if tag.len() <= 35 => Locale::from_tag(tag).ok_or_else(|| {
+            ApiError::new("unknown_locale", "expected fr, en, de, es, it, nl or pt")
+        })?,
         Some(_) => return Err(ApiError::new("unknown_locale", "not a language tag")),
     };
     let format: CardFormat = format_by_name(dto.format.as_deref().unwrap_or(DEFAULT_FORMAT))?;
@@ -435,9 +437,10 @@ fn warning_dto(warning: &CardWarning) -> WarningDto {
         CardWarning::CoverDownsampled { from_ppi, to_ppi } => {
             ("cover_downsampled", vec![("from", rounded(*from_ppi)), ("to", rounded(*to_ppi))])
         }
-        CardWarning::HeavyCrop { percent, dimension } => {
-            ("heavy_crop", vec![("percent", rounded(*percent)), ("dimension", (*dimension).to_owned())])
-        }
+        CardWarning::HeavyCrop { percent, dimension } => (
+            "heavy_crop",
+            vec![("percent", rounded(*percent)), ("dimension", (*dimension).to_owned())],
+        ),
         CardWarning::CoverCreditMissing => ("cover_credit_missing", vec![]),
         CardWarning::CoverNotConverted => ("cover_not_converted", vec![]),
         CardWarning::CoverProfileIgnored => ("cover_profile_ignored", vec![]),
@@ -446,12 +449,17 @@ fn warning_dto(warning: &CardWarning) -> WarningDto {
         CardWarning::SpineChoiceIgnored { style } => {
             ("spine_choice_ignored", vec![("style", (*style).to_owned())])
         }
-        CardWarning::MissingGlyphs { field, characters } => {
-            ("missing_glyphs", vec![("field", field.to_string()), ("characters", characters.clone())])
-        }
+        CardWarning::MissingGlyphs { field, characters } => (
+            "missing_glyphs",
+            vec![("field", field.to_string()), ("characters", characters.clone())],
+        ),
         CardWarning::TextClamped { field } => ("text_clamped", vec![("field", field.to_string())]),
-        CardWarning::StepsReduced { size_pt } => ("steps_reduced", vec![("size", format!("{size_pt:.1}"))]),
-        CardWarning::CodeReduced { size_pt } => ("code_reduced", vec![("size", format!("{size_pt:.1}"))]),
+        CardWarning::StepsReduced { size_pt } => {
+            ("steps_reduced", vec![("size", format!("{size_pt:.1}"))])
+        }
+        CardWarning::CodeReduced { size_pt } => {
+            ("code_reduced", vec![("size", format!("{size_pt:.1}"))])
+        }
         CardWarning::QrModuleBelowMinimum { .. } => ("qr_module_below_minimum", vec![]),
         CardWarning::QrModuleSmall { .. } => ("qr_module_small", vec![]),
         CardWarning::QrVersionHigh { version } => {
@@ -602,7 +610,11 @@ pub fn preview_card(request_json: &str, cover: Option<&[u8]>) -> Result<String, 
 ///
 /// # Errors
 /// As [`render_card`]; `unknown_page` for any other page.
-pub fn preview_svg(request_json: &str, cover: Option<&[u8]>, page: u32) -> Result<String, ApiError> {
+pub fn preview_svg(
+    request_json: &str,
+    cover: Option<&[u8]>,
+    page: u32,
+) -> Result<String, ApiError> {
     if page > 1 {
         return Err(ApiError::new("unknown_page", "a card has pages 0 (outside) and 1 (inside)"));
     }
@@ -910,12 +922,18 @@ mod tests {
         );
         let err = render_card(&private, Some(cover.clone()), None).expect_err("refused");
         assert_eq!(err.code, "rights_route_refused");
-        assert_eq!(preview_card(&private, Some(&cover)).expect_err("refused").code, "rights_route_refused");
+        assert_eq!(
+            preview_card(&private, Some(&cover)).expect_err("refused").code,
+            "rights_route_refused"
+        );
 
         // The bases that open the route do print — as PDF/X, with the fallback profile
         // reported when the page supplies none.
         for basis in ["rights_holder_declared", "public_domain"] {
-            let json = with(with(request(), pro.clone()).parse().expect("json"), json!({"cover": {"rights": basis}}));
+            let json = with(
+                with(request(), pro.clone()).parse().expect("json"),
+                json!({"cover": {"rights": basis}}),
+            );
             let card = render_card(&json, Some(cover.clone()), None).expect(basis);
             assert!(has_image(&card.pdf), "{basis}");
             let codes = warning_codes(&card.warnings_json);
@@ -932,31 +950,53 @@ mod tests {
             assert_eq!(err.code, "rights_basis_not_available", "{basis}");
         }
         // A declaration that does not go with the basis, or an invented basis.
-        let json = with(request(), json!({"cover": {"rights": "public_domain", "declaration": "own_work"}}));
-        assert_eq!(render_card(&json, Some(cover.clone()), None).expect_err("mismatch").code, "unknown_declaration");
+        let json = with(
+            request(),
+            json!({"cover": {"rights": "public_domain", "declaration": "own_work"}}),
+        );
+        assert_eq!(
+            render_card(&json, Some(cover.clone()), None).expect_err("mismatch").code,
+            "unknown_declaration"
+        );
         let json = with(request(), json!({"cover": {"rights": "fair_use"}}));
-        assert_eq!(render_card(&json, Some(cover), None).expect_err("invented").code, "invalid_json");
+        assert_eq!(
+            render_card(&json, Some(cover), None).expect_err("invented").code,
+            "invalid_json"
+        );
     }
 
     #[test]
     fn placeholders_and_non_images_are_refused_as_covers() {
         let json = with(request(), json!({"cover": {"rights": "public_domain"}}));
-        let err = render_card(&json, Some(b"<html>not an image</html>".to_vec()), None).expect_err("html");
+        let err = render_card(&json, Some(b"<html>not an image</html>".to_vec()), None)
+            .expect_err("html");
         assert_eq!(err.code, "not_an_image");
         let pixel = png(1, 1, |_, _| [255, 255, 255]);
-        assert_eq!(render_card(&json, Some(pixel), None).expect_err("1 px").code, "cover_placeholder");
+        assert_eq!(
+            render_card(&json, Some(pixel), None).expect_err("1 px").code,
+            "cover_placeholder"
+        );
         let mut truncated = framed_cover(600, 960);
         truncated.truncate(truncated.len() / 3);
-        assert_eq!(render_card(&json, Some(truncated), None).expect_err("truncated").code, "cover_decode");
+        assert_eq!(
+            render_card(&json, Some(truncated), None).expect_err("truncated").code,
+            "cover_decode"
+        );
     }
 
     #[test]
     fn adapting_the_cover_needs_the_tick_and_a_basis_that_allows_it() {
         let cover = framed_cover(900, 1440);
-        let edge = |cover_rights: Value| with(request(), json!({"spine": "edge_continuation", "cover": cover_rights}));
+        let edge = |cover_rights: Value| {
+            with(request(), json!({"spine": "edge_continuation", "cover": cover_rights}))
+        };
         // No tick.
-        let err = render_card(&edge(json!({"rights": "rights_holder_declared"})), Some(cover.clone()), None)
-            .expect_err("no tick");
+        let err = render_card(
+            &edge(json!({"rights": "rights_holder_declared"})),
+            Some(cover.clone()),
+            None,
+        )
+        .expect_err("no tick");
         assert_eq!(err.code, "adaptation_not_authorised");
         // The tick, but a basis that cannot adapt.
         for basis in ["public_domain", "user_private_copy", "none"] {
@@ -977,17 +1017,22 @@ mod tests {
         .expect("authorised");
         assert!(has_image(&card.pdf));
         // The computed flat colour needs neither.
-        let flat = with(request(), json!({"spine": "cover_colour", "cover": {"rights": "public_domain"}}));
+        let flat =
+            with(request(), json!({"spine": "cover_colour", "cover": {"rights": "public_domain"}}));
         assert!(render_card(&flat, Some(cover), None).is_ok());
         // Without a printable cover the style is ignored, with a warning.
-        let card = render_card(&with(request(), json!({"spine": "cover_colour"})), None, None).expect("ok");
+        let card = render_card(&with(request(), json!({"spine": "cover_colour"})), None, None)
+            .expect("ok");
         assert_eq!(warning_codes(&card.warnings_json), ["spine_choice_ignored"]);
     }
 
     #[test]
     fn professional_profiles_need_a_creation_time_and_take_an_output_profile() {
         let json = with(request(), json!({"profile": "upload_eu"}));
-        assert_eq!(render_card(&json, None, None).expect_err("no time").code, "missing_creation_date");
+        assert_eq!(
+            render_card(&json, None, None).expect_err("no time").code,
+            "missing_creation_date"
+        );
         // The preview does not need one.
         assert!(preview_card(&json, None).is_ok());
 
@@ -997,11 +1042,20 @@ mod tests {
             "invalid_output_profile"
         );
         let srgb = include_bytes!("../../../../assets/icc/sRGB-v2-micro.icc");
-        assert_eq!(render_card(&json, None, Some(srgb)).expect_err("RGB").code, "invalid_output_profile");
+        assert_eq!(
+            render_card(&json, None, Some(srgb)).expect_err("RGB").code,
+            "invalid_output_profile"
+        );
         let cmyk = include_bytes!("../../../../assets/icc/CGATS001Compat-v2-micro.icc");
         let card = render_card(&json, None, Some(cmyk)).expect("with a CMYK profile");
-        assert!(card.pdf.windows(11).any(|w| w == b"/GTS_PDFX4)" || w == b"GTS_PDFX" || w.starts_with(b"/GTS_PDFX")));
-        assert!(!warning_codes(&card.warnings_json).contains(&"fallback_output_profile".to_owned()));
+        assert!(
+            card.pdf
+                .windows(11)
+                .any(|w| w == b"/GTS_PDFX4)" || w == b"GTS_PDFX" || w.starts_with(b"/GTS_PDFX"))
+        );
+        assert!(
+            !warning_codes(&card.warnings_json).contains(&"fallback_output_profile".to_owned())
+        );
         // A home profile ignores the output profile altogether.
         let home = render_card(&request().to_string(), None, Some(b"junk")).expect("ignored");
         assert_eq!(home.pdf, render_card(&request().to_string(), None, None).expect("same").pdf);
@@ -1021,12 +1075,22 @@ mod tests {
             assert!(svg.starts_with("<svg xmlns=\"http://www.w3.org/2000/svg\""));
             assert!(svg.ends_with("</svg>"));
             let lower = svg.to_lowercase();
-            assert!(!lower.contains("<script") && !lower.contains("onerror") && !lower.contains("onload"));
+            assert!(
+                !lower.contains("<script")
+                    && !lower.contains("onerror")
+                    && !lower.contains("onload")
+            );
             assert!(!lower.contains("href=\"http"), "no external reference");
         }
-        assert_eq!(preview_svg(&request().to_string(), None, 0).expect("page 0"), value(&preview_card(&request().to_string(), None).expect("both"))["pages"][0]);
+        assert_eq!(
+            preview_svg(&request().to_string(), None, 0).expect("page 0"),
+            value(&preview_card(&request().to_string(), None).expect("both"))["pages"][0]
+        );
         assert!(preview_svg(&request().to_string(), None, 1).expect("page 1").len() > 1000);
-        assert_eq!(preview_svg(&request().to_string(), None, 2).expect_err("page 2").code, "unknown_page");
+        assert_eq!(
+            preview_svg(&request().to_string(), None, 2).expect_err("page 2").code,
+            "unknown_page"
+        );
     }
 
     #[test]
@@ -1035,8 +1099,12 @@ mod tests {
         let json = with(request(), json!({"cover": {"rights": "public_domain"}}));
         let preview = value(&preview_card(&json, Some(&small)).expect("preview"));
         assert!(preview["pages"][0].as_str().expect("svg").contains("<image"));
-        let codes: Vec<&str> =
-            preview["warnings"].as_array().expect("warnings").iter().filter_map(|w| w["code"].as_str()).collect();
+        let codes: Vec<&str> = preview["warnings"]
+            .as_array()
+            .expect("warnings")
+            .iter()
+            .filter_map(|w| w["code"].as_str())
+            .collect();
         assert!(!codes.iter().any(|c| c.contains("resolution")), "{codes:?}");
         let card = render_card(&json, Some(small.clone()), None).expect("pdf");
         assert!(warning_codes(&card.warnings_json).iter().any(|c| c.contains("resolution")));
@@ -1098,7 +1166,10 @@ mod tests {
         // Every locale and every (profile, format) pair the options advertise renders.
         let options = value(&card_options().expect("options"));
         for locale in options["locales"].as_array().expect("locales") {
-            assert!(render_card(&with(request(), json!({"locale": locale["code"]})), None, None).is_ok());
+            assert!(
+                render_card(&with(request(), json!({"locale": locale["code"]})), None, None)
+                    .is_ok()
+            );
         }
         for profile in options["profiles"].as_array().expect("profiles") {
             for format in profile["formats"].as_array().expect("formats") {
@@ -1120,15 +1191,28 @@ mod tests {
             assert_eq!(choice["home_print"], true, "{choice}");
             let private = choice["id"] == "private_copy";
             assert_eq!(choice["professional_order"], !private, "{choice}");
-            assert_eq!(choice["adaptation"], choice["basis"] == "rights_holder_declared", "{choice}");
+            assert_eq!(
+                choice["adaptation"],
+                choice["basis"] == "rights_holder_declared",
+                "{choice}"
+            );
         }
         let profiles = v["profiles"].as_array().expect("profiles");
         let home = profiles.iter().find(|p| p["name"] == "home_a4").expect("home_a4");
-        assert_eq!((home["route"].as_str(), home["pdfx"].as_bool()), (Some("home_print"), Some(false)));
+        assert_eq!(
+            (home["route"].as_str(), home["pdfx"].as_bool()),
+            (Some("home_print"), Some(false))
+        );
         assert!(home["formats"].as_array().expect("formats").contains(&json!("poche")));
-        assert!(!home["formats"].as_array().expect("formats").contains(&json!("a5")), "A5 spread is wider than A4");
+        assert!(
+            !home["formats"].as_array().expect("formats").contains(&json!("a5")),
+            "A5 spread is wider than A4"
+        );
         let pro = profiles.iter().find(|p| p["name"] == "upload_eu").expect("upload_eu");
-        assert_eq!((pro["route"].as_str(), pro["pdfx"].as_bool()), (Some("professional_order"), Some(true)));
+        assert_eq!(
+            (pro["route"].as_str(), pro["pdfx"].as_bool()),
+            (Some("professional_order"), Some(true))
+        );
         assert_eq!(pro["formats"].as_array().map(Vec::len), Some(4));
         assert_eq!(v["defaults"]["profile"], DEFAULT_PROFILE);
         assert_eq!(v["locales"].as_array().map(Vec::len), Some(7));

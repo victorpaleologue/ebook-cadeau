@@ -476,7 +476,8 @@ pub fn claim_urls(base_url: &str, code: &str) -> Result<String, ApiError> {
 /// # Errors
 /// `qr_error` when the text is empty or too long for a QR code.
 pub fn qr_svg(text: &str) -> Result<String, ApiError> {
-    let qr = QrCode::encode(text, EcLevel::M).map_err(|e| ApiError::new("qr_error", e.to_string()))?;
+    let qr =
+        QrCode::encode(text, EcLevel::M).map_err(|e| ApiError::new("qr_error", e.to_string()))?;
     Ok(qr.to_svg(8, ebc_qr::QUIET_ZONE_MODULES))
 }
 
@@ -571,8 +572,18 @@ mod tests {
         let v = value(&catalog_lookup_requests("9782070360024", &config.to_string()).expect("ok"));
         let list = v.as_array().expect("array");
         assert_eq!(list[0]["provider"], "bnf");
-        assert!(list[0]["requests"][0]["url"].as_str().expect("url").starts_with("http://127.0.0.1:9000/sru"));
-        assert!(list[1]["requests"][0]["url"].as_str().expect("url").starts_with("http://127.0.0.1:9000/"));
+        assert!(
+            list[0]["requests"][0]["url"]
+                .as_str()
+                .expect("url")
+                .starts_with("http://127.0.0.1:9000/sru")
+        );
+        assert!(
+            list[1]["requests"][0]["url"]
+                .as_str()
+                .expect("url")
+                .starts_with("http://127.0.0.1:9000/")
+        );
     }
 
     #[test]
@@ -592,8 +603,15 @@ mod tests {
         .to_string();
         let response = json!({"status": 200, "headers": [["content-type", "application/json"]]});
         let parsed = value(
-            &catalog_parse("openlibrary", "9782070360024", "", &request, &response.to_string(), body.as_bytes())
-                .expect("parsed"),
+            &catalog_parse(
+                "openlibrary",
+                "9782070360024",
+                "",
+                &request,
+                &response.to_string(),
+                body.as_bytes(),
+            )
+            .expect("parsed"),
         );
         let records = parsed["records"].as_array().expect("records");
         assert_eq!(records.len(), 1);
@@ -607,8 +625,15 @@ mod tests {
 
         // Not found: an empty object.
         let none = value(
-            &catalog_parse("openlibrary", "9782070360024", "", &request, &response.to_string(), b"{}")
-                .expect("parsed"),
+            &catalog_parse(
+                "openlibrary",
+                "9782070360024",
+                "",
+                &request,
+                &response.to_string(),
+                b"{}",
+            )
+            .expect("parsed"),
         );
         assert_eq!(none["records"].as_array().map(Vec::len), Some(0));
         assert_eq!(catalog_merge("[]").expect("merged"), "null");
@@ -619,26 +644,36 @@ mod tests {
         let requests = value(&catalog_lookup_requests("9782070360024", "").expect("requests"));
         let request = requests[0]["requests"][0]["request"].to_string();
         let ok = r#"{"status": 200}"#;
-        for body in [&b""[..], b"<html>", b"\xff\xfe\x00", b"[[[[[[[[", b"{\"ISBN:9782070360024\": 3}"] {
+        for body in
+            [&b""[..], b"<html>", b"\xff\xfe\x00", b"[[[[[[[[", b"{\"ISBN:9782070360024\": 3}"]
+        {
             // Whatever comes back is an error or an empty result — never a panic.
-            if let Ok(json) = catalog_parse("openlibrary", "9782070360024", "", &request, ok, body) {
+            if let Ok(json) = catalog_parse("openlibrary", "9782070360024", "", &request, ok, body)
+            {
                 assert!(value(&json)["records"].is_array());
             }
         }
-        let err = catalog_parse("openlibrary", "9782070360024", "", &request, r#"{"status": 503}"#, b"")
-            .expect_err("HTTP error");
+        let err =
+            catalog_parse("openlibrary", "9782070360024", "", &request, r#"{"status": 503}"#, b"")
+                .expect_err("HTTP error");
         assert_eq!(err.code, "catalog_error");
         assert_eq!(
-            catalog_parse("amazon", "9782070360024", "", &request, ok, b"{}").expect_err("unknown").code,
+            catalog_parse("amazon", "9782070360024", "", &request, ok, b"{}")
+                .expect_err("unknown")
+                .code,
             "unknown_provider"
         );
         assert_eq!(
-            catalog_parse("openlibrary", "9782070360024", "", "{", ok, b"{}").expect_err("bad").code,
+            catalog_parse("openlibrary", "9782070360024", "", "{", ok, b"{}")
+                .expect_err("bad")
+                .code,
             "invalid_json"
         );
         let big = vec![b' '; MAX_CATALOG_BODY_BYTES + 1];
         assert_eq!(
-            catalog_parse("openlibrary", "9782070360024", "", &request, ok, &big).expect_err("big").code,
+            catalog_parse("openlibrary", "9782070360024", "", &request, ok, &big)
+                .expect_err("big")
+                .code,
             "body_too_large"
         );
     }
@@ -653,7 +688,10 @@ mod tests {
         assert!(!follow_up_allowed(p, &isbn, "https://www.amazon.fr/dp/2070360024"));
         assert!(!follow_up_allowed(p, &isbn, "https://127.0.0.1/x"));
         assert!(!follow_up_allowed(p, &isbn, "javascript:alert(1)"));
-        assert_eq!(origin_of("HTTPS://User@Example.org:8443/a?b#c").as_deref(), Some("https://example.org:8443"));
+        assert_eq!(
+            origin_of("HTTPS://User@Example.org:8443/a?b#c").as_deref(),
+            Some("https://example.org:8443")
+        );
         assert_eq!(origin_of("no scheme"), None);
     }
 
@@ -675,7 +713,14 @@ mod tests {
     #[test]
     fn gift_code_errors_are_typed() {
         assert_eq!(gift_code_from_random(&[1, 2, 3]).expect_err("too few").code, "invalid_code");
-        for bad in ["", "BCDF-GHJK-LMN", "BCDF-GHJK-LMNA", "0000-0000-0000", "https://ebk.example/x", "\u{202e}"] {
+        for bad in [
+            "",
+            "BCDF-GHJK-LMN",
+            "BCDF-GHJK-LMNA",
+            "0000-0000-0000",
+            "https://ebk.example/x",
+            "\u{202e}",
+        ] {
             assert_eq!(gift_code_parse(bad).expect_err(bad).code, "invalid_code", "{bad:?}");
         }
         assert_eq!(gift_code_parse(&"B".repeat(5000)).expect_err("long").code, "invalid_code");
@@ -715,9 +760,15 @@ mod tests {
         assert_eq!(v["claim_url"], format!("https://ebk.example/k/{code}"));
         assert_eq!(v["qr_payload"], format!("HTTPS://EBK.EXAMPLE/K/{code}"));
         assert_eq!(v["qr_upper_case"], true);
-        assert_eq!(claim_urls("ftp://ebk.example", &code).expect_err("scheme").code, "invalid_base_url");
+        assert_eq!(
+            claim_urls("ftp://ebk.example", &code).expect_err("scheme").code,
+            "invalid_base_url"
+        );
         assert_eq!(claim_urls("", &code).expect_err("empty").code, "invalid_base_url");
-        assert_eq!(claim_urls("https://ebk.example", "nope").expect_err("code").code, "invalid_code");
+        assert_eq!(
+            claim_urls("https://ebk.example", "nope").expect_err("code").code,
+            "invalid_code"
+        );
     }
 
     #[test]

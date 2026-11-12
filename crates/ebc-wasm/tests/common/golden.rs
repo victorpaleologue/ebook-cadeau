@@ -22,9 +22,8 @@ pub(crate) fn render(name: &str, with_cover: bool, with_icc: bool) -> RenderedCa
     let dir = fixtures();
     let request = fs::read_to_string(dir.join(format!("golden-{name}.json")))
         .unwrap_or_else(|e| panic!("golden-{name}.json: {e}"));
-    let cover = with_cover.then(|| {
-        fs::read(dir.join("golden-cover.png")).expect("tests/fixtures/golden-cover.png")
-    });
+    let cover = with_cover
+        .then(|| fs::read(dir.join("golden-cover.png")).expect("tests/fixtures/golden-cover.png"));
     let icc = with_icc.then(|| {
         fs::read(dir.join("../../../../assets/icc/CGATS001Compat-v2-micro.icc"))
             .expect("the CC0 CMYK profile of assets/icc")

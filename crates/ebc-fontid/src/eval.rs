@@ -584,6 +584,88 @@ pub fn evaluate_holdout(
     out
 }
 
+/// Result of the family hold-out run: the whole family of the true face is removed from
+/// the index — the situation of a real cover, whose font is almost never in an open
+/// index. Is the nearest remaining font at least of the same broad category (serif,
+/// sans serif, display, handwriting, monospace)?
+#[derive(Debug, Clone, PartialEq, Default)]
+pub struct CategoryHoldout {
+    /// Name of the condition.
+    pub name: String,
+    /// Covers evaluated (only fonts whose category is known).
+    pub cases: usize,
+    /// The best match has the category of the removed family.
+    pub same_top1: usize,
+    /// One of the first three matches has it.
+    pub same_top3: usize,
+    /// Expected `same_top1 / cases` of a random ranking.
+    pub chance: f32,
+}
+
+/// Runs the family hold-out experiment for one condition (true box, title known):
+/// for every cover, every face of the true family is taken out of the index before
+/// identifying. `category` gives the category of a family (`None`: the cover is
+/// skipped), for example from the `METADATA.pb` files of github.com/google/fonts.
+#[must_use]
+pub fn evaluate_family_holdout(
+    fonts: &[(IndexEntryMeta, Font)],
+    index: &FontIndex,
+    condition: &Condition,
+    opts: &EvalOptions<'_>,
+    category: &dyn Fn(&str) -> Option<String>,
+) -> CategoryHoldout {
+    let mut out = CategoryHoldout { name: condition.name.clone(), ..CategoryHoldout::default() };
+    if fonts.is_empty() {
+        return out;
+    }
+    let mut chance = 0.0f32;
+    for i in 0..opts.cases {
+        let (meta, _) = &fonts[i % fonts.len()];
+        let Some(wanted) = category(&meta.family) else { continue };
+        let rest: Vec<IndexEntry> =
+            index.entries().iter().filter(|e| e.family != meta.family).cloned().collect();
+        let same = rest.iter().filter(|e| category(&e.family).as_ref() == Some(&wanted)).count();
+        if rest.len() < 2 {
+            continue;
+        }
+        let Some(case) = make_case(fonts, condition, opts, i) else { continue };
+        let reduced = FontIndex::from_entries(rest.iter().cloned());
+        let id = identify_detailed(
+            &case.cover.image,
+            &case.cover.title_region,
+            Some(&case.title),
+            &reduced,
+        );
+        let is_same =
+            |m: &crate::identify::Match| category(&m.entry.family).as_ref() == Some(&wanted);
+        out.cases += 1;
+        chance += same as f32 / rest.len() as f32;
+        out.same_top1 += usize::from(id.matches.first().is_some_and(is_same));
+        out.same_top3 += usize::from(id.matches.iter().take(3).any(is_same));
+    }
+    out.chance = if out.cases > 0 { chance / out.cases as f32 } else { 0.0 };
+    out
+}
+
+/// The family hold-out results as a Markdown table.
+#[must_use]
+pub fn format_category_holdout(rows: &[CategoryHoldout]) -> String {
+    let mut out = String::from(
+        "| Condition | n | Same category top-1 | Same category in top-3 | Chance (top-1) |\n|---|---|---|---|---|\n",
+    );
+    for r in rows {
+        out.push_str(&format!(
+            "| {} | {} | {} | {} | {:.0} % |\n",
+            r.name,
+            r.cases,
+            percent(r.same_top1, r.cases),
+            percent(r.same_top3, r.cases),
+            100.0 * r.chance,
+        ));
+    }
+    out
+}
+
 fn percent(count: usize, total: usize) -> String {
     if total == 0 {
         "–".to_string()
@@ -673,6 +755,15 @@ mod tests {
         let table = format_table(&[Row { name: "empty".into(), ..Row::default() }]);
         assert!(table.contains("| empty | 0 | – |"));
         assert!(format_holdout(&[Holdout::default()]).contains("| 0 | – | – |"));
+        assert!(format_category_holdout(&[CategoryHoldout::default()]).contains("| 0 | – | – |"));
+        let none = evaluate_family_holdout(
+            &[],
+            &FontIndex::default(),
+            &Condition::clean(),
+            &EvalOptions::default(),
+            &|_| None,
+        );
+        assert_eq!(none.cases, 0);
         assert!(
             evaluate(&[], &FontIndex::default(), &standard_conditions(), &EvalOptions::default())
                 .is_empty()

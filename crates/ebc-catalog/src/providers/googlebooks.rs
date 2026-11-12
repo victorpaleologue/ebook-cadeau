@@ -1,7 +1,9 @@
 //! Google Books API v1 (`volumes?q=isbn:`). Class B: display-only, nothing stored.
 
 use ebc_isbn::Isbn13;
-use ebc_model::{BookFormat, BookMeta, Contributor, CoverKind, CoverRef, HttpRequest, HttpResponse};
+use ebc_model::{
+    BookFormat, BookMeta, Contributor, CoverKind, CoverRef, HttpRequest, HttpResponse,
+};
 use serde_json::Value;
 
 use crate::error::{CatalogError, shorten};
@@ -9,7 +11,7 @@ use crate::marc::Extracted;
 use crate::provider::{Parsed, Permission, Provider, ProviderInfo, SourceClass, finalize};
 use crate::providers::{get_json, unknown_request};
 use crate::util::{
-    Found, Sniff, check_http, isbns_in, jarr, jnum, jstr, jtexts, join, parse_json, path,
+    Found, Sniff, check_http, isbns_in, jarr, jnum, join, jstr, jtexts, parse_json, path,
     push_isbn, sniff, url_with_query,
 };
 
@@ -71,8 +73,11 @@ impl GoogleBooks {
     fn api_error(json: &Value, status: u16) -> Option<CatalogError> {
         let error = json.get("error").filter(|e| e.is_object())?;
         let message = shorten(jstr(error, "message").unwrap_or("no message"));
-        let mut reasons: Vec<String> =
-            jarr(error, "errors").iter().filter_map(|e| jstr(e, "reason")).map(str::to_owned).collect();
+        let mut reasons: Vec<String> = jarr(error, "errors")
+            .iter()
+            .filter_map(|e| jstr(e, "reason"))
+            .map(str::to_owned)
+            .collect();
         reasons.extend(jstr(error, "status").map(str::to_owned));
         let code = jnum(error.get("code")).and_then(|c| u16::try_from(c).ok()).unwrap_or(status);
         let any = |needles: &[&str]| {
@@ -90,7 +95,13 @@ impl GoogleBooks {
             {
                 CatalogError::RateLimited { provider: INFO.id, status, retry_after_s: None }
             } else if matches!(code, 401 | 403)
-                || any(&["keyInvalid", "keyExpired", "forbidden", "PERMISSION_DENIED", "accessNotConfigured"])
+                || any(&[
+                    "keyInvalid",
+                    "keyExpired",
+                    "forbidden",
+                    "PERMISSION_DENIED",
+                    "accessNotConfigured",
+                ])
                 || message.contains("API key")
             {
                 CatalogError::Unauthorized { provider: INFO.id, status, message }
@@ -117,7 +128,10 @@ impl GoogleBooks {
         let mut book = BookMeta {
             title: jstr(info, "title")?.to_owned(),
             subtitle: jstr(info, "subtitle").map(str::to_owned),
-            contributors: jtexts(info, "authors", &[]).into_iter().map(Contributor::author).collect(),
+            contributors: jtexts(info, "authors", &[])
+                .into_iter()
+                .map(Contributor::author)
+                .collect(),
             publisher: jstr(info, "publisher").map(str::to_owned),
             published: jstr(info, "publishedDate").map(str::to_owned),
             language: jstr(info, "language").map(str::to_owned),
@@ -180,7 +194,8 @@ impl Provider for GoogleBooks {
         request: &HttpRequest,
         response: &HttpResponse,
     ) -> Result<Parsed, CatalogError> {
-        if !request.url.starts_with(&self.base) || !path(&request.url).ends_with("/books/v1/volumes")
+        if !request.url.starts_with(&self.base)
+            || !path(&request.url).ends_with("/books/v1/volumes")
         {
             return Err(unknown_request(&INFO, request));
         }

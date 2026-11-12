@@ -133,9 +133,8 @@ pub const DENIED_HOSTS: [&str; 12] = [
 #[must_use]
 pub fn is_denied_host(host: &str) -> bool {
     let host = host.trim().trim_end_matches('.').to_ascii_lowercase();
-    let listed = DENIED_HOSTS
-        .iter()
-        .any(|denied| host == *denied || host.ends_with(&format!(".{denied}")));
+    let listed =
+        DENIED_HOSTS.iter().any(|denied| host == *denied || host.ends_with(&format!(".{denied}")));
     // "amazon" as a whole label, except Amazon Web Services hosting.
     let amazon = host.split('.').any(|label| label == "amazon") && !host.ends_with("amazonaws.com");
     listed || amazon

@@ -298,8 +298,8 @@ fn strip_gmd(input: &str) -> String {
 /// Words after which a final full stop is part of the word.
 const ABBREVIATIONS: &[&str] = &[
     "verl", "ed", "éd", "eds", "inc", "ltd", "co", "corp", "publ", "pr", "univ", "libr", "impr",
-    "cie", "bros", "gmbh", "etc", "jr", "sr", "st", "dr", "mr", "mrs", "vol", "hrsg", "aufl",
-    "bd", "nr", "no", "ill", "coll", "trad", "pref", "préf", "u.a",
+    "cie", "bros", "gmbh", "etc", "jr", "sr", "st", "dr", "mr", "mrs", "vol", "hrsg", "aufl", "bd",
+    "nr", "no", "ill", "coll", "trad", "pref", "préf", "u.a",
 ];
 
 /// Removes ISBD separators left at the end of a subfield (`" /"`, `" :"`, `","`…) and a
@@ -342,7 +342,8 @@ fn close_elisions(input: &str) -> String {
             && matches!(chars[i - 1], '\'' | '’')
             && chars.get(i + 1).is_some_and(|next| next.is_alphabetic())
         {
-            let word_start = chars[..i - 1].iter().rposition(|c| !c.is_alphabetic()).map_or(0, |p| p + 1);
+            let word_start =
+                chars[..i - 1].iter().rposition(|c| !c.is_alphabetic()).map_or(0, |p| p + 1);
             let word: String = chars[word_start..i - 1].iter().collect::<String>().to_lowercase();
             let boundary = word_start == 0 || chars[word_start - 1].is_whitespace();
             if boundary && (word.chars().count() == 1 || word == "qu") {
@@ -533,7 +534,8 @@ pub fn publisher(input: &str) -> Option<String> {
         && let Some(open) = name.rfind('(')
     {
         let inner = &name[open + 1..name.len() - 1];
-        let wordy = inner.split_whitespace().count() <= 3 && !inner.chars().any(|c| c.is_ascii_digit());
+        let wordy =
+            inner.split_whitespace().count() <= 3 && !inner.chars().any(|c| c.is_ascii_digit());
         if open > 0 && wordy {
             name.truncate(open);
         }
@@ -632,9 +634,8 @@ fn year_candidates(s: &str) -> impl Iterator<Item = (usize, u16)> + '_ {
                     i += 1;
                 }
                 if i - start == 4 {
-                    let year = bytes[start..i]
-                        .iter()
-                        .fold(0u16, |acc, b| acc * 10 + u16::from(b - b'0'));
+                    let year =
+                        bytes[start..i].iter().fold(0u16, |acc, b| acc * 10 + u16::from(b - b'0'));
                     if (1000..=2100).contains(&year) {
                         return Some((start, year));
                     }
@@ -671,25 +672,97 @@ fn year_kind(before: &str) -> YearKind {
 }
 
 const MONTHS: &[(&str, u8)] = &[
-    ("january", 1), ("jan", 1), ("janvier", 1), ("janv", 1), ("januar", 1), ("enero", 1),
-    ("gennaio", 1), ("januari", 1), ("janeiro", 1),
-    ("february", 2), ("feb", 2), ("février", 2), ("fevrier", 2), ("févr", 2), ("fevr", 2),
-    ("februar", 2), ("febrero", 2), ("febbraio", 2), ("februari", 2), ("fevereiro", 2),
-    ("march", 3), ("mar", 3), ("mars", 3), ("märz", 3), ("marz", 3), ("marzo", 3), ("maart", 3),
+    ("january", 1),
+    ("jan", 1),
+    ("janvier", 1),
+    ("janv", 1),
+    ("januar", 1),
+    ("enero", 1),
+    ("gennaio", 1),
+    ("januari", 1),
+    ("janeiro", 1),
+    ("february", 2),
+    ("feb", 2),
+    ("février", 2),
+    ("fevrier", 2),
+    ("févr", 2),
+    ("fevr", 2),
+    ("februar", 2),
+    ("febrero", 2),
+    ("febbraio", 2),
+    ("februari", 2),
+    ("fevereiro", 2),
+    ("march", 3),
+    ("mar", 3),
+    ("mars", 3),
+    ("märz", 3),
+    ("marz", 3),
+    ("marzo", 3),
+    ("maart", 3),
     ("março", 3),
-    ("april", 4), ("apr", 4), ("avril", 4), ("avr", 4), ("abril", 4), ("aprile", 4),
-    ("may", 5), ("mai", 5), ("mayo", 5), ("maggio", 5), ("mei", 5), ("maio", 5),
-    ("june", 6), ("jun", 6), ("juin", 6), ("juni", 6), ("junio", 6), ("giugno", 6), ("junho", 6),
-    ("july", 7), ("jul", 7), ("juillet", 7), ("juil", 7), ("juli", 7), ("julio", 7),
-    ("luglio", 7), ("julho", 7),
-    ("august", 8), ("aug", 8), ("août", 8), ("aout", 8), ("agosto", 8), ("augustus", 8),
-    ("september", 9), ("sep", 9), ("sept", 9), ("septembre", 9), ("septiembre", 9),
-    ("settembre", 9), ("setembro", 9),
-    ("october", 10), ("oct", 10), ("octobre", 10), ("oktober", 10), ("okt", 10), ("octubre", 10),
-    ("ottobre", 10), ("outubro", 10),
-    ("november", 11), ("nov", 11), ("novembre", 11), ("noviembre", 11), ("novembro", 11),
-    ("december", 12), ("dec", 12), ("décembre", 12), ("decembre", 12), ("déc", 12),
-    ("dezember", 12), ("dez", 12), ("diciembre", 12), ("dicembre", 12), ("dezembro", 12),
+    ("april", 4),
+    ("apr", 4),
+    ("avril", 4),
+    ("avr", 4),
+    ("abril", 4),
+    ("aprile", 4),
+    ("may", 5),
+    ("mai", 5),
+    ("mayo", 5),
+    ("maggio", 5),
+    ("mei", 5),
+    ("maio", 5),
+    ("june", 6),
+    ("jun", 6),
+    ("juin", 6),
+    ("juni", 6),
+    ("junio", 6),
+    ("giugno", 6),
+    ("junho", 6),
+    ("july", 7),
+    ("jul", 7),
+    ("juillet", 7),
+    ("juil", 7),
+    ("juli", 7),
+    ("julio", 7),
+    ("luglio", 7),
+    ("julho", 7),
+    ("august", 8),
+    ("aug", 8),
+    ("août", 8),
+    ("aout", 8),
+    ("agosto", 8),
+    ("augustus", 8),
+    ("september", 9),
+    ("sep", 9),
+    ("sept", 9),
+    ("septembre", 9),
+    ("septiembre", 9),
+    ("settembre", 9),
+    ("setembro", 9),
+    ("october", 10),
+    ("oct", 10),
+    ("octobre", 10),
+    ("oktober", 10),
+    ("okt", 10),
+    ("octubre", 10),
+    ("ottobre", 10),
+    ("outubro", 10),
+    ("november", 11),
+    ("nov", 11),
+    ("novembre", 11),
+    ("noviembre", 11),
+    ("novembro", 11),
+    ("december", 12),
+    ("dec", 12),
+    ("décembre", 12),
+    ("decembre", 12),
+    ("déc", 12),
+    ("dezember", 12),
+    ("dez", 12),
+    ("diciembre", 12),
+    ("dicembre", 12),
+    ("dezembro", 12),
 ];
 
 fn month_number(word: &str) -> Option<u8> {
@@ -793,7 +866,8 @@ pub fn date(input: &str) -> Option<String> {
     {
         let year = year_candidates(s).next().map(|(_, y)| y);
         if let Some(year) = year {
-            let before = mi.checked_sub(1).and_then(|i| tokens.get(i)).and_then(|t| small_number(t, 31));
+            let before =
+                mi.checked_sub(1).and_then(|i| tokens.get(i)).and_then(|t| small_number(t, 31));
             let after = tokens.get(mi + 1).and_then(|t| small_number(t, 31));
             return Some(iso(year, Some(month), before.or(after)));
         }
@@ -887,30 +961,118 @@ pub fn page_count(input: &str) -> Option<u32> {
 
 /// ISO 639-2 (bibliographic and terminologic) codes with their ISO 639-1 equivalent.
 const LANG3: &[(&str, &str)] = &[
-    ("fre", "fr"), ("fra", "fr"), ("eng", "en"), ("ger", "de"), ("deu", "de"), ("spa", "es"),
-    ("ita", "it"), ("dut", "nl"), ("nld", "nl"), ("por", "pt"), ("lat", "la"), ("rus", "ru"),
-    ("pol", "pl"), ("swe", "sv"), ("dan", "da"), ("nor", "no"), ("nob", "nb"), ("nno", "nn"),
-    ("fin", "fi"), ("cze", "cs"), ("ces", "cs"), ("slo", "sk"), ("slk", "sk"), ("slv", "sl"),
-    ("hun", "hu"), ("rum", "ro"), ("ron", "ro"), ("bul", "bg"), ("gre", "el"), ("ell", "el"),
-    ("tur", "tr"), ("ara", "ar"), ("heb", "he"), ("jpn", "ja"), ("chi", "zh"), ("zho", "zh"),
-    ("kor", "ko"), ("cat", "ca"), ("baq", "eu"), ("eus", "eu"), ("glg", "gl"), ("bre", "br"),
-    ("oci", "oc"), ("cos", "co"), ("wel", "cy"), ("cym", "cy"), ("gle", "ga"), ("ice", "is"),
-    ("isl", "is"), ("est", "et"), ("lav", "lv"), ("lit", "lt"), ("ukr", "uk"), ("srp", "sr"),
-    ("hrv", "hr"), ("bos", "bs"), ("mac", "mk"), ("mkd", "mk"), ("alb", "sq"), ("sqi", "sq"),
-    ("per", "fa"), ("fas", "fa"), ("hin", "hi"), ("vie", "vi"), ("tha", "th"), ("ind", "id"),
-    ("epo", "eo"), ("ltz", "lb"), ("afr", "af"), ("arm", "hy"), ("hye", "hy"), ("geo", "ka"),
-    ("kat", "ka"), ("yid", "yi"), ("san", "sa"), ("bel", "be"), ("mlt", "mt"), ("gla", "gd"),
+    ("fre", "fr"),
+    ("fra", "fr"),
+    ("eng", "en"),
+    ("ger", "de"),
+    ("deu", "de"),
+    ("spa", "es"),
+    ("ita", "it"),
+    ("dut", "nl"),
+    ("nld", "nl"),
+    ("por", "pt"),
+    ("lat", "la"),
+    ("rus", "ru"),
+    ("pol", "pl"),
+    ("swe", "sv"),
+    ("dan", "da"),
+    ("nor", "no"),
+    ("nob", "nb"),
+    ("nno", "nn"),
+    ("fin", "fi"),
+    ("cze", "cs"),
+    ("ces", "cs"),
+    ("slo", "sk"),
+    ("slk", "sk"),
+    ("slv", "sl"),
+    ("hun", "hu"),
+    ("rum", "ro"),
+    ("ron", "ro"),
+    ("bul", "bg"),
+    ("gre", "el"),
+    ("ell", "el"),
+    ("tur", "tr"),
+    ("ara", "ar"),
+    ("heb", "he"),
+    ("jpn", "ja"),
+    ("chi", "zh"),
+    ("zho", "zh"),
+    ("kor", "ko"),
+    ("cat", "ca"),
+    ("baq", "eu"),
+    ("eus", "eu"),
+    ("glg", "gl"),
+    ("bre", "br"),
+    ("oci", "oc"),
+    ("cos", "co"),
+    ("wel", "cy"),
+    ("cym", "cy"),
+    ("gle", "ga"),
+    ("ice", "is"),
+    ("isl", "is"),
+    ("est", "et"),
+    ("lav", "lv"),
+    ("lit", "lt"),
+    ("ukr", "uk"),
+    ("srp", "sr"),
+    ("hrv", "hr"),
+    ("bos", "bs"),
+    ("mac", "mk"),
+    ("mkd", "mk"),
+    ("alb", "sq"),
+    ("sqi", "sq"),
+    ("per", "fa"),
+    ("fas", "fa"),
+    ("hin", "hi"),
+    ("vie", "vi"),
+    ("tha", "th"),
+    ("ind", "id"),
+    ("epo", "eo"),
+    ("ltz", "lb"),
+    ("afr", "af"),
+    ("arm", "hy"),
+    ("hye", "hy"),
+    ("geo", "ka"),
+    ("kat", "ka"),
+    ("yid", "yi"),
+    ("san", "sa"),
+    ("bel", "be"),
+    ("mlt", "mt"),
+    ("gla", "gd"),
 ];
 
 const LANG_NAMES: &[(&str, &str)] = &[
-    ("french", "fr"), ("francais", "fr"), ("franzosisch", "fr"), ("frances", "fr"),
-    ("english", "en"), ("anglais", "en"), ("englisch", "en"), ("ingles", "en"),
-    ("german", "de"), ("deutsch", "de"), ("allemand", "de"), ("aleman", "de"),
-    ("spanish", "es"), ("espanol", "es"), ("espagnol", "es"), ("spanisch", "es"),
-    ("italian", "it"), ("italiano", "it"), ("italien", "it"), ("italienisch", "it"),
-    ("dutch", "nl"), ("nederlands", "nl"), ("neerlandais", "nl"),
-    ("portuguese", "pt"), ("portugues", "pt"), ("portugais", "pt"),
-    ("latin", "la"), ("swedish", "sv"), ("svenska", "sv"), ("finnish", "fi"), ("suomi", "fi"),
+    ("french", "fr"),
+    ("francais", "fr"),
+    ("franzosisch", "fr"),
+    ("frances", "fr"),
+    ("english", "en"),
+    ("anglais", "en"),
+    ("englisch", "en"),
+    ("ingles", "en"),
+    ("german", "de"),
+    ("deutsch", "de"),
+    ("allemand", "de"),
+    ("aleman", "de"),
+    ("spanish", "es"),
+    ("espanol", "es"),
+    ("espagnol", "es"),
+    ("spanisch", "es"),
+    ("italian", "it"),
+    ("italiano", "it"),
+    ("italien", "it"),
+    ("italienisch", "it"),
+    ("dutch", "nl"),
+    ("nederlands", "nl"),
+    ("neerlandais", "nl"),
+    ("portuguese", "pt"),
+    ("portugues", "pt"),
+    ("portugais", "pt"),
+    ("latin", "la"),
+    ("swedish", "sv"),
+    ("svenska", "sv"),
+    ("finnish", "fi"),
+    ("suomi", "fi"),
 ];
 
 /// Normalises a language to a BCP 47 code: `"fre"`, `"fra"`, `"/languages/fre"`,
@@ -957,26 +1119,110 @@ pub fn language(input: &str) -> Option<String> {
 // ---------------------------------------------------------------------------------------
 
 const ENTITIES: &[(&str, &str)] = &[
-    ("amp", "&"), ("lt", "<"), ("gt", ">"), ("quot", "\""), ("apos", "'"), ("nbsp", " "),
-    ("iexcl", "¡"), ("cent", "¢"), ("pound", "£"), ("yen", "¥"), ("sect", "§"), ("copy", "©"),
-    ("laquo", "«"), ("raquo", "»"), ("reg", "®"), ("deg", "°"), ("plusmn", "±"), ("para", "¶"),
-    ("middot", "·"), ("iquest", "¿"), ("times", "×"), ("divide", "÷"), ("szlig", "ß"),
-    ("Agrave", "À"), ("Aacute", "Á"), ("Acirc", "Â"), ("Atilde", "Ã"), ("Auml", "Ä"),
-    ("Aring", "Å"), ("AElig", "Æ"), ("Ccedil", "Ç"), ("Egrave", "È"), ("Eacute", "É"),
-    ("Ecirc", "Ê"), ("Euml", "Ë"), ("Igrave", "Ì"), ("Iacute", "Í"), ("Icirc", "Î"),
-    ("Iuml", "Ï"), ("Ntilde", "Ñ"), ("Ograve", "Ò"), ("Oacute", "Ó"), ("Ocirc", "Ô"),
-    ("Otilde", "Õ"), ("Ouml", "Ö"), ("Oslash", "Ø"), ("Ugrave", "Ù"), ("Uacute", "Ú"),
-    ("Ucirc", "Û"), ("Uuml", "Ü"), ("Yacute", "Ý"), ("agrave", "à"), ("aacute", "á"),
-    ("acirc", "â"), ("atilde", "ã"), ("auml", "ä"), ("aring", "å"), ("aelig", "æ"),
-    ("ccedil", "ç"), ("egrave", "è"), ("eacute", "é"), ("ecirc", "ê"), ("euml", "ë"),
-    ("igrave", "ì"), ("iacute", "í"), ("icirc", "î"), ("iuml", "ï"), ("ntilde", "ñ"),
-    ("ograve", "ò"), ("oacute", "ó"), ("ocirc", "ô"), ("otilde", "õ"), ("ouml", "ö"),
-    ("oslash", "ø"), ("ugrave", "ù"), ("uacute", "ú"), ("ucirc", "û"), ("uuml", "ü"),
-    ("yacute", "ý"), ("yuml", "ÿ"), ("OElig", "Œ"), ("oelig", "œ"), ("Scaron", "Š"),
-    ("scaron", "š"), ("Yuml", "Ÿ"), ("ndash", "–"), ("mdash", "—"), ("lsquo", "‘"),
-    ("rsquo", "’"), ("sbquo", "‚"), ("ldquo", "“"), ("rdquo", "”"), ("bdquo", "„"),
-    ("bull", "•"), ("hellip", "…"), ("euro", "€"), ("trade", "™"), ("thinsp", " "),
-    ("ensp", " "), ("emsp", " "), ("shy", ""), ("zwnj", ""), ("zwj", ""), ("lrm", ""),
+    ("amp", "&"),
+    ("lt", "<"),
+    ("gt", ">"),
+    ("quot", "\""),
+    ("apos", "'"),
+    ("nbsp", " "),
+    ("iexcl", "¡"),
+    ("cent", "¢"),
+    ("pound", "£"),
+    ("yen", "¥"),
+    ("sect", "§"),
+    ("copy", "©"),
+    ("laquo", "«"),
+    ("raquo", "»"),
+    ("reg", "®"),
+    ("deg", "°"),
+    ("plusmn", "±"),
+    ("para", "¶"),
+    ("middot", "·"),
+    ("iquest", "¿"),
+    ("times", "×"),
+    ("divide", "÷"),
+    ("szlig", "ß"),
+    ("Agrave", "À"),
+    ("Aacute", "Á"),
+    ("Acirc", "Â"),
+    ("Atilde", "Ã"),
+    ("Auml", "Ä"),
+    ("Aring", "Å"),
+    ("AElig", "Æ"),
+    ("Ccedil", "Ç"),
+    ("Egrave", "È"),
+    ("Eacute", "É"),
+    ("Ecirc", "Ê"),
+    ("Euml", "Ë"),
+    ("Igrave", "Ì"),
+    ("Iacute", "Í"),
+    ("Icirc", "Î"),
+    ("Iuml", "Ï"),
+    ("Ntilde", "Ñ"),
+    ("Ograve", "Ò"),
+    ("Oacute", "Ó"),
+    ("Ocirc", "Ô"),
+    ("Otilde", "Õ"),
+    ("Ouml", "Ö"),
+    ("Oslash", "Ø"),
+    ("Ugrave", "Ù"),
+    ("Uacute", "Ú"),
+    ("Ucirc", "Û"),
+    ("Uuml", "Ü"),
+    ("Yacute", "Ý"),
+    ("agrave", "à"),
+    ("aacute", "á"),
+    ("acirc", "â"),
+    ("atilde", "ã"),
+    ("auml", "ä"),
+    ("aring", "å"),
+    ("aelig", "æ"),
+    ("ccedil", "ç"),
+    ("egrave", "è"),
+    ("eacute", "é"),
+    ("ecirc", "ê"),
+    ("euml", "ë"),
+    ("igrave", "ì"),
+    ("iacute", "í"),
+    ("icirc", "î"),
+    ("iuml", "ï"),
+    ("ntilde", "ñ"),
+    ("ograve", "ò"),
+    ("oacute", "ó"),
+    ("ocirc", "ô"),
+    ("otilde", "õ"),
+    ("ouml", "ö"),
+    ("oslash", "ø"),
+    ("ugrave", "ù"),
+    ("uacute", "ú"),
+    ("ucirc", "û"),
+    ("uuml", "ü"),
+    ("yacute", "ý"),
+    ("yuml", "ÿ"),
+    ("OElig", "Œ"),
+    ("oelig", "œ"),
+    ("Scaron", "Š"),
+    ("scaron", "š"),
+    ("Yuml", "Ÿ"),
+    ("ndash", "–"),
+    ("mdash", "—"),
+    ("lsquo", "‘"),
+    ("rsquo", "’"),
+    ("sbquo", "‚"),
+    ("ldquo", "“"),
+    ("rdquo", "”"),
+    ("bdquo", "„"),
+    ("bull", "•"),
+    ("hellip", "…"),
+    ("euro", "€"),
+    ("trade", "™"),
+    ("thinsp", " "),
+    ("ensp", " "),
+    ("emsp", " "),
+    ("shy", ""),
+    ("zwnj", ""),
+    ("zwj", ""),
+    ("lrm", ""),
     ("rlm", ""),
 ];
 
@@ -1052,8 +1298,8 @@ pub fn strip_html(input: &str) -> String {
         };
         out.push_str(&rest[..pos]);
         let tail = &rest[pos..];
-        if tail.starts_with('<') {
-            let next = tail[1..].chars().next().unwrap_or(' ');
+        if let Some(after_bracket) = tail.strip_prefix('<') {
+            let next = after_bracket.chars().next().unwrap_or(' ');
             let end = tail.char_indices().take(2000).find(|(_, c)| *c == '>').map(|(i, _)| i);
             match end {
                 Some(end) if next.is_ascii_alphabetic() || next == '/' || next == '!' => {
@@ -1078,8 +1324,19 @@ pub fn strip_html(input: &str) -> String {
                         };
                     } else if matches!(
                         name.as_str(),
-                        "br" | "p" | "div" | "li" | "tr" | "h1" | "h2" | "h3" | "h4" | "h5" | "h6"
-                            | "jats:p" | "jats:title" | "blockquote"
+                        "br" | "p"
+                            | "div"
+                            | "li"
+                            | "tr"
+                            | "h1"
+                            | "h2"
+                            | "h3"
+                            | "h4"
+                            | "h5"
+                            | "h6"
+                            | "jats:p"
+                            | "jats:title"
+                            | "blockquote"
                     ) {
                         out.push('\n');
                     }
@@ -1356,7 +1613,10 @@ mod tests {
     fn publisher_statements_reduce_to_the_name() {
         assert_eq!(publisher("[Paris] : Gallimard").as_deref(), Some("Gallimard"));
         assert_eq!(publisher("Paris : Gallimard, 1971").as_deref(), Some("Gallimard"));
-        assert_eq!(publisher("Paris : Gallimard, impr. 2011, cop. 1942").as_deref(), Some("Gallimard"));
+        assert_eq!(
+            publisher("Paris : Gallimard, impr. 2011, cop. 1942").as_deref(),
+            Some("Gallimard")
+        );
         assert_eq!(publisher("Gallimard ([Paris])").as_deref(), Some("Gallimard"));
         assert_eq!(publisher("[Gallimard]").as_deref(), Some("Gallimard"));
         assert_eq!(publisher("Penguin Books,").as_deref(), Some("Penguin Books"));

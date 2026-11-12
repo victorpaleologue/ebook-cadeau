@@ -97,6 +97,14 @@ fn collect_ppns(value: &Value, list: &mut Vec<String>, error: &mut Option<String
     }
 }
 
+fn not_a_resolver_answer(format: &'static str) -> CatalogError {
+    CatalogError::Malformed {
+        provider: INFO.id,
+        format,
+        detail: "no `sudoc` element: not an isbn2ppn answer".to_owned(),
+    }
+}
+
 impl Provider for Sudoc {
     fn info(&self) -> &ProviderInfo {
         &INFO
@@ -134,6 +142,9 @@ impl Provider for Sudoc {
             match sniff(&response.body) {
                 Sniff::Xml => {
                     let root = parse_xml(INFO.id, response)?;
+                    if root.name != "sudoc" {
+                        return Err(not_a_resolver_answer("XML"));
+                    }
                     let mut nodes = Vec::new();
                     root.find_all("ppn", &mut nodes);
                     nodes.iter().for_each(|node| push_ppn(&mut ppns, &node.text));
@@ -141,7 +152,13 @@ impl Provider for Sudoc {
                     root.find_all("error", &mut errors);
                     error = errors.first().map(|node| node.text.trim().to_owned());
                 }
-                _ => collect_ppns(&parse_json(INFO.id, response)?, &mut ppns, &mut error),
+                _ => {
+                    let json = parse_json(INFO.id, response)?;
+                    if json.get("sudoc").is_none() {
+                        return Err(not_a_resolver_answer("JSON"));
+                    }
+                    collect_ppns(&json, &mut ppns, &mut error);
+                }
             }
             if ppns.is_empty()
                 && let Some(message) = error

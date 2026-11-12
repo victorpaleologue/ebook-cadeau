@@ -113,7 +113,7 @@ impl<'a, P: Provider + ?Sized> Session<'a, P> {
     /// [`feed`](Self::feed) (or [`fail`](Self::fail)) before calling [`finish`](Self::finish).
     pub fn next_request(&mut self) -> Option<HttpRequest> {
         while let Some(request) = self.queue.pop_front() {
-            if self.issued.iter().any(|url| *url == request.url) {
+            if self.issued.contains(&request.url) {
                 continue;
             }
             if !self.allowed(&request.url) {

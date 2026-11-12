@@ -9,7 +9,7 @@ use crate::marc::Extracted;
 use crate::provider::{Parsed, Permission, Provider, ProviderInfo, SourceClass, finalize};
 use crate::providers::{get_json, unknown_request};
 use crate::util::{
-    Found, check_http, isbns_in, jarr, jstr, jtexts, join, parse_json, path, push_isbn,
+    Found, check_http, isbns_in, jarr, join, jstr, jtexts, parse_json, path, push_isbn,
     url_with_query,
 };
 
@@ -88,7 +88,8 @@ fn people(item: &Value, key: &str, role: &ContributorRole, book: &mut BookMeta) 
 /// `{"date-parts": [[2019, 5, 2]]}` → `"2019-05-02"`.
 fn date_parts(value: Option<&Value>) -> Option<String> {
     let parts = value?.get("date-parts")?.as_array()?.first()?.as_array()?;
-    let number = |i: usize, max: u64| parts.get(i).and_then(Value::as_u64).filter(|n| (1..=max).contains(n));
+    let number =
+        |i: usize, max: u64| parts.get(i).and_then(Value::as_u64).filter(|n| (1..=max).contains(n));
     let year = number(0, 2100).filter(|y| *y >= 1000)?;
     Some(match (number(1, 12), number(2, 31)) {
         (Some(month), Some(day)) => format!("{year:04}-{month:02}-{day:02}"),

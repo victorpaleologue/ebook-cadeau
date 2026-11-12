@@ -158,6 +158,8 @@ struct Payload {
     file_name: String,
     display_name: String,
     licence: bool,
+    /// The bytes of a licence, to store again once the session references them.
+    bytes: Option<Bytes>,
 }
 
 fn unprocessable(code: &'static str, message: impl Into<String>) -> ApiError {
@@ -213,7 +215,7 @@ impl AppState {
         })?;
         let sha256 = codes::sha256_hex(&bytes);
         let size_bytes = bytes.len() as u64;
-        self.put_blob(&sha256, bytes).await?;
+        self.put_blob(&sha256, bytes.clone()).await?;
         let record = UploadRecord {
             id: format!("u_{}", codes::random_hex(self.entropy.as_ref(), 16)?),
             sha256,
@@ -234,6 +236,8 @@ impl AppState {
             db.uploads.insert(record.id.clone(), record.clone());
             stale
         })?;
+        // Again, now that the record protects the file (see `delete_unused_blobs`).
+        self.put_blob(&record.sha256, bytes).await?;
         self.db.delete_unused_blobs(&stale);
         Ok(record)
     }
@@ -622,13 +626,14 @@ impl AppState {
                     display_name: uploaded_name
                         .unwrap_or_else(|| display_file_name(&gift.book.title, extension)),
                     licence: false,
+                    bytes: None,
                 })
             }
             Delivery::ResellerLicence { format, url } => {
                 let bytes = self.fetch_licence(gift, url).await?;
                 let sha256 = codes::sha256_hex(&bytes);
                 let size_bytes = bytes.len() as u64;
-                self.put_blob(&sha256, bytes).await.map_err(|_| ClaimError::Internal)?;
+                self.put_blob(&sha256, bytes.clone()).await.map_err(|_| ClaimError::Internal)?;
                 let extension = format.as_str();
                 Ok(Payload {
                     sha256,
@@ -640,6 +645,7 @@ impl AppState {
                     file_name: ascii_file_name(&gift.book.title, extension),
                     display_name: display_file_name(&gift.book.title, extension),
                     licence: true,
+                    bytes: Some(bytes),
                 })
             }
             Delivery::ResellerRedirect { .. } => Err(ClaimError::NotAvailable),
@@ -717,7 +723,7 @@ impl AppState {
         let outcome = self.record_claim(gift_id, true, |db, _| {
             db.sessions.insert(key, session);
         });
-        let (record, first, mut stale) = match outcome {
+        let (record, first, stale) = match outcome {
             Ok(done) => done,
             Err(error) => {
                 if payload.licence {
@@ -726,7 +732,10 @@ impl AppState {
                 return Err(error);
             }
         };
-        stale.retain(|sha256| *sha256 != payload.sha256);
+        if let Some(bytes) = payload.bytes {
+            // Again, now that the session protects the licence (see `delete_unused_blobs`).
+            self.put_blob(&payload.sha256, bytes).await.map_err(|_| ClaimError::Internal)?;
+        }
         self.db.delete_unused_blobs(&stale);
         if first {
             self.emit(&record, "gift.redeemed");
@@ -830,20 +839,26 @@ impl AppState {
     }
 
     /// Attaches a stored file (cover, card PDF) to a gift; the previous one is deleted.
-    pub(crate) fn attach_blob(
+    pub(crate) async fn attach_blob(
         &self,
         gift_id: &str,
         blob: BlobRef,
+        bytes: Bytes,
         cover: bool,
     ) -> Result<(), ApiError> {
-        let previous = self
-            .db
-            .update(|db| {
-                let gift = db.gifts.get_mut(gift_id)?;
-                let slot = if cover { &mut gift.cover } else { &mut gift.card_pdf };
-                Some(slot.replace(blob))
-            })?
-            .ok_or_else(|| ApiError::not_found("no such gift"))?;
+        let sha256 = blob.sha256.clone();
+        self.put_blob(&sha256, bytes.clone()).await?;
+        let previous = self.db.update(|db| {
+            let gift = db.gifts.get_mut(gift_id)?;
+            let slot = if cover { &mut gift.cover } else { &mut gift.card_pdf };
+            Some(slot.replace(blob))
+        })?;
+        let Some(previous) = previous else {
+            self.db.delete_unused_blobs(&[sha256]);
+            return Err(ApiError::not_found("no such gift"));
+        };
+        // Again, now that the gift protects the file (see `delete_unused_blobs`).
+        self.put_blob(&sha256, bytes).await?;
         self.db.delete_unused_blobs(&previous.into_iter().map(|b| b.sha256).collect::<Vec<_>>());
         Ok(())
     }

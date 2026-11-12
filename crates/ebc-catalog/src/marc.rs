@@ -54,7 +54,7 @@ fn role_from_unimarc_code(code: &str) -> Option<ContributorRole> {
         "010" => ContributorRole::Other("adapter".to_owned()),
         "100" => ContributorRole::Other("antecedent".to_owned()),
         "205" => ContributorRole::Other("contributor".to_owned()),
-        other if other.is_empty() => return Some(ContributorRole::Author),
+        "" => return Some(ContributorRole::Author),
         other => ContributorRole::Other(format!("unimarc-{other}")),
     })
 }
@@ -73,8 +73,15 @@ pub(crate) fn role_from_term(term: &str) -> Option<ContributorRole> {
     } else if has(&["vorw", "nachw", "pref", "postf", "introd", "foreword", "afterword", "geleitw"])
     {
         ContributorRole::Preface
-    } else if has(&["hrsg", "herausg", "editeur scientifique", "editor", "directeur", "compil", "toimitt"])
-        || key == "ed"
+    } else if has(&[
+        "hrsg",
+        "herausg",
+        "editeur scientifique",
+        "editor",
+        "directeur",
+        "compil",
+        "toimitt",
+    ]) || key == "ed"
     {
         ContributorRole::Editor
     } else if has(&["erzahl", "sprecher", "narrat", "lecteur", "read by"]) {
@@ -132,7 +139,11 @@ fn join_title(main: &str, parts: &[&str]) -> String {
 // MARC 21
 // ---------------------------------------------------------------------------------------
 
-fn marc21_person(field: &MarcField, default: Option<ContributorRole>, statement: &str) -> Option<Contributor> {
+fn marc21_person(
+    field: &MarcField,
+    default: Option<ContributorRole>,
+    statement: &str,
+) -> Option<Contributor> {
     // An added entry with a title ($t) points at another work, not at a contributor.
     if field.sub('t').is_some() {
         return None;
@@ -140,7 +151,8 @@ fn marc21_person(field: &MarcField, default: Option<ContributorRole>, statement:
     let heading = field.sub('a')?;
     let mut name = heading.to_owned();
     if let Some(numeration) = field.sub('b') {
-        name = format!("{} {}", name.trim_end_matches(','), numeration.trim_end_matches([',', '.']));
+        name =
+            format!("{} {}", name.trim_end_matches(','), numeration.trim_end_matches([',', '.']));
     }
     let coded = field.subs('4').map(role_from_marc_code).collect::<Vec<_>>();
     let role = if let Some(first) = coded.first() {
@@ -240,7 +252,9 @@ fn unimarc_person(field: &MarcField, default: ContributorRole) -> Option<Contrib
     let entry = field.sub('a')?;
     let name = match field.sub('b') {
         // $a entry element (surname), $b rest of the name (forename).
-        Some(forename) => format!("{} {}", forename.trim_end_matches(','), entry.trim_end_matches(',')),
+        Some(forename) => {
+            format!("{} {}", forename.trim_end_matches(','), entry.trim_end_matches(','))
+        }
         None => entry.to_owned(),
     };
     let coded: Vec<Option<ContributorRole>> = field.subs('4').map(role_from_unimarc_code).collect();
@@ -308,7 +322,8 @@ pub(crate) fn unimarc(record: &MarcRecord) -> Extracted {
     }
     if book.published.is_none() {
         // 100 $a positions 9-12: first date of publication.
-        book.published = record.first("100", 'a').and_then(|a| a.get(9..13)).and_then(normalize::date);
+        book.published =
+            record.first("100", 'a').and_then(|a| a.get(9..13)).and_then(normalize::date);
     }
     book.language = record.first("101", 'a').map(str::to_owned);
     book.page_count = record.first("215", 'a').and_then(normalize::page_count);
@@ -376,7 +391,8 @@ pub(crate) fn dublin_core(dc: &Node) -> Extracted {
     book.published = values("date").find(|d| normalize::date(d).is_some()).map(str::to_owned);
     book.language = values("language").next().map(str::to_owned);
     for value in values("identifier") {
-        if (value.starts_with("http://") || value.starts_with("https://")) && isbns_in(value).is_empty()
+        if (value.starts_with("http://") || value.starts_with("https://"))
+            && isbns_in(value).is_empty()
         {
             url.get_or_insert_with(|| value.to_owned());
         } else {
@@ -385,8 +401,7 @@ pub(crate) fn dublin_core(dc: &Node) -> Extracted {
             }
         }
     }
-    book.page_count =
-        values("format").chain(values("extent")).find_map(normalize::page_count);
+    book.page_count = values("format").chain(values("extent")).find_map(normalize::page_count);
     book.series = values("relation").chain(values("description")).find_map(|relation| {
         let rest = relation
             .strip_prefix("Appartient à : ")
@@ -457,7 +472,10 @@ mod tests {
         assert_eq!(role_from_term("Herausgeber"), Some(ContributorRole::Editor));
         assert_eq!(role_from_term("Verlag"), None);
         assert_eq!(
-            role_from_statement("Albert Camus ; translated from the French by Matthew Ward", "Ward"),
+            role_from_statement(
+                "Albert Camus ; translated from the French by Matthew Ward",
+                "Ward"
+            ),
             Some(ContributorRole::Translator)
         );
         assert_eq!(

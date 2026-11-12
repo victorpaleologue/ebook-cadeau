@@ -17,6 +17,7 @@
 //! * `--rerank-top K`: candidates passed to the render-and-compare stage (default 5).
 //! * `--only NAME`: run only the conditions whose name contains `NAME`.
 //! * `--verbose`: one line per cover that went wrong somewhere (on standard error).
+//! * `--tables-only`: skip the hold-out and scaling measurements.
 
 use std::io::Write;
 use std::path::{Path, PathBuf};
@@ -79,6 +80,7 @@ fn run() -> Result<(), String> {
     let mut only_bundled_covers = false;
     let mut only: Option<String> = None;
     let mut verbose = false;
+    let mut tables_only = false;
     let mut args = std::env::args().skip(1);
     while let Some(arg) = args.next() {
         let mut value = || args.next().ok_or_else(|| format!("{arg} needs a value"));
@@ -92,6 +94,7 @@ fn run() -> Result<(), String> {
             "--only-bundled-covers" => only_bundled_covers = true,
             "--only" => only = Some(value()?),
             "--verbose" => verbose = true,
+            "--tables-only" => tables_only = true,
             other => return Err(format!("unknown argument {other} (see the file header)")),
         }
     }
@@ -166,6 +169,9 @@ fn run() -> Result<(), String> {
         .collect();
     let rows = evaluate(&cover_fonts, &index, &conditions, &opts);
     line(format_table(&rows))?;
+    if tables_only {
+        return Ok(());
+    }
 
     let holdout: Vec<_> = [Condition::clean(), Condition::typical()]
         .iter()

@@ -458,7 +458,10 @@ mod tests {
         assert_eq!(host("http://127.0.0.1:8080/x").as_deref(), Some("127.0.0.1"));
         assert_eq!(path("https://x.example/a/b.json?c#d"), "/a/b.json");
         assert_eq!(path("https://x.example"), "/");
-        assert_eq!(query_param("https://x.example/?a=1&q=isbn%3A9#f", "q").as_deref(), Some("isbn:9"));
+        assert_eq!(
+            query_param("https://x.example/?a=1&q=isbn%3A9#f", "q").as_deref(),
+            Some("isbn:9")
+        );
     }
 
     #[test]

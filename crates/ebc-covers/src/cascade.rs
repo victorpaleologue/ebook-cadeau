@@ -46,7 +46,7 @@
 use core::fmt;
 
 use ebc_isbn::Isbn13;
-use ebc_model::{BookMeta, CoverKind, CoverRef, HttpRequest, Method};
+use ebc_model::{BookMeta, CoverKind, CoverRef, HttpRequest, HttpResponse, Method};
 use url::Url;
 
 use crate::CoversError;
@@ -477,6 +477,57 @@ impl CoverCandidate {
     pub fn source_info(&self) -> Option<&'static SourceInfo> {
         source(self.source)
     }
+
+    /// Whether `response` — the answer to this candidate's request, after redirects —
+    /// is a hit, so that the cascade can stop here.
+    ///
+    /// * the status must be 2xx (Open Library answers 404 thanks to `default=false`,
+    ///   the DNB answers an error, when there is no cover);
+    /// * the final URL must still pass the host guard (a redirect to a denied or
+    ///   internal host is not a hit);
+    /// * a BnF probe must not announce one of the two placeholder lengths;
+    /// * an answer that announces `text/html` to an image request is an error page;
+    /// * when a body is present for an image request (operator downloads), it must be
+    ///   a recognised image and not a placeholder ([`crate::placeholder`]).
+    ///
+    /// A `true` here says nothing about rights: the candidate's basis is still `none`.
+    #[must_use]
+    pub fn accepts(&self, response: &HttpResponse) -> bool {
+        if !response.is_success() {
+            return false;
+        }
+        if !response.final_url.is_empty() {
+            let checked = if self.source == "reseller_feed" {
+                guard::check_url_shape(&response.final_url)
+            } else {
+                guard::check_url(&response.final_url)
+            };
+            if checked.is_err() {
+                return false;
+            }
+        }
+        if matches!(self.role, CandidateRole::Locate | CandidateRole::Page) {
+            return true;
+        }
+        if response.content_type().is_some_and(|t| t.starts_with("text/")) {
+            return false;
+        }
+        let announced = response.header("content-length").and_then(|v| v.trim().parse::<u64>().ok());
+        if self.source == "bnf"
+            && announced.is_some_and(crate::placeholder::is_bnf_placeholder_length)
+        {
+            return false;
+        }
+        if response.body.is_empty() {
+            return true;
+        }
+        match crate::sniff::probe(&response.body) {
+            Some(info) => {
+                !crate::placeholder::assess_for_source(self.source, &info, &response.body).is_placeholder()
+            }
+            None => false,
+        }
+    }
 }
 
 /// Which product flow the lookup serves.
@@ -543,8 +594,10 @@ pub struct Policy {
     /// Candidates riskier than this are not produced. Default [`Risk::Medium`]; the
     /// hosted service must never raise it.
     pub max_risk: Risk,
-    /// Source ids that may be used. Default: `reseller_feed`, `openlibrary`,
-    /// `googlebooks`, `publisher_page`, `reference`. Adding `bnf` or `dnb` records the
+    /// Source ids that may be used, **in lookup order** (the research wants the order
+    /// configurable so that a measured hit rate can change it). Default:
+    /// `reseller_feed`, `openlibrary`, `googlebooks`, `publisher_page`, `reference`.
+    /// Adding `bnf` or `dnb` records the
     /// operator's decision to enable them (see [`SourceStatus::DisabledUntilTermsRead`]);
     /// ids whose status is `Never` or `ContractOnly` have no effect.
     pub allowed_sources: Vec<String>,
@@ -574,6 +627,11 @@ pub struct Policy {
     pub operator_rights_basis: Option<RightsBasis>,
     /// Publisher opt-outs, consulted before any lookup.
     pub opt_out: OptOutList,
+    /// Hosts (and their subdomains) a pasted page may be on. Empty (default): any host
+    /// that passes the guard. The denylist only names the retailers the research
+    /// knew; a deployment that wants "publisher pages only" lists publisher domains
+    /// here.
+    pub page_hosts: Vec<String>,
 }
 
 /// Default user agent: product token (contains "bot", as Open Library's rules for
@@ -601,6 +659,7 @@ impl Default for Policy {
             max_related_isbns: 1,
             operator_rights_basis: None,
             opt_out: OptOutList::default(),
+            page_hosts: Vec::new(),
         }
     }
 }
@@ -962,7 +1021,7 @@ impl Builder<'_> {
         {
             return;
         }
-        if self.out.iter().any(|c| c.request.url == request.url && c.request.method == request.method) {
+        if self.out.iter().any(|c| c.role == role && c.request.url == request.url && c.request.method == request.method) {
             return;
         }
         self.out.push(CoverCandidate {
@@ -1126,9 +1185,11 @@ impl Builder<'_> {
 /// Order: covers the record already references (each routed to its source, so that a
 /// known Open Library cover id or Google image link costs no extra lookup), then, for
 /// the book's own ISBN and after it for up to [`Policy::max_related_isbns`] related
-/// ISBNs: Open Library, Google Books (with a key), BnF (978-2, 979-10) and DNB (978-3)
-/// when enabled. Run it top to bottom and stop at the first accepted hit: each user
-/// action should cost the sources as few requests as possible.
+/// ISBNs, the lookup sources **in the order of [`Policy::allowed_sources`]** — by
+/// default Open Library, then Google Books (with a key); BnF (978-2, 979-10) and DNB
+/// (978-3) follow when the caller enabled them. Run it top to bottom and stop at the
+/// first accepted hit ([`CoverCandidate::accepts`]): each user action should cost the
+/// sources as few requests as possible.
 ///
 /// Returns nothing when the publisher opted out ([`Policy::opt_out`]) — the output is
 /// then the typographic card — and, in [`Mode::Reseller`], only the covers the record
@@ -1181,17 +1242,17 @@ pub fn candidates(book: &BookMeta, policy: &Policy) -> Vec<CoverCandidate> {
         .take(policy.max_related_isbns)
         .map(|isbn| (isbn, true));
     for (isbn, other_edition) in own.chain(related) {
-        if policy.allows_source("openlibrary") {
-            builder.openlibrary(isbn, other_edition);
-        }
-        if policy.allows_source("googlebooks") {
-            builder.googlebooks(isbn, other_edition);
-        }
-        if policy.allows_source("bnf") {
-            builder.bnf(book, isbn, other_edition);
-        }
-        if policy.allows_source("dnb") {
-            builder.dnb(isbn, other_edition);
+        for id in &policy.allowed_sources {
+            if !policy.allows_source(id) {
+                continue;
+            }
+            match id.as_str() {
+                "openlibrary" => builder.openlibrary(isbn, other_edition),
+                "googlebooks" => builder.googlebooks(isbn, other_edition),
+                "bnf" => builder.bnf(book, isbn, other_edition),
+                "dnb" => builder.dnb(isbn, other_edition),
+                _ => {}
+            }
         }
     }
     builder.out
@@ -1207,12 +1268,13 @@ pub fn candidates(book: &BookMeta, policy: &Policy) -> Vec<CoverCandidate> {
 ///
 /// The denylist only knows the hosts the research named: any other host passes, a blog
 /// or an unlisted retailer included. A deployment that wants "publisher pages only"
-/// needs its own allow-list of publisher domains on top (fact-check, omission 7).
+/// sets [`Policy::page_hosts`] to its allow-list of publisher domains (fact-check,
+/// omission 7).
 ///
 /// # Errors
 /// [`CoversError::UrlRefused`] with the reason: the guard's refusal,
-/// [`Refusal::OptedOut`], or [`Refusal::LookupsDisabled`] in reseller mode or when the
-/// `publisher_page` source is not allowed.
+/// [`Refusal::OptedOut`], [`Refusal::NotAllowListed`], or [`Refusal::LookupsDisabled`]
+/// in reseller mode or when the `publisher_page` source is not allowed.
 pub fn page_candidate(url: &str, policy: &Policy) -> Result<CoverCandidate, CoversError> {
     if policy.mode == Mode::Reseller || !policy.allows_source("publisher_page") {
         return Err(CoversError::UrlRefused(Refusal::LookupsDisabled));
@@ -1220,6 +1282,16 @@ pub fn page_candidate(url: &str, policy: &Policy) -> Result<CoverCandidate, Cove
     let parsed = guard::check_url(url).map_err(CoversError::UrlRefused)?;
     if parsed.host_str().is_some_and(|host| policy.opt_out.blocks_host(host)) {
         return Err(CoversError::UrlRefused(Refusal::OptedOut));
+    }
+    if !policy.page_hosts.is_empty() {
+        let host = parsed.host_str().unwrap_or_default().to_ascii_lowercase();
+        let listed = policy.page_hosts.iter().any(|allowed| {
+            let allowed = allowed.trim().trim_end_matches('.').to_ascii_lowercase();
+            !allowed.is_empty() && guard::host_matches_suffix(&host, &allowed)
+        });
+        if !listed {
+            return Err(CoversError::UrlRefused(Refusal::NotAllowListed));
+        }
     }
     let info = builtin("publisher_page");
     Ok(CoverCandidate {

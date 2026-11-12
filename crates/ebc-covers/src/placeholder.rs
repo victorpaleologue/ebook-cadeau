@@ -32,9 +32,11 @@ pub const MIN_SIDE_PX: u32 = 100;
 /// Plausible `width / height` range for a book front; outside it the image is flagged
 /// as suspicious.
 pub const ASPECT_RANGE: (f64, f64) = (0.55, 0.85);
-/// Below this many bits per pixel a complete file is flagged as suspiciously empty
-/// (flat colour compresses to almost nothing in every format).
-pub const MIN_BITS_PER_PIXEL: f64 = 0.12;
+/// Below this many bits per pixel a complete file is flagged as suspiciously empty.
+/// Measured in this crate's tests: a completely flat 400 × 600 tile is about 0.24 bits
+/// per pixel as a baseline 4:4:4 JPEG, while photographic and illustrated covers sit
+/// well above 0.5. A hint only — very plain typographic covers can fall below it.
+pub const MIN_BITS_PER_PIXEL: f64 = 0.3;
 
 /// MD5 digests of the two Google Books "image not available" pictures (the digests
 /// calibre rejects; see research §2.2).

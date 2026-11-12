@@ -88,8 +88,39 @@ pub fn app(state: AppState) -> Router {
     router
         .fallback(fallback)
         .layer(axum::middleware::from_fn(security_headers))
-        .layer(tower_http::trace::TraceLayer::new_for_http())
+        .layer(tower_http::trace::TraceLayer::new_for_http().make_span_with(
+            |request: &axum::http::Request<Body>| {
+                // Codes and download tokens are bearer secrets: they never reach the logs,
+                // at any level. The query string is not logged at all.
+                let path = redact_path(request.uri().path());
+                tracing::debug_span!("request", method = %request.method(), %path)
+            },
+        ))
         .with_state(state)
+}
+
+/// A request path fit for logs: the segment after `/k/`, `/d/` and `/o/` (a gift code or
+/// a download token) is replaced, and so is any segment that is itself a well-formed
+/// gift code (`GET /{CODE}`) or looks like a token.
+pub(crate) fn redact_path(path: &str) -> String {
+    let mut out = String::with_capacity(path.len());
+    let mut after_secret_prefix = false;
+    for (index, segment) in path.split('/').enumerate() {
+        if index > 0 {
+            out.push('/');
+        }
+        let token_like = segment.len() >= 24 && segment.bytes().all(|b| b.is_ascii_hexdigit());
+        if !segment.is_empty()
+            && (after_secret_prefix || token_like || GiftCode::parse(segment).is_ok())
+        {
+            out.push('…');
+        } else {
+            // Bound what a hostile path can write into a log line.
+            out.extend(segment.chars().filter(|c| !c.is_control()).take(64));
+        }
+        after_secret_prefix = index == 1 && matches!(segment, "k" | "K" | "d" | "o");
+    }
+    out
 }
 
 /// Adds the headers of `docs/api.md` §2 to every response that does not set them itself.
@@ -346,6 +377,34 @@ mod tests {
         let mut headers = HeaderMap::new();
         headers.insert("x-forwarded-for", HeaderValue::from_static(value));
         headers
+    }
+
+    #[test]
+    fn codes_and_tokens_never_reach_the_logs() {
+        let code = GiftCode::from_payload(123_456_789).map(|c| c.compact()).unwrap_or_default();
+        let token = "0123456789abcdef0123456789abcdef";
+        let cases = [
+            (format!("/k/{code}"), "/k/…".to_owned()),
+            (format!("/K/{}/download", code.to_lowercase()), "/K/…/download".to_owned()),
+            ("/k/not-even-a-code/pair".to_owned(), "/k/…/pair".to_owned()),
+            (format!("/{code}"), "/…".to_owned()),
+            (format!("/d/{token}/Le-Horla.epub"), "/d/…/Le-Horla.epub".to_owned()),
+            (format!("/o/{token}/catalog.xml"), "/o/…/catalog.xml".to_owned()),
+            (format!("/x/{token}"), "/x/…".to_owned()),
+            (
+                "/api/v1/gifts/g_fedcba9876543210fedcba9876543210".to_owned(),
+                "/api/v1/gifts/g_fedcba9876543210fedcba9876543210".to_owned(),
+            ),
+            ("/".to_owned(), "/".to_owned()),
+            ("/aide".to_owned(), "/aide".to_owned()),
+            ("/k".to_owned(), "/k".to_owned()),
+        ];
+        for (path, expected) in cases {
+            let redacted = redact_path(&path);
+            assert_eq!(redacted, expected, "{path}");
+            assert!(!redacted.contains(&code) && !redacted.contains(token));
+        }
+        assert!(redact_path(&format!("/{}\r\nfake log line", "a".repeat(500))).len() <= 70);
     }
 
     #[test]

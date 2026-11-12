@@ -689,3 +689,99 @@ async fn reveal_date_expiry_reissue_and_cancellation() {
     assert_eq!(cancelled.status, StatusCode::OK);
     assert_eq!(store.blob_count(), 0, "no hosted file is kept for cancelled gifts");
 }
+
+/// Collects everything the service logs.
+#[derive(Clone, Default)]
+struct LogCapture(Arc<std::sync::Mutex<Vec<u8>>>);
+
+impl std::io::Write for LogCapture {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.0.lock().unwrap().extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+#[tokio::test]
+async fn no_log_line_at_any_level_contains_a_code_or_a_token() {
+    // A process-wide subscriber at TRACE level: a thread-local one misses call sites
+    // that another test thread registered first. Other tests log into it too, which is
+    // fine: the secrets looked for below belong to this test only.
+    static CAPTURE: std::sync::OnceLock<LogCapture> = std::sync::OnceLock::new();
+    let capture = CAPTURE.get_or_init(|| {
+        let capture = LogCapture::default();
+        let writer = capture.clone();
+        let subscriber = tracing_subscriber::fmt()
+            .with_max_level(tracing::Level::TRACE)
+            .with_ansi(false)
+            .with_writer(move || writer.clone())
+            .finish();
+        tracing::subscriber::set_global_default(subscriber).unwrap();
+        capture
+    });
+
+    let h = Harness::new();
+    assert_eq!(h.get("/log-probe-start").await.status, StatusCode::NOT_FOUND);
+    let gift = h.hosted_gift(json!({})).await;
+    let code = code_of(&gift);
+    let grouped = GiftCode::parse(&code).unwrap().grouped();
+    let manage_token = gift["manage_token"].as_str().unwrap().to_owned();
+    let bearer = format!("Bearer {manage_token}");
+
+    // Every route a code or a token travels through, including the failures.
+    assert_eq!(h.get(&format!("/k/{code}")).await.status, StatusCode::OK);
+    assert_eq!(h.get(&format!("/K/{}", grouped.to_lowercase())).await.status, StatusCode::OK);
+    assert_eq!(h.get(&format!("/{code}")).await.status, StatusCode::SEE_OTHER);
+    assert_eq!(h.get(&format!("/k?code={code}")).await.status, StatusCode::SEE_OTHER);
+    let session = h.post_form(&format!("/k/{code}/download"), &[]).await.location();
+    let token = session.split('/').nth(2).unwrap().to_owned();
+    assert_eq!(h.get(&session).await.status, StatusCode::OK);
+    assert_eq!(h.get(&format!("/o/{token}/catalog.xml")).await.status, StatusCode::OK);
+    let pair = h.post_form(&format!("/k/{code}/pair"), &[]).await.text_of("pair-code");
+    assert_eq!(h.post_form("/e", &[("p", pair.as_str())]).await.status, StatusCode::SEE_OTHER);
+    assert_eq!(
+        h.post_form(&format!("/k/{code}/send"), &[("device_email", "a@kindle.com")]).await.status,
+        StatusCode::CONFLICT
+    );
+    assert_eq!(h.get(&format!("/k/{}", unknown_code(5))).await.status, StatusCode::NOT_FOUND);
+    assert_eq!(h.get(&format!("/k/{}X", &code[..11])).await.status, StatusCode::BAD_REQUEST);
+    let auth = [("authorization", bearer.as_str())];
+    let reissued = h
+        .call(
+            Method::POST,
+            &format!("/api/v1/gifts/{}/reissue", gift["id"].as_str().unwrap()),
+            &auth,
+            Body::empty(),
+        )
+        .await;
+    let new_code = reissued.json()["code"].as_str().unwrap().to_owned();
+    assert_eq!(h.get(&format!("/k/{code}")).await.status, StatusCode::GONE);
+    assert_eq!(h.get(&format!("/k/{new_code}")).await.status, StatusCode::OK);
+
+    assert_eq!(h.get("/log-probe-end").await.status, StatusCode::NOT_FOUND);
+
+    let logs = String::from_utf8_lossy(&capture.0.lock().unwrap()).to_lowercase();
+    // The requests of this test were captured from start to end, with redacted paths.
+    for expected in
+        ["/log-probe-start", "/log-probe-end", "/k/…", "/d/…/le-horla.epub", "/o/…/catalog.xml"]
+    {
+        assert!(logs.contains(expected), "{expected} is missing from the captured logs");
+    }
+    let secrets = [
+        code.clone(),
+        grouped,
+        new_code,
+        unknown_code(5),
+        token,
+        pair.clone(),
+        pair.replace('-', ""),
+        manage_token,
+        "a@kindle.com".to_owned(),
+    ];
+    for secret in secrets {
+        assert!(!logs.contains(&secret.to_lowercase()), "{secret} was logged");
+    }
+}

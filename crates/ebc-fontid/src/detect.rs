@@ -173,7 +173,7 @@ fn detect(img: &Pixmap, title: Option<&str>) -> Vec<TextRegion> {
             } else {
                 0.0
             };
-            c.score = 0.35 * c.score + 0.65 * prior;
+            c.score *= 0.4 + 0.6 * prior;
         }
         kept.sort_by(|a, b| b.score.total_cmp(&a.score));
     }
@@ -181,9 +181,9 @@ fn detect(img: &Pixmap, title: Option<&str>) -> Vec<TextRegion> {
     kept.iter().map(|c| c.region(iw, ih)).filter(|r| r.w > 0 && r.h > 0).collect()
 }
 
-/// How well the letters of the title fit the lines of a region, in `0..=1`: the share
-/// of the title's letters that the region accounts for, reduced when counts fit only
-/// approximately or when the region has lines the title does not explain.
+/// How well the letters of the title fit the lines of a region, in `0..=1`: 1 when the
+/// region's lines hold exactly the letters of the whole title, 0.6 when they do nearly
+/// (touching or broken letters), and a small value for a part of the title.
 fn title_prior(img: &Pixmap, region: &TextRegion, title: &str, no_shapes: &FaceDescriptor) -> f32 {
     let Some(analysis) = analyse(img, region) else { return 0.0 };
     let obs = observe(&analysis, false);
@@ -196,8 +196,14 @@ fn title_prior(img: &Pixmap, region: &TextRegion, title: &str, no_shapes: &FaceD
         }
         if let Some((coverage, exact, matched_lines)) = match_text_structure(&obs, &cased, no_shapes)
         {
-            let lines = obs.lines.len().max(1) as f32;
-            let p = coverage * if exact { 1.0 } else { 0.75 } * (matched_lines as f32 / lines);
+            // Only the whole title with the right letter count on every line is strong
+            // evidence; a part of it fits other text too easily.
+            let all_lines = matched_lines == obs.lines.len();
+            let p = if coverage >= 0.999 && all_lines {
+                if exact { 1.0 } else { 0.6 }
+            } else {
+                0.3 * coverage * (matched_lines as f32 / obs.lines.len().max(1) as f32)
+            };
             best = best.max(p);
         }
         tried.push(cased);

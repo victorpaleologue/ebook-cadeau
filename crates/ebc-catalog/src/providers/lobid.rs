@@ -10,7 +10,7 @@ use crate::normalize;
 use crate::provider::{Parsed, Permission, Provider, ProviderInfo, SourceClass, finalize};
 use crate::providers::{format_from_text, get_json, unknown_request};
 use crate::util::{
-    Found, check_http, isbns_in, jarr, jlist, jstr, jtext, jtexts, join, parse_json, path,
+    Found, check_http, isbns_in, jarr, jlist, join, jstr, jtext, jtexts, parse_json, path,
     push_isbn, url_with_query,
 };
 
@@ -144,7 +144,8 @@ impl Provider for Lobid {
         request: &HttpRequest,
         response: &HttpResponse,
     ) -> Result<Parsed, CatalogError> {
-        if !request.url.starts_with(&self.base) || !path(&request.url).ends_with("/resources/search")
+        if !request.url.starts_with(&self.base)
+            || !path(&request.url).ends_with("/resources/search")
         {
             return Err(unknown_request(&INFO, request));
         }

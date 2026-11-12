@@ -56,6 +56,9 @@ pub enum Refusal {
     RobotsNotChecked,
     /// Lookups do not run in this mode (reseller mode uses the reseller's feed only).
     LookupsDisabled,
+    /// The deployment restricts pasted pages to an allow-list of publisher hosts and
+    /// this host is not on it.
+    NotAllowListed,
 }
 
 impl fmt::Display for Refusal {
@@ -76,6 +79,7 @@ impl fmt::Display for Refusal {
             Self::RobotsDisallow => f.write_str("robots.txt disallows this path"),
             Self::RobotsNotChecked => f.write_str("robots.txt was not checked for this origin"),
             Self::LookupsDisabled => f.write_str("cover lookups do not run in reseller mode"),
+            Self::NotAllowListed => f.write_str("this host is not on the list of publisher sites"),
         }
     }
 }

@@ -712,6 +712,12 @@ fn probe_bmff(b: &[u8]) -> Option<Details> {
         }
     });
     let meta = meta?;
+    // A `meta` box cut short would make the answer depend on how many bytes were
+    // fetched (a thumbnail's extent may come before the primary image's): wait for all
+    // of it.
+    if meta.next > b.len() {
+        return None;
+    }
 
     let mut primary: Option<u32> = None;
     let mut properties: Vec<Property> = Vec::new();

@@ -519,6 +519,30 @@ mod tests {
     }
 
     #[test]
+    fn the_development_partners_file_of_the_readme_is_valid() {
+        let file = PartnersFile::parse(include_str!("../partners.dev.toml")).unwrap();
+        let ids: Vec<&str> = file.partners.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(ids, ["septante", "grande-enseigne"]);
+        assert!(file.partners[0].allows_url("http://127.0.0.1:8101/cadeau/activer"));
+        assert!(!file.partners[0].allows_url("http://127.0.0.1:8102/cadeau/activer"));
+        assert!(file.partners.iter().all(|p| p.name.contains("démo")), "demo names say so");
+    }
+
+    #[test]
+    fn public_url_warnings_flag_hosts_that_are_hard_to_type() {
+        let with = |url: &str| {
+            let mut config = Config::for_tests();
+            config.public_url = url.to_owned();
+            config.public_url_warnings()
+        };
+        assert!(with("http://127.0.0.1:8080").is_empty(), "loopback is development");
+        assert!(with("https://ebk.example").is_empty());
+        assert_eq!(with("http://ebk.example").len(), 1, "plain http");
+        assert_eq!(with("https://e-book4u.example").len(), 2, "digit and hyphen, and long");
+        assert_eq!(with("https://cadeau.livres.example").len(), 1, "long");
+    }
+
+    #[test]
     fn defaults_match_the_contract() {
         let dir = tempfile::tempdir().unwrap();
         let config =

@@ -69,9 +69,8 @@ async fn record(out: &Path, isbns: &[Isbn13]) -> Result<(), String> {
                         let file = dir.join(&name);
                         std::fs::write(&file, &response.body)
                             .map_err(|e| format!("{}: {e}", file.display()))?;
-                        let retrieved = SystemTime::now()
-                            .duration_since(UNIX_EPOCH)
-                            .map_or(0, |d| d.as_secs());
+                        let retrieved =
+                            SystemTime::now().duration_since(UNIX_EPOCH).map_or(0, |d| d.as_secs());
                         index.push(json!({
                             "provider": id,
                             "isbn": isbn.to_plain(),

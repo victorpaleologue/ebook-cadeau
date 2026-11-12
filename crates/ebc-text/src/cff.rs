@@ -26,6 +26,8 @@
 //! `seac` (the deprecated "accented character" form of `endchar`) is resolved here as
 //! well, one level deep: base and accent glyphs are flattened and drawn separately.
 
+use std::collections::BTreeMap;
+
 use ttf_parser::{GlyphId, NormalizedCoordinate, OutlineBuilder, Rect};
 
 /// Most operators and operands interpreted while flattening one glyph (subroutine
@@ -243,6 +245,8 @@ pub(crate) struct CffFont<'a> {
     charset: Charset,
     /// Offset of the CFF2 variation store (its 16-bit length field).
     vstore: Option<usize>,
+    /// The local subroutines of the Font DICTs looked up so far.
+    locals: BTreeMap<u32, Option<Index<'a>>>,
 }
 
 impl<'a> CffFont<'a> {
@@ -320,6 +324,7 @@ impl<'a> CffFont<'a> {
             fd_select: None,
             charset: Charset::IsoAdobe,
             vstore: None,
+            locals: BTreeMap::new(),
         }
     }
 
@@ -328,99 +333,141 @@ impl<'a> CffFont<'a> {
         let Some(at) = self.fd_select else { return Some(0) };
         let data = self.data;
         let glyph = u32::from(glyph);
+        // Formats 3 and 4: `count` ranges of (first glyph, font dict), sorted by first
+        // glyph and closed by a sentinel glyph id. `first(count)` is the sentinel.
+        let in_ranges = |count: usize,
+                         first: &dyn Fn(usize) -> Option<u32>,
+                         font_dict: &dyn Fn(usize) -> Option<u32>| {
+            // Binary search for the last range that starts at or before the glyph.
+            let (mut low, mut high) = (0usize, count);
+            while low < high {
+                let middle = low + (high - low) / 2;
+                if first(middle)? <= glyph {
+                    low = middle + 1;
+                } else {
+                    high = middle;
+                }
+            }
+            let range = low.checked_sub(1)?;
+            (glyph < first(range + 1)?).then(|| font_dict(range)).flatten()
+        };
         match *data.get(at)? {
             0 => Some(u32::from(*data.get(at.checked_add(1)?.checked_add(glyph as usize)?)?)),
             3 => {
-                let ranges = usize::from(be_u16(data, at + 1)?);
-                // Ranges of (first glyph: u16, fd: u8), then a sentinel glyph id.
-                (0..ranges).find_map(|i| {
-                    let entry = at + 3 + i * 3;
-                    let first = u32::from(be_u16(data, entry)?);
-                    let next = u32::from(be_u16(data, entry + 3)?);
-                    (first..next).contains(&glyph).then_some(u32::from(*data.get(entry + 2)?))
-                })
+                let entry = |i: usize| at.checked_add(3)?.checked_add(i.checked_mul(3)?);
+                in_ranges(
+                    usize::from(be_u16(data, at.checked_add(1)?)?),
+                    &|i| be_u16(data, entry(i)?).map(u32::from),
+                    &|i| data.get(entry(i)?.checked_add(2)?).map(|&fd| u32::from(fd)),
+                )
             }
             4 => {
-                let ranges = usize::try_from(be_u32(data, at + 1)?).ok()?;
-                // Ranges of (first glyph: u32, fd: u16), then a sentinel glyph id.
-                (0..ranges.min(usize::from(u16::MAX))).find_map(|i| {
-                    let entry = at + 5 + i * 6;
-                    let first = be_u32(data, entry)?;
-                    let next = be_u32(data, entry + 6)?;
-                    (first..next).contains(&glyph).then_some(u32::from(be_u16(data, entry + 4)?))
-                })
+                let entry = |i: usize| at.checked_add(5)?.checked_add(i.checked_mul(6)?);
+                in_ranges(
+                    usize::try_from(be_u32(data, at.checked_add(1)?)?).ok()?,
+                    &|i| be_u32(data, entry(i)?),
+                    &|i| be_u16(data, entry(i)?.checked_add(4)?).map(u32::from),
+                )
             }
             _ => None,
         }
     }
 
-    /// The local subroutines that apply to a glyph, if it has any.
-    fn local_subrs(&self, glyph: u16) -> Option<Index<'a>> {
-        let (private_at, private_len) = match self.fd_array {
-            Some(fd_array) => {
-                let font_dict = fd_array.get(self.font_dict_of(glyph)?)?;
-                let mut private = None;
-                for_each_dict_entry(font_dict, |operator, operands| {
-                    if let (18, [size, offset]) = (operator, operands) {
-                        private = as_offset(*offset).zip(as_offset(*size));
+    /// The local subroutines that apply to a glyph, if it has any. They are looked up
+    /// once per Font DICT; reading the DICTs is charged to `steps` by their size.
+    fn local_subrs(&mut self, glyph: u16, steps: &mut u32) -> Result<Option<Index<'a>>, Stop> {
+        let Some(font_dict) = self.font_dict_of(glyph) else { return Ok(None) };
+        if let Some(&known) = self.locals.get(&font_dict) {
+            return Ok(known);
+        }
+        let data = self.data;
+        let mut charge = |dict: &[u8]| {
+            let cost = u32::try_from(dict.len() / 8 + 1).unwrap_or(u32::MAX);
+            *steps = steps.checked_sub(cost).ok_or(Stop::TooComplex)?;
+            Ok(())
+        };
+        let private = match self.fd_array {
+            Some(fd_array) => match fd_array.get(font_dict) {
+                Some(font_dict) => {
+                    charge(font_dict)?;
+                    let mut private = None;
+                    for_each_dict_entry(font_dict, |operator, operands| {
+                        if let (18, [size, offset]) = (operator, operands) {
+                            private = as_offset(*offset).zip(as_offset(*size));
+                        }
+                    });
+                    private
+                }
+                None => None,
+            },
+            None => self.private,
+        };
+        let mut subrs = None;
+        if let Some((at, len)) = private {
+            let end = at.saturating_add(len);
+            if let Some(private) = data.get(at..end) {
+                charge(private)?;
+                let mut offset = None;
+                for_each_dict_entry(private, |operator, operands| {
+                    if let (19, [value]) = (operator, operands) {
+                        offset = as_offset(*value);
                     }
                 });
-                private?
+                // "The local subroutines offset is relative to the beginning of the
+                // Private DICT data."
+                subrs = offset
+                    .and_then(|offset| at.checked_add(offset))
+                    .and_then(|at| Index::parse(data, at, self.cff2))
+                    .map(|(index, _)| index);
             }
-            None => self.private?,
-        };
-        let private = self.data.get(private_at..private_at.checked_add(private_len)?)?;
-        let mut subrs = None;
-        for_each_dict_entry(private, |operator, operands| {
-            if let (19, [offset]) = (operator, operands) {
-                subrs = as_offset(*offset);
-            }
-        });
-        // "The local subroutines offset is relative to the beginning of the Private DICT."
-        let at = private_at.checked_add(subrs?)?;
-        Index::parse(self.data, at, self.cff2).map(|(index, _)| index)
+        }
+        self.locals.insert(font_dict, subrs);
+        Ok(subrs)
     }
 
-    /// The glyph that the standard-encoding `code` of a `seac` refers to.
-    fn seac_glyph(&self, code: f64) -> Option<u16> {
-        let code = u8::try_from(as_integer(code)?).ok()?;
+    /// The glyph that the standard-encoding `code` of a `seac` refers to. Searching the
+    /// charset is charged to `steps`.
+    fn seac_glyph(&self, code: f64, steps: &mut u32) -> Result<u16, Stop> {
+        let code = as_integer(code).and_then(|v| u8::try_from(v).ok()).ok_or(Stop::Invalid)?;
         let sid = standard_encoding_sid(code);
         if sid == 0 {
-            return Some(0);
+            return Ok(0);
         }
         match self.charset {
-            Charset::IsoAdobe => Some(sid),
-            Charset::Expert => None,
-            Charset::Table(at) => self.glyph_of_sid(at, sid),
+            Charset::IsoAdobe => Ok(sid),
+            Charset::Expert => Err(Stop::Invalid),
+            Charset::Table(at) => self.glyph_of_sid(at, sid, steps),
         }
     }
 
     /// Looks a string id up in a charset table (formats 0, 1 and 2). Glyph 0 is implicit.
-    fn glyph_of_sid(&self, at: usize, sid: u16) -> Option<u16> {
+    fn glyph_of_sid(&self, at: usize, sid: u16, steps: &mut u32) -> Result<u16, Stop> {
         let data = self.data;
         let glyphs = self.char_strings.count.min(u32::from(u16::MAX));
-        let format = *data.get(at)?;
-        let mut entry = at + 1;
+        let (format, entry_len) = match data.get(at) {
+            Some(0) => (0, 2),
+            Some(1) => (1, 3),
+            Some(2) => (2, 4),
+            _ => return Err(Stop::Invalid),
+        };
+        let mut entry = at + 1; // `at` is inside the table
         let mut glyph = 1u32;
         while glyph < glyphs {
-            let first = u32::from(be_u16(data, entry)?);
+            *steps = steps.checked_sub(1).ok_or(Stop::TooComplex)?;
+            let first = u32::from(be_u16(data, entry).ok_or(Stop::Invalid)?);
             let left = match format {
-                0 => 0,
-                1 => u32::from(*data.get(entry + 2)?),
-                2 => u32::from(be_u16(data, entry + 2)?),
-                _ => return None,
+                0 => Some(0),
+                1 => data.get(entry + 2).map(|&n| u32::from(n)),
+                _ => be_u16(data, entry + 2).map(u32::from),
             };
+            let left = left.ok_or(Stop::Invalid)?;
             if (first..=first + left).contains(&u32::from(sid)) {
-                return u16::try_from(glyph + (u32::from(sid) - first)).ok();
+                return u16::try_from(glyph + (u32::from(sid) - first)).map_err(|_| Stop::Invalid);
             }
             glyph += left + 1;
-            entry += match format {
-                0 => 2,
-                1 => 3,
-                _ => 4,
-            };
+            entry += entry_len; // bounded by the table: the reads above have succeeded
         }
-        None
+        Err(Stop::Invalid)
     }
 
     /// The raw CFF2 variation store, with its 16-bit length prefix.
@@ -449,7 +496,7 @@ impl<'a> CffFont<'a> {
     ///
     /// Returns the bounding box, or `Ok(None)` for a glyph that draws nothing.
     pub(crate) fn outline(
-        &self,
+        &mut self,
         glyph: u16,
         coordinates: &[NormalizedCoordinate],
         steps: &mut u32,
@@ -460,8 +507,8 @@ impl<'a> CffFont<'a> {
         let Some(seac) = flat.seac else { return Ok(own) };
 
         // An accented character: the base glyph as it is, the accent moved by (dx, dy).
-        let base = self.seac_glyph(seac.base).ok_or(Stop::Invalid)?;
-        let accent = self.seac_glyph(seac.accent).ok_or(Stop::Invalid)?;
+        let base = self.seac_glyph(seac.base, steps)?;
+        let accent = self.seac_glyph(seac.accent, steps)?;
         let base = self.flatten(base, steps)?;
         let accent = self.flatten(accent, steps)?;
         if base.seac.is_some() || accent.seac.is_some() {
@@ -487,11 +534,12 @@ impl<'a> CffFont<'a> {
     }
 
     /// Replaces every subroutine call of a glyph's charstring by the subroutine's body.
-    fn flatten(&self, glyph: u16, steps: &mut u32) -> Result<Flat, Stop> {
+    fn flatten(&mut self, glyph: u16, steps: &mut u32) -> Result<Flat, Stop> {
         let body = self.char_strings.get(u32::from(glyph)).ok_or(Stop::Invalid)?;
+        let locals = self.local_subrs(glyph, steps)?;
         let mut flattener = Flattener {
             font: self,
-            locals: self.local_subrs(glyph),
+            locals,
             out: Vec::new(),
             stack: Vec::new(),
             stems: 0,
@@ -987,7 +1035,9 @@ mod tests {
             let mut trace = Trace::default();
             let mut steps = MAX_CHARSTRING_STEPS;
             CffFont::parse_cff(table)
-                .and_then(|font| font.outline(glyph, &[], &mut steps, &mut trace).ok().flatten())
+                .and_then(|mut font| {
+                    font.outline(glyph, &[], &mut steps, &mut trace).ok().flatten()
+                })
                 .map(|rect| format!("{}{rect:?}", trace.0))
         };
         (reference, ours)
@@ -1097,7 +1147,7 @@ mod tests {
         let glyph: Vec<u8> = [[32, CALLGSUBR]; 8].concat().into_iter().chain([14]).collect();
         let subrs: Vec<&[u8]> = subrs.iter().map(Vec::as_slice).collect();
         let table = cff(&[&[14], &glyph], &subrs, &[]);
-        let font = CffFont::parse_cff(&table).expect("parses");
+        let mut font = CffFont::parse_cff(&table).expect("parses");
 
         let mut steps = MAX_CHARSTRING_STEPS;
         let mut trace = Trace::default();
@@ -1108,7 +1158,7 @@ mod tests {
         let recursive: Vec<u8> = vec![32, CALLGSUBR, 11];
         let glyph: Vec<u8> = vec![32, CALLGSUBR, 14];
         let table = cff(&[&[14], &glyph], &[&recursive], &[]);
-        let font = CffFont::parse_cff(&table).expect("parses");
+        let mut font = CffFont::parse_cff(&table).expect("parses");
         let mut steps = MAX_CHARSTRING_STEPS;
         assert_eq!(font.outline(1, &[], &mut steps, &mut trace), Err(Stop::Invalid));
         assert!(MAX_CHARSTRING_STEPS - steps < 100);
@@ -1168,7 +1218,7 @@ mod tests {
             assert!(expected.is_some(), "the reference must draw the glyph");
             let mut ours = Trace::default();
             let mut steps = MAX_CHARSTRING_STEPS;
-            let font = CffFont::parse_cff2(&table).expect("parses");
+            let mut font = CffFont::parse_cff2(&table).expect("parses");
             let rect = font.outline(1, &coordinates, &mut steps, &mut ours);
             assert_eq!(rect, Ok(expected), "at {coordinate}");
             assert_eq!(ours.0, reference.0, "at {coordinate}");
@@ -1176,9 +1226,58 @@ mod tests {
         // At the region's peak the deltas apply in full: the first point is (110, 220).
         let mut trace = Trace::default();
         let mut steps = MAX_CHARSTRING_STEPS;
-        let font = CffFont::parse_cff2(&table).expect("parses");
+        let mut font = CffFont::parse_cff2(&table).expect("parses");
         let _ = font.outline(1, &[NormalizedCoordinate::from(1.0)], &mut steps, &mut trace);
         assert!(trace.0.starts_with("M 110 220 L 145 254 "), "{}", trace.0);
+    }
+
+    #[test]
+    fn font_dict_selection_and_charset_lookups() {
+        let with_fd_select = |data: &'static [u8]| {
+            let mut font = CffFont::empty(data, false, Index::default());
+            font.fd_select = Some(0);
+            font
+        };
+        // Format 0: one font dict per glyph.
+        let font = with_fd_select(&[0, 1, 2, 3]);
+        assert_eq!([0, 2, 3].map(|g| font.font_dict_of(g)), [Some(1), Some(3), None]);
+        // Format 3: glyphs 0..10 -> 5, 10..20 -> 7, sentinel 20.
+        let font = with_fd_select(&[3, 0, 2, 0, 0, 5, 0, 10, 7, 0, 20]);
+        let picks = [0, 9, 10, 19, 20, 500].map(|g| font.font_dict_of(g));
+        assert_eq!(picks, [Some(5), Some(5), Some(7), Some(7), None, None]);
+        // Format 4 (CFF2): the same with wide fields.
+        let font =
+            with_fd_select(&[4, 0, 0, 0, 2, 0, 0, 0, 0, 0, 5, 0, 0, 0, 10, 0, 7, 0, 0, 0, 20]);
+        let picks = [0, 9, 10, 19, 20].map(|g| font.font_dict_of(g));
+        assert_eq!(picks, [Some(5), Some(5), Some(7), Some(7), None]);
+        // Unknown formats, truncated tables and offsets outside the table select nothing.
+        assert_eq!(with_fd_select(&[9, 0, 0]).font_dict_of(0), None);
+        assert_eq!(with_fd_select(&[3, 0, 2, 0, 0, 5]).font_dict_of(3), None);
+        let mut nowhere = with_fd_select(&[3]);
+        nowhere.fd_select = Some(usize::MAX);
+        assert_eq!(nowhere.font_dict_of(0), None);
+        // No FDSelect at all: everything belongs to font dict 0.
+        assert_eq!(CffFont::empty(&[], true, Index::default()).font_dict_of(77), Some(0));
+
+        // Charsets: glyph 0 is implicit, the table starts with glyph 1.
+        let charset = |data: &'static [u8]| {
+            let mut font = CffFont::empty(data, false, Index::default());
+            font.char_strings.count = 6;
+            font
+        };
+        let lookup = |font: &CffFont<'_>, sid: u16| font.glyph_of_sid(0, sid, &mut 1_000);
+        let format0 = charset(&[0, 0, 40, 0, 34, 0, 99, 0, 7, 0, 8]);
+        assert_eq!(lookup(&format0, 34), Ok(2));
+        assert_eq!(lookup(&format0, 8), Ok(5));
+        assert_eq!(lookup(&format0, 35), Err(Stop::Invalid));
+        let format1 = charset(&[1, 0, 34, 3, 0, 90, 0]); // sids 34..=37, then 90
+        assert_eq!([34, 37, 90].map(|sid| lookup(&format1, sid)), [Ok(1), Ok(4), Ok(5)]);
+        let format2 = charset(&[2, 0, 34, 0, 4]); // sids 34..=38
+        assert_eq!(lookup(&format2, 38), Ok(5));
+        assert_eq!(lookup(&format2, 39), Err(Stop::Invalid));
+        // The search is charged to the budget.
+        assert_eq!(format0.glyph_of_sid(0, 8, &mut 3), Err(Stop::TooComplex));
+        assert_eq!(charset(&[7]).glyph_of_sid(0, 1, &mut 9), Err(Stop::Invalid));
     }
 
     #[test]
@@ -1196,7 +1295,7 @@ mod tests {
                 broken[at] = (state >> 24) as u8;
             }
             for parse in [CffFont::parse_cff, CffFont::parse_cff2] {
-                if let Some(font) = parse(&broken) {
+                if let Some(mut font) = parse(&broken) {
                     for glyph in 0..3 {
                         let mut steps = 10_000;
                         let _ = font.outline(glyph, &[], &mut steps, &mut Trace::default());

@@ -170,10 +170,9 @@ impl SruProvider {
         let plain = isbn.to_plain();
         match self.catalogue {
             Catalogue::Bnf => match isbn.to_isbn10() {
-                Ok(ten) => format!(
-                    "(bib.isbn all \"{}\" or bib.isbn all \"{plain}\")",
-                    ten.to_plain()
-                ),
+                Ok(ten) => {
+                    format!("(bib.isbn all \"{}\" or bib.isbn all \"{plain}\")", ten.to_plain())
+                }
                 Err(_) => format!("bib.isbn all \"{plain}\""),
             },
             Catalogue::Dnb => format!("num={plain}"),

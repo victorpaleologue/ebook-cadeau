@@ -128,7 +128,18 @@ pub fn combine(records: &[BookMeta]) -> Option<BookMeta> {
                 }
             )*};
         }
-        fill!(isbn13, subtitle, publisher, imprint, series, published, language, page_count, description, format);
+        fill!(
+            isbn13,
+            subtitle,
+            publisher,
+            imprint,
+            series,
+            published,
+            language,
+            page_count,
+            description,
+            format
+        );
         for contributor in &record.contributors {
             add_contributor(&mut out.contributors, contributor);
         }
@@ -145,8 +156,20 @@ pub fn combine(records: &[BookMeta]) -> Option<BookMeta> {
 
 /// Words that do not distinguish one publisher from another.
 const PUBLISHER_NOISE: [&str; 14] = [
-    "editions", "edition", "ed", "les", "the", "verlag", "gmbh", "co", "kg", "inc", "ltd",
-    "publishing", "publishers", "books",
+    "editions",
+    "edition",
+    "ed",
+    "les",
+    "the",
+    "verlag",
+    "gmbh",
+    "co",
+    "kg",
+    "inc",
+    "ltd",
+    "publishing",
+    "publishers",
+    "books",
 ];
 
 fn publisher_key(name: &str) -> String {
@@ -300,7 +323,8 @@ pub fn merge(records: &[BookMeta]) -> Option<BookMeta> {
             }
             let is_author = contributor.role == ContributorRole::Author;
             let confirmed = records.iter().enumerate().any(|(other, r)| {
-                other != index && r.contributors.iter().any(|c| same_person(&c.name, &contributor.name))
+                other != index
+                    && r.contributors.iter().any(|c| same_person(&c.name, &contributor.name))
             });
             if !is_author || !base_has_author || confirmed {
                 add_contributor(&mut contributors, contributor);

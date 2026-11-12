@@ -9,7 +9,7 @@ use crate::normalize;
 use crate::provider::{Parsed, Permission, Provider, ProviderInfo, SourceClass, finalize};
 use crate::providers::{format_from_text, get_json, unknown_request};
 use crate::util::{
-    Found, check_http, encode_component, isbns_in, jarr, jstr, jtext, jtexts, join, parse_json,
+    Found, check_http, encode_component, isbns_in, jarr, join, jstr, jtext, jtexts, parse_json,
     path, push_isbn, url_with_query,
 };
 
@@ -110,7 +110,8 @@ fn record(value: &serde_json::Value) -> Option<Extracted> {
             book.contributors.push(Contributor { name, role });
         }
     }
-    let url = jstr(value, "id").map(|id| format!("https://www.finna.fi/Record/{}", encode_component(id)));
+    let url =
+        jstr(value, "id").map(|id| format!("https://www.finna.fi/Record/{}", encode_component(id)));
     Some(Extracted { book, isbns, url })
 }
 

@@ -317,9 +317,8 @@ pub(crate) async fn put_cover(
         size_bytes: authed.body.len() as u64,
         media_type: media_type.to_owned(),
     };
-    state.put_blob(&blob.sha256, authed.body).await?;
     let receipt = serde_json::json!({ "sha256": blob.sha256, "size_bytes": blob.size_bytes, "media_type": blob.media_type });
-    state.attach_blob(&id, blob, true)?;
+    state.attach_blob(&id, blob, authed.body, true).await?;
     Ok(json(StatusCode::OK, &receipt))
 }
 

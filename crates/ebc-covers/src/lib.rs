@@ -56,7 +56,7 @@ pub use cascade::{
     SourceStatus, Use, candidates, page_candidate, page_image_candidates, source,
 };
 pub use ebc_model::CoverKind;
-pub use guard::{Refusal, check_url, is_denied_host};
+pub use guard::{Refusal, check_url, is_denied_host, is_public_ip};
 pub use placeholder::{Assessment, is_placeholder, is_placeholder_pixels};
 pub use quality::{Quality, Thresholds, Verdict, print_quality, print_quality_with};
 pub use rights::{AssetOrigin, Condition, Grant, Placement, PrintRoute, PrintableCover, RightsBasis};

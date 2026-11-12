@@ -11,6 +11,8 @@ use crate::gray::{Channel, Gray, Integral, noise_sigma, otsu};
 const MAX_CROP_H: usize = 480;
 /// Largest width of the analysed crop, in pixels.
 const MAX_CROP_W: usize = 2400;
+/// Percentile of the grey levels of stroke cores that is taken as the ink level.
+const INK_PERCENTILE: f32 = 0.2;
 /// Largest number of connected components considered in a region.
 const MAX_COMPONENTS: usize = 4000;
 
@@ -332,15 +334,34 @@ fn refine(g: &Gray, mask: &[u8], window: usize) -> Option<Gray> {
         }
     }
     let bg = Integral::new(g, Some(&background));
-    let ink = Integral::new(g, Some(&core));
     let far = w.max(h);
     let (n_bg, global_bg, _) = bg.window(w / 2, h / 2, far);
     if n_bg < 1.0 {
         return None;
     }
-    let (n_core, core_mean, _) = ink.window(w / 2, h / 2, far);
-    let global_ink = if n_core >= 20.0 {
-        core_mean
+    // The ink level is the dark plateau of the stroke cores: a low percentile, not the
+    // mean. Blurred thin strokes never reach the plateau, and a mean that includes them
+    // would stretch every stroke towards "bolder".
+    let mut hist = [0u32; 256];
+    let mut n_core = 0u32;
+    for (c, &v) in core.iter().zip(&g.px) {
+        if *c != 0 {
+            hist[usize::from(v)] += 1;
+            n_core += 1;
+        }
+    }
+    let global_ink = if n_core >= 20 {
+        let target = (n_core as f32 * INK_PERCENTILE).ceil().max(1.0) as u32;
+        let mut acc = 0u32;
+        let mut level = 0usize;
+        for (v, &c) in hist.iter().enumerate() {
+            acc += c;
+            if acc >= target {
+                level = v;
+                break;
+            }
+        }
+        level as f32
     } else {
         // Hairline strokes have no core: take the darkest third of the ink pixels.
         let mut values: Vec<u8> =
@@ -360,9 +381,7 @@ fn refine(g: &Gray, mask: &[u8], window: usize) -> Option<Gray> {
         for x in 0..w {
             let (nb, mb, _) = bg.window(x, y, r);
             let level_bg = if nb >= min_bg { mb } else { global_bg };
-            let (ni, mi, _) = ink.window(x, y, r);
-            let level_ink = if ni >= 30.0 { mi } else { global_ink };
-            let range = level_bg - level_ink;
+            let range = level_bg - global_ink;
             if range < 6.0 {
                 continue;
             }

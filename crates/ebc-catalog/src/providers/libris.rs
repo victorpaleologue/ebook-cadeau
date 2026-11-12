@@ -10,7 +10,7 @@ use crate::normalize;
 use crate::provider::{Parsed, Permission, Provider, ProviderInfo, SourceClass, finalize};
 use crate::providers::unknown_request;
 use crate::util::{
-    Found, check_http, isbns_in, jlist, jstr, jtext, join, parse_json, path, push_isbn,
+    Found, check_http, isbns_in, jlist, join, jstr, jtext, parse_json, path, push_isbn,
     url_with_query,
 };
 
@@ -76,9 +76,9 @@ fn agent_name(agent: &Value) -> Option<String> {
     match (jstr(agent, "givenName"), jstr(agent, "familyName")) {
         (Some(given), Some(family)) => Some(format!("{given} {family}")),
         (None, Some(family)) => Some(family.to_owned()),
-        _ => ["name", "label", "prefLabel"].iter().find_map(|k| {
-            jlist(agent.get(*k)).into_iter().find_map(|v| jtext(v, &[]))
-        }),
+        _ => ["name", "label", "prefLabel"]
+            .iter()
+            .find_map(|k| jlist(agent.get(*k)).into_iter().find_map(|v| jtext(v, &[]))),
     }
 }
 
@@ -95,10 +95,8 @@ fn instance(item: &Value) -> Option<Extracted> {
         }
     }
     let titles = jlist(item.get("hasTitle"));
-    let title = titles
-        .iter()
-        .find(|t| jstr(t, "@type") == Some("Title"))
-        .or_else(|| titles.first())?;
+    let title =
+        titles.iter().find(|t| jstr(t, "@type") == Some("Title")).or_else(|| titles.first())?;
     book.title = jlist(title.get("mainTitle")).into_iter().find_map(|v| jtext(v, &[]))?;
     book.subtitle = jlist(title.get("subtitle")).into_iter().find_map(|v| jtext(v, &[]));
 
@@ -108,8 +106,7 @@ fn instance(item: &Value) -> Option<Extracted> {
             jstr(language, "code").or_else(|| id_tail(language)).map(str::to_owned)
         });
         for contribution in jlist(work.get("contribution")) {
-            let Some(name) =
-                jlist(contribution.get("agent")).into_iter().find_map(agent_name)
+            let Some(name) = jlist(contribution.get("agent")).into_iter().find_map(agent_name)
             else {
                 continue;
             };
@@ -133,8 +130,7 @@ fn instance(item: &Value) -> Option<Extracted> {
         .find(|p| jstr(p, "@type") == Some("PrimaryPublication"))
         .or_else(|| publications.first())
     {
-        book.publisher =
-            jlist(publication.get("agent")).into_iter().find_map(agent_name);
+        book.publisher = jlist(publication.get("agent")).into_iter().find_map(agent_name);
         book.published = ["year", "date", "startYear"]
             .iter()
             .find_map(|k| publication.get(*k).and_then(|v| jtext(v, &[])))

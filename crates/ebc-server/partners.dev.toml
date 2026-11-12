@@ -1,0 +1,16 @@
+# Development partners for `EBC_PARTNERS` — the two fictional demo stores of demo/stores
+# (demo — not affiliated with any real retailer). Never use these secrets in production.
+
+[[partners]]
+id = "septante"                               # value of X-EBC-Partner
+name = "Septante (démo)"                      # shown to recipients
+secret = "dev-secret-septante-0123456789"     # signs requests, redirects and webhooks
+webhook_url = "http://127.0.0.1:8101/webhooks/ebc"
+redirect_hosts = ["127.0.0.1:8101"]           # hosts delivery URLs may point to
+
+[[partners]]
+id = "grande-enseigne"
+name = "Grande Enseigne (démo)"
+secret = "dev-secret-grande-enseigne-0123456789"
+webhook_url = "http://127.0.0.1:8102/webhooks/ebc"
+redirect_hosts = ["127.0.0.1:8102"]

@@ -137,10 +137,7 @@ impl CatalogError {
     /// `true` when trying again later can succeed (rate limit, outage, transport failure).
     #[must_use]
     pub fn is_transient(&self) -> bool {
-        matches!(
-            self,
-            Self::RateLimited { .. } | Self::Unavailable { .. } | Self::Transport { .. }
-        )
+        matches!(self, Self::RateLimited { .. } | Self::Unavailable { .. } | Self::Transport { .. })
     }
 
     /// Seconds the server asked to wait before retrying, if it said.

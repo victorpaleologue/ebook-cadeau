@@ -16,7 +16,7 @@ use crate::marc::{Extracted, role_from_term};
 use crate::provider::{Parsed, Permission, Provider, ProviderInfo, SourceClass, finalize};
 use crate::providers::{format_from_text, fragment, get_json, unknown_request};
 use crate::util::{
-    Found, check_http, isbns_in, jarr, jlist, jnum, jstr, jtext, jtexts, join, parse_json, path,
+    Found, check_http, isbns_in, jarr, jlist, jnum, join, jstr, jtext, jtexts, parse_json, path,
     push_isbn, url_with_query,
 };
 
@@ -82,7 +82,9 @@ impl OpenLibrary {
             .and_then(|rest| rest.strip_prefix("OL"))
             .and_then(|rest| rest.strip_suffix(suffix))
             .is_some_and(|digits| {
-                !digits.is_empty() && digits.len() <= 12 && digits.bytes().all(|b| b.is_ascii_digit())
+                !digits.is_empty()
+                    && digits.len() <= 12
+                    && digits.bytes().all(|b| b.is_ascii_digit())
             })
     }
 
@@ -90,7 +92,11 @@ impl OpenLibrary {
         get_json(format!("{}.json", join(&self.base, key)))
     }
 
-    fn parse_edition(&self, isbn: &Isbn13, response: &HttpResponse) -> Result<Parsed, CatalogError> {
+    fn parse_edition(
+        &self,
+        isbn: &Isbn13,
+        response: &HttpResponse,
+    ) -> Result<Parsed, CatalogError> {
         let json = parse_json(INFO.id, response)?;
         let Some(object) = json.as_object() else {
             return Err(CatalogError::Malformed {
@@ -171,9 +177,8 @@ impl OpenLibrary {
         book.publisher = jtexts(details, "publishers", &["name"]).into_iter().next();
         book.published = jstr(details, "publish_date").map(str::to_owned);
         book.language = jtexts(details, "languages", &["key"]).into_iter().next();
-        book.page_count = jnum(details.get("number_of_pages")).or_else(|| {
-            jstr(details, "pagination").and_then(crate::normalize::page_count)
-        });
+        book.page_count = jnum(details.get("number_of_pages"))
+            .or_else(|| jstr(details, "pagination").and_then(crate::normalize::page_count));
         book.series = jtexts(details, "series", &["name"]).into_iter().next();
         book.description = details.get("description").and_then(|d| jtext(d, &["value"]));
         book.subjects = jtexts(details, "subjects", &["name"]);
@@ -225,8 +230,10 @@ impl OpenLibrary {
         }
         match jstr(&json, "name").or_else(|| jstr(&json, "personal_name")) {
             Some(name) => {
-                let book =
-                    BookMeta { contributors: vec![Contributor::author(name)], ..BookMeta::default() };
+                let book = BookMeta {
+                    contributors: vec![Contributor::author(name)],
+                    ..BookMeta::default()
+                };
                 parsed.records.push(fragment(isbn, book));
             }
             None => parsed.notes.push("an author record has no name".to_owned()),
@@ -250,7 +257,10 @@ impl OpenLibrary {
         }
         let book = BookMeta {
             description: json.get("description").and_then(|d| jtext(d, &["value"])),
-            subjects: jlist(json.get("subjects")).into_iter().filter_map(|s| jtext(s, &[])).collect(),
+            subjects: jlist(json.get("subjects"))
+                .into_iter()
+                .filter_map(|s| jtext(s, &[]))
+                .collect(),
             ..BookMeta::default()
         };
         if book.description.is_some() || !book.subjects.is_empty() {

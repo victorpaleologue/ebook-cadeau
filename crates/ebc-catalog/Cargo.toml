@@ -37,5 +37,9 @@ required-features = ["client"]
 name = "client"
 required-features = ["client"]
 
+[[test]]
+name = "live"
+required-features = ["client"]
+
 [lints]
 workspace = true

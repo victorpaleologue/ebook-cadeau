@@ -132,7 +132,8 @@ impl Provider for Wikidata {
             return Err(CatalogError::Status { provider: INFO.id, status: response.status });
         }
         let json = parse_json(INFO.id, response)?;
-        let Some(results) = json.get("results").filter(|r| r.get("bindings").is_some_and(Value::is_array))
+        let Some(results) =
+            json.get("results").filter(|r| r.get("bindings").is_some_and(Value::is_array))
         else {
             return Err(CatalogError::Malformed {
                 provider: INFO.id,
@@ -173,9 +174,9 @@ impl Provider for Wikidata {
                     push_unique(list, value);
                 }
             }
-            book.publisher = book
-                .publisher
-                .or_else(|| binding(row, "publisherLabel").filter(|p| !is_qid(p)).map(str::to_owned));
+            book.publisher = book.publisher.or_else(|| {
+                binding(row, "publisherLabel").filter(|p| !is_qid(p)).map(str::to_owned)
+            });
             book.published = book.published.or_else(|| {
                 binding(row, "date").and_then(|date| {
                     // Year-precision dates are served as 1 January, midnight.

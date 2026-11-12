@@ -70,7 +70,7 @@
           <datafield tag="830" ind1=" " ind2="0">
             <subfield code="a">Penguin classics.</subfield>
           </datafield>
-        </zs:record>
+        </record>
       </zs:recordData>
       <zs:recordPosition>1</zs:recordPosition>
     </zs:record>

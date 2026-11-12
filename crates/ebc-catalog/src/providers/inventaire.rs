@@ -19,7 +19,7 @@ use crate::marc::Extracted;
 use crate::provider::{Parsed, Permission, Provider, ProviderInfo, SourceClass, finalize};
 use crate::providers::{fragment, get_json, is_qid, unknown_request};
 use crate::util::{
-    Found, check_http, context, isbns_in, jlist, jstr, jtext, join, parse_json, path, push_isbn,
+    Found, check_http, context, isbns_in, jlist, join, jstr, jtext, parse_json, path, push_isbn,
     query_param, url_with_query, with_context,
 };
 
@@ -253,7 +253,9 @@ impl Provider for Inventaire {
                                 }
                             }
                         }
-                        Some("publisher") => book.publisher = book.publisher.or_else(|| label(entity)),
+                        Some("publisher") => {
+                            book.publisher = book.publisher.or_else(|| label(entity))
+                        }
                         Some("collection") => book.series = book.series.or_else(|| label(entity)),
                         Some("human") => {
                             if let Some(name) = label(entity) {

@@ -24,7 +24,11 @@ use ebc_catalog::{
 use ebc_model::{BookFormat, BookMeta, ContributorRole, HttpRequest, HttpResponse};
 
 /// Parses `response` as the answer to the provider's first request.
-fn parse_first(provider: &dyn Provider, isbn_text: &str, response: &HttpResponse) -> Result<Parsed, CatalogError> {
+fn parse_first(
+    provider: &dyn Provider,
+    isbn_text: &str,
+    response: &HttpResponse,
+) -> Result<Parsed, CatalogError> {
     let isbn = isbn(isbn_text);
     let request = provider.lookup(&isbn).into_iter().next().expect("one request");
     provider.parse(&isbn, &request, response)
@@ -94,7 +98,10 @@ fn request_urls_follow_the_research() {
         first_url(&GoogleBooks::new(None), FR),
         "https://www.googleapis.com/books/v1/volumes?q=isbn%3A9782070360024&maxResults=5"
     );
-    assert_eq!(first_url(&Libris::new(), FR), "https://libris.kb.se/find.jsonld?q=9782070360024&_limit=5");
+    assert_eq!(
+        first_url(&Libris::new(), FR),
+        "https://libris.kb.se/find.jsonld?q=9782070360024&_limit=5"
+    );
     assert!(first_url(&Finna::new(), FR).starts_with(
         "https://api.finna.fi/api/v1/search?lookfor=9782070360024&type=AllFields&limit=5&field%5B%5D=id&field%5B%5D=title"
     ));
@@ -102,7 +109,10 @@ fn request_urls_follow_the_research() {
         first_url(&Lobid::new(), DE),
         "https://lobid.org/resources/search?q=isbn%3A9783596294312&format=json&size=5"
     );
-    assert_eq!(first_url(&Sudoc::new(), FR), "https://www.sudoc.fr/services/isbn2ppn/9782070360024");
+    assert_eq!(
+        first_url(&Sudoc::new(), FR),
+        "https://www.sudoc.fr/services/isbn2ppn/9782070360024"
+    );
     assert_eq!(
         first_url(&Inventaire::new(), FR),
         "https://inventaire.io/api/entities?action=by-uris&uris=isbn%3A9782070360024"
@@ -153,10 +163,14 @@ fn base_urls_can_be_overridden_for_every_provider() {
     }
     // Follow-up requests stay on the overridden base.
     let provider = OpenLibrary::new().with_base_url("http://127.0.0.1:8080/ol/");
-    let parsed = parse_first(&provider, FR, &ok("openlibrary/etranger-author-keys.json")).expect("parses");
+    let parsed =
+        parse_first(&provider, FR, &ok("openlibrary/etranger-author-keys.json")).expect("parses");
     assert_eq!(
         parsed.follow_up.iter().map(wire_url).collect::<Vec<_>>(),
-        ["http://127.0.0.1:8080/ol/authors/OL124171A.json", "http://127.0.0.1:8080/ol/authors/OL9999999A.json"]
+        [
+            "http://127.0.0.1:8080/ol/authors/OL124171A.json",
+            "http://127.0.0.1:8080/ol/authors/OL9999999A.json"
+        ]
     );
 }
 
@@ -193,9 +207,17 @@ fn bnf_unimarc_prefers_the_most_recent_record_and_cleans_it() {
     assert_eq!(book.series.as_deref(), Some("Folio"));
     assert!(book.related_isbns.is_empty());
     let source = &book.sources[0];
-    assert_eq!(source.record_url.as_deref(), Some("https://catalogue.bnf.fr/ark:/12148/cb44321021n"));
+    assert_eq!(
+        source.record_url.as_deref(),
+        Some("https://catalogue.bnf.fr/ark:/12148/cb44321021n")
+    );
     assert_eq!(source.licence.as_deref(), Some("etalab-2.0"));
-    assert!(source.attribution.as_deref().is_some_and(|a| a.contains("Bibliothèque nationale de France")));
+    assert!(
+        source
+            .attribution
+            .as_deref()
+            .is_some_and(|a| a.contains("Bibliothèque nationale de France"))
+    );
 }
 
 #[test]
@@ -229,7 +251,10 @@ fn bnf_latin1_and_minimal_records() {
     let minimal = one_record(&SruProvider::bnf(), FR, "bnf/minimal.xml");
     assert_eq!(minimal.title, "L'étranger");
     assert!(minimal.contributors.is_empty());
-    assert_eq!((minimal.publisher, minimal.published, minimal.language, minimal.page_count), (None, None, None, None));
+    assert_eq!(
+        (minimal.publisher, minimal.published, minimal.language, minimal.page_count),
+        (None, None, None, None)
+    );
 }
 
 #[test]
@@ -243,7 +268,9 @@ fn bnf_not_found_other_isbn_and_diagnostics() {
     assert!(other.notes.iter().any(|n| n.contains("another ISBN") && n.contains("9782080700124")));
 
     let error = parse_first(&bnf, FR, &ok("bnf/diagnostic.xml")).expect_err("diagnostic");
-    assert!(matches!(&error, CatalogError::Remote { provider: "bnf", message } if message.contains("Query syntax error")));
+    assert!(
+        matches!(&error, CatalogError::Remote { provider: "bnf", message } if message.contains("Query syntax error"))
+    );
     assert!(!error.is_transient());
 }
 
@@ -304,7 +331,11 @@ fn k10plus_marc21() {
         book.sources[0].record_url.as_deref(),
         Some("https://opac.k10plus.de/DB=2.299/PPNSET?PPN=66554433X")
     );
-    assert!(parse_first(&SruProvider::k10plus(), DE, &ok("k10plus/not-found.xml")).expect("parses").is_empty());
+    assert!(
+        parse_first(&SruProvider::k10plus(), DE, &ok("k10plus/not-found.xml"))
+            .expect("parses")
+            .is_empty()
+    );
 }
 
 #[test]
@@ -339,7 +370,11 @@ fn openlibrary_details_in_one_request() {
     assert_eq!(book.page_count, Some(185));
     assert_eq!(book.series.as_deref(), Some("Folio"), "\"Collection Folio ; 2\"");
     assert_eq!(book.format, Some(BookFormat::Paperback));
-    assert_eq!(book.description.as_deref(), Some("Roman écrit en 1940, publié en 1942."), "HTML is stripped");
+    assert_eq!(
+        book.description.as_deref(),
+        Some("Roman écrit en 1940, publié en 1942."),
+        "HTML is stripped"
+    );
     assert_eq!(book.subjects.len(), 2);
     assert_eq!(book.covers.len(), 1, "the -1 placeholder is not a cover");
     assert_eq!(book.covers[0].url, "https://covers.openlibrary.org/b/id/8231856-L.jpg");
@@ -376,7 +411,10 @@ fn openlibrary_follows_up_for_author_names() {
     assert_eq!(book.title, "L'étranger", "title_prefix + title");
     assert_eq!(
         roles(&book),
-        [("Albert Camus", &ContributorRole::Author), ("Jean-Paul Sartre", &ContributorRole::Preface)],
+        [
+            ("Albert Camus", &ContributorRole::Author),
+            ("Jean-Paul Sartre", &ContributorRole::Preface)
+        ],
         "authors come first although their names arrived last"
     );
     assert_eq!(book.sources.len(), 1);
@@ -402,14 +440,20 @@ fn openlibrary_asks_the_work_when_the_edition_has_no_author() {
 #[test]
 fn openlibrary_not_found_and_wrong_answers() {
     let provider = OpenLibrary::new();
-    assert!(parse_first(&provider, FR, &ok("openlibrary/not-found.json")).expect("parses").is_empty());
+    assert!(
+        parse_first(&provider, FR, &ok("openlibrary/not-found.json")).expect("parses").is_empty()
+    );
     let other = parse_first(&provider, FR, &ok("openlibrary/other-isbn.json")).expect("parses");
     assert!(other.records.is_empty() && other.notes.len() == 1);
     let wrong = parse_first(&provider, FR, &ok("openlibrary/wrong-edition.json")).expect("parses");
     assert!(wrong.records.is_empty() && wrong.notes.len() == 1);
     // A linked author that no longer exists is not an error.
     let request = HttpRequest::get("https://openlibrary.org/authors/OL124171A.json");
-    let gone = provider.parse(&isbn(FR), &request, &response(404, "text/html", b"<html>Not found</html>".to_vec()));
+    let gone = provider.parse(
+        &isbn(FR),
+        &request,
+        &response(404, "text/html", b"<html>Not found</html>".to_vec()),
+    );
     assert!(gone.expect("tolerated").records.is_empty());
 }
 
@@ -435,21 +479,32 @@ fn googlebooks_volumes() {
     );
     assert_eq!(book.subjects, ["Fiction"]);
     assert_eq!(book.covers.len(), 2);
-    assert!(book.covers[0].url.starts_with("https://books.google.com/books/content?id=sfUsAAAAYAAJ"));
+    assert!(
+        book.covers[0].url.starts_with("https://books.google.com/books/content?id=sfUsAAAAYAAJ")
+    );
     assert!(book.covers[0].url.contains("zoom=1"), "the larger image comes first");
     let source = &book.sources[0];
     assert_eq!(source.attribution.as_deref(), Some("Powered by Google"));
     assert_eq!(source.licence, None);
-    assert!(source.record_url.as_deref().is_some_and(|u| u.starts_with("https://books.google.com/")));
+    assert!(
+        source.record_url.as_deref().is_some_and(|u| u.starts_with("https://books.google.com/"))
+    );
 
     let ebook = one_record(&provider, DE, "googlebooks/verwandlung-ebook.json");
     assert_eq!(ebook.format, Some(BookFormat::Ebook));
     assert_eq!(ebook.subtitle.as_deref(), Some("Erzählung"));
     assert_eq!(ebook.published.as_deref(), Some("2011-05-12"));
 
-    assert!(parse_first(&provider, FR, &ok("googlebooks/not-found.json")).expect("parses").is_empty());
+    assert!(
+        parse_first(&provider, FR, &ok("googlebooks/not-found.json")).expect("parses").is_empty()
+    );
     // The German fixture answers a French query: nothing is kept.
-    assert!(parse_first(&provider, FR, &ok("googlebooks/verwandlung-ebook.json")).expect("parses").records.is_empty());
+    assert!(
+        parse_first(&provider, FR, &ok("googlebooks/verwandlung-ebook.json"))
+            .expect("parses")
+            .records
+            .is_empty()
+    );
 }
 
 #[test]
@@ -457,17 +512,25 @@ fn googlebooks_error_envelopes() {
     let provider = GoogleBooks::new(Some("SECRET".to_owned()));
     let quota = response(403, "application/json; charset=UTF-8", fixture("googlebooks/quota.json"));
     let error = parse_first(&provider, FR, &quota).expect_err("quota");
-    assert!(matches!(error, CatalogError::RateLimited { provider: "googlebooks", status: 403, .. }));
+    assert!(matches!(
+        error,
+        CatalogError::RateLimited { provider: "googlebooks", status: 403, .. }
+    ));
     assert!(error.is_transient());
 
-    let key = response(400, "application/json; charset=UTF-8", fixture("googlebooks/key-invalid.json"));
+    let key =
+        response(400, "application/json; charset=UTF-8", fixture("googlebooks/key-invalid.json"));
     let error = parse_first(&provider, FR, &key).expect_err("bad key");
-    assert!(matches!(&error, CatalogError::Unauthorized { message, .. } if message.contains("API key not valid")));
+    assert!(
+        matches!(&error, CatalogError::Unauthorized { message, .. } if message.contains("API key not valid"))
+    );
     assert!(!error.to_string().contains("SECRET"), "the key never appears in an error");
 
     // parse() refuses a request it did not issue, without leaking the key either.
     let foreign = HttpRequest::get("https://www.googleapis.com/other?key=SECRET");
-    let error = provider.parse(&isbn(FR), &foreign, &ok("googlebooks/not-found.json")).expect_err("unknown");
+    let error = provider
+        .parse(&isbn(FR), &foreign, &ok("googlebooks/not-found.json"))
+        .expect_err("unknown");
     assert!(!error.to_string().contains("SECRET"), "{error}");
 }
 
@@ -488,7 +551,10 @@ fn wikidata_sparql_results() {
     assert_eq!(book.published.as_deref(), Some("1971"), "a year-precision date, not 1 January");
     assert_eq!(book.language.as_deref(), Some("fr"));
     assert_eq!(book.page_count, Some(185));
-    assert_eq!(book.sources[0].record_url.as_deref(), Some("https://www.wikidata.org/wiki/Q112233445"));
+    assert_eq!(
+        book.sources[0].record_url.as_deref(),
+        Some("https://www.wikidata.org/wiki/Q112233445")
+    );
 
     let parsed = parse_first(&Wikidata::new(), EN, &ok("wikidata/pride.json")).expect("parses");
     assert!(parsed.notes.iter().any(|n| n.contains("several")));
@@ -496,15 +562,27 @@ fn wikidata_sparql_results() {
     assert_eq!(parsed.records[0].published.as_deref(), Some("2003-01-30"));
     assert_eq!(parsed.records[0].author_line().as_deref(), Some("Jane Austen"));
 
-    assert!(parse_first(&Wikidata::new(), FR, &ok("wikidata/not-found.json")).expect("parses").is_empty());
-    assert!(parse_first(&Wikidata::new(), FR, &ok("wikidata/other-isbn.json")).expect("parses").records.is_empty());
+    assert!(
+        parse_first(&Wikidata::new(), FR, &ok("wikidata/not-found.json"))
+            .expect("parses")
+            .is_empty()
+    );
+    assert!(
+        parse_first(&Wikidata::new(), FR, &ok("wikidata/other-isbn.json"))
+            .expect("parses")
+            .records
+            .is_empty()
+    );
 }
 
 #[test]
 fn inventaire_three_steps() {
     let routes = Routes::of(&[
         ("uris=isbn%3A9782070360024", "inventaire/edition.json"),
-        ("uris=wd%3AQ11142%7Cwd%3AQ1492608%7Cinv%3A00112233445566778899aabbccddeeff", "inventaire/refs.json"),
+        (
+            "uris=wd%3AQ11142%7Cwd%3AQ1492608%7Cinv%3A00112233445566778899aabbccddeeff",
+            "inventaire/refs.json",
+        ),
         ("uris=wd%3AQ34670", "inventaire/authors.json"),
     ]);
     let outcome = drive(&Inventaire::new(), &isbn(FR), routes.exec(), 6).expect("found");
@@ -517,10 +595,20 @@ fn inventaire_three_steps() {
     assert_eq!(book.published.as_deref(), Some("1971"));
     assert_eq!(book.language.as_deref(), Some("fr"), "wd:Q150");
     assert_eq!(book.page_count, Some(185));
-    assert_eq!(book.covers[0].url, "https://inventaire.io/img/entities/3f2a9c1de0b54a7f8c6d1e2f3a4b5c6d7e8f9a0b");
-    assert_eq!(book.sources[0].record_url.as_deref(), Some("https://inventaire.io/entity/isbn:9782070360024"));
+    assert_eq!(
+        book.covers[0].url,
+        "https://inventaire.io/img/entities/3f2a9c1de0b54a7f8c6d1e2f3a4b5c6d7e8f9a0b"
+    );
+    assert_eq!(
+        book.sources[0].record_url.as_deref(),
+        Some("https://inventaire.io/entity/isbn:9782070360024")
+    );
 
-    assert!(parse_first(&Inventaire::new(), FR, &ok("inventaire/not-found.json")).expect("parses").is_empty());
+    assert!(
+        parse_first(&Inventaire::new(), FR, &ok("inventaire/not-found.json"))
+            .expect("parses")
+            .is_empty()
+    );
 }
 
 // ---------------------------------------------------------------------------------------
@@ -540,7 +628,9 @@ fn libris_json_ld() {
     assert_eq!(book.page_count, Some(185), "\"185, [2] s.\"");
     assert_eq!(book.series.as_deref(), Some("Folio"));
     assert_eq!(book.sources[0].record_url.as_deref(), Some("https://libris.kb.se/q7xz5dkc0t2wvnh"));
-    assert!(parse_first(&Libris::new(), FR, &ok("libris/not-found.jsonld")).expect("parses").is_empty());
+    assert!(
+        parse_first(&Libris::new(), FR, &ok("libris/not-found.jsonld")).expect("parses").is_empty()
+    );
 }
 
 #[test]
@@ -549,7 +639,10 @@ fn finna_search() {
     assert_eq!(book.title, "L'étranger");
     assert_eq!(
         roles(&book),
-        [("Albert Camus", &ContributorRole::Author), ("Kalle Kiviniemi", &ContributorRole::Translator)]
+        [
+            ("Albert Camus", &ContributorRole::Author),
+            ("Kalle Kiviniemi", &ContributorRole::Translator)
+        ]
     );
     assert_eq!(book.publisher.as_deref(), Some("Gallimard"));
     assert_eq!(book.published.as_deref(), Some("1971"));
@@ -560,7 +653,9 @@ fn finna_search() {
         book.sources[0].record_url.as_deref(),
         Some("https://www.finna.fi/Record/helka.9916548763506253")
     );
-    assert!(parse_first(&Finna::new(), FR, &ok("finna/not-found.json")).expect("parses").is_empty());
+    assert!(
+        parse_first(&Finna::new(), FR, &ok("finna/not-found.json")).expect("parses").is_empty()
+    );
     assert!(matches!(
         parse_first(&Finna::new(), FR, &ok("finna/error.json")),
         Err(CatalogError::Remote { message, .. }) if message == "Invalid search type"
@@ -586,7 +681,9 @@ fn lobid_search() {
         book.sources[0].record_url.as_deref(),
         Some("http://lobid.org/resources/990123456780206441")
     );
-    assert!(parse_first(&Lobid::new(), DE, &ok("lobid/not-found.json")).expect("parses").is_empty());
+    assert!(
+        parse_first(&Lobid::new(), DE, &ok("lobid/not-found.json")).expect("parses").is_empty()
+    );
 }
 
 #[test]
@@ -602,10 +699,17 @@ fn sudoc_two_steps() {
     assert_eq!(book.title, "L'étranger", "the PICA \"@\" filing mark is gone");
     assert_eq!(
         roles(&book),
-        [("Albert Camus", &ContributorRole::Author), ("Marie Dupont", &ContributorRole::Illustrator)]
+        [
+            ("Albert Camus", &ContributorRole::Author),
+            ("Marie Dupont", &ContributorRole::Illustrator)
+        ]
     );
     assert_eq!(book.publisher.as_deref(), Some("Gallimard"));
-    assert_eq!(book.published.as_deref(), Some("1984"), "\"impr. 1984, cop. 1942\": printing beats copyright");
+    assert_eq!(
+        book.published.as_deref(),
+        Some("1984"),
+        "\"impr. 1984, cop. 1942\": printing beats copyright"
+    );
     assert_eq!(book.page_count, Some(185));
     assert_eq!(book.series.as_deref(), Some("Folio"));
     let urls: Vec<_> = book.sources.iter().filter_map(|s| s.record_url.as_deref()).collect();
@@ -626,7 +730,8 @@ fn sudoc_two_steps() {
 
 #[test]
 fn crossref_works() {
-    let parsed = parse_first(&Crossref::new(None), SCHOLARLY, &ok("crossref/book.json")).expect("parses");
+    let parsed =
+        parse_first(&Crossref::new(None), SCHOLARLY, &ok("crossref/book.json")).expect("parses");
     assert!(parsed.notes.iter().any(|n| n.contains("not whole books")), "the chapter is skipped");
     let book = &parsed.records[0];
     assert_eq!(book.title, "Reading the Absurd");
@@ -639,9 +744,16 @@ fn crossref_works() {
     assert_eq!(book.published.as_deref(), Some("2019-05-02"));
     assert_eq!(book.language.as_deref(), Some("en"));
     assert_eq!(book.related_isbns, [isbn(EN)], "the other ISBN of the record is kept as related");
-    assert_eq!(book.sources[0].record_url.as_deref(), Some("https://doi.org/10.5555/9780061120084"));
+    assert_eq!(
+        book.sources[0].record_url.as_deref(),
+        Some("https://doi.org/10.5555/9780061120084")
+    );
 
-    assert!(parse_first(&Crossref::new(None), SCHOLARLY, &ok("crossref/not-found.json")).expect("parses").is_empty());
+    assert!(
+        parse_first(&Crossref::new(None), SCHOLARLY, &ok("crossref/not-found.json"))
+            .expect("parses")
+            .is_empty()
+    );
     assert!(matches!(
         parse_first(&Crossref::new(None), SCHOLARLY, &ok("crossref/failed.json")),
         Err(CatalogError::Remote { message, .. }) if message.contains("no such filter")
@@ -659,10 +771,14 @@ fn every_provider_reports_rate_limits_outages_and_wrong_formats() {
         let provider = provider_by_id(id, &config).expect("known id");
         let provider = provider.as_ref();
 
-        let mut limited = response(429, "application/json", fixture("common/too-many-requests.json"));
+        let mut limited =
+            response(429, "application/json", fixture("common/too-many-requests.json"));
         limited.headers.push(("Retry-After".to_owned(), "30".to_owned()));
         let error = parse_first(provider, FR, &limited).expect_err("429");
-        assert!(matches!(error, CatalogError::RateLimited { status: 429, retry_after_s: Some(30), .. }), "{id}: {error:?}");
+        assert!(
+            matches!(error, CatalogError::RateLimited { status: 429, retry_after_s: Some(30), .. }),
+            "{id}: {error:?}"
+        );
         assert_eq!(error.provider(), id);
         assert!(error.is_transient());
         assert_eq!(error.retry_after_s(), Some(30));
@@ -684,22 +800,39 @@ fn every_provider_reports_rate_limits_outages_and_wrong_formats() {
 
         let empty = response(200, "application/octet-stream", Vec::new());
         let error = parse_first(provider, FR, &empty).expect_err("empty");
-        assert!(matches!(error, CatalogError::UnexpectedContent { found: "an empty body", .. }), "{id}: {error:?}");
+        assert!(
+            matches!(error, CatalogError::UnexpectedContent { found: "an empty body", .. }),
+            "{id}: {error:?}"
+        );
 
         let forbidden = response(403, "text/plain", b"Forbidden".to_vec());
         let error = parse_first(provider, FR, &forbidden).expect_err("403");
         assert!(matches!(error, CatalogError::Unauthorized { status: 403, .. }), "{id}: {error:?}");
 
         let teapot = response(418, "text/plain", b"I'm a teapot".to_vec());
-        assert!(matches!(parse_first(provider, FR, &teapot), Err(CatalogError::Status { status: 418, .. })), "{id}");
+        assert!(
+            matches!(
+                parse_first(provider, FR, &teapot),
+                Err(CatalogError::Status { status: 418, .. })
+            ),
+            "{id}"
+        );
 
         let huge = response(200, "application/json", vec![b' '; 2 * 1024 * 1024 + 1]);
-        assert!(matches!(parse_first(provider, FR, &huge), Err(CatalogError::TooLarge { .. })), "{id}");
+        assert!(
+            matches!(parse_first(provider, FR, &huge), Err(CatalogError::TooLarge { .. })),
+            "{id}"
+        );
 
         // Well-formed but not the documented structure.
-        for (content_type, body) in [("application/json", &b"[1, 2, 3]"[..]), ("application/xml", &b"<unrelated/>"[..])] {
+        for (content_type, body) in
+            [("application/json", &b"[1, 2, 3]"[..]), ("application/xml", &b"<unrelated/>"[..])]
+        {
             let odd = response(200, content_type, body.to_vec());
-            assert!(parse_first(provider, FR, &odd).is_err(), "{id}: {content_type} must not be read as \"not found\"");
+            assert!(
+                parse_first(provider, FR, &odd).is_err(),
+                "{id}: {content_type} must not be read as \"not found\""
+            );
         }
     }
 }

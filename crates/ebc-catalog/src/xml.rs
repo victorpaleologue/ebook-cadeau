@@ -148,8 +148,7 @@ pub(crate) fn parse_xml_text(provider: &'static str, text: &str) -> Result<Node,
     let mut reader = Reader::from_str(text.trim_start_matches('\u{FEFF}'));
     let mut stack: Vec<Node> = Vec::new();
     let mut root: Option<Node> = None;
-    let attach = |stack: &mut Vec<Node>, root: &mut Option<Node>, node: Node| match stack
-        .last_mut()
+    let attach = |stack: &mut Vec<Node>, root: &mut Option<Node>, node: Node| match stack.last_mut()
     {
         Some(parent) => parent.children.push(node),
         None => {
@@ -387,10 +386,8 @@ mod tests {
 
     #[test]
     fn external_entities_are_not_expanded() {
-        let root = parse(
-            r#"<!DOCTYPE a [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><a>&xxe;</a>"#,
-        )
-        .expect("parses");
+        let root = parse(r#"<!DOCTYPE a [<!ENTITY xxe SYSTEM "file:///etc/passwd">]><a>&xxe;</a>"#)
+            .expect("parses");
         assert_eq!(root.text, "&xxe;");
     }
 
@@ -434,7 +431,9 @@ mod tests {
         )
         .expect("parses");
         let error = sru_records("test", &root).expect_err("diagnostic");
-        assert!(matches!(&error, CatalogError::Remote { message, .. } if message.contains("syntax")));
+        assert!(
+            matches!(&error, CatalogError::Remote { message, .. } if message.contains("syntax"))
+        );
         let other = parse("<explainResponse/>").expect("parses");
         assert!(matches!(sru_records("test", &other), Err(CatalogError::Malformed { .. })));
     }

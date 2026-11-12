@@ -286,7 +286,9 @@ mod tests {
         // Scans made at exactly 300 ppi on inch-based sizes: 6 x 9 in and 3 x 7 in.
         for (px, w, h) in [((1800, 2700), 152.4, 228.6), ((900, 2100), 76.2, 177.8)] {
             let ppi = effective_ppi(px, Rect::new(0.0, 0.0, w, h));
-            assert!((ppi - 300.0).abs() < 1e-9, "{px:?}: {ppi:?}");
+            // Exactly: multiplying before dividing leaves no rounding error here
+            // (`1800.0 / (152.4 / 25.4)` would be 299.99999999999994).
+            assert_eq!(ppi, 300.0, "{px:?}");
         }
     }
 }

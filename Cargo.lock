@@ -828,6 +828,7 @@ dependencies = [
  "ebc-i18n",
  "ebc-layout",
  "ebc-model",
+ "ebc-pdf",
  "ebc-scene",
  "ebc-text",
  "thiserror",

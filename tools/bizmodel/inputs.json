@@ -1,0 +1,535 @@
+{
+  "meta": {
+    "title": "eBook Cadeau business model inputs",
+    "as_of": "2026-11-12",
+    "currency": "EUR",
+    "simulation_start": "2027-01 (month 1 = January 2027, so months 12, 24 and 36 are Decembers)",
+    "warning": "No value in this file is a quote. The research pages were read as search-result extracts only and the three fact-checkers could not run a single web search, so nothing was re-verified at source. Values tagged 'assumption' have no source at all.",
+    "fields": {
+      "low / base / high": "Range used by the model. Monte Carlo draws a triangular distribution over it; 'low' is the numerically smaller value, not necessarily the pessimistic one.",
+      "role": "'decision' = a price or budget the owner chooses (held at base in Monte Carlo, swung in the tornado); 'uncertain' = an unknown of the world; 'fixed' = a single value (tariff or legal rate).",
+      "vat": "'HT' = quoted excluding VAT: the model adds 20 % when the business is under the VAT franchise (micro-entreprise) and cannot recover it. 'TTC' = consumer price including VAT. 'none' = not a VAT-bearing amount, or VAT status unknown and taken as is.",
+      "confidence": "V2 = two independent sources in the research; V1 = one source; M = researcher's memory; derived = arithmetic on other rows; assumption = planning value with no source.",
+      "factcheck": "Present when the fact-check report changed or contested the value. The fact-check wins where it rests on arithmetic or on the repository; where it rests on the checker's memory the conflicting figures are kept as the range."
+    },
+    "documents": {
+      "R12": "docs/research/12-market-and-business-inputs.md",
+      "FC12": "docs/research/factcheck/market-business.md",
+      "R04": "docs/research/04-printers.md",
+      "FC04": "docs/research/factcheck/printers.md",
+      "R09": "docs/research/09-legal-gifting-and-commerce.md",
+      "FC09": "docs/research/factcheck/legal-gifting-commerce.md",
+      "STATUS": "docs/STATUS.md",
+      "MODEL": "introduced by this model; no research source"
+    }
+  },
+  "inputs": {
+    "price_paid_pdf": {
+      "low": 0.99, "base": 1.99, "high": 2.99, "unit": "EUR per PDF, incl. VAT", "role": "decision", "vat": "TTC",
+      "confidence": "assumption", "source": "R12", "section": "5.4 Price points to test",
+      "note": "Only used by the 'small fee' variant of scenario A. R12 tests 0 / 0 / 1.99 (anchor: Popcarte virtual card from 1.99); 0.99 and 2.99 are this model's bracket. The free variant ignores it."
+    },
+    "price_mailed_card": {
+      "low": 4.90, "base": 6.90, "high": 8.90, "unit": "EUR per card, incl. VAT and postage", "role": "decision", "vat": "TTC",
+      "confidence": "assumption", "source": "R12", "section": "5.4 Price points to test",
+      "note": "Benchmark for a folded card mailed in France: 3.7 / 4.3 / 6.9 (R12 5.1)."
+    },
+    "price_reseller_fee_per_card": {
+      "low": 0.20, "base": 0.30, "high": 0.50, "unit": "EUR per card generated, excl. VAT", "role": "decision", "vat": "HT",
+      "confidence": "assumption", "source": "R12", "section": "5.4 Price points to test",
+      "note": "No public comparable found."
+    },
+    "price_reseller_monthly_minimum": {
+      "low": 99, "base": 200, "high": 499, "unit": "EUR per reseller per month, excl. VAT", "role": "decision", "vat": "HT",
+      "confidence": "assumption", "source": "R12", "section": "5.4 Price points to test (reseller flat licence)",
+      "note": "R12 prices a flat licence; the model uses the same amounts as the monthly minimum of a metered fee: invoice = max(minimum, cards x fee)."
+    },
+    "price_author_plan": {
+      "low": 29, "base": 49, "high": 99, "unit": "EUR per author per year, incl. VAT", "role": "decision", "vat": "TTC",
+      "confidence": "assumption", "source": "R12", "section": "5.4 Price points to test",
+      "note": "Anchor: BookFunnel plans that allow print codes, USD 200-300 a year (unverified, FC12 claim 16)."
+    },
+    "price_author_jacket": {
+      "low": 1.50, "base": 2.00, "high": 2.50, "unit": "EUR per jacket in a pack of 100, incl. VAT", "role": "decision", "vat": "TTC",
+      "confidence": "assumption", "source": "R12", "section": "5.4 Price points to test",
+      "note": "Treated as a VAT-inclusive price because most self-published authors cannot recover VAT. Anchor: Dropcards USD 0.33-0.45 for a much smaller card."
+    },
+
+    "fulfil_card_print": {
+      "low": 2.99, "base": 2.99, "high": 3.59, "unit": "EUR per card", "role": "uncertain", "vat": "none",
+      "confidence": "V1", "source": "R04", "section": "3.4 One card printed and mailed (Merci Facteur folded card, envelope included)",
+      "factcheck": "FC04 claims 1-3 and FC12 claim 13: single vendor (V1, not V2); whether 2.99 is excl. or incl. VAT is unknown (high = 2.99 x 1.2); nothing shows the API accepts custom artwork on all four panels.",
+      "note": "Single-fold 15 x 21 cm card, not the true jacket with a 10 mm spine."
+    },
+    "fulfil_postage": {
+      "low": 1.30, "base": 2.31, "high": 3.34, "unit": "EUR per card, 2027 tariff", "role": "uncertain", "vat": "none",
+      "confidence": "derived", "source": "FC12", "section": "2 Internal findings, item 1; R04 3.4 and 3.6",
+      "factcheck": "FC12: the landed cost should be 4.29 / about 5.3 / 6.33 or more, not 4.29 / 4.29 / 4.79. Low = Merci Facteur 'from 1.30' (a floor); high = public Lettre verte 100 g rate from 1 January 2027 (3.34, itself unverified); base = midpoint, which with the print line gives the fact-check's 5.30.",
+      "note": "Until a test invoice exists this is the weakest cost input of the mailed card."
+    },
+    "postage_yearly_increase": {
+      "low": 0.067, "base": 0.08, "high": 0.099, "unit": "fraction per year", "role": "uncertain", "vat": "none",
+      "confidence": "derived", "source": "R12", "section": "6.3 Table (postage_yearly_increase)",
+      "note": "One year of evidence (2026 to 2027). Applied to the postage line from the second simulated year."
+    },
+    "pay_card_pct": {
+      "low": 0.012, "base": 0.015, "high": 0.028, "unit": "fraction of the amount paid", "role": "uncertain", "vat": "none",
+      "confidence": "V1", "source": "R12", "section": "6.3 Table (pay_model_card_pct)",
+      "factcheck": "FC12 claim 7: 2.8 % for premium EEA cards is probably a comparator error (checker's memory: 1.9 %). Kept as the high end.",
+      "note": "Mollie domestic / Stripe standard EEA / Stripe premium."
+    },
+    "pay_card_fixed": {
+      "low": 0.07, "base": 0.25, "high": 0.25, "unit": "EUR per transaction", "role": "uncertain", "vat": "none",
+      "confidence": "V1", "source": "R12", "section": "6.3 Table (pay_model_card_fixed)",
+      "note": "Low = Stancer (conflicting sources)."
+    },
+    "pay_sepa_pct": {
+      "low": 0.01, "base": 0.01, "high": 0.01, "unit": "fraction of the invoice", "role": "fixed", "vat": "none",
+      "confidence": "V1", "source": "R12", "section": "6.3 Table (pay_gocardless_pct)",
+      "note": "SEPA direct debit for monthly reseller invoices."
+    },
+    "pay_sepa_fixed": {
+      "low": 0.20, "base": 0.20, "high": 0.20, "unit": "EUR per invoice", "role": "fixed", "vat": "none",
+      "confidence": "V1", "source": "R12", "section": "6.3 Table (pay_gocardless_fixed)",
+      "note": ""
+    },
+    "pay_sepa_cap": {
+      "low": 2.0, "base": 2.0, "high": 4.0, "unit": "EUR per invoice", "role": "uncertain", "vat": "none",
+      "confidence": "V1", "source": "R12", "section": "6.3 Table (pay_gocardless_cap)",
+      "factcheck": "FC12 claim 8: the cap is probably 4.00 (checker's memory). Kept as the high end.",
+      "note": ""
+    },
+    "print_jacket_pack100": {
+      "low": 0.60, "base": 1.00, "high": 1.50, "unit": "EUR per jacket, excl. VAT, runs of 100-500", "role": "uncertain", "vat": "HT",
+      "confidence": "assumption", "source": "R04", "section": "3.3 True jacket (planning assumption)",
+      "factcheck": "FC04 claim 10 and section 3: 'no analogue; label as a pure guess'. Only one printer priced a folded A6 (0.52-0.59); a pocket jacket has about 30 % more sheet area and two creases.",
+      "note": "No quote obtained. Three quotes from French trade printers are the cheapest way to fix this."
+    },
+    "print_variable_data_surcharge": {
+      "low": 0.0, "base": 0.10, "high": 0.30, "unit": "EUR per jacket, excl. VAT", "role": "uncertain", "vat": "HT",
+      "confidence": "assumption", "source": "MODEL", "section": "R12 7.3 item 7 says variable data was 'not priced anywhere'",
+      "note": "Unique code per jacket. Low = one shared code with a redemption cap (the Bookwire pattern)."
+    },
+    "pack_shipping": {
+      "low": 0.0, "base": 0.0, "high": 9.0, "unit": "EUR per pack of 100", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "R04", "section": "3.1 (delivery to one French address is included by the web-to-print shops read)",
+      "note": "Base assumes the printer ships straight to the author. High = one parcel re-shipped by the founder."
+    },
+    "var_infra_per_card": {
+      "low": 0.001, "base": 0.003, "high": 0.010, "unit": "EUR per card generated", "role": "uncertain", "vat": "HT",
+      "confidence": "assumption", "source": "MODEL", "section": "R12 6.3 hosting rows (storage 0.01 EUR/GB, egress 0.01 EUR/GB)",
+      "note": "PDF, QR and font work run in the browser; the server stores a code record and serves the redemption page."
+    },
+    "support_incident_rate": {
+      "low": 0.05, "base": 0.075, "high": 0.10, "unit": "fraction of paid consumer orders", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "R12", "section": "6.3 Table (labour_incident_rate)",
+      "note": ""
+    },
+    "support_minutes_per_incident": {
+      "low": 3, "base": 4, "high": 5, "unit": "minutes", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "R12", "section": "6.3 Table (labour_support_minutes_per_incident)",
+      "note": ""
+    },
+    "support_b2b_ticket_rate": {
+      "low": 0.002, "base": 0.005, "high": 0.010, "unit": "tickets per reseller card", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "R12 section 9 step 3 lists 'support tickets per 1,000 cards' as a thing to measure",
+      "note": "The reseller handles first-line support."
+    },
+    "pack_prepress_minutes": {
+      "low": 20, "base": 30, "high": 45, "unit": "minutes per pack ordered", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "-",
+      "note": "File check, order placement with the printer, follow-up."
+    },
+    "partner_account_hours_month": {
+      "low": 1, "base": 2, "high": 4, "unit": "hours per live reseller per month", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "-",
+      "note": "Account management, reports, invoicing."
+    },
+    "partner_onboarding_days": {
+      "low": 3, "base": 6, "high": 12, "unit": "working days per new reseller", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "-",
+      "note": "Integration support. Founder time at the minimal level; absorbed by the paid developer at seed and funded."
+    },
+    "labour_support_hourly_cost": {
+      "low": 15, "base": 20, "high": 30, "unit": "EUR per hour, cash", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "R12", "section": "7.2 ('at 5 minutes a card and EUR 20 an hour')",
+      "note": "Cash cost of support and handling at seed and funded. At the minimal level the same hours are founder time."
+    },
+    "founder_hourly_value": {
+      "low": 25, "base": 35, "high": 50, "unit": "EUR per hour, not cash", "role": "uncertain", "vat": "none",
+      "confidence": "derived", "source": "R12", "section": "6.3 Table (tax_salary_total_cost_3000_net: 5,275 a month)",
+      "note": "5,275 / 151.67 hours = 34.8. Used only in the 'founder time valued' view; never in the cash view."
+    },
+    "labour_dev_day_rate": {
+      "low": 400, "base": 500, "high": 600, "unit": "EUR per day, excl. VAT", "role": "uncertain", "vat": "HT",
+      "confidence": "M", "source": "R12", "section": "6.3 Table (labour_dev_day_rate)",
+      "note": "Freelance developer, France."
+    },
+
+    "tax_micro_social_goods": {
+      "low": 0.123, "base": 0.123, "high": 0.212, "unit": "fraction of turnover", "role": "uncertain", "vat": "none",
+      "confidence": "V2", "source": "R12", "section": "6.3 Table (tax_micro_social_goods)",
+      "factcheck": "FC04 claim 20: 12.3 % is the rate for sales of goods; if the mailed card or the packs are classed as a service the rate is 21.2 %. Kept as the high end.",
+      "note": "Micro-entreprise only (minimal level). Applied to mailed cards and printed packs."
+    },
+    "tax_micro_social_services": {
+      "low": 0.212, "base": 0.212, "high": 0.261, "unit": "fraction of turnover", "role": "uncertain", "vat": "none",
+      "confidence": "V2", "source": "R12", "section": "6.3 Table (tax_micro_social_services_bic)",
+      "factcheck": "FC12 claim 9: if the activity is classed BNC the 2026 rate is probably 26.1 % (checker's memory), not the 25.6 % in R12. Kept as the high end. The training levy (0.1-0.3 %) is not included.",
+      "note": "Micro-entreprise only. Applied to reseller fees, author plans and paid PDFs."
+    },
+    "tax_vat_standard": {
+      "low": 0.20, "base": 0.20, "high": 0.20, "unit": "fraction", "role": "fixed", "vat": "none",
+      "confidence": "M", "source": "R09", "section": "6.1 Rates",
+      "note": "Card, postage charged, PDF fee, reseller fee and author plan are all standard-rated. The eBook itself (5.5 %) is never sold by eBook Cadeau (R09 6.5, art. 9a)."
+    },
+    "tax_vat_franchise_services": {
+      "low": 37500, "base": 37500, "high": 37500, "unit": "EUR of service turnover per 12 months", "role": "fixed", "vat": "none",
+      "confidence": "V1", "source": "R12", "section": "6.3 Table (tax_vat_franchise_services)",
+      "factcheck": "FC12 claim 10 and FC09 claim 15: 85,000 / 37,500 are the current pair (91,900 / 36,800 were the 2023-2024 figures). A single 25,000 threshold was voted for 2025, suspended, then dropped: a regulatory risk.",
+      "note": "Above it the micro-entreprise charges VAT."
+    },
+    "tax_vat_franchise_total": {
+      "low": 85000, "base": 85000, "high": 85000, "unit": "EUR of total turnover per 12 months", "role": "fixed", "vat": "none",
+      "confidence": "V1", "source": "R12", "section": "6.3 Table (tax_vat_franchise_goods)",
+      "note": "Mixed activity: total turnover under this figure and services under the services figure."
+    },
+    "tax_micro_ceiling_services": {
+      "low": 83600, "base": 83600, "high": 83600, "unit": "EUR of service turnover per year", "role": "fixed", "vat": "none",
+      "confidence": "V1", "source": "R12", "section": "6.3 Table (tax_micro_ceiling_services)",
+      "note": "Above it the micro regime ends. The model only raises a flag; it does not convert the business."
+    },
+    "tax_corporate_reduced_rate": {
+      "low": 0.15, "base": 0.15, "high": 0.15, "unit": "fraction of profit", "role": "fixed", "vat": "none",
+      "confidence": "M", "source": "R12", "section": "6.3 Table (tax_corporate_reduced_rate)",
+      "note": "Company regime (seed, funded)."
+    },
+    "tax_corporate_reduced_ceiling": {
+      "low": 42500, "base": 42500, "high": 42500, "unit": "EUR of yearly profit", "role": "fixed", "vat": "none",
+      "confidence": "M", "source": "R12", "section": "6.3 Table (tax_corporate_reduced_rate)",
+      "note": ""
+    },
+    "tax_corporate_standard_rate": {
+      "low": 0.25, "base": 0.25, "high": 0.25, "unit": "fraction of profit", "role": "fixed", "vat": "none",
+      "confidence": "M", "source": "R12", "section": "6.3 Table (tax_corporate_standard_rate)",
+      "note": ""
+    },
+    "tax_cfe_exempt_turnover": {
+      "low": 5000, "base": 5000, "high": 5000, "unit": "EUR of turnover in the previous year", "role": "fixed", "vat": "none",
+      "confidence": "M", "source": "FC12", "section": "3 Omissions, item 5",
+      "note": "Checker's memory: no minimum CFE at or below EUR 5,000 of turnover."
+    },
+
+    "fix_hosting_month": {
+      "low": 10, "base": 15, "high": 25, "unit": "EUR per month, excl. VAT", "role": "uncertain", "vat": "HT",
+      "confidence": "derived", "source": "R12", "section": "6.3 Table (host_total_launch)",
+      "factcheck": "FC12 section 2 item 2 and R12 risk 20: budget 25 rather than 10. All three EU hosts raised prices in 2026; prices unverified.",
+      "note": "Small API server and object storage with an EU host."
+    },
+    "fix_email_month": {
+      "low": 0, "base": 7, "high": 14, "unit": "EUR per month", "role": "uncertain", "vat": "none",
+      "confidence": "V1", "source": "R12", "section": "6.3 Table (mail_brevo_starter)",
+      "note": "Transactional e-mail. Conflicting sources (7 vs 14)."
+    },
+    "fix_domains_year": {
+      "low": 17, "base": 42, "high": 80, "unit": "EUR per year", "role": "uncertain", "vat": "none",
+      "confidence": "M", "source": "R12", "section": "6.3 Table (fix_domain + fix_short_domain)",
+      "note": "Main domain plus a short domain for the typed code."
+    },
+    "fix_rc_pro_year": {
+      "low": 150, "base": 300, "high": 500, "unit": "EUR per year", "role": "uncertain", "vat": "none",
+      "confidence": "M", "source": "R12", "section": "6.3 Table (fix_rc_pro)",
+      "note": "Professional liability insurance."
+    },
+    "fix_bank_month": {
+      "low": 0, "base": 8, "high": 15, "unit": "EUR per month", "role": "uncertain", "vat": "none",
+      "confidence": "M", "source": "R12", "section": "6.3 Table (fix_bank)",
+      "note": ""
+    },
+    "fix_cfe_year": {
+      "low": 200, "base": 400, "high": 600, "unit": "EUR per year, from the second year", "role": "uncertain", "vat": "none",
+      "confidence": "M", "source": "R12", "section": "6.3 Table (fix_cfe_from_year2)",
+      "factcheck": "FC12 omission 5: nil when the previous year's turnover is EUR 5,000 or less. The model applies that exemption.",
+      "note": ""
+    },
+    "fix_einvoicing_month": {
+      "low": 0, "base": 5, "high": 15, "unit": "EUR per month", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "FC12", "section": "3 Omissions, item 1 (e-invoicing reform)",
+      "note": "Every business must be able to receive e-invoices since 1 September 2026 and small ones must issue them from 1 September 2027. The cost of a platform is this model's guess."
+    },
+    "fix_epr_year": {
+      "low": 0, "base": 100, "high": 300, "unit": "EUR per year, only when printed cards are sold", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "R09", "section": "11.2 EPR in France (flat-rate declaration for very small quantities; amount not found)",
+      "note": "Listed in R12 risk 17 as an unpriced compliance cost."
+    },
+    "fix_postal_api_month": {
+      "low": 19.95, "base": 19.95, "high": 39.95, "unit": "EUR per month, only when mailed cards are sold", "role": "uncertain", "vat": "none",
+      "confidence": "V1", "source": "R04", "section": "3.4 (Merci Facteur API plan)",
+      "factcheck": "FC04 section 3: every V2 on Merci Facteur prices is V1 (single vendor).",
+      "note": "High = plan above about 2,000 cards a month."
+    },
+    "fix_accountant_micro_year": {
+      "low": 0, "base": 0, "high": 300, "unit": "EUR per year", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "R12 6.3 says an accountant is 'not needed for a micro-entreprise'",
+      "note": "High = one yearly consultation."
+    },
+    "fix_accountant_company_year": {
+      "low": 1000, "base": 1400, "high": 1800, "unit": "EUR per year, excl. VAT", "role": "uncertain", "vat": "HT",
+      "confidence": "M", "source": "R12", "section": "6.3 Table (fix_accountant_company)",
+      "note": "Online accountant for a SASU (seed, funded)."
+    },
+    "fix_tools_seed_month": {
+      "low": 0, "base": 30, "high": 80, "unit": "EUR per month, excl. VAT", "role": "uncertain", "vat": "HT",
+      "confidence": "assumption", "source": "MODEL", "section": "-",
+      "note": "Helpdesk, analytics, CI minutes."
+    },
+    "fix_tools_funded_month": {
+      "low": 100, "base": 300, "high": 600, "unit": "EUR per month, excl. VAT", "role": "uncertain", "vat": "HT",
+      "confidence": "assumption", "source": "MODEL", "section": "-",
+      "note": "Same, for a team of three."
+    },
+
+    "setup_legal_templates": {
+      "low": 0, "base": 100, "high": 200, "unit": "EUR one-off", "role": "uncertain", "vat": "none",
+      "confidence": "M", "source": "R12", "section": "6.3 Table (legal_docs_templates)",
+      "note": "Terms of sale and privacy documents from templates (minimal level)."
+    },
+    "setup_legal_lawyer": {
+      "low": 500, "base": 1000, "high": 1500, "unit": "EUR one-off", "role": "uncertain", "vat": "none",
+      "confidence": "M", "source": "R12", "section": "6.3 Table (legal_docs_lawyer)",
+      "note": "Same documents drafted by a lawyer (seed, funded)."
+    },
+    "setup_counsel_before_reseller": {
+      "low": 500, "base": 1500, "high": 3000, "unit": "EUR one-off, paid when the first reseller goes live", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "R09", "section": "13 Questions for counsel and the accountant; R12 risk 6 ('lawyer review before a reseller launch')",
+      "note": "Fixed-price law, 'prime' risk, VAT position, reseller contract. The amount is this model's guess."
+    },
+    "setup_trademark_inpi": {
+      "low": 190, "base": 230, "high": 270, "unit": "EUR one-off", "role": "uncertain", "vat": "none",
+      "confidence": "V2", "source": "R12", "section": "6.3 Table (ip_inpi_filing_one_class, ip_inpi_extra_class)",
+      "note": "One to three classes. Only worth paying for a distinctive name (R12 risk 18)."
+    },
+    "setup_trademark_euipo": {
+      "low": 850, "base": 850, "high": 1000, "unit": "EUR one-off", "role": "uncertain", "vat": "none",
+      "confidence": "V1", "source": "R12", "section": "6.3 Table (ip_euipo_filing_one_class)",
+      "note": "Funded level only."
+    },
+    "setup_company_formation": {
+      "low": 300, "base": 600, "high": 1200, "unit": "EUR one-off", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "-",
+      "note": "Registering a SASU (seed, funded). Not researched."
+    },
+    "setup_samples_test_orders": {
+      "low": 50, "base": 150, "high": 250, "unit": "EUR one-off", "role": "uncertain", "vat": "none",
+      "confidence": "V1", "source": "R12", "section": "9 Go-to-market, step 1 (EUR 50-250 for two or three pilot runs)",
+      "note": "Sample prints and test orders, to weigh and to obtain a real invoice."
+    },
+    "setup_build_completion": {
+      "low": 200, "base": 400, "high": 800, "unit": "EUR one-off", "role": "uncertain", "vat": "none",
+      "confidence": "derived", "source": "STATUS", "section": "How to resume (about USD 7-8 per agent run; option B about 30 runs, option A about 100)",
+      "note": "Cash cost of finishing the software with coding agents. The owner's own time is counted in founder hours."
+    },
+
+    "minimal_founder_hours_month": {
+      "low": 30, "base": 45, "high": 60, "unit": "hours per month, unpaid", "role": "decision", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "-",
+      "note": "About one to two days a week, before support and handling time, which the model adds."
+    },
+    "seed_founder_hours_month": {
+      "low": 60, "base": 80, "high": 120, "unit": "hours per month, unpaid", "role": "decision", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "-",
+      "note": "Half time."
+    },
+    "seed_dev_days_month": {
+      "low": 4, "base": 8, "high": 12, "unit": "freelance days per month", "role": "decision", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "-",
+      "note": "The 'part-time developer' of the seed level."
+    },
+    "seed_marketing_month": {
+      "low": 500, "base": 1000, "high": 2000, "unit": "EUR per month", "role": "decision", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "-",
+      "note": "Spent only on channels that can use it (consumer generator, authors)."
+    },
+    "funded_founder_salary_month": {
+      "low": 5275, "base": 5275, "high": 5275, "unit": "EUR per month, total employer cost", "role": "fixed", "vat": "none",
+      "confidence": "V2", "source": "R12", "section": "6.3 Table (tax_salary_total_cost_3000_net)",
+      "note": "EUR 3,000 net a month for a SASU president."
+    },
+    "funded_dev_cost_month": {
+      "low": 5000, "base": 5800, "high": 7000, "unit": "EUR per month, total employer cost", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "-",
+      "note": "One full-time developer."
+    },
+    "funded_bizdev_cost_month": {
+      "low": 2300, "base": 2700, "high": 3300, "unit": "EUR per month, total employer cost", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "-",
+      "note": "Half-time partnerships person."
+    },
+    "funded_marketing_month": {
+      "low": 2000, "base": 4000, "high": 8000, "unit": "EUR per month", "role": "decision", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "-",
+      "note": "Spent only on channels that can use it, and only up to the market caps below."
+    },
+
+    "b2c_organic_cards_month_start": {
+      "low": 15, "base": 40, "high": 100, "unit": "free cards generated per month at launch, before seasonality", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "R12", "section": "9 step 0 (gate: at least 200 cards in a season); 7.4 low case (3,060 cards a year in year 3, standalone only)",
+      "note": "With the base growth rate this reaches about 2,800 cards in year 3."
+    },
+    "b2c_organic_growth_month": {
+      "low": 0.02, "base": 0.05, "high": 0.08, "unit": "fraction per month", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "-",
+      "note": "Word of mouth and search, no paid acquisition."
+    },
+    "b2c_cac_per_card": {
+      "low": 1.0, "base": 2.0, "high": 4.0, "unit": "EUR of advertising per extra card generated", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "-",
+      "note": "Not researched. Compare with what one generated card earns: upgrade share x contribution of a mailed card."
+    },
+    "b2c_mailed_upgrade_share": {
+      "low": 0.02, "base": 0.05, "high": 0.10, "unit": "fraction of generated cards", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "R12", "section": "6.3 Table (demand_mailed_upgrade_share)",
+      "note": "Share of people using the free generator who pay for the printed-and-posted card."
+    },
+    "b2c_paid_pdf_conversion": {
+      "low": 0.02, "base": 0.05, "high": 0.15, "unit": "fraction of would-be free users who still pay", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "R12 7.1 A' ('free alternatives; conversion unknown'); FC12 omission 3 (Amazon.fr and Fnac give free print-at-home gift cards)",
+      "note": "Only used by the 'small fee' variant."
+    },
+    "b2c_sam_cards_year": {
+      "low": 102000, "base": 331500, "high": 979200, "unit": "cards per year, France", "role": "uncertain", "vat": "none",
+      "confidence": "derived", "source": "R12", "section": "2.5 TAM / SAM / SOM (SAM France)",
+      "factcheck": "FC12 claims 1 and 5 and finding 3: built on assumed gift share (3-12 %) and non-Amazon share (40-60 %); the panel scope is unknown.",
+      "note": "Used with the next row to cap the standalone channel."
+    },
+    "b2c_standalone_cap_share": {
+      "low": 0.01, "base": 0.03, "high": 0.08, "unit": "fraction of the SAM the standalone generator can reach", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "R12", "section": "2.4 Funnel assumptions (A5: low = standalone only = 3 %)",
+      "note": "Paid acquisition cannot push the standalone channel above SAM x this share."
+    },
+    "season_december_share": {
+      "low": 0.17, "base": 0.30, "high": 0.50, "unit": "fraction of yearly consumer cards generated in December", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "FC12", "section": "2 Internal findings, item 5; R12 3.1 (December = 17-21 % of French book revenue)",
+      "factcheck": "FC12: the 45-55 % peak share in R12 is far above the cited evidence. Low = December share of book revenue (V2); high = R12's assumption; base = this model's guess for a gift-only product.",
+      "note": "Applies to the consumer generator and to reseller cards, not to author packs."
+    },
+
+    "reseller_attach_rate": {
+      "low": 0.005, "base": 0.02, "high": 0.05, "unit": "fraction of a reseller's eBook orders that use the gift card", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "R12", "section": "6.3 Table (demand_attach_rate); 3.3 item 2 ('no source gives the attach rate')",
+      "note": "The single most important unknown of the reseller channel."
+    },
+    "reseller_orders_small": {
+      "low": 50000, "base": 85000, "high": 170000, "unit": "eBook orders per year", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "R12 2.4 (17 M paid eBooks a year in France); retailer shares 'not found'",
+      "note": "About 0.3 / 0.5 / 1 % of French units: an open-file store of the 7switch type."
+    },
+    "reseller_orders_mid": {
+      "low": 300000, "base": 510000, "high": 850000, "unit": "eBook orders per year", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "R12 2.4; retailer shares 'not found'",
+      "note": "About 2 / 3 / 5 % of French units: one storefront of a bookseller network."
+    },
+    "reseller_orders_large": {
+      "low": 1000000, "base": 1360000, "high": 3400000, "unit": "eBook orders per year", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "R12", "section": "2.5 cross-checks ('one reseller holding about 8 % of French eBook units')",
+      "note": "About 6 / 8 / 20 % of French units: a platform of the Fnac/Kobo class."
+    },
+    "reseller_ramp_months": {
+      "low": 3, "base": 6, "high": 12, "unit": "months for a new reseller to reach its attach rate", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "-",
+      "note": "Linear ramp."
+    },
+    "reseller_annual_churn": {
+      "low": 0.05, "base": 0.15, "high": 0.30, "unit": "probability per year that a reseller stops", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "R12 4.4 lesson 6 and risk 5 (dependence on one partner killed Livrada and Enthrill); 7.3 item 6 (the code is BSD-3-Clause)",
+      "note": "Applied as an expected value: revenue is multiplied by the survival probability."
+    },
+    "minimal_first_partner_month": {
+      "low": 9, "base": 12, "high": 18, "unit": "simulation month of the first live reseller", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "R12", "section": "9 step 3 (talks from January 2027, live by October 2027)",
+      "note": ""
+    },
+    "seed_first_partner_month": {
+      "low": 8, "base": 10, "high": 14, "unit": "simulation month", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "R12", "section": "9 step 3",
+      "note": ""
+    },
+    "funded_first_partner_month": {
+      "low": 6, "base": 8, "high": 12, "unit": "simulation month", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "-",
+      "note": ""
+    },
+    "minimal_months_between_partners": {
+      "low": 8, "base": 12, "high": 18, "unit": "months", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "-",
+      "note": "Pace of reseller sales by a solo founder."
+    },
+    "seed_months_between_partners": {
+      "low": 4, "base": 6, "high": 9, "unit": "months", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "-",
+      "note": ""
+    },
+    "funded_months_between_partners": {
+      "low": 2, "base": 3, "high": 5, "unit": "months", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "-",
+      "note": "With a half-time partnerships person; includes resellers outside France from the second year."
+    },
+    "minimal_max_partners": {
+      "low": 3, "base": 4, "high": 5, "unit": "live resellers", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "-",
+      "note": "What one person can integrate and support."
+    },
+    "seed_max_partners": {
+      "low": 5, "base": 6, "high": 8, "unit": "live resellers", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "R12 4.2 (France is fragmented by platform: Kobo, Vivlio, ePagine, Immatériel and a few others)",
+      "note": "Roughly the number of eBook platforms in France."
+    },
+    "funded_max_partners": {
+      "low": 8, "base": 12, "high": 15, "unit": "live resellers", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "-",
+      "note": "France plus Germany and the next markets."
+    },
+
+    "minimal_authors_new_month": {
+      "low": 1, "base": 2, "high": 4, "unit": "new paying authors per month, unpaid acquisition", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "R12", "section": "7.4 (20 / 100 / 300 authors on the plan in year 3); 9 step 1",
+      "note": "Fairs, author groups, word of mouth."
+    },
+    "seed_authors_new_month": {
+      "low": 2, "base": 3, "high": 6, "unit": "new paying authors per month, unpaid acquisition", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "-",
+      "note": "Paid acquisition comes on top (author_cac)."
+    },
+    "funded_authors_new_month": {
+      "low": 3, "base": 5, "high": 10, "unit": "new paying authors per month, unpaid acquisition", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "-",
+      "note": ""
+    },
+    "author_cac": {
+      "low": 20, "base": 40, "high": 80, "unit": "EUR of marketing per extra paying author", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "-",
+      "note": "Not researched."
+    },
+    "author_annual_churn": {
+      "low": 0.25, "base": 0.40, "high": 0.55, "unit": "fraction of paying authors lost per year", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "-",
+      "note": ""
+    },
+    "author_packs_per_year": {
+      "low": 0.3, "base": 0.5, "high": 1.0, "unit": "packs of 100 jackets per paying author per year", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "R12", "section": "7.4 (50 packs for 100 authors in the base case)",
+      "note": ""
+    },
+    "author_market_cap": {
+      "low": 200, "base": 500, "high": 1000, "unit": "paying authors, France", "role": "uncertain", "vat": "none",
+      "confidence": "assumption", "source": "R12", "section": "2.5 (10,000-20,000 self-published authors active at signings, 2-5 % adopt; nothing could be searched)",
+      "factcheck": "FC12 claim 17: the evidence supports 'authors pay for delivery tooling', not 'authors pay for printed code cards'.",
+      "note": "Ceiling on the author base at every investment level."
+    },
+    "mkt_split_authors": {
+      "low": 0.3, "base": 0.5, "high": 0.7, "unit": "share of the marketing budget spent on authors when consumers are also targeted", "role": "decision", "vat": "none",
+      "confidence": "assumption", "source": "MODEL", "section": "-",
+      "note": ""
+    }
+  }
+}

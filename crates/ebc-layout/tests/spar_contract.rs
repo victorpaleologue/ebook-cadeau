@@ -107,8 +107,9 @@ fn home_page_is_the_closest_page_a_single_slug_can_describe() {
             let (mx, my) = (-want.x, -want.y);
 
             // Why the page cannot be the sheet: for every slug the page's margins are
-            // equal, the sheet's are not (by 2.9 mm at least, 17.5 mm for poche on A4).
-            assert!((mx - my).abs() > 2.5, "{ctx}: margins {mx} and {my}");
+            // equal, the sheet's are not (by 4.25 mm at least — A6 on Letter — and by
+            // 17.5 mm for poche on A4).
+            assert!((mx - my).abs() > 4.0, "{ctx}: margins {mx} and {my}");
             for slug in [0.0, mx - profile.bleed, my - profile.bleed] {
                 let media = Page::new(spread, profile.bleed, slug).media_box();
                 assert!(!rect_close(media, want), "{ctx}: slug {slug}");

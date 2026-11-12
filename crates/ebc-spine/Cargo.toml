@@ -11,12 +11,15 @@ authors.workspace = true
 [dependencies]
 ebc-color.workspace = true
 ebc-i18n.workspace = true
-ebc-layout.workspace = true
 ebc-model.workspace = true
 ebc-scene.workspace = true
 ebc-text.workspace = true
 thiserror.workspace = true
 unicode-segmentation = "1"
+
+[dev-dependencies]
+ebc-layout.workspace = true
+ebc-pdf.workspace = true
 
 [lints]
 workspace = true

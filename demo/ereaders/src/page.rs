@@ -428,7 +428,12 @@ impl<'a> Element<'a> {
 
 impl Page {
     /// Builds a page from an HTTP response. `headers` use lower-case names.
-    pub fn from_response(url: Url, status: u16, headers: Vec<(String, String)>, body: &[u8]) -> Self {
+    pub fn from_response(
+        url: Url,
+        status: u16,
+        headers: Vec<(String, String)>,
+        body: &[u8],
+    ) -> Self {
         let content_type = headers
             .iter()
             .find(|(name, _)| name == "content-type")
@@ -565,8 +570,9 @@ impl Page {
 
     /// Text of every element matching a CSS selector (re-parses the markup; for tests).
     pub fn select_text(&self, selector: &str) -> Result<Vec<String>, crate::error::BrowserError> {
-        let parsed = scraper::Selector::parse(selector)
-            .map_err(|_| crate::error::BrowserError::BadSelector { selector: selector.to_owned() })?;
+        let parsed = scraper::Selector::parse(selector).map_err(|_| {
+            crate::error::BrowserError::BadSelector { selector: selector.to_owned() }
+        })?;
         if self.facts.pathological.is_some() {
             return Ok(Vec::new());
         }
@@ -627,8 +633,8 @@ fn decode(body: &[u8], content_type: &str) -> String {
 
 const INLINE_TAGS: [&str; 28] = [
     "a", "abbr", "b", "bdo", "big", "cite", "code", "dfn", "em", "font", "i", "kbd", "label",
-    "mark", "q", "s", "samp", "small", "span", "strike", "strong", "sub", "sup", "time", "tt",
-    "u", "var", "wbr",
+    "mark", "q", "s", "samp", "small", "span", "strike", "strong", "sub", "sup", "time", "tt", "u",
+    "var", "wbr",
 ];
 
 const MODERN_INPUT_TYPES: [&str; 8] =
@@ -845,9 +851,8 @@ impl Builder {
         }
 
         let parent = self.stack.last();
-        let (mut fg, mut bg, mut styled) = parent
-            .map(|f| (f.fg, f.bg, f.styled))
-            .unwrap_or((css::BLACK, css::WHITE, false));
+        let (mut fg, mut bg, mut styled) =
+            parent.map(|f| (f.fg, f.bg, f.styled)).unwrap_or((css::BLACK, css::WHITE, false));
         let style = attr("style").unwrap_or("");
         let declarations = css::declarations(style);
         for (prop, value) in &declarations {
@@ -894,8 +899,10 @@ impl Builder {
         }
 
         // The content of <select> and <textarea> is captured as control state, not page text.
-        let hides = matches!(tag.as_str(), "script" | "style" | "template" | "head" | "select" | "textarea")
-            || attr("hidden").is_some()
+        let hides = matches!(
+            tag.as_str(),
+            "script" | "style" | "template" | "head" | "select" | "textarea"
+        ) || attr("hidden").is_some()
             || css::hides(&declarations);
         if hides {
             self.hidden_depth += 1;
@@ -976,7 +983,12 @@ impl Builder {
             }
             "form" => {
                 if self.cur_form.is_none() {
-                    let method = match attr("method").unwrap_or("get").trim().to_ascii_lowercase().as_str() {
+                    let method = match attr("method")
+                        .unwrap_or("get")
+                        .trim()
+                        .to_ascii_lowercase()
+                        .as_str()
+                    {
                         "get" | "" => FormMethod::Get,
                         "post" => FormMethod::Post,
                         other => FormMethod::Other(other.to_owned()),
@@ -1011,7 +1023,9 @@ impl Builder {
                 let href = attr("href").map(str::trim);
                 let lower = href.map(str::to_ascii_lowercase);
                 let reason = match lower.as_deref() {
-                    Some(h) if h.starts_with("javascript:") => Some("its href is a javascript: URL"),
+                    Some(h) if h.starts_with("javascript:") => {
+                        Some("its href is a javascript: URL")
+                    }
                     Some(h) if (h.is_empty() || h.starts_with('#')) && onclick => {
                         Some("it is a placeholder link driven by onclick")
                     }
@@ -1028,7 +1042,10 @@ impl Builder {
             "input" | "button" | "select" | "textarea" => {
                 let (kind, input_type) = control_kind(&tag, attr("type"));
                 if tag == "input" && MODERN_INPUT_TYPES.contains(&input_type.as_str()) {
-                    push_fact(&mut self.facts.modern_inputs, (description.clone(), input_type.clone()));
+                    push_fact(
+                        &mut self.facts.modern_inputs,
+                        (description.clone(), input_type.clone()),
+                    );
                 }
                 if tag == "input" && input_type == "image" {
                     if let Some(src) = attr("src") {
@@ -1067,7 +1084,10 @@ impl Builder {
                         if kind == FieldKind::Button {
                             push_fact(
                                 &mut self.facts.needs_js,
-                                (description.clone(), "type=button does nothing without script".to_owned()),
+                                (
+                                    description.clone(),
+                                    "type=button does nothing without script".to_owned(),
+                                ),
                             );
                         }
                         self.forms[form].fields.push(control);
@@ -1098,7 +1118,9 @@ impl Builder {
             }
             "option" => {
                 if let Some((form, index)) = self.cur_select {
-                    if self.cur_option.is_none() && self.forms[form].fields[index].options.len() < 1000 {
+                    if self.cur_option.is_none()
+                        && self.forms[form].fields[index].options.len() < 1000
+                    {
                         self.raw_text.clear();
                         self.cur_option = Some(attr("value").map(str::to_owned));
                         self.forms[form].fields[index].options.push(SelectOption {
@@ -1121,7 +1143,10 @@ impl Builder {
         }
 
         let indexed = element.id().is_some()
-            || matches!(tag.as_str(), "a" | "button" | "input" | "select" | "textarea" | "form" | "label");
+            || matches!(
+                tag.as_str(),
+                "a" | "button" | "input" | "select" | "textarea" | "form" | "label"
+            );
         let node = if indexed && self.nodes.len() < MAX_INDEXED {
             self.nodes.push(Indexed {
                 tag: tag.clone(),
@@ -1193,7 +1218,9 @@ impl Builder {
             Closes::Textarea => self.cur_textarea = None,
             Closes::Title => self.in_title = false,
             Closes::Option => {
-                if let (Some(value), Some((form, index))) = (self.cur_option.take(), self.cur_select) {
+                if let (Some(value), Some((form, index))) =
+                    (self.cur_option.take(), self.cur_select)
+                {
                     let text = self.raw_text.split_whitespace().collect::<Vec<_>>().join(" ");
                     if let Some(option) = self.forms[form].fields[index].options.last_mut() {
                         option.value = value.unwrap_or_else(|| text.clone());
@@ -1222,7 +1249,8 @@ impl Builder {
         html: String,
         weight: usize,
     ) -> Page {
-        let slice = |range: &Range<usize>| self.text.get(range.clone()).unwrap_or("").trim().to_owned();
+        let slice =
+            |range: &Range<usize>| self.text.get(range.clone()).unwrap_or("").trim().to_owned();
         // Button text is the button's content.
         let button_texts: Vec<(usize, usize, String)> = self
             .button_nodes
@@ -1243,7 +1271,8 @@ impl Builder {
                 self.forms[form].fields[index].label = Some(text);
             }
         }
-        let mut explicit: std::collections::HashMap<String, String> = std::collections::HashMap::new();
+        let mut explicit: std::collections::HashMap<String, String> =
+            std::collections::HashMap::new();
         for label in &self.labels {
             if let Some(id) = &label.for_id {
                 let text = slice(&label.text);
@@ -1318,11 +1347,8 @@ fn parse_meta_refresh(content: &str, base: &Url) -> Option<MetaRefresh> {
     };
     let delay = delay.trim();
     let whole = delay.split('.').next().unwrap_or("");
-    let delay_secs = if whole.is_empty() && delay.starts_with('.') {
-        0
-    } else {
-        whole.parse::<u32>().ok()?
-    };
+    let delay_secs =
+        if whole.is_empty() && delay.starts_with('.') { 0 } else { whole.parse::<u32>().ok()? };
     let rest = rest.trim();
     let target = if rest.len() >= 4 && rest.as_bytes()[..3].eq_ignore_ascii_case(b"url") {
         rest[3..].trim_start().strip_prefix('=').map(str::trim).unwrap_or(rest)
@@ -1531,10 +1557,12 @@ world</textarea>
         assert_eq!(p.text(), "");
         assert!(p.forms().is_empty());
         assert!(p.select_text("div").unwrap().is_empty());
-        let report = p.lint(&crate::lint::LintConfig { weight_budget_bytes: 2 * mib, ..Default::default() });
+        let report =
+            p.lint(&crate::lint::LintConfig { weight_budget_bytes: 2 * mib, ..Default::default() });
         assert!(report.errors().any(|f| f.code == "nesting-too-deep"), "{report}");
         // One tag with 100 000 attributes.
-        let attrs = format!("<p {}>x</p>", (0..100_000).map(|i| format!("a{i}=1 ")).collect::<String>());
+        let attrs =
+            format!("<p {}>x</p>", (0..100_000).map(|i| format!("a{i}=1 ")).collect::<String>());
         assert!(matches!(page(&attrs).facts.pathological, Some((_, n)) if n > 50_000));
         // The cap is on real nesting: long flat documents and unclosed paragraphs are fine.
         let flat = "<p>paragraphe<li>item".repeat(20_000);
@@ -1570,5 +1598,4 @@ world</textarea>
         assert_eq!(shape("<!--").depth, 0);
         assert_eq!(shape("<div").depth, 1);
     }
-
 }

@@ -142,8 +142,11 @@ impl TypingCost {
             }
             if c.is_uppercase() {
                 if !caps_locked {
-                    let upper_ahead =
-                        chars[i..].iter().take_while(|c| !c.is_lowercase()).filter(|c| c.is_uppercase()).count();
+                    let upper_ahead = chars[i..]
+                        .iter()
+                        .take_while(|c| !c.is_lowercase())
+                        .filter(|c| c.is_uppercase())
+                        .count();
                     let lower_follows = chars[i..].iter().any(|c| c.is_lowercase());
                     let lock_cost = 2 + usize::from(lower_follows);
                     if keyboard.caps_lock && upper_ahead > lock_cost {

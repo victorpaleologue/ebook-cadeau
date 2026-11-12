@@ -8,8 +8,11 @@ book-shaped card: the book's cover on the front, a **1 cm spine** with the title
 stand on a shelf, and inside, a **QR code and a short code** that put the eBook on the
 recipient's e-reader in a few steps.
 
-> Status: early development. See [`docs/architecture.md`](docs/architecture.md) for the design
-> and [`docs/research/`](docs/research/) for the studies behind it.
+> **Status: interrupted mid-build.** The workspace compiles and 945 tests pass, but 128 fail,
+> several crates are partial and no card PDF is produced end to end yet.
+> [`docs/STATUS.md`](docs/STATUS.md) has the exact state and how to resume;
+> [`docs/architecture.md`](docs/architecture.md) the design; [`docs/research/`](docs/research/)
+> the studies behind it (mostly drafts — see the status page for which were fact-checked).
 
 ## Repository layout
 

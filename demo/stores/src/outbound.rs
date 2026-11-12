@@ -40,11 +40,8 @@ const SEGMENT: &AsciiSet = &CONTROLS
 
 /// Characters escaped in the `X-File-Name` header (percent-encoded UTF-8, RFC 3986
 /// unreserved characters kept).
-const HEADER_VALUE: &AsciiSet = &percent_encoding::NON_ALPHANUMERIC
-    .remove(b'-')
-    .remove(b'.')
-    .remove(b'_')
-    .remove(b'~');
+const HEADER_VALUE: &AsciiSet =
+    &percent_encoding::NON_ALPHANUMERIC.remove(b'-').remove(b'.').remove(b'_').remove(b'~');
 
 /// A failed outgoing call.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
@@ -328,7 +325,11 @@ impl PartnerClient {
     /// # Errors
     /// [`StoreError::Config`] for an unusable base URL, [`StoreError::HttpClient`] when the
     /// HTTP client cannot be built.
-    pub fn new(config: &PartnerConfig, clock: Clock, timeout: Duration) -> Result<Self, StoreError> {
+    pub fn new(
+        config: &PartnerConfig,
+        clock: Clock,
+        timeout: Duration,
+    ) -> Result<Self, StoreError> {
         Ok(Self {
             http: http_client(timeout)?,
             base: parse_base("the eBook Cadeau URL", &config.base_url)?,
@@ -528,8 +529,7 @@ impl PartnerClient {
         let path = format!("/api/partner/v1/gifts/{}/fulfilled", segment(gift_id));
         let body = serde_json::to_vec(&serde_json::json!({ "account_ref": account_ref }))
             .map_err(|e| OutboundError::Decode { service: EBC, detail: e.to_string() })?;
-        let response =
-            self.send(Method::POST, &path, Some("application/json"), body, &[]).await?;
+        let response = self.send(Method::POST, &path, Some("application/json"), body, &[]).await?;
         if response.status().is_success() {
             return Ok(Fulfilment::Confirmed);
         }
@@ -700,8 +700,9 @@ impl PrinterClient {
     }
 
     fn url(&self, path: &str) -> Result<Url, OutboundError> {
-        Url::parse(&format!("{}{path}", self.base.as_str().trim_end_matches('/')))
-            .map_err(|e| OutboundError::Decode { service: PRINTER, detail: format!("bad URL: {e}") })
+        Url::parse(&format!("{}{path}", self.base.as_str().trim_end_matches('/'))).map_err(|e| {
+            OutboundError::Decode { service: PRINTER, detail: format!("bad URL: {e}") }
+        })
     }
 
     /// `GET /v1/products`.
@@ -740,7 +741,8 @@ impl PrinterClient {
             .file_name("card.pdf")
             .mime_str("application/pdf")
             .map_err(|e| decode(e.to_string()))?;
-        let form = reqwest::multipart::Form::new().part("order", order_part).part("file", file_part);
+        let form =
+            reqwest::multipart::Form::new().part("order", order_part).part("file", file_part);
         let response = self
             .http
             .post(self.url("/v1/orders")?)
@@ -881,7 +883,10 @@ mod tests {
             error_fields(br#"{"error":{"code":"bad_signature","message":"nope"}}"#),
             ("bad_signature".to_owned(), "nope".to_owned())
         );
-        assert_eq!(error_fields(b"<html>502</html>"), ("unknown".into(), "<html>502</html>".into()));
+        assert_eq!(
+            error_fields(b"<html>502</html>"),
+            ("unknown".into(), "<html>502</html>".into())
+        );
         assert_eq!(error_fields(b""), ("unknown".into(), String::new()));
         assert_eq!(error_fields(br#"{"error":"flat"}"#).0, "unknown");
         let long = vec![b'x'; 5000];
@@ -897,10 +902,7 @@ mod tests {
             "garbage"
         ]}});
         let lines = preflight_findings(&serde_json::to_vec(&body).unwrap());
-        assert_eq!(
-            lines,
-            vec!["BOX_TRIM_SIZE: trim is 210 x 148", "NO_SEVERITY: kept", "?: ?"]
-        );
+        assert_eq!(lines, vec!["BOX_TRIM_SIZE: trim is 210 x 148", "NO_SEVERITY: kept", "?: ?"]);
         assert!(preflight_findings(b"not json").is_empty());
         let many: Vec<_> = (0..50)
             .map(|i| serde_json::json!({"severity": "error", "code": "C", "message": "m".repeat(i * 20)}))
@@ -916,9 +918,14 @@ mod tests {
         let parse = |v: serde_json::Value| {
             serde_json::from_value::<PrintOrderStatus>(v).unwrap().tracking_text()
         };
-        assert_eq!(parse(serde_json::json!({"status": "shipped", "tracking": "DC-1"})), Some("DC-1".into()));
         assert_eq!(
-            parse(serde_json::json!({"status": "shipped", "tracking": {"number": "N2", "carrier": "x"}})),
+            parse(serde_json::json!({"status": "shipped", "tracking": "DC-1"})),
+            Some("DC-1".into())
+        );
+        assert_eq!(
+            parse(
+                serde_json::json!({"status": "shipped", "tracking": {"number": "N2", "carrier": "x"}})
+            ),
             Some("N2".into())
         );
         assert_eq!(parse(serde_json::json!({"status": "accepted", "tracking": null})), None);

@@ -58,13 +58,21 @@ impl Printer {
     async fn submit(&self, order: &Value, pdf: Vec<u8>) -> (StatusCode, Value) {
         let form = Form::new()
             .part("order", Part::text(order.to_string()).mime_str("application/json").unwrap())
-            .part("file", Part::bytes(pdf).file_name("card.pdf").mime_str("application/pdf").unwrap());
+            .part(
+                "file",
+                Part::bytes(pdf).file_name("card.pdf").mime_str("application/pdf").unwrap(),
+            );
         self.submit_form(form).await
     }
 
     async fn submit_form(&self, form: Form) -> (StatusCode, Value) {
-        let response =
-            self.http.post(format!("{}/v1/orders", self.base)).multipart(form).send().await.unwrap();
+        let response = self
+            .http
+            .post(format!("{}/v1/orders", self.base))
+            .multipart(form)
+            .send()
+            .await
+            .unwrap();
         let status = response.status();
         (status, response.json().await.unwrap())
     }
@@ -214,12 +222,28 @@ async fn bad_pdfs_are_refused_with_findings_and_nothing_is_stored() {
     let poche = catalog::find("card-poche").unwrap();
     let good = SampleCard::for_product(poche);
     let cases: Vec<(&str, Vec<u8>, &str)> = vec![
-        ("wrong format", SampleCard::for_product(catalog::find("card-a6").unwrap()).to_pdf(), "BOX_TRIM_SIZE"),
+        (
+            "wrong format",
+            SampleCard::for_product(catalog::find("card-a6").unwrap()).to_pdf(),
+            "BOX_TRIM_SIZE",
+        ),
         ("no bleed", SampleCard { bleed_mm: 0.0, ..good.clone() }.to_pdf(), "BOX_BLEED_TOO_SMALL"),
-        ("no output intent", SampleCard { output_intent: false, ..good.clone() }.to_pdf(), "NO_OUTPUT_INTENT"),
-        ("low resolution", SampleCard { image_ppi: Some(60.0), ..good.clone() }.to_pdf(), "IMAGE_LOW_RES"),
+        (
+            "no output intent",
+            SampleCard { output_intent: false, ..good.clone() }.to_pdf(),
+            "NO_OUTPUT_INTENT",
+        ),
+        (
+            "low resolution",
+            SampleCard { image_ppi: Some(60.0), ..good.clone() }.to_pdf(),
+            "IMAGE_LOW_RES",
+        ),
         ("one page", SampleCard { pages: 1, ..good.clone() }.to_pdf(), "PAGE_COUNT"),
-        ("wrong spine", SampleCard { spine_mm: 20.0, ..good.clone() }.to_pdf(), "EBC_SPINE_MISMATCH"),
+        (
+            "wrong spine",
+            SampleCard { spine_mm: 20.0, ..good.clone() }.to_pdf(),
+            "EBC_SPINE_MISMATCH",
+        ),
         ("not a pdf", b"<html>pas un PDF</html>".to_vec(), "NOT_A_PDF"),
         ("empty", Vec::new(), "NOT_A_PDF"),
     ];
@@ -236,7 +260,8 @@ async fn bad_pdfs_are_refused_with_findings_and_nothing_is_stored() {
         }
     }
     let truncated = poche_pdf();
-    let (status, body) = p.submit(&order_json("BAD-CUT"), truncated[..truncated.len() / 2].to_vec()).await;
+    let (status, body) =
+        p.submit(&order_json("BAD-CUT"), truncated[..truncated.len() / 2].to_vec()).await;
     assert_eq!(status, StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(error_code(&body), "preflight_failed");
     assert!(p.state.orders().is_empty(), "refused files leave no order behind");
@@ -245,7 +270,10 @@ async fn bad_pdfs_are_refused_with_findings_and_nothing_is_stored() {
 #[tokio::test]
 async fn rgb_is_refused_only_by_the_cmyk_only_product() {
     let p = printer(PrinterConfig::manual()).await;
-    let rgb = SampleCard { rgb_fill: true, ..SampleCard::for_product(catalog::find("card-poche").unwrap()) };
+    let rgb = SampleCard {
+        rgb_fill: true,
+        ..SampleCard::for_product(catalog::find("card-poche").unwrap())
+    };
     let (status, _) = p.submit(&order_json("RGB-DIGITAL"), rgb.to_pdf()).await;
     assert_eq!(status, StatusCode::CREATED, "the digital product converts RGB itself");
 
@@ -272,16 +300,50 @@ async fn invalid_requests_get_precise_errors() {
         order
     };
     let cases: Vec<(Value, StatusCode, &str)> = vec![
-        (patched(&|o| o["product"] = json!("poster")), StatusCode::UNPROCESSABLE_ENTITY, "unknown_product"),
-        (patched(&|o| o["quantity"] = json!(0)), StatusCode::UNPROCESSABLE_ENTITY, "invalid_quantity"),
-        (patched(&|o| o["reference"] = json!("../../etc/passwd")), StatusCode::UNPROCESSABLE_ENTITY, "invalid_reference"),
-        (patched(&|o| o["reference"] = json!("<script>")), StatusCode::UNPROCESSABLE_ENTITY, "invalid_reference"),
-        (patched(&|o| o["address"]["country"] = json!("US")), StatusCode::UNPROCESSABLE_ENTITY, "unsupported_country"),
-        (patched(&|o| o["address"]["name"] = json!("")), StatusCode::UNPROCESSABLE_ENTITY, "invalid_address"),
-        (patched(&|o| o["callback_url"] = json!("file:///etc/passwd")), StatusCode::UNPROCESSABLE_ENTITY, "invalid_callback_url"),
+        (
+            patched(&|o| o["product"] = json!("poster")),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "unknown_product",
+        ),
+        (
+            patched(&|o| o["quantity"] = json!(0)),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "invalid_quantity",
+        ),
+        (
+            patched(&|o| o["reference"] = json!("../../etc/passwd")),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "invalid_reference",
+        ),
+        (
+            patched(&|o| o["reference"] = json!("<script>")),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "invalid_reference",
+        ),
+        (
+            patched(&|o| o["address"]["country"] = json!("US")),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "unsupported_country",
+        ),
+        (
+            patched(&|o| o["address"]["name"] = json!("")),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "invalid_address",
+        ),
+        (
+            patched(&|o| o["callback_url"] = json!("file:///etc/passwd")),
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "invalid_callback_url",
+        ),
         (patched(&|o| o["quantity"] = json!(-3)), StatusCode::BAD_REQUEST, "invalid_order"),
         (patched(&|o| o["quantity"] = json!("many")), StatusCode::BAD_REQUEST, "invalid_order"),
-        (patched(&|o| { o.as_object_mut().unwrap().remove("address"); }), StatusCode::BAD_REQUEST, "invalid_order"),
+        (
+            patched(&|o| {
+                o.as_object_mut().unwrap().remove("address");
+            }),
+            StatusCode::BAD_REQUEST,
+            "invalid_order",
+        ),
         (json!([1, 2, 3]), StatusCode::BAD_REQUEST, "invalid_order"),
     ];
     for (order, expected_status, expected_code) in cases {
@@ -397,8 +459,12 @@ async fn orders_advance_step_by_step_and_notify_the_callback() {
     let (_, fetched) = p.get(&format!("/v1/orders/{id}")).await;
     assert_eq!(fetched["status"], "shipped");
     assert_eq!(fetched["tracking"], "DC00000001FR");
-    let history: Vec<&str> =
-        fetched["history"].as_array().unwrap().iter().map(|h| h["status"].as_str().unwrap()).collect();
+    let history: Vec<&str> = fetched["history"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|h| h["status"].as_str().unwrap())
+        .collect();
     assert_eq!(history, ["accepted", "printing", "shipped"]);
 
     let received = receiver.received.lock().unwrap().clone();

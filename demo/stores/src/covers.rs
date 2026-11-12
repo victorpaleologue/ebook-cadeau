@@ -317,12 +317,9 @@ pub fn render_png(svg_source: &str, width_px: u32) -> Result<Vec<u8>, StoreError
         let mut encoder = png::Encoder::new(&mut out, width_px, height_px);
         encoder.set_color(png::ColorType::Rgb);
         encoder.set_depth(png::BitDepth::Eight);
-        let mut writer = encoder
-            .write_header()
-            .map_err(|e| StoreError::Cover(format!("PNG header: {e}")))?;
-        writer
-            .write_image_data(&rgb)
-            .map_err(|e| StoreError::Cover(format!("PNG data: {e}")))?;
+        let mut writer =
+            encoder.write_header().map_err(|e| StoreError::Cover(format!("PNG header: {e}")))?;
+        writer.write_image_data(&rgb).map_err(|e| StoreError::Cover(format!("PNG data: {e}")))?;
         writer.finish().map_err(|e| StoreError::Cover(format!("PNG end: {e}")))?;
     }
     Ok(out)

@@ -182,10 +182,8 @@ impl SampleCard {
             );
             let metadata = w.alloc();
             w.stream(metadata, "/Type /Metadata /Subtype /XML", self.xmp().as_bytes());
-            let _ = write!(
-                catalog_entries,
-                " /OutputIntents [{intent} 0 R] /Metadata {metadata} 0 R"
-            );
+            let _ =
+                write!(catalog_entries, " /OutputIntents [{intent} 0 R] /Metadata {metadata} 0 R");
         }
         w.object(catalog, &format!("<< {catalog_entries} >>"));
 
@@ -446,8 +444,9 @@ impl Writer {
 
     fn stream(&mut self, id: usize, entries: &str, data: &[u8]) {
         self.begin(id);
-        self.buffer
-            .extend_from_slice(format!("<< {entries} /Length {} >>\nstream\n", data.len()).as_bytes());
+        self.buffer.extend_from_slice(
+            format!("<< {entries} /Length {} >>\nstream\n", data.len()).as_bytes(),
+        );
         self.buffer.extend_from_slice(data);
         self.buffer.extend_from_slice(b"\nendstream\nendobj\n");
     }
@@ -511,8 +510,7 @@ mod tests {
         let table_text = String::from_utf8_lossy(table);
         let mut lines = table_text.lines();
         assert_eq!(lines.next(), Some("xref"));
-        let count: usize =
-            lines.next().unwrap().strip_prefix("0 ").unwrap().parse().unwrap();
+        let count: usize = lines.next().unwrap().strip_prefix("0 ").unwrap().parse().unwrap();
         for (number, line) in lines.take(count).enumerate().skip(1) {
             assert_eq!(line.len(), 19, "{line:?} (plus the newline: 20 bytes)");
             let offset: usize = line[..10].parse().unwrap();

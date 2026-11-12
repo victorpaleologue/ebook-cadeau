@@ -91,12 +91,9 @@ impl Product {
     }
 }
 
-const PRICE_INCLUDES: &str =
-    "impression recto verso, deux rainages, livraison à une adresse (lettre suivie en France), TVA 20 %";
-const PRICE_BASIS: &str =
-    "prix de démonstration, indicatifs : ordres de grandeur relevés dans docs/research, pas des devis";
-const DIGITAL_PAPER: &str =
-    "Carte couchée demi-mate 350 g/m², fibres issues de forêts gérées durablement (mention fictive), sans pelliculage";
+const PRICE_INCLUDES: &str = "impression recto verso, deux rainages, livraison à une adresse (lettre suivie en France), TVA 20 %";
+const PRICE_BASIS: &str = "prix de démonstration, indicatifs : ordres de grandeur relevés dans docs/research, pas des devis";
+const DIGITAL_PAPER: &str = "Carte couchée demi-mate 350 g/m², fibres issues de forêts gérées durablement (mention fictive), sans pelliculage";
 
 const fn digital(
     id: &'static str,

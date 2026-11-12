@@ -77,8 +77,10 @@ async fn security_headers(mut response: Response) -> Response {
         HeaderName::from_static("x-content-type-options"),
         HeaderValue::from_static("nosniff"),
     );
-    headers
-        .insert(HeaderName::from_static("referrer-policy"), HeaderValue::from_static("no-referrer"));
+    headers.insert(
+        HeaderName::from_static("referrer-policy"),
+        HeaderValue::from_static("no-referrer"),
+    );
     headers.insert(
         HeaderName::from_static("content-security-policy"),
         HeaderValue::from_static(
@@ -117,7 +119,11 @@ fn visitor(state: &AppState, headers: &HeaderMap) -> (Option<String>, SessionVie
 }
 
 fn chrome<'a>(state: &AppState, view: &'a SessionView) -> Chrome<'a> {
-    Chrome { store: state.config.kind, account: view.account.as_deref(), cart_count: view.cart.len() }
+    Chrome {
+        store: state.config.kind,
+        account: view.account.as_deref(),
+        cart_count: view.cart.len(),
+    }
 }
 
 fn html(status: StatusCode, markup: Markup) -> Response {
@@ -127,7 +133,9 @@ fn html(status: StatusCode, markup: Markup) -> Response {
 fn see_other(location: &str) -> Response {
     match HeaderValue::from_str(location) {
         Ok(value) => (StatusCode::SEE_OTHER, [(LOCATION, value)]).into_response(),
-        Err(_) => (StatusCode::SEE_OTHER, [(LOCATION, HeaderValue::from_static("/"))]).into_response(),
+        Err(_) => {
+            (StatusCode::SEE_OTHER, [(LOCATION, HeaderValue::from_static("/"))]).into_response()
+        }
     }
 }
 
@@ -238,7 +246,11 @@ async fn product(
     html(StatusCode::OK, views::product(&chrome(&state, &view), book, owned, in_cart))
 }
 
-async fn cover(State(state): State<Shared>, headers: HeaderMap, Path(file): Path<String>) -> Response {
+async fn cover(
+    State(state): State<Shared>,
+    headers: HeaderMap,
+    Path(file): Path<String>,
+) -> Response {
     let found = file.rsplit_once('.').and_then(|(id, ext)| {
         let assets = state.assets.as_ref().ok()?.book(id)?;
         Some((assets, ext))
@@ -674,9 +686,9 @@ async fn library_download(
             "Vos Ebooks se lisent sur votre liseuse et dans l'application, pas depuis ce site.",
         );
     }
-    let entry = file.strip_suffix(".epub").and_then(|id| {
-        state.library(email).into_iter().find(|entry| entry.book_id == id)
-    });
+    let entry = file
+        .strip_suffix(".epub")
+        .and_then(|id| state.library(email).into_iter().find(|entry| entry.book_id == id));
     let assets = entry.as_ref().and_then(|e| state.assets.as_ref().ok()?.book(e.book_id));
     let (Some(entry), Some(assets)) = (entry, assets) else {
         return not_found(State(state), headers).await;
@@ -778,8 +790,12 @@ async fn activation_page(
     match state.check_activation(&pending.gift_id, &pending.line_ref, account) {
         Activation::Ok { book, giver_name, already_owned } => {
             if account.is_some() {
-                let page =
-                    views::activation_confirm(&chrome(&state, &view), book, &giver_name, already_owned);
+                let page = views::activation_confirm(
+                    &chrome(&state, &view),
+                    book,
+                    &giver_name,
+                    already_owned,
+                );
                 html(StatusCode::OK, page)
             } else {
                 auth_page(&state, &view, StatusCode::OK, "/cadeau/activer", None, "")
@@ -936,7 +952,11 @@ async fn webhook_ebc(
     match verdict {
         Ok(()) => {}
         Err(SignatureError::Stale) => {
-            return json_error(StatusCode::UNAUTHORIZED, "stale_timestamp", "timestamp too old or too new");
+            return json_error(
+                StatusCode::UNAUTHORIZED,
+                "stale_timestamp",
+                "timestamp too old or too new",
+            );
         }
         Err(SignatureError::Mismatch) => {
             return json_error(StatusCode::UNAUTHORIZED, "bad_signature", "signature mismatch");
@@ -1018,11 +1038,17 @@ async fn device_link(State(state): State<Shared>, body: Bytes) -> Response {
         );
     };
     let Some(email) = state.check_password(&request.email, &request.password) else {
-        return json_error(StatusCode::UNAUTHORIZED, "invalid_credentials", "wrong e-mail or password");
+        return json_error(
+            StatusCode::UNAUTHORIZED,
+            "invalid_credentials",
+            "wrong e-mail or password",
+        );
     };
     match state.link_device(&email) {
         Ok(token) => axum::Json(serde_json::json!({ "device_token": token })).into_response(),
-        Err(_) => json_error(StatusCode::INTERNAL_SERVER_ERROR, "internal", "token generation failed"),
+        Err(_) => {
+            json_error(StatusCode::INTERNAL_SERVER_ERROR, "internal", "token generation failed")
+        }
     }
 }
 
@@ -1034,11 +1060,12 @@ fn device_account(state: &AppState, headers: &HeaderMap) -> Result<String, Box<R
         .and_then(|v| v.strip_prefix("Bearer ").or_else(|| v.strip_prefix("bearer ")))
         .and_then(|token| state.device_account(token.trim()))
         .ok_or_else(|| {
-            let mut response =
-                json_error(StatusCode::UNAUTHORIZED, "invalid_token", "unknown or missing device token");
-            response
-                .headers_mut()
-                .insert("www-authenticate", HeaderValue::from_static("Bearer"));
+            let mut response = json_error(
+                StatusCode::UNAUTHORIZED,
+                "invalid_token",
+                "unknown or missing device token",
+            );
+            response.headers_mut().insert("www-authenticate", HeaderValue::from_static("Bearer"));
             Box::new(response)
         })
 }
@@ -1080,7 +1107,11 @@ async fn device_book(
         .and_then(|id| state.assets.as_ref().ok()?.book(id));
     match owned {
         Some(assets) => epub_response(&assets.book.file_name(), assets.epub.clone()),
-        None => json_error(StatusCode::NOT_FOUND, "not_in_library", "this account does not own that book"),
+        None => json_error(
+            StatusCode::NOT_FOUND,
+            "not_in_library",
+            "this account does not own that book",
+        ),
     }
 }
 

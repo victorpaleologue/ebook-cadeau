@@ -100,7 +100,13 @@ async fn covers_are_served_as_svg_and_as_print_ready_png() {
     assert!(info.width >= 1300 && info.height >= 2100, "{}x{}", info.width, info.height);
     assert_eq!(info.color_type, png::ColorType::Rgb, "opaque, ready for print");
 
-    for bad in ["/covers/candide.gif", "/covers/candide", "/covers/nope.png", "/covers/..%2F..%2Fetc%2Fpasswd.svg", "/covers/.svg"] {
+    for bad in [
+        "/covers/candide.gif",
+        "/covers/candide",
+        "/covers/nope.png",
+        "/covers/..%2F..%2Fetc%2Fpasswd.svg",
+        "/covers/.svg",
+    ] {
         assert_eq!(browser.get(bad).await.status, StatusCode::NOT_FOUND, "{bad}");
     }
 }
@@ -155,13 +161,19 @@ async fn septante_purchase_without_gift_ends_in_a_watermarked_download() {
     assert!(browser.get("/panier").await.has("cart-empty"));
     let library = browser.get("/bibliotheque").await;
     assert!(library.has("owned-candide") && library.has("owned-le-horla"));
-    assert_eq!(library.attr("download-candide", "href").as_deref(), Some("/bibliotheque/candide.epub"));
+    assert_eq!(
+        library.attr("download-candide", "href").as_deref(),
+        Some("/bibliotheque/candide.epub")
+    );
 
     // the download is a valid EPUB stamped for the buyer
     let download = browser.get("/bibliotheque/candide.epub").await;
     assert_eq!(download.status, StatusCode::OK);
     assert_eq!(download.header("content-type"), Some("application/epub+zip"));
-    assert_eq!(download.header("content-disposition"), Some("attachment; filename=\"candide.epub\""));
+    assert_eq!(
+        download.header("content-disposition"),
+        Some("attachment; filename=\"candide.epub\"")
+    );
     let (names, files) = open_epub(&download.body);
     assert!(names.contains(&"OEBPS/watermark.xhtml".to_owned()));
     let watermark = text_of(&files, "OEBPS/watermark.xhtml");
@@ -231,7 +243,8 @@ async fn grande_enseigne_purchase_lands_in_the_account_and_on_the_e_reader() {
     assert_eq!(anonymous.headers()["www-authenticate"], "Bearer");
     let forged = http.get(&library_url).bearer_auth("0".repeat(64)).send().await.unwrap();
     assert_eq!(forged.status(), StatusCode::UNAUTHORIZED);
-    let books: Value = http.get(&library_url).bearer_auth(&token).send().await.unwrap().json().await.unwrap();
+    let books: Value =
+        http.get(&library_url).bearer_auth(&token).send().await.unwrap().json().await.unwrap();
     assert_eq!(
         books,
         json!([{
@@ -308,7 +321,10 @@ async fn accounts_sign_in_out_and_reject_bad_input() {
     for path in ["/commande", "/commandes", "/bibliotheque", "/commande/SEP-2026-000001"] {
         let page = anonymous.get_once(path).await;
         assert_eq!(page.status, StatusCode::SEE_OTHER, "{path}");
-        assert!(page.header("location").unwrap().starts_with("/compte/connexion?next=%2F"), "{path}");
+        assert!(
+            page.header("location").unwrap().starts_with("/compte/connexion?next=%2F"),
+            "{path}"
+        );
     }
 }
 
@@ -316,20 +332,27 @@ async fn accounts_sign_in_out_and_reject_bad_input() {
 async fn the_next_parameter_never_redirects_off_site() {
     let world = World::new().await;
     let store = world.store(StoreKind::Septante).await;
-    let hostile = ["https://evil.example/", "//evil.example", "/\\evil.example", "javascript:alert(1)"];
+    let hostile =
+        ["https://evil.example/", "//evil.example", "/\\evil.example", "javascript:alert(1)"];
     for (index, next) in hostile.into_iter().enumerate() {
         // After registration…
         let browser = store.browser();
         let email = format!("visiteur{index}@example.org");
         let page = browser
-            .post("/compte/inscription", &[("email", &email), ("password", "motdepasse"), ("next", next)])
+            .post(
+                "/compte/inscription",
+                &[("email", &email), ("password", "motdepasse"), ("next", next)],
+            )
             .await;
         // (`Browser::follow` also asserts that every hop stays on the store's origin.)
         assert_eq!(page.hops, [(StatusCode::SEE_OTHER, "/".to_owned())], "{next}");
         // …after sign-in…
         let browser = store.browser();
         let page = browser
-            .post("/compte/connexion", &[("email", &email), ("password", "motdepasse"), ("next", next)])
+            .post(
+                "/compte/connexion",
+                &[("email", &email), ("password", "motdepasse"), ("next", next)],
+            )
             .await;
         assert_eq!(page.hops, [(StatusCode::SEE_OTHER, "/".to_owned())], "{next}");
         // …and after sign-out.
@@ -382,7 +405,10 @@ async fn session_cookies_are_scoped_and_rotated_at_sign_in() {
         let url = format!("{}/panier", septante.base);
         async move { http.get(url).header("cookie", sid).send().await.unwrap().text().await.unwrap() }
     };
-    assert!(cart_with(signed_in_sid.clone()).await.contains("id=\"line-candide\""), "the cart follows");
+    assert!(
+        cart_with(signed_in_sid.clone()).await.contains("id=\"line-candide\""),
+        "the cart follows"
+    );
     assert!(cart_with(anonymous_sid).await.contains("id=\"cart-empty\""));
 
     // A client-chosen identifier is never adopted (no session fixation).
@@ -415,7 +441,10 @@ async fn hostile_form_input_is_harmless() {
     let world = World::new().await;
     let store = world.store(StoreKind::Septante).await;
     let browser = store.browser();
-    assert_eq!(browser.add_to_cart("<script>alert(1)</script>").await.status, StatusCode::NOT_FOUND);
+    assert_eq!(
+        browser.add_to_cart("<script>alert(1)</script>").await.status,
+        StatusCode::NOT_FOUND
+    );
     assert_eq!(browser.add_to_cart("../../etc/passwd").await.status, StatusCode::NOT_FOUND);
     assert_eq!(browser.add_to_cart("").await.status, StatusCode::NOT_FOUND);
     // Removing something that is not there, or with no session at all, is a no-op.
@@ -484,6 +513,7 @@ async fn test_hooks_expose_state_only_when_enabled() {
     assert!(!dump.contains("password") && !dump.contains("salt") && !dump.contains("motdepasse"));
 
     let closed = world.store_with(StoreKind::Septante, |c| c.with_test_hooks(false)).await;
-    let response = plain_client().get(format!("{}/__test/state", closed.base)).send().await.unwrap();
+    let response =
+        plain_client().get(format!("{}/__test/state", closed.base)).send().await.unwrap();
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }

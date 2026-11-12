@@ -320,7 +320,11 @@ impl PrinterState {
             let same = existing.pdf_sha256 == new.pdf_sha256
                 && existing.product == new.product.id
                 && existing.quantity == new.quantity;
-            return if same { Registration::Replayed(existing.clone()) } else { Registration::Conflict };
+            return if same {
+                Registration::Replayed(existing.clone())
+            } else {
+                Registration::Conflict
+            };
         }
         if inner.orders.len() >= MAX_ORDERS {
             return Registration::Full;
@@ -375,7 +379,12 @@ impl PrinterState {
 
     /// Moves an order to `status` and returns its new state, or `None` when the order does
     /// not exist or `expected` is not its current status any more.
-    fn transition(&self, order_id: &str, expected: OrderStatus, status: OrderStatus) -> Option<Order> {
+    fn transition(
+        &self,
+        order_id: &str,
+        expected: OrderStatus,
+        status: OrderStatus,
+    ) -> Option<Order> {
         let now = self.config.clock.now();
         let mut inner = self.lock();
         let order = inner.orders.get_mut(order_id)?;
@@ -455,7 +464,8 @@ impl PrinterState {
             "tracking": order.tracking,
             "at": order.updated_at,
         });
-        let mut outcome = CallbackAttempt { status: order.status, http_status: None, delivered: false };
+        let mut outcome =
+            CallbackAttempt { status: order.status, http_status: None, delivered: false };
         for attempt in 0..CALLBACK_ATTEMPTS {
             if attempt > 0 {
                 tokio::time::sleep(self.config.callback_retry_delay).await;
@@ -586,18 +596,24 @@ mod tests {
         let a = created(state.register(new_order("REF-1", "aa")));
         let b = created(state.register(new_order("REF-2", "aa")));
         assert_ne!(a.order_id, b.order_id);
-        let other = PrinterState::new(PrinterConfig { id_salt: "other".into(), ..PrinterConfig::manual() });
+        let other =
+            PrinterState::new(PrinterConfig { id_salt: "other".into(), ..PrinterConfig::manual() });
         let c = created(other.register(new_order("REF-1", "aa")));
         assert_ne!(a.order_id, c.order_id);
-        assert_eq!(state.orders().iter().map(|o| o.reference.as_str()).collect::<Vec<_>>(), ["REF-1", "REF-2"]);
+        assert_eq!(
+            state.orders().iter().map(|o| o.reference.as_str()).collect::<Vec<_>>(),
+            ["REF-1", "REF-2"]
+        );
     }
 
     #[tokio::test]
     async fn automatic_mode_reaches_shipped_on_its_own() {
-        let config = PrinterConfig { tick: Some(Duration::from_millis(10)), ..PrinterConfig::manual() };
+        let config =
+            PrinterConfig { tick: Some(Duration::from_millis(10)), ..PrinterConfig::manual() };
         let state = PrinterState::new(config);
         let order = created(state.register(new_order("REF-1", "aa")));
-        let task = tokio::spawn(state.clone().run(order.order_id.clone(), Duration::from_millis(10)));
+        let task =
+            tokio::spawn(state.clone().run(order.order_id.clone(), Duration::from_millis(10)));
         tokio::time::timeout(Duration::from_secs(10), task).await.unwrap().unwrap();
         assert_eq!(state.order(&order.order_id).unwrap().status, OrderStatus::Shipped);
     }

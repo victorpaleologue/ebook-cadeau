@@ -586,12 +586,8 @@ fn print_block(print: &PrintRecord, id: &dyn Fn(&str) -> String) -> Markup {
 #[must_use]
 pub fn order(chrome: &Chrome<'_>, order: &Order, notice: Option<&str>) -> Markup {
     let store = chrome.store;
-    let gifts: Vec<(usize, &GiftRecord)> = order
-        .lines
-        .iter()
-        .filter_map(|l| l.gift.as_ref())
-        .enumerate()
-        .collect();
+    let gifts: Vec<(usize, &GiftRecord)> =
+        order.lines.iter().filter_map(|l| l.gift.as_ref()).enumerate().collect();
     let needs_retry = order.status == OrderStatus::Paid
         && gifts.iter().any(|(_, g)| {
             !g.status.is_terminal()
@@ -603,7 +599,8 @@ pub fn order(chrome: &Chrome<'_>, order: &Order, notice: Option<&str>) -> Markup
     let cancellable = order.status == OrderStatus::Paid
         && !gifts.is_empty()
         && gifts.iter().all(|(_, g)| {
-            matches!(g.status, GiftStatus::Pending | GiftStatus::Created) && g.activated_by.is_none()
+            matches!(g.status, GiftStatus::Pending | GiftStatus::Created)
+                && g.activated_by.is_none()
         });
     let books_total: u32 = order.lines.iter().map(|l| l.price_cents).sum();
     page(

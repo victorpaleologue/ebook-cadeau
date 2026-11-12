@@ -195,7 +195,8 @@ impl EpubBuilder {
 
     /// Serialises the EPUB.
     pub fn build(&self) -> Vec<u8> {
-        let stored = |name: &str, data: Vec<u8>| ZipEntry { name: name.to_owned(), data, method: 0 };
+        let stored =
+            |name: &str, data: Vec<u8>| ZipEntry { name: name.to_owned(), data, method: 0 };
         let mimetype = ZipEntry {
             name: "mimetype".to_owned(),
             data: self.mimetype_content.clone().into_bytes(),
@@ -364,7 +365,9 @@ pub fn pdf(title: &str) -> Vec<u8> {
         out.extend_from_slice(format!("{} 0 obj\n{body}\nendobj\n", i + 1).as_bytes());
     }
     let xref = out.len();
-    out.extend_from_slice(format!("xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1).as_bytes());
+    out.extend_from_slice(
+        format!("xref\n0 {}\n0000000000 65535 f \n", objects.len() + 1).as_bytes(),
+    );
     for offset in offsets {
         out.extend_from_slice(format!("{offset:010} 00000 n \n").as_bytes());
     }

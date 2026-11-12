@@ -105,7 +105,11 @@ impl SyncDevice {
     }
 
     /// The same with explicit limits.
-    pub fn with_config(profile: DeviceProfile, store_url: &str, config: SyncConfig) -> Result<Self> {
+    pub fn with_config(
+        profile: DeviceProfile,
+        store_url: &str,
+        config: SyncConfig,
+    ) -> Result<Self> {
         let mut store = net::parse_url(store_url)?;
         store.set_query(None);
         store.set_fragment(None);
@@ -154,7 +158,8 @@ impl SyncDevice {
 
     fn endpoint(&self, path: &str) -> Result<Url> {
         self.store.join(path).map_err(|e| {
-            NetError::InvalidUrl { url: format!("{}{path}", self.store), reason: e.to_string() }.into()
+            NetError::InvalidUrl { url: format!("{}{path}", self.store), reason: e.to_string() }
+                .into()
         })
     }
 
@@ -173,10 +178,15 @@ impl SyncDevice {
             method: Method::POST,
             url: self.endpoint("api/device/link")?,
             headers: vec![("accept", "application/json".to_owned())],
-            body: Some(Body { content_type: "application/json".to_owned(), bytes: body.to_string().into_bytes() }),
+            body: Some(Body {
+                content_type: "application/json".to_owned(),
+                bytes: body.to_string().into_bytes(),
+            }),
         };
-        let (head, bytes) =
-            self.http.fetch_bytes(request, self.config.max_listing_bytes, &mut self.exchanges).await?;
+        let (head, bytes) = self
+            .http
+            .fetch_bytes(request, self.config.max_listing_bytes, &mut self.exchanges)
+            .await?;
         if matches!(head.status, 400 | 401 | 403) {
             return Err(SyncError::BadCredentials { status: head.status }.into());
         }
@@ -190,7 +200,9 @@ impl SyncDevice {
             .and_then(|t| t.as_str())
             .map(str::trim)
             .filter(|t| !t.is_empty() && t.len() <= 4096 && t.chars().all(|c| c.is_ascii_graphic()))
-            .ok_or_else(|| SyncError::Protocol("link response has no usable device_token".to_owned()))?;
+            .ok_or_else(|| {
+                SyncError::Protocol("link response has no usable device_token".to_owned())
+            })?;
         self.token = Some(token.to_owned());
         Ok(())
     }
@@ -207,8 +219,10 @@ impl SyncDevice {
         let request = Request::get(self.endpoint("api/device/library")?)
             .header("accept", "application/json")
             .header("authorization", bearer.clone());
-        let (head, bytes) =
-            self.http.fetch_bytes(request, self.config.max_listing_bytes, &mut self.exchanges).await?;
+        let (head, bytes) = self
+            .http
+            .fetch_bytes(request, self.config.max_listing_bytes, &mut self.exchanges)
+            .await?;
         if matches!(head.status, 401 | 403) {
             self.token = None;
             return Err(SyncError::Unauthorized { status: head.status }.into());
@@ -225,12 +239,15 @@ impl SyncDevice {
         let mut report = SyncReport::default();
         for book in books.iter().take(self.config.max_books) {
             let text = |key: &str| match book.get(key) {
-                Some(serde_json::Value::String(s)) => s.trim().chars().take(500).collect::<String>(),
+                Some(serde_json::Value::String(s)) => {
+                    s.trim().chars().take(500).collect::<String>()
+                }
                 Some(serde_json::Value::Number(n)) => n.to_string(),
                 _ => String::new(),
             };
             let (id, title) = (text("id"), text("title"));
-            let skip = |reason: SkipReason| SkippedBook { id: id.clone(), title: title.clone(), reason };
+            let skip =
+                |reason: SkipReason| SkippedBook { id: id.clone(), title: title.clone(), reason };
             if id.is_empty() {
                 report.skipped.push(skip(SkipReason::BadEntry("no id".to_owned())));
                 continue;
@@ -246,7 +263,9 @@ impl SyncDevice {
                 .ok()
                 .filter(|u| !raw_url.is_empty() && matches!(u.scheme(), "http" | "https"))
             else {
-                report.skipped.push(skip(SkipReason::BadEntry("no usable download_url".to_owned())));
+                report
+                    .skipped
+                    .push(skip(SkipReason::BadEntry("no usable download_url".to_owned())));
                 continue;
             };
             if !net::same_origin(&self.store, &url) {
@@ -257,9 +276,13 @@ impl SyncDevice {
             let fetched = async {
                 let (head, response) = self.http.fetch(request, None, &mut self.exchanges).await?;
                 if !head.is_success() {
-                    return Err(NetError::Status { url: head.url.to_string(), status: head.status });
+                    return Err(NetError::Status {
+                        url: head.url.to_string(),
+                        status: head.status,
+                    });
                 }
-                let bytes = self.http.read(&head, response, self.profile.max_download_bytes).await?;
+                let bytes =
+                    self.http.read(&head, response, self.profile.max_download_bytes).await?;
                 Ok((head, bytes))
             }
             .await;
@@ -276,7 +299,9 @@ impl SyncDevice {
                 .header("content-type")
                 .and_then(FileFormat::from_media_type)
                 .or_else(|| FileFormat::from_media_type(&listed))
-                .or_else(|| FileFormat::from_file_name(&format!("x.{}", listed.to_ascii_lowercase())))
+                .or_else(|| {
+                    FileFormat::from_file_name(&format!("x.{}", listed.to_ascii_lowercase()))
+                })
                 .or_else(|| FileFormat::from_file_name(&file_name));
             match self.library.import(
                 &self.profile,

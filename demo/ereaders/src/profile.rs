@@ -341,17 +341,56 @@ impl DeviceProfile {
             assumption(C::UserAgent, "full UA string", UA_WHY),
             assumption(C::Cookies, "cookies are kept", COOKIES_WHY),
             assumption(C::PageWeight, "pages up to 1 MiB", PAGE_CAP_WHY),
-            research(C::JavaScript, "the Nickel browser (QtWebKit fork) runs ES5 + XMLHttpRequest; modern syntax is not assumed", "devices §3.2", Grade::V1),
-            research(C::BrowserDownloads, "the browser saves EPUB/KEPUB/PDF to the library", "devices §2", Grade::V2),
-            research(C::ReadingFormats, "EPUB 2/3, KEPUB, PDF, TXT, CBZ are native", "devices §2", Grade::V1),
+            research(
+                C::JavaScript,
+                "the Nickel browser (QtWebKit fork) runs ES5 + XMLHttpRequest; modern syntax is not assumed",
+                "devices §3.2",
+                Grade::V1,
+            ),
+            research(
+                C::BrowserDownloads,
+                "the browser saves EPUB/KEPUB/PDF to the library",
+                "devices §2",
+                Grade::V2,
+            ),
+            research(
+                C::ReadingFormats,
+                "EPUB 2/3, KEPUB, PDF, TXT, CBZ are native",
+                "devices §2",
+                Grade::V1,
+            ),
             research(C::ReadingFormats, "MOBI is native", "devices §2", Grade::M),
-            research(C::Drm, "Kobo DRM arrives by store sync only; Adobe needs a computer; no LCP — so nothing protected can be opened from a direct download", "devices §2", Grade::M),
-            research(C::MailService, "no mail-to-device service (cloud options are Dropbox/Google Drive on some models)", "devices §2", Grade::V1),
+            research(
+                C::Drm,
+                "Kobo DRM arrives by store sync only; Adobe needs a computer; no LCP — so nothing protected can be opened from a direct download",
+                "devices §2",
+                Grade::M,
+            ),
+            research(
+                C::MailService,
+                "no mail-to-device service (cloud options are Dropbox/Google Drive on some models)",
+                "devices §2",
+                Grade::V1,
+            ),
             research(C::Opds, "no native OPDS client", "devices §2", Grade::M),
             research(C::Screen, "6-inch class", "devices §2", Grade::M),
-            assumption(C::Keyboard, "three-layer keyboard; 4 taps to reach the beta browser (More → Settings → Beta features → Web browser); 1 tap to confirm a download", KEYBOARD_WHY),
-            research(C::Quirks, "the browser has problems on non-standard ports", "devices §3.2", Grade::V1),
-            research(C::Quirks, "`.kepub.epub` selects the Kobo WebKit renderer, plain `.epub` the Adobe one", "devices §3.2", Grade::V2),
+            assumption(
+                C::Keyboard,
+                "three-layer keyboard; 4 taps to reach the beta browser (More → Settings → Beta features → Web browser); 1 tap to confirm a download",
+                KEYBOARD_WHY,
+            ),
+            research(
+                C::Quirks,
+                "the browser has problems on non-standard ports",
+                "devices §3.2",
+                Grade::V1,
+            ),
+            research(
+                C::Quirks,
+                "`.kepub.epub` selects the Kobo WebKit renderer, plain `.epub` the Adobe one",
+                "devices §3.2",
+                Grade::V2,
+            ),
             REFERRER_CLAIM,
         ];
         Self {
@@ -391,7 +430,12 @@ impl DeviceProfile {
     pub fn kobo_ereader_ua() -> Self {
         use Capability as C;
         const CLAIMS: &[Claim] = &[
-            research(C::UserAgent, "newer Kobo firmware reports a generic `eReader` and no longer `Kobo`", "devices §3.2", Grade::V1),
+            research(
+                C::UserAgent,
+                "newer Kobo firmware reports a generic `eReader` and no longer `Kobo`",
+                "devices §3.2",
+                Grade::V1,
+            ),
             assumption(C::UserAgent, "full UA string", UA_WHY),
             assumption(C::Cookies, "cookies are kept", COOKIES_WHY),
             assumption(C::PageWeight, "pages up to 1 MiB", PAGE_CAP_WHY),
@@ -420,23 +464,77 @@ impl DeviceProfile {
     pub fn kindle_paperwhite() -> Self {
         use Capability as C;
         const CLAIMS: &[Claim] = &[
-            research(C::UserAgent, "classic Kindle browsers identify as `Kindle/3`", "devices §3.1", Grade::V1),
+            research(
+                C::UserAgent,
+                "classic Kindle browsers identify as `Kindle/3`",
+                "devices §3.1",
+                Grade::V1,
+            ),
             assumption(C::UserAgent, "full UA string", UA_WHY),
             assumption(C::Cookies, "cookies are kept", COOKIES_WHY),
             assumption(C::PageWeight, "pages up to 1 MiB", PAGE_CAP_WHY),
-            assumption(C::JavaScript, "an old WebKit; ES5 at best", "engine level could not be verified (devices, 'Could not verify')"),
-            research(C::BrowserDownloads, "the browser downloads AZW3 and MOBI", "devices §2", Grade::V2),
-            research(C::BrowserDownloads, "the browser also downloads TXT; other types are refused", "devices §2", Grade::M),
-            research(C::BrowserDownloads, "EPUB is not downloadable; PDF download is reported failing", "devices §2", Grade::V1),
-            research(C::ReadingFormats, "KFX, AZW3, AZW, MOBI, PDF, TXT are native; no EPUB", "devices §3.1", Grade::V2),
+            assumption(
+                C::JavaScript,
+                "an old WebKit; ES5 at best",
+                "engine level could not be verified (devices, 'Could not verify')",
+            ),
+            research(
+                C::BrowserDownloads,
+                "the browser downloads AZW3 and MOBI",
+                "devices §2",
+                Grade::V2,
+            ),
+            research(
+                C::BrowserDownloads,
+                "the browser also downloads TXT; other types are refused",
+                "devices §2",
+                Grade::M,
+            ),
+            research(
+                C::BrowserDownloads,
+                "EPUB is not downloadable; PDF download is reported failing",
+                "devices §2",
+                Grade::V1,
+            ),
+            research(
+                C::ReadingFormats,
+                "KFX, AZW3, AZW, MOBI, PDF, TXT are native; no EPUB",
+                "devices §3.1",
+                Grade::V2,
+            ),
             research(C::Drm, "Amazon DRM only, by account sync", "devices §2", Grade::M),
-            research(C::MailService, "Send to Kindle by e-mail: approved senders, EPUB converted, AZW3/MOBI refused", "devices §3.1", Grade::V2),
-            research(C::Opds, "no OPDS (KOReader on jailbroken units only)", "devices §2", Grade::V1),
+            research(
+                C::MailService,
+                "Send to Kindle by e-mail: approved senders, EPUB converted, AZW3/MOBI refused",
+                "devices §3.1",
+                Grade::V2,
+            ),
+            research(
+                C::Opds,
+                "no OPDS (KOReader on jailbroken units only)",
+                "devices §2",
+                Grade::V1,
+            ),
             research(C::Screen, "6 to 7-inch class", "devices §2", Grade::M),
-            research(C::Keyboard, "the browser is reached through the ⋮ menu → Web Browser (2 taps); a download asks for an OK (1 tap)", "devices §3.1", Grade::V1),
+            research(
+                C::Keyboard,
+                "the browser is reached through the ⋮ menu → Web Browser (2 taps); a download asks for an OK (1 tap)",
+                "devices §3.1",
+                Grade::V1,
+            ),
             assumption(C::Keyboard, "three-layer keyboard", KEYBOARD_WHY),
-            research(C::Quirks, "download file names must be plain ASCII", "devices §3.1", Grade::V1),
-            research(C::Quirks, "a browser download is not added to the Kindle library proper and shows no cover", "devices §3.1", Grade::V1),
+            research(
+                C::Quirks,
+                "download file names must be plain ASCII",
+                "devices §3.1",
+                Grade::V1,
+            ),
+            research(
+                C::Quirks,
+                "a browser download is not added to the Kindle library proper and shows no cover",
+                "devices §3.1",
+                Grade::V1,
+            ),
             REFERRER_CLAIM,
         ];
         Self {
@@ -479,11 +577,25 @@ impl DeviceProfile {
     pub fn kindle_2024() -> Self {
         use Capability as C;
         const CLAIMS: &[Claim] = &[
-            research(C::UserAgent, "a 2024 Kindle on firmware 5.18.6 is no longer recognised as `Kindle`", "devices §3.1", Grade::V1),
-            assumption(C::UserAgent, "full UA string (a Chromium-style UA without any Kindle token)", UA_WHY),
+            research(
+                C::UserAgent,
+                "a 2024 Kindle on firmware 5.18.6 is no longer recognised as `Kindle`",
+                "devices §3.1",
+                Grade::V1,
+            ),
+            assumption(
+                C::UserAgent,
+                "full UA string (a Chromium-style UA without any Kindle token)",
+                UA_WHY,
+            ),
             assumption(C::Cookies, "cookies are kept", COOKIES_WHY),
             assumption(C::PageWeight, "pages up to 1 MiB", PAGE_CAP_WHY),
-            research(C::JavaScript, "engine reportedly Chromium-based since firmware 5.16.4", "devices §2", Grade::M),
+            research(
+                C::JavaScript,
+                "engine reportedly Chromium-based since firmware 5.16.4",
+                "devices §2",
+                Grade::M,
+            ),
             research(C::BrowserDownloads, "as kindle-paperwhite", "devices §2", Grade::V2),
             research(C::ReadingFormats, "as kindle-paperwhite", "devices §3.1", Grade::V2),
             research(C::Drm, "as kindle-paperwhite", "devices §2", Grade::M),
@@ -492,7 +604,11 @@ impl DeviceProfile {
             research(C::Screen, "6-inch class", "devices §2", Grade::M),
             research(C::Keyboard, "as kindle-paperwhite", "devices §3.1", Grade::V1),
             research(C::Quirks, "as kindle-paperwhite", "devices §3.1", Grade::V1),
-            assumption(C::Quirks, "honours Referrer-Policy", "follows from the reportedly Chromium-based engine (devices §2 [M])"),
+            assumption(
+                C::Quirks,
+                "honours Referrer-Policy",
+                "follows from the reportedly Chromium-based engine (devices §2 [M])",
+            ),
         ];
         Self {
             id: "kindle-2024",
@@ -508,18 +624,50 @@ impl DeviceProfile {
     pub fn pocketbook() -> Self {
         use Capability as C;
         const CLAIMS: &[Claim] = &[
-            assumption(C::UserAgent, "a WebKit UA carrying a `PocketBook/` token", "the research sources no PocketBook UA at all"),
+            assumption(
+                C::UserAgent,
+                "a WebKit UA carrying a `PocketBook/` token",
+                "the research sources no PocketBook UA at all",
+            ),
             assumption(C::Cookies, "cookies are kept", COOKIES_WHY),
             assumption(C::PageWeight, "pages up to 1 MiB", PAGE_CAP_WHY),
             research(C::JavaScript, "WebKit-based browser; level unknown", "devices §2", Grade::M),
-            research(C::BrowserDownloads, "the browser downloads book files", "devices §2", Grade::M),
-            assumption(C::BrowserDownloads, "`.lcpl` and `.acsm` downloads are handed to the reading system", "on-device licence handling is listed as unverified (devices §3.4) and is the first thing to test on real hardware"),
-            research(C::ReadingFormats, "EPUB, PDF, FB2, MOBI (no DRM), TXT are native", "devices §2", Grade::V1),
+            research(
+                C::BrowserDownloads,
+                "the browser downloads book files",
+                "devices §2",
+                Grade::M,
+            ),
+            assumption(
+                C::BrowserDownloads,
+                "`.lcpl` and `.acsm` downloads are handed to the reading system",
+                "on-device licence handling is listed as unverified (devices §3.4) and is the first thing to test on real hardware",
+            ),
+            research(
+                C::ReadingFormats,
+                "EPUB, PDF, FB2, MOBI (no DRM), TXT are native",
+                "devices §2",
+                Grade::V1,
+            ),
             research(C::Drm, "Adobe ADE on the device and Readium LCP", "devices §2", Grade::M),
-            research(C::MailService, "Send-to-PocketBook (`@pbsync.com`)", "devices §3.4", Grade::V1),
-            research(C::Opds, "OPDS on the e-ink firmware is unclear; treated as absent", "devices §2", Grade::M),
+            research(
+                C::MailService,
+                "Send-to-PocketBook (`@pbsync.com`)",
+                "devices §3.4",
+                Grade::V1,
+            ),
+            research(
+                C::Opds,
+                "OPDS on the e-ink firmware is unclear; treated as absent",
+                "devices §2",
+                Grade::M,
+            ),
             research(C::Screen, "6-inch class (Verse)", "devices §2", Grade::M),
-            assumption(C::Keyboard, "keyboard with a number row; 2 taps to open the browser; 1 tap to confirm a download", KEYBOARD_WHY),
+            assumption(
+                C::Keyboard,
+                "keyboard with a number row; 2 taps to open the browser; 1 tap to confirm a download",
+                KEYBOARD_WHY,
+            ),
             assumption(C::Quirks, "none modelled", "nothing sourced"),
             REFERRER_CLAIM,
         ];
@@ -563,14 +711,29 @@ impl DeviceProfile {
     pub fn vivlio() -> Self {
         use Capability as C;
         const CLAIMS: &[Claim] = &[
-            research(C::UserAgent, "Vivlio is PocketBook hardware; the same UA is assumed", "devices §3.4", Grade::M),
+            research(
+                C::UserAgent,
+                "Vivlio is PocketBook hardware; the same UA is assumed",
+                "devices §3.4",
+                Grade::M,
+            ),
             assumption(C::Cookies, "cookies are kept", COOKIES_WHY),
             assumption(C::PageWeight, "pages up to 1 MiB", PAGE_CAP_WHY),
             research(C::JavaScript, "as PocketBook", "devices §2", Grade::M),
             research(C::BrowserDownloads, "as PocketBook", "devices §2", Grade::M),
             research(C::ReadingFormats, "as PocketBook", "devices §2", Grade::M),
-            research(C::Drm, "Adobe and LCP (Vivlio staff co-authored an LCP note)", "devices §3.4", Grade::M),
-            research(C::MailService, "PocketBook channels are assumed available", "devices §2", Grade::M),
+            research(
+                C::Drm,
+                "Adobe and LCP (Vivlio staff co-authored an LCP note)",
+                "devices §3.4",
+                Grade::M,
+            ),
+            research(
+                C::MailService,
+                "PocketBook channels are assumed available",
+                "devices §2",
+                Grade::M,
+            ),
             research(C::Opds, "unknown; treated as absent", "devices §2", Grade::M),
             research(C::Screen, "6-inch class", "devices §2", Grade::M),
             assumption(C::Keyboard, "as PocketBook", KEYBOARD_WHY),
@@ -595,14 +758,34 @@ impl DeviceProfile {
             assumption(C::Cookies, "cookies are kept", COOKIES_WHY),
             assumption(C::PageWeight, "pages up to 1 MiB", PAGE_CAP_WHY),
             research(C::JavaScript, "Kobo-derived firmware: as Kobo", "devices §3.3", Grade::V2),
-            research(C::BrowserDownloads, "browser download confirmed by a user (2024-08)", "devices §3.3", Grade::V1),
+            research(
+                C::BrowserDownloads,
+                "browser download confirmed by a user (2024-08)",
+                "devices §3.3",
+                Grade::V1,
+            ),
             research(C::ReadingFormats, "EPUB, PDF, TXT", "devices §2", Grade::V1),
-            research(C::Drm, "Adobe; LCP is low-confidence and not modelled", "devices §2", Grade::M),
-            research(C::MailService, "none; own files go through the tolino cloud web upload", "devices §3.3", Grade::V1),
+            research(
+                C::Drm,
+                "Adobe; LCP is low-confidence and not modelled",
+                "devices §2",
+                Grade::M,
+            ),
+            research(
+                C::MailService,
+                "none; own files go through the tolino cloud web upload",
+                "devices §3.3",
+                Grade::V1,
+            ),
             research(C::Opds, "no native OPDS", "devices §2", Grade::M),
             research(C::Screen, "6-inch class (shine)", "devices §2", Grade::M),
             assumption(C::Keyboard, "as Kobo", KEYBOARD_WHY),
-            research(C::Quirks, "behaves as a Kobo (detected as one over USB)", "devices §3.3", Grade::V1),
+            research(
+                C::Quirks,
+                "behaves as a Kobo (detected as one over USB)",
+                "devices §3.3",
+                Grade::V1,
+            ),
             REFERRER_CLAIM,
         ];
         Self {
@@ -626,14 +809,28 @@ impl DeviceProfile {
             assumption(C::Cookies, "cookies are kept", COOKIES_WHY),
             assumption(C::PageWeight, "pages up to 1 MiB", PAGE_CAP_WHY),
             assumption(C::JavaScript, "Android 4.4 WebView", "not in the research"),
-            research(C::BrowserDownloads, "the browser download completes", "devices §3.3", Grade::V1),
+            research(
+                C::BrowserDownloads,
+                "the browser download completes",
+                "devices §3.3",
+                Grade::V1,
+            ),
             research(C::ReadingFormats, "EPUB, PDF, TXT", "devices §2", Grade::V1),
             research(C::Drm, "Adobe", "devices §2", Grade::M),
             research(C::MailService, "none", "devices §3.3", Grade::V1),
             research(C::Opds, "no native OPDS", "devices §2", Grade::M),
             research(C::Screen, "6-inch class", "devices §2", Grade::M),
-            assumption(C::Keyboard, "Android keyboard approximated by the three-layer model", KEYBOARD_WHY),
-            research(C::Quirks, "the downloaded file is reported \"damaged\"", "devices §3.3", Grade::V1),
+            assumption(
+                C::Keyboard,
+                "Android keyboard approximated by the three-layer model",
+                KEYBOARD_WHY,
+            ),
+            research(
+                C::Quirks,
+                "the downloaded file is reported \"damaged\"",
+                "devices §3.3",
+                Grade::V1,
+            ),
             REFERRER_CLAIM,
         ];
         Self {
@@ -707,15 +904,32 @@ impl DeviceProfile {
         const CLAIMS: &[Claim] = &[
             assumption(C::UserAgent, "an Electron UA with a `Thorium/` token", UA_WHY),
             assumption(C::Cookies, "cookies are kept", "Chromium default"),
-            assumption(C::PageWeight, "pages up to 8 MiB", "a desktop application; bound only to stop hostile input"),
-            assumption(C::JavaScript, "modern engine (never executed by the simulator)", "Electron"),
-            research(C::BrowserDownloads, "imports `.epub` and `.lcpl` files", "devices §4", Grade::V1),
+            assumption(
+                C::PageWeight,
+                "pages up to 8 MiB",
+                "a desktop application; bound only to stop hostile input",
+            ),
+            assumption(
+                C::JavaScript,
+                "modern engine (never executed by the simulator)",
+                "Electron",
+            ),
+            research(
+                C::BrowserDownloads,
+                "imports `.epub` and `.lcpl` files",
+                "devices §4",
+                Grade::V1,
+            ),
             research(C::ReadingFormats, "EPUB (and PDF)", "devices §4", Grade::V1),
             research(C::Drm, "Readium LCP in production builds; no Adobe", "devices §4", Grade::V1),
             assumption(C::MailService, "none", "a desktop application has no device address"),
             research(C::Opds, "OPDS catalogues are supported", "devices §4", Grade::V1),
             assumption(C::Screen, "large", "a computer window"),
-            assumption(C::Keyboard, "a physical keyboard approximated by a number-row layout; no launch taps", "taps are not meaningful on a computer"),
+            assumption(
+                C::Keyboard,
+                "a physical keyboard approximated by a number-row layout; no launch taps",
+                "taps are not meaningful on a computer",
+            ),
             assumption(C::Quirks, "none", "nothing sourced"),
         ];
         Self {
@@ -874,7 +1088,11 @@ mod tests {
         // Every reading system opens what its own browser saves, licences aside.
         for profile in DeviceProfile::all() {
             for format in profile.browser_downloads.iter().filter(|f| !f.is_licence()) {
-                assert!(profile.reads(*format), "{} downloads {format} but cannot read it", profile.id);
+                assert!(
+                    profile.reads(*format),
+                    "{} downloads {format} but cannot read it",
+                    profile.id
+                );
             }
         }
     }

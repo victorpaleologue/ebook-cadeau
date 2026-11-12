@@ -64,7 +64,10 @@ pub fn simulated_key_check(licence_id: &str, passphrase: &str) -> String {
 }
 
 fn key_check_for_user_key(licence_id: &str, user_key: &str) -> String {
-    format!("{SIMULATED_KEY_CHECK_PREFIX}{}", sha256_hex(format!("{licence_id}\n{user_key}").as_bytes()))
+    format!(
+        "{SIMULATED_KEY_CHECK_PREFIX}{}",
+        sha256_hex(format!("{licence_id}\n{user_key}").as_bytes())
+    )
 }
 
 /// The `rel="publication"` link of a licence.
@@ -115,8 +118,8 @@ impl SimulatedLicence {
                 .filter(|s| !s.is_empty())
         };
         let id = string("/id").ok_or_else(|| LcpError::MalformedLicence("no id".to_owned()))?;
-        let provider =
-            string("/provider").ok_or_else(|| LcpError::MalformedLicence("no provider".to_owned()))?;
+        let provider = string("/provider")
+            .ok_or_else(|| LcpError::MalformedLicence("no provider".to_owned()))?;
         let text_hint = string("/encryption/user_key/text_hint").ok_or_else(|| {
             LcpError::MalformedLicence("no encryption.user_key.text_hint".to_owned())
         })?;
@@ -134,7 +137,9 @@ impl SimulatedLicence {
         let link = |rel: &str| {
             links.iter().take(64).find(|l| match l.get("rel") {
                 Some(serde_json::Value::String(r)) => r == rel,
-                Some(serde_json::Value::Array(rels)) => rels.iter().any(|r| r.as_str() == Some(rel)),
+                Some(serde_json::Value::Array(rels)) => {
+                    rels.iter().any(|r| r.as_str() == Some(rel))
+                }
                 _ => false,
             })
         };
@@ -367,8 +372,10 @@ impl SimulatedLcpReader {
     /// Downloads a licence document and opens it.
     pub async fn open_licence_url(&mut self, url: &str) -> Result<LicenceStep> {
         let url = net::parse_url(url)?;
-        let request = Request::get(url).header("accept", format!("{LICENCE_MEDIA_TYPE}, application/json"));
-        let (head, bytes) = self.http.fetch_bytes(request, MAX_LICENCE_BYTES, &mut self.exchanges).await?;
+        let request =
+            Request::get(url).header("accept", format!("{LICENCE_MEDIA_TYPE}, application/json"));
+        let (head, bytes) =
+            self.http.fetch_bytes(request, MAX_LICENCE_BYTES, &mut self.exchanges).await?;
         if !head.is_success() {
             return Err(NetError::Status { url: head.url.to_string(), status: head.status }.into());
         }
@@ -378,7 +385,11 @@ impl SimulatedLcpReader {
 
     /// Opens a licence document already on the device (e.g. downloaded by the browser).
     /// `source_url`, when known, is used to resolve relative links.
-    pub async fn open_licence(&mut self, bytes: &[u8], source_url: Option<&Url>) -> Result<LicenceStep> {
+    pub async fn open_licence(
+        &mut self,
+        bytes: &[u8],
+        source_url: Option<&Url>,
+    ) -> Result<LicenceStep> {
         let licence = SimulatedLicence::parse(bytes, source_url)?;
         self.open(licence).await
     }
@@ -431,7 +442,8 @@ impl SimulatedLcpReader {
     async fn check_status(&mut self, licence: &SimulatedLicence) -> Result<()> {
         let Some(url) = licence.status_url.clone() else { return Ok(()) };
         let request = Request::get(url).header("accept", "application/json");
-        let Ok((head, bytes)) = self.http.fetch_bytes(request, MAX_LICENCE_BYTES, &mut self.exchanges).await
+        let Ok((head, bytes)) =
+            self.http.fetch_bytes(request, MAX_LICENCE_BYTES, &mut self.exchanges).await
         else {
             return Ok(());
         };
@@ -467,7 +479,10 @@ impl SimulatedLcpReader {
         }
         if let Some(hash) = &link.hash {
             if *hash != sha256_hex(&bytes) {
-                return Err(LcpError::PublicationMismatch("SHA-256 differs from the licence's hash".to_owned()).into());
+                return Err(LcpError::PublicationMismatch(
+                    "SHA-256 differs from the licence's hash".to_owned(),
+                )
+                .into());
             }
         }
         let file_name = net::response_file_name(&head);
@@ -479,7 +494,9 @@ impl SimulatedLcpReader {
             ImportSource::SimulatedLcp { licence_id: licence.id.clone() },
             |entry| {
                 entry.drm = Some(DrmScheme::ReadiumLcp);
-                entry.notes.push("opened through the SIMULATED LCP flow (no cryptography involved)".to_owned());
+                entry.notes.push(
+                    "opened through the SIMULATED LCP flow (no cryptography involved)".to_owned(),
+                );
             },
         )?;
         Ok(entry)
@@ -519,8 +536,17 @@ mod tests {
         let json = licence_json();
         let value: serde_json::Value = serde_json::from_str(&json).unwrap();
         // The members the LCP specification makes mandatory are present.
-        for pointer in ["/id", "/issued", "/provider", "/encryption/profile", "/encryption/content_key",
-                        "/encryption/user_key/text_hint", "/encryption/user_key/key_check", "/links", "/signature"] {
+        for pointer in [
+            "/id",
+            "/issued",
+            "/provider",
+            "/encryption/profile",
+            "/encryption/content_key",
+            "/encryption/user_key/text_hint",
+            "/encryption/user_key/key_check",
+            "/links",
+            "/signature",
+        ] {
             assert!(value.pointer(pointer).is_some(), "missing {pointer}");
         }
         assert!(json.contains("SIMULATED"), "the document must say it is not real LCP");
@@ -570,13 +596,15 @@ mod tests {
         ));
         // A real licence's key_check (base64 of AES output) is not something we can verify.
         let mut real = good.clone();
-        real["encryption"]["user_key"]["key_check"] = serde_json::json!("jJEjUDipHK3OjGt6kFq7dcOLZuicQFUYwQ+TYkAIWKm6Xv6kpHFhF7LOkUK/Owww");
+        real["encryption"]["user_key"]["key_check"] =
+            serde_json::json!("jJEjUDipHK3OjGt6kFq7dcOLZuicQFUYwQ+TYkAIWKm6Xv6kpHFhF7LOkUK/Owww");
         assert!(matches!(
             SimulatedLicence::parse(real.to_string().as_bytes(), None),
             Err(LcpError::Unverifiable(_))
         ));
         let mut no_publication = good.clone();
-        no_publication["links"] = serde_json::json!([{"rel": "hint", "href": "https://x.example/"}]);
+        no_publication["links"] =
+            serde_json::json!([{"rel": "hint", "href": "https://x.example/"}]);
         assert_eq!(
             SimulatedLicence::parse(no_publication.to_string().as_bytes(), None),
             Err(LcpError::NoPublicationLink)
@@ -596,8 +624,12 @@ mod tests {
 
     #[test]
     fn relative_links_need_a_base() {
-        let json = SimulatedLicenceBuilder::new("l1", "https://store.example", "/pub/x.epub", "p").build();
-        assert_eq!(SimulatedLicence::parse(json.as_bytes(), None), Err(LcpError::NoPublicationLink));
+        let json =
+            SimulatedLicenceBuilder::new("l1", "https://store.example", "/pub/x.epub", "p").build();
+        assert_eq!(
+            SimulatedLicence::parse(json.as_bytes(), None),
+            Err(LcpError::NoPublicationLink)
+        );
         let base = Url::parse("http://127.0.0.1:9/d/session/x.lcpl").unwrap();
         let licence = SimulatedLicence::parse(json.as_bytes(), Some(&base)).unwrap();
         assert_eq!(licence.publication.url.as_str(), "http://127.0.0.1:9/pub/x.epub");
@@ -605,7 +637,11 @@ mod tests {
 
     #[test]
     fn devices_without_lcp_cannot_host_the_reader() {
-        for profile in [DeviceProfile::kobo_clara(), DeviceProfile::kindle_paperwhite(), DeviceProfile::tolino()] {
+        for profile in [
+            DeviceProfile::kobo_clara(),
+            DeviceProfile::kindle_paperwhite(),
+            DeviceProfile::tolino(),
+        ] {
             let id = profile.id;
             let err = SimulatedLcpReader::new(profile).unwrap_err();
             assert!(matches!(err, Error::Lcp(LcpError::DeviceLacksLcp { device }) if device == id));

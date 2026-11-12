@@ -13,13 +13,15 @@ use ebc_demo_printer::{DEFAULT_PORT, PrinterConfig, app};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn Error>> {
-    let env = |name: &str| std::env::var(name).ok().map(|v| v.trim().to_owned()).filter(|v| !v.is_empty());
+    let env = |name: &str| {
+        std::env::var(name).ok().map(|v| v.trim().to_owned()).filter(|v| !v.is_empty())
+    };
 
     let mut config = PrinterConfig::default();
     if let Some(value) = env("DEMO_PRINTER_TICK_MS") {
-        let millis: u64 = value
-            .parse()
-            .map_err(|_| format!("DEMO_PRINTER_TICK_MS must be a number of milliseconds, got {value:?}"))?;
+        let millis: u64 = value.parse().map_err(|_| {
+            format!("DEMO_PRINTER_TICK_MS must be a number of milliseconds, got {value:?}")
+        })?;
         config.tick = (millis > 0).then(|| Duration::from_millis(millis));
     }
     config.test_hooks = env("DEMO_TEST_HOOKS").is_some_and(|v| v == "1");

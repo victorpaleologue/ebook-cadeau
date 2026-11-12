@@ -266,7 +266,9 @@ fn check_epub_mimetype_entry(bytes: &[u8], warnings: &mut Vec<String>) -> Result
         return Err(epub_err("the \"mimetype\" entry is encrypted"));
     }
     if header.flags & 0x0008 != 0 {
-        return Err(epub_err("the \"mimetype\" entry uses a data descriptor; sizes must be inline"));
+        return Err(epub_err(
+            "the \"mimetype\" entry uses a data descriptor; sizes must be inline",
+        ));
     }
     if header.extra_len != 0 {
         warnings.push("the \"mimetype\" entry has a ZIP extra field (OCF forbids it)".to_owned());
@@ -357,7 +359,9 @@ fn inspect_epub(bytes: &[u8]) -> Result<BookInfo, ImportError> {
             .find(|n| n.is_element() && n.tag_name().name() == "metadata")
             .ok_or_else(|| epub_err("the package document has no <metadata>"))?;
         for node in metadata.descendants().filter(roxmltree::Node::is_element) {
-            let text = collapse_ws(&node.text().unwrap_or_default().chars().take(2000).collect::<String>());
+            let text = collapse_ws(
+                &node.text().unwrap_or_default().chars().take(2000).collect::<String>(),
+            );
             if text.is_empty() {
                 continue;
             }
@@ -597,8 +601,8 @@ mod tests {
 
     #[test]
     fn epub_metadata_is_read_from_the_opf() {
-        let info = inspect(FileFormat::Epub, &fixtures::epub("Le Horla", "Guy de Maupassant"))
-            .unwrap();
+        let info =
+            inspect(FileFormat::Epub, &fixtures::epub("Le Horla", "Guy de Maupassant")).unwrap();
         assert_eq!(info.title.as_deref(), Some("Le Horla"));
         assert_eq!(info.authors, vec!["Guy de Maupassant".to_owned()]);
         assert_eq!(info.language.as_deref(), Some("fr"));
@@ -611,7 +615,10 @@ mod tests {
         let good = fixtures::EpubBuilder::new("T", "A");
         let wrong_first = good.clone().mimetype_first(false).build();
         let err = inspect(FileFormat::Epub, &wrong_first).unwrap_err();
-        assert!(matches!(&err, ImportError::InvalidEpub(m) if m.contains("first ZIP entry")), "{err}");
+        assert!(
+            matches!(&err, ImportError::InvalidEpub(m) if m.contains("first ZIP entry")),
+            "{err}"
+        );
 
         let wrong_content = good.clone().mimetype_content("application/zip").build();
         let err = inspect(FileFormat::Epub, &wrong_content).unwrap_err();
@@ -683,7 +690,10 @@ mod tests {
 
     #[test]
     fn pdf_title_parser_handles_escapes_and_garbage() {
-        assert_eq!(pdf_literal(b"/Title (A \\(nested\\) (b) c)", b"/Title").unwrap(), "A (nested) (b) c");
+        assert_eq!(
+            pdf_literal(b"/Title (A \\(nested\\) (b) c)", b"/Title").unwrap(),
+            "A (nested) (b) c"
+        );
         assert_eq!(pdf_literal(b"/Title <FEFF0041>", b"/Title"), None);
         assert_eq!(pdf_literal(b"/Title (unterminated", b"/Title"), None);
         assert_eq!(pdf_literal(b"/Title", b"/Title"), None);

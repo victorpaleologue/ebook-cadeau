@@ -818,7 +818,11 @@ impl AppState {
     }
 
     /// Applies `f` to the gift whose line reference is `line_ref`.
-    pub fn update_gift<R>(&self, line_ref: &str, f: impl FnOnce(&mut GiftRecord) -> R) -> Option<R> {
+    pub fn update_gift<R>(
+        &self,
+        line_ref: &str,
+        f: impl FnOnce(&mut GiftRecord) -> R,
+    ) -> Option<R> {
         let mut inner = self.lock();
         let gift = inner
             .orders
@@ -1007,14 +1011,12 @@ impl AppState {
             giver_name: giver_name.clone(),
             recipient_name,
         };
-        let already_owned = inner
-            .accounts
-            .get_mut(email)
-            .is_some_and(|account| !add_to_library(account, book.id, line_ref, now, Some(provenance)));
+        let already_owned = inner.accounts.get_mut(email).is_some_and(|account| {
+            !add_to_library(account, book.id, line_ref, now, Some(provenance))
+        });
         if let Some(session) = inner.sessions.get_mut(sid) {
             session.pending_activation = None;
-            session.last_activation =
-                Some(CompletedActivation { book_id: book.id, already_owned });
+            session.last_activation = Some(CompletedActivation { book_id: book.id, already_owned });
         }
         Activation::Ok { book, giver_name, already_owned }
     }
@@ -1022,7 +1024,10 @@ impl AppState {
     /// Gifts activated locally whose fulfilment eBook Cadeau has not acknowledged yet:
     /// `(line_ref, gift_id, account)`.
     #[must_use]
-    pub fn unconfirmed_fulfilments(&self, order_ref: Option<&str>) -> Vec<(String, String, String)> {
+    pub fn unconfirmed_fulfilments(
+        &self,
+        order_ref: Option<&str>,
+    ) -> Vec<(String, String, String)> {
         let inner = self.lock();
         inner
             .orders
@@ -1031,9 +1036,7 @@ impl AppState {
             .flat_map(|o| o.lines.iter())
             .filter_map(|l| l.gift.as_ref())
             .filter(|g| !g.fulfilment_confirmed)
-            .filter_map(|g| {
-                Some((g.line_ref.clone(), g.gift_id.clone()?, g.activated_by.clone()?))
-            })
+            .filter_map(|g| Some((g.line_ref.clone(), g.gift_id.clone()?, g.activated_by.clone()?)))
             .collect()
     }
 
@@ -1158,10 +1161,7 @@ mod tests {
         assert_eq!(s.register("a@B.example", "motdepasse"), Err(AccountError::Exists));
         assert_eq!(s.register("nope", "motdepasse"), Err(AccountError::InvalidEmail));
         assert_eq!(s.register("c@d.example", "court"), Err(AccountError::InvalidPassword));
-        assert_eq!(
-            s.register("c@d.example", &"x".repeat(201)),
-            Err(AccountError::InvalidPassword)
-        );
+        assert_eq!(s.register("c@d.example", &"x".repeat(201)), Err(AccountError::InvalidPassword));
         assert_eq!(s.check_password("a@b.example", "motdepasse"), Some("a@b.example".into()));
         assert_eq!(s.check_password(" A@B.EXAMPLE ", "motdepasse"), Some("a@b.example".into()));
         assert_eq!(s.check_password("a@b.example", "Motdepasse"), None);

@@ -133,10 +133,7 @@ fn package_opf(book: &Book, watermark: Option<&Watermark>) -> String {
     s.push_str("    <dc:language>fr</dc:language>\n");
     s.push_str(&format!("    <dc:publisher>{}</dc:publisher>\n", xml_escape(PUBLISHER)));
     s.push_str(&format!("    <dc:date>{}</dc:date>\n", book.year));
-    s.push_str(&format!(
-        "    <dc:description>{}</dc:description>\n",
-        xml_escape(book.description)
-    ));
+    s.push_str(&format!("    <dc:description>{}</dc:description>\n", xml_escape(book.description)));
     let rights = match watermark {
         Some(w) => format!(
             "Texte du domaine public. Exemplaire personnel — {} — commande {} — {}.",
@@ -208,7 +205,9 @@ fn nav_xhtml(book: &Book, stamped: bool) -> String {
     ));
     xhtml_page(
         "Sommaire",
-        &format!("<nav epub:type=\"toc\" id=\"toc\">\n<h1>Sommaire</h1>\n<ol>\n{items}</ol>\n</nav>\n"),
+        &format!(
+            "<nav epub:type=\"toc\" id=\"toc\">\n<h1>Sommaire</h1>\n<ol>\n{items}</ol>\n</nav>\n"
+        ),
     )
 }
 
@@ -309,7 +308,11 @@ mod tests {
 
     fn read(archive: &mut ZipArchive<Cursor<&[u8]>>, name: &str) -> String {
         let mut out = String::new();
-        archive.by_name(name).unwrap_or_else(|_| panic!("{name} missing")).read_to_string(&mut out).unwrap();
+        archive
+            .by_name(name)
+            .unwrap_or_else(|_| panic!("{name} missing"))
+            .read_to_string(&mut out)
+            .unwrap();
         out
     }
 
@@ -359,7 +362,12 @@ mod tests {
                     book.isbn13
                 )));
                 assert!(opf.contains("unique-identifier=\"pub-id\""));
-                assert!(opf.contains(&format!("<dc:title>{}</dc:title>", xml_escape(&book.full_title()))));
+                assert!(
+                    opf.contains(&format!(
+                        "<dc:title>{}</dc:title>",
+                        xml_escape(&book.full_title())
+                    ))
+                );
                 assert!(opf.contains(&format!(">{}</dc:creator>", book.author)));
                 assert!(opf.contains("<dc:language>fr</dc:language>"));
                 assert!(opf.contains("<meta property=\"dcterms:modified\">20"));
@@ -405,7 +413,8 @@ mod tests {
         for book in catalogue::books() {
             let bytes = build(book, FAKE_PNG, Some(&wm)).unwrap();
             let mut archive = open(&bytes);
-            let names: Vec<String> = archive.file_names().map(|n| n.unwrap().into_owned()).collect();
+            let names: Vec<String> =
+                archive.file_names().map(|n| n.unwrap().into_owned()).collect();
             for name in names {
                 if name.ends_with(".xml")
                     || name.ends_with(".opf")
@@ -418,7 +427,9 @@ mod tests {
                         ..Default::default()
                     };
                     resvg::usvg::roxmltree::Document::parse_with_options(&text, options)
-                        .unwrap_or_else(|e| panic!("{name} of {} is not well-formed: {e}", book.id));
+                        .unwrap_or_else(|e| {
+                            panic!("{name} of {} is not well-formed: {e}", book.id)
+                        });
                 }
             }
         }
@@ -434,7 +445,9 @@ mod tests {
         let page = read(&mut archive, "OEBPS/watermark.xhtml");
         assert!(page.contains("SEP-2026-000042"));
         assert!(page.contains("12 novembre 2026"));
-        assert!(page.contains("Offert à &lt;script&gt;alert(1)&lt;/script&gt; &amp; &quot;Bob&quot;"));
+        assert!(
+            page.contains("Offert à &lt;script&gt;alert(1)&lt;/script&gt; &amp; &quot;Bob&quot;")
+        );
         assert!(!page.contains("<script"));
         let opf = read(&mut archive, "OEBPS/package.opf");
         assert!(opf.contains("<meta property=\"demo:order\">SEP-2026-000042</meta>"));
@@ -461,7 +474,10 @@ mod tests {
         let s2 = build(book, FAKE_PNG, Some(&mark("Offert à B", "SEP-2026-000001"))).unwrap();
         assert_ne!(s1, s2);
         assert_ne!(a, s1);
-        assert_eq!(s1, build(book, FAKE_PNG, Some(&mark("Offert à A", "SEP-2026-000001"))).unwrap());
+        assert_eq!(
+            s1,
+            build(book, FAKE_PNG, Some(&mark("Offert à A", "SEP-2026-000001"))).unwrap()
+        );
     }
 
     #[test]
@@ -469,7 +485,10 @@ mod tests {
         let book = catalogue::find("les-fleurs-du-mal").unwrap();
         let bytes = build(book, FAKE_PNG, None).unwrap();
         let chapter = read(&mut open(&bytes), "OEBPS/chapter-1.xhtml");
-        assert!(chapter.contains("<p class=\"verse\">La sottise, l&#39;erreur, le péché, la lésine,<br/>"));
+        assert!(
+            chapter
+                .contains("<p class=\"verse\">La sottise, l&#39;erreur, le péché, la lésine,<br/>")
+        );
         assert_eq!(chapter.matches("<br/>").count(), 9, "three quatrains");
     }
 }

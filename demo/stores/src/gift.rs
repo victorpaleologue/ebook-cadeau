@@ -16,7 +16,9 @@ use crate::outbound::{
     BookPayload, CardFetch, ContributorPayload, DeliveryPayload, Fulfilment, NewGift,
     PrintOrderRequest, PrintSubmission,
 };
-use crate::state::{AppState, CardDelivery, CardState, GiftDetails, GiftStatus, Order, PrintRecord};
+use crate::state::{
+    AppState, CardDelivery, CardState, GiftDetails, GiftStatus, Order, PrintRecord,
+};
 
 /// Card format requested from eBook Cadeau and ordered from the printer.
 pub const CARD_FORMAT: &str = "poche";
@@ -60,15 +62,14 @@ async fn process_line(state: &AppState, order: &Order, details: &GiftDetails, in
     // Work on a fresh copy of the record: an earlier, partially successful run may have
     // completed some steps already.
     let current = |state: &AppState| {
-        state
-            .order(&order.reference)
-            .and_then(|o| o.lines.get(index).and_then(|l| l.gift.clone()))
+        state.order(&order.reference).and_then(|o| o.lines.get(index).and_then(|l| l.gift.clone()))
     };
     let Some(gift) = current(state) else { return };
     if gift.status.is_terminal() {
         return;
     }
-    let (Some(partner), Some(book)) = (state.partner.as_ref(), catalogue::find(line.book_id)) else {
+    let (Some(partner), Some(book)) = (state.partner.as_ref(), catalogue::find(line.book_id))
+    else {
         fail(state, line_ref, "L'option cadeau n'est pas configurée sur cette boutique.".into());
         return;
     };
@@ -112,7 +113,9 @@ async fn process_line(state: &AppState, order: &Order, details: &GiftDetails, in
     let Some(gift) = current(state) else { return };
     if gift.gift_id.is_none() {
         let delivery = match (details.delivery, gift.upload_id.clone()) {
-            (GiftDelivery::HostedFile, Some(upload_id)) => DeliveryPayload::HostedFile { upload_id },
+            (GiftDelivery::HostedFile, Some(upload_id)) => {
+                DeliveryPayload::HostedFile { upload_id }
+            }
             (GiftDelivery::HostedFile, None) => return,
             (GiftDelivery::ResellerRedirect, _) => DeliveryPayload::ResellerRedirect {
                 url: format!("{}/cadeau/activer", state.config.public_url),
@@ -251,10 +254,7 @@ async fn submit_print_order(state: &AppState, line_ref: &str, details: &GiftDeta
         quantity: 1,
         address,
         reference: line_ref.to_owned(),
-        callback_url: Some(format!(
-            "{}/webhooks/printer?token={token}",
-            state.config.public_url
-        )),
+        callback_url: Some(format!("{}/webhooks/printer?token={token}", state.config.public_url)),
     };
     match printer.create_order(&request, pdf.as_ref().clone()).await {
         Ok(PrintSubmission::Accepted(accepted)) => {

@@ -125,7 +125,9 @@ impl MailRecord {
     /// Books that reached the library from this message.
     pub fn delivered(&self) -> Vec<&LibraryEntry> {
         match &self.outcome {
-            MailOutcome::Processed(items) => items.iter().filter_map(|a| a.result.as_ref().ok()).collect(),
+            MailOutcome::Processed(items) => {
+                items.iter().filter_map(|a| a.result.as_ref().ok()).collect()
+            }
             _ => Vec::new(),
         }
     }
@@ -306,22 +308,19 @@ impl MailDevice {
     /// Messages currently parked.
     pub fn held(&self) -> Vec<MailRecord> {
         let state = self.shared.state();
-        state
-            .records
-            .iter()
-            .filter(|r| state.held.iter().any(|h| h.id == r.id))
-            .cloned()
-            .collect()
+        state.records.iter().filter(|r| state.held.iter().any(|h| h.id == r.id)).cloned().collect()
     }
 
     /// Delivers a parked message as if the account owner had approved it (the "verify this
     /// sender" / "confirm this delivery" click). Returns the updated record.
     pub fn release(&self, id: u64) -> Result<MailRecord, MailError> {
         let mut state = self.shared.state();
-        let position = state.held.iter().position(|h| h.id == id).ok_or(MailError::UnknownMail(id))?;
+        let position =
+            state.held.iter().position(|h| h.id == id).ok_or(MailError::UnknownMail(id))?;
         let held = state.held.remove(position);
         let outcome = process(&self.shared, &mut state, &held.raw);
-        let record = state.records.iter_mut().find(|r| r.id == id).ok_or(MailError::UnknownMail(id))?;
+        let record =
+            state.records.iter_mut().find(|r| r.id == id).ok_or(MailError::UnknownMail(id))?;
         record.outcome = outcome;
         Ok(record.clone())
     }
@@ -431,7 +430,8 @@ fn accept(
 ) -> Result<LibraryEntry, ImportError> {
     let service = &shared.service;
     let rules = service.file_names;
-    let bad_name = |reason: &'static str| ImportError::BadFileName { file_name: file_name.to_owned(), reason };
+    let bad_name =
+        |reason: &'static str| ImportError::BadFileName { file_name: file_name.to_owned(), reason };
     if rules.ascii_only && !file_name.is_ascii() {
         return Err(bad_name("non-ASCII characters"));
     }
@@ -612,7 +612,8 @@ async fn session(stream: TcpStream, shared: &Shared) -> std::io::Result<()> {
     let mut reader = LineReader::new(read_half);
     let host = &shared.config.hostname;
     let idle = shared.config.idle_timeout;
-    reply(&mut writer, &format!("220 {host} ESMTP eBook Cadeau demo mail device (simulation)")).await?;
+    reply(&mut writer, &format!("220 {host} ESMTP eBook Cadeau demo mail device (simulation)"))
+        .await?;
 
     let mut greeted = false;
     let mut sender: Option<String> = None;
@@ -681,7 +682,8 @@ async fn session(stream: TcpStream, shared: &Shared) -> std::io::Result<()> {
                         .find(|(key, _)| key.eq_ignore_ascii_case("SIZE"))
                         .and_then(|(_, value)| value.parse::<u64>().ok());
                     if declared_size.is_some_and(|size| size > shared.service.max_message_bytes) {
-                        reply(&mut writer, "552 5.3.4 message size exceeds the service limit").await?;
+                        reply(&mut writer, "552 5.3.4 message size exceeds the service limit")
+                            .await?;
                     } else {
                         sender = Some(address);
                         reply(&mut writer, "250 2.1.0 sender ok").await?;
@@ -727,7 +729,8 @@ async fn session(stream: TcpStream, shared: &Shared) -> std::io::Result<()> {
                         reply(&mut writer, "250 2.0.0 message accepted").await?;
                     }
                     DataEnd::TooBig => {
-                        reply(&mut writer, "552 5.3.4 message size exceeds the service limit").await?;
+                        reply(&mut writer, "552 5.3.4 message size exceeds the service limit")
+                            .await?;
                     }
                     DataEnd::LineTooLong => {
                         errors += 1;
@@ -750,7 +753,11 @@ async fn session(stream: TcpStream, shared: &Shared) -> std::io::Result<()> {
             }
             "STARTTLS" | "AUTH" => {
                 errors += 1;
-                reply(&mut writer, "502 5.5.1 not implemented (this simulation has no TLS and no AUTH)").await?;
+                reply(
+                    &mut writer,
+                    "502 5.5.1 not implemented (this simulation has no TLS and no AUTH)",
+                )
+                .await?;
             }
             _ => {
                 errors += 1;
@@ -831,8 +838,16 @@ pub async fn send_mail(
         let mut reader = LineReader::new(read_half);
         expect(&mut reader, "greeting", 220).await?;
         command(&mut writer, &mut reader, "EHLO ebc-demo-client.invalid", "EHLO", 250).await?;
-        command(&mut writer, &mut reader, &format!("MAIL FROM:<{envelope_from}>"), "MAIL FROM", 250).await?;
-        command(&mut writer, &mut reader, &format!("RCPT TO:<{recipient}>"), "RCPT TO", 250).await?;
+        command(
+            &mut writer,
+            &mut reader,
+            &format!("MAIL FROM:<{envelope_from}>"),
+            "MAIL FROM",
+            250,
+        )
+        .await?;
+        command(&mut writer, &mut reader, &format!("RCPT TO:<{recipient}>"), "RCPT TO", 250)
+            .await?;
         command(&mut writer, &mut reader, "DATA", "DATA", 354).await?;
         // Dot-stuffing and CRLF normalisation.
         let mut wire = Vec::with_capacity(message.len() + 64);
@@ -878,9 +893,19 @@ async fn expect<R: AsyncRead + Unpin>(
     for _ in 0..64 {
         let line = match reader.read_line(MAX_COMMAND_LINE).await.map_err(MailError::Io)? {
             Line::Data(line) => String::from_utf8_lossy(&line).into_owned(),
-            Line::TooLong => return Err(MailError::Smtp { stage, code: 0, message: "reply too long".to_owned() }),
+            Line::TooLong => {
+                return Err(MailError::Smtp {
+                    stage,
+                    code: 0,
+                    message: "reply too long".to_owned(),
+                });
+            }
             Line::Eof => {
-                return Err(MailError::Smtp { stage, code: 0, message: "connection closed".to_owned() });
+                return Err(MailError::Smtp {
+                    stage,
+                    code: 0,
+                    message: "connection closed".to_owned(),
+                });
             }
         };
         let code = line.get(..3).and_then(|c| c.parse::<u16>().ok()).unwrap_or(0);
@@ -892,7 +917,11 @@ async fn expect<R: AsyncRead + Unpin>(
         if line.as_bytes().get(3) == Some(&b'-') {
             continue;
         }
-        return if code == want { Ok(text) } else { Err(MailError::Smtp { stage, code, message: text }) };
+        return if code == want {
+            Ok(text)
+        } else {
+            Err(MailError::Smtp { stage, code, message: text })
+        };
     }
     Err(MailError::Smtp { stage, code: 0, message: "endless multi-line reply".to_owned() })
 }
@@ -904,7 +933,11 @@ mod tests {
 
     #[test]
     fn approval_matches_addresses_and_domains() {
-        let approved = vec!["livraison@ebk.example".to_owned(), "@amie.example".to_owned(), "club.example".to_owned()];
+        let approved = vec![
+            "livraison@ebk.example".to_owned(),
+            "@amie.example".to_owned(),
+            "club.example".to_owned(),
+        ];
         assert!(is_approved(&approved, "Livraison@EBK.example"));
         assert!(!is_approved(&approved, "autre@ebk.example"));
         assert!(is_approved(&approved, "camille@amie.example"));
@@ -916,11 +949,23 @@ mod tests {
 
     #[test]
     fn smtp_paths_are_parsed_leniently_but_safely() {
-        assert_eq!(parse_path("FROM:<A@B.example> SIZE=12", "FROM:"), Some(("a@b.example".into(), "SIZE=12".into())));
-        assert_eq!(parse_path("from: <a@b.example>", "FROM:"), Some(("a@b.example".into(), String::new())));
-        assert_eq!(parse_path("TO:a@b.example", "TO:"), Some(("a@b.example".into(), String::new())));
+        assert_eq!(
+            parse_path("FROM:<A@B.example> SIZE=12", "FROM:"),
+            Some(("a@b.example".into(), "SIZE=12".into()))
+        );
+        assert_eq!(
+            parse_path("from: <a@b.example>", "FROM:"),
+            Some(("a@b.example".into(), String::new()))
+        );
+        assert_eq!(
+            parse_path("TO:a@b.example", "TO:"),
+            Some(("a@b.example".into(), String::new()))
+        );
         assert_eq!(parse_path("FROM:<>", "FROM:"), Some((String::new(), String::new())));
-        assert_eq!(parse_path("FROM:<@relay.example:a@b.example>", "FROM:"), Some(("a@b.example".into(), String::new())));
+        assert_eq!(
+            parse_path("FROM:<@relay.example:a@b.example>", "FROM:"),
+            Some(("a@b.example".into(), String::new()))
+        );
         assert_eq!(parse_path("FROM:<a@b.example", "FROM:"), None);
         assert_eq!(parse_path("TO:<a@b.example>", "FROM:"), None);
         assert_eq!(parse_path("", "FROM:"), None);
@@ -942,13 +987,23 @@ mod tests {
             &content,
         );
         let message = MessageParser::default().parse(&raw).unwrap();
-        assert_eq!(message.from().unwrap().first().unwrap().address(), Some("camille@amie.example"));
+        assert_eq!(
+            message.from().unwrap().first().unwrap().address(),
+            Some("camille@amie.example")
+        );
         assert_eq!(message.subject(), Some("Un livre pour toi — « Le Horla »"));
         let attachment = message.attachments().next().unwrap();
         assert_eq!(attachment.attachment_name(), Some("le-horla.epub"));
         assert_eq!(attachment.contents(), content.as_slice());
         // Non-ASCII file names survive too.
-        let raw = compose_with_attachment("a@b.example", "c@d.example", "s", "déjà vu.epub", "application/epub+zip", b"x");
+        let raw = compose_with_attachment(
+            "a@b.example",
+            "c@d.example",
+            "s",
+            "déjà vu.epub",
+            "application/epub+zip",
+            b"x",
+        );
         let message = MessageParser::default().parse(&raw).unwrap();
         assert_eq!(message.attachments().next().unwrap().attachment_name(), Some("déjà vu.epub"));
         // Deterministic.
@@ -957,7 +1012,14 @@ mod tests {
             compose_with_attachment("a@b", "c@d", "s", "f.pdf", "application/pdf", b"x")
         );
         // Header injection through CR/LF is neutralised.
-        let raw = compose_with_attachment("a@b\r\nBcc: evil@x", "c@d", "s\r\nX: y", "f\r\n.pdf", "application/pdf", b"x");
+        let raw = compose_with_attachment(
+            "a@b\r\nBcc: evil@x",
+            "c@d",
+            "s\r\nX: y",
+            "f\r\n.pdf",
+            "application/pdf",
+            b"x",
+        );
         let text = String::from_utf8_lossy(&raw);
         assert!(!text.contains("\r\nBcc:"));
         assert!(!text.contains("\r\nX: y"));

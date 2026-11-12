@@ -25,7 +25,8 @@ use crate::profile::{DeviceProfile, DrmScheme};
 /// Relation prefix of every OPDS acquisition link.
 pub const REL_ACQUISITION: &str = "http://opds-spec.org/acquisition";
 /// Media type of an OPDS 1.2 acquisition feed.
-pub const TYPE_OPDS1_ACQUISITION: &str = "application/atom+xml;profile=opds-catalog;kind=acquisition";
+pub const TYPE_OPDS1_ACQUISITION: &str =
+    "application/atom+xml;profile=opds-catalog;kind=acquisition";
 /// Media type of an OPDS 2.0 feed.
 pub const TYPE_OPDS2: &str = "application/opds+json";
 
@@ -109,13 +110,19 @@ impl Publication {
     /// format it reads, directly if possible, else through a licence it can unlock. Purchase,
     /// loan and subscription links are never picked (their flows are not simulated).
     pub fn best_for(&self, profile: &DeviceProfile) -> Option<&Acquisition> {
-        let usable = |a: &&Acquisition| matches!(a.kind(), "acquisition" | "open-access" | "sample");
+        let usable =
+            |a: &&Acquisition| matches!(a.kind(), "acquisition" | "open-access" | "sample");
         let reads = |media_type: &str| {
-            FileFormat::from_media_type(media_type).is_some_and(|f| !f.is_licence() && profile.reads(f))
+            FileFormat::from_media_type(media_type)
+                .is_some_and(|f| !f.is_licence() && profile.reads(f))
         };
         let rank = |a: &Acquisition| u8::from(a.kind() == "sample");
-        let mut direct: Vec<&Acquisition> =
-            self.acquisitions.iter().filter(usable).filter(|a| a.indirect.is_empty() && reads(&a.media_type)).collect();
+        let mut direct: Vec<&Acquisition> = self
+            .acquisitions
+            .iter()
+            .filter(usable)
+            .filter(|a| a.indirect.is_empty() && reads(&a.media_type))
+            .collect();
         direct.sort_by_key(|a| rank(a));
         if let Some(found) = direct.first() {
             return Some(found);
@@ -229,7 +236,8 @@ fn parse_opds1(text: &str, base: &Url, max_entries: usize) -> Result<Feed, OpdsE
     let entries: Vec<roxmltree::Node<'_, '_>> = match root.tag_name().name() {
         "feed" => {
             feed.title = child_text(root, "title").unwrap_or_default();
-            for link in root.children().filter(|c| c.is_element() && c.tag_name().name() == "link") {
+            for link in root.children().filter(|c| c.is_element() && c.tag_name().name() == "link")
+            {
                 if link.attribute("rel") == Some("next") {
                     feed.next = link.attribute("href").and_then(|h| resolve(&base, h));
                 }
@@ -258,10 +266,14 @@ fn parse_opds1(text: &str, base: &Url, max_entries: usize) -> Result<Feed, OpdsE
             acquisitions: Vec::new(),
         };
         let mut nav: Option<Url> = None;
-        for link in entry.children().filter(|c| c.is_element() && c.tag_name().name() == "link").take(64) {
+        for link in
+            entry.children().filter(|c| c.is_element() && c.tag_name().name() == "link").take(64)
+        {
             let rel = link.attribute("rel").unwrap_or("");
             let media_type = link.attribute("type").unwrap_or("");
-            let Some(url) = link.attribute("href").and_then(|h| resolve(&base, h)) else { continue };
+            let Some(url) = link.attribute("href").and_then(|h| resolve(&base, h)) else {
+                continue;
+            };
             if rel.starts_with(REL_ACQUISITION) {
                 let mut indirect = Vec::new();
                 let mut cursor = link;
@@ -284,7 +296,9 @@ fn parse_opds1(text: &str, base: &Url, max_entries: usize) -> Result<Feed, OpdsE
                     media_type: media_type.to_owned(),
                     indirect,
                 });
-            } else if media_type.to_ascii_lowercase().contains("profile=opds-catalog") && nav.is_none() {
+            } else if media_type.to_ascii_lowercase().contains("profile=opds-catalog")
+                && nav.is_none()
+            {
                 nav = Some(url);
             }
         }
@@ -313,7 +327,9 @@ fn json_string(value: &serde_json::Value) -> Option<String> {
 
 fn json_names(value: Option<&serde_json::Value>) -> Vec<String> {
     match value {
-        Some(serde_json::Value::Array(items)) => items.iter().take(32).filter_map(json_name).collect(),
+        Some(serde_json::Value::Array(items)) => {
+            items.iter().take(32).filter_map(json_name).collect()
+        }
         Some(other) => json_name(other).into_iter().collect(),
         None => Vec::new(),
     }
@@ -354,15 +370,23 @@ fn json_indirect(link: &serde_json::Value) -> Vec<String> {
 fn parse_opds2(text: &str, base: &Url, max_entries: usize) -> Result<Feed, OpdsError> {
     let root: serde_json::Value =
         serde_json::from_str(text).map_err(|e| OpdsError::Malformed(e.to_string()))?;
-    let object = root.as_object().ok_or_else(|| OpdsError::NotOpds("not a JSON object".to_owned()))?;
-    let has_collections = ["publications", "navigation", "groups"].iter().any(|k| object.contains_key(*k));
+    let object =
+        root.as_object().ok_or_else(|| OpdsError::NotOpds("not a JSON object".to_owned()))?;
+    let has_collections =
+        ["publications", "navigation", "groups"].iter().any(|k| object.contains_key(*k));
     if !object.contains_key("metadata") && !has_collections {
-        return Err(OpdsError::NotOpds("no metadata, publications, navigation or groups".to_owned()));
+        return Err(OpdsError::NotOpds(
+            "no metadata, publications, navigation or groups".to_owned(),
+        ));
     }
     let mut feed = Feed {
         kind: FeedKind::Opds2,
         url: base.clone(),
-        title: root.get("metadata").and_then(|m| m.get("title")).and_then(json_string).unwrap_or_default(),
+        title: root
+            .get("metadata")
+            .and_then(|m| m.get("title"))
+            .and_then(json_string)
+            .unwrap_or_default(),
         publications: Vec::new(),
         navigation: Vec::new(),
         next: None,
@@ -428,11 +452,13 @@ fn parse_opds2(text: &str, base: &Url, max_entries: usize) -> Result<Feed, OpdsE
                 if link.get("templated").and_then(serde_json::Value::as_bool) == Some(true) {
                     continue;
                 }
-                let Some(rel) = json_rels(link).into_iter().find(|r| r.starts_with(REL_ACQUISITION))
+                let Some(rel) =
+                    json_rels(link).into_iter().find(|r| r.starts_with(REL_ACQUISITION))
                 else {
                     continue;
                 };
-                let Some(url) = link.get("href").and_then(|h| h.as_str()).and_then(|h| resolve(base, h))
+                let Some(url) =
+                    link.get("href").and_then(|h| h.as_str()).and_then(|h| resolve(base, h))
                 else {
                     continue;
                 };
@@ -494,11 +520,23 @@ impl OpdsClient {
     /// A client with explicit limits.
     pub fn with_config(profile: DeviceProfile, config: OpdsConfig) -> Result<Self> {
         let http = Http::new(profile.user_agent, config.net.clone())?;
-        Ok(Self { profile, http, config, library: Library::new(), exchanges: Vec::new(), basic_auth: None })
+        Ok(Self {
+            profile,
+            http,
+            config,
+            library: Library::new(),
+            exchanges: Vec::new(),
+            basic_auth: None,
+        })
     }
 
     /// Uses HTTP Basic credentials — sent only to the origin of `catalogue_url`.
-    pub fn with_basic_auth(mut self, catalogue_url: &str, user: &str, password: &str) -> Result<Self> {
+    pub fn with_basic_auth(
+        mut self,
+        catalogue_url: &str,
+        user: &str,
+        password: &str,
+    ) -> Result<Self> {
         let origin = normalise_opds_url(catalogue_url)?;
         self.basic_auth = Some((user.to_owned(), password.to_owned(), origin));
         Ok(self)
@@ -573,7 +611,12 @@ impl OpdsClient {
     pub async fn acquire(&mut self, publication: &Publication) -> Result<Outcome> {
         let acquisition = publication.best_for(&self.profile).cloned().ok_or_else(|| {
             Error::from(OpdsError::NoAcquisition {
-                wanted: self.profile.reading_formats.iter().map(|f| f.media_type().to_owned()).collect(),
+                wanted: self
+                    .profile
+                    .reading_formats
+                    .iter()
+                    .map(|f| f.media_type().to_owned())
+                    .collect(),
             })
         })?;
         self.download(&acquisition).await
@@ -663,7 +706,10 @@ mod tests {
         let feed = parse_feed(ATOM.as_bytes(), Some("application/atom+xml"), &base(), 100).unwrap();
         assert_eq!(feed.kind, FeedKind::Opds1);
         assert_eq!(feed.title, "Votre cadeau");
-        assert_eq!(feed.next.as_ref().unwrap().as_str(), "http://ebk.example/o/s3ss10n/catalog.xml?page=2");
+        assert_eq!(
+            feed.next.as_ref().unwrap().as_str(),
+            "http://ebk.example/o/s3ss10n/catalog.xml?page=2"
+        );
         assert_eq!(feed.publications.len(), 1);
         let book = feed.publication("Le Horla").unwrap();
         assert_eq!(book.id.as_deref(), Some("urn:isbn:9782070360024"));
@@ -680,10 +726,13 @@ mod tests {
         let buy = book.acquisition("text/html").unwrap();
         assert_eq!(buy.kind(), "buy");
         assert_eq!(buy.indirect.len(), 2);
-        assert_eq!(feed.navigation, vec![Navigation {
-            title: "Nouveautés".to_owned(),
-            url: Url::parse("http://ebk.example/new.xml").unwrap()
-        }]);
+        assert_eq!(
+            feed.navigation,
+            vec![Navigation {
+                title: "Nouveautés".to_owned(),
+                url: Url::parse("http://ebk.example/new.xml").unwrap()
+            }]
+        );
     }
 
     #[test]
@@ -717,7 +766,12 @@ mod tests {
 
         let lcp_only = Publication {
             title: "Protégé".to_owned(),
-            acquisitions: book.acquisitions.iter().filter(|a| a.media_type.contains("lcp") || a.kind() == "buy").cloned().collect(),
+            acquisitions: book
+                .acquisitions
+                .iter()
+                .filter(|a| a.media_type.contains("lcp") || a.kind() == "buy")
+                .cloned()
+                .collect(),
             ..Publication::default()
         };
         assert!(lcp_only.best_for(&DeviceProfile::kobo_clara()).is_none());
@@ -791,8 +845,14 @@ mod tests {
 
     #[test]
     fn opds_scheme_maps_to_https_except_for_local_hosts() {
-        assert_eq!(normalise_opds_url("opds://store.example/shelf").unwrap().as_str(), "https://store.example/shelf");
-        assert_eq!(normalise_opds_url("OPDS://127.0.0.1:8080/o/x/catalog.xml").unwrap().as_str(), "http://127.0.0.1:8080/o/x/catalog.xml");
+        assert_eq!(
+            normalise_opds_url("opds://store.example/shelf").unwrap().as_str(),
+            "https://store.example/shelf"
+        );
+        assert_eq!(
+            normalise_opds_url("OPDS://127.0.0.1:8080/o/x/catalog.xml").unwrap().as_str(),
+            "http://127.0.0.1:8080/o/x/catalog.xml"
+        );
         assert_eq!(normalise_opds_url("opds://localhost/c").unwrap().scheme(), "http");
         assert_eq!(normalise_opds_url("http://store.example/c").unwrap().scheme(), "http");
         assert!(normalise_opds_url("opds://").is_err());

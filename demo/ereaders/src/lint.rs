@@ -128,7 +128,13 @@ impl LintReport {
         codes
     }
 
-    fn push(&mut self, severity: Severity, code: &'static str, message: String, element: Option<&str>) {
+    fn push(
+        &mut self,
+        severity: Severity,
+        code: &'static str,
+        message: String,
+        element: Option<&str>,
+    ) {
         if self.findings.len() < 500 {
             self.findings.push(LintFinding {
                 severity,
@@ -187,7 +193,8 @@ impl Page {
     /// inline script. All findings are errors with codes `header-*`.
     pub fn check_gift_headers(&self) -> LintReport {
         let mut report = LintReport::default();
-        let header = |name: &str| self.header(name).map(str::to_ascii_lowercase).unwrap_or_default();
+        let header =
+            |name: &str| self.header(name).map(str::to_ascii_lowercase).unwrap_or_default();
         if !header("cache-control").contains("no-store") {
             report.error("header-cache-control", "Cache-Control must contain no-store", None);
         }
@@ -198,7 +205,11 @@ impl Page {
             report.error("header-x-robots-tag", "X-Robots-Tag must contain noindex", None);
         }
         if header("x-content-type-options").trim() != "nosniff" {
-            report.error("header-x-content-type-options", "X-Content-Type-Options must be nosniff", None);
+            report.error(
+                "header-x-content-type-options",
+                "X-Content-Type-Options must be nosniff",
+                None,
+            );
         }
         let csp = header("content-security-policy");
         if csp.is_empty() {
@@ -261,13 +272,15 @@ impl Page {
                 Some(element),
             );
         }
-        let has_script = facts.scripts.iter().any(|s| {
-            s.kind.is_empty() || s.kind == "module" || s.kind.contains("javascript")
-        });
+        let has_script = facts
+            .scripts
+            .iter()
+            .any(|s| s.kind.is_empty() || s.kind == "module" || s.kind.contains("javascript"));
         if has_script {
             let asks_for_js = facts.noscript_text.iter().any(|t| {
                 let lower = t.to_lowercase();
-                lower.contains("javascript") && !lower.contains("sans javascript")
+                lower.contains("javascript")
+                    && !lower.contains("sans javascript")
                     && !lower.contains("without javascript")
             });
             let usable_forms = self.forms().iter().any(|f| f.default_submit().is_some());
@@ -300,7 +313,11 @@ impl Page {
             let action = form.action.as_deref().map(str::trim);
             match action {
                 Some(a) if a.to_ascii_lowercase().starts_with("javascript:") => {
-                    report.error("form-action", "the form's action is a javascript: URL", Some(&what));
+                    report.error(
+                        "form-action",
+                        "the form's action is a javascript: URL",
+                        Some(&what),
+                    );
                 }
                 Some("#") if form.onsubmit => {
                     report.error(
@@ -345,7 +362,10 @@ impl Page {
             if form.enctype != "application/x-www-form-urlencoded" {
                 report.error(
                     "form-unsupported",
-                    format!("enctype {} is not supported by this flow (e-readers cannot upload files)", form.enctype),
+                    format!(
+                        "enctype {} is not supported by this flow (e-readers cannot upload files)",
+                        form.enctype
+                    ),
                     Some(&what),
                 );
             }
@@ -363,7 +383,11 @@ impl Page {
                     (None, None) => "<input>".to_owned(),
                 };
                 if field.kind == FieldKind::File {
-                    report.error("form-unsupported", "file upload is not available on e-readers", Some(&element));
+                    report.error(
+                        "form-unsupported",
+                        "file upload is not available on e-readers",
+                        Some(&element),
+                    );
                 }
                 let needs_label = matches!(
                     field.kind,
@@ -459,7 +483,11 @@ impl Page {
                     None,
                 );
             } else {
-                report.warn("charset-missing", "no charset is declared (header or <meta charset>)", None);
+                report.warn(
+                    "charset-missing",
+                    "no charset is declared (header or <meta charset>)",
+                    None,
+                );
             }
         }
         if !self.facts.has_viewport {
@@ -470,7 +498,11 @@ impl Page {
             );
         }
         if !self.facts.has_doctype {
-            report.warn("doctype-missing", "no <!DOCTYPE html>: the page renders in quirks mode", None);
+            report.warn(
+                "doctype-missing",
+                "no <!DOCTYPE html>: the page renders in quirks mode",
+                None,
+            );
         }
         if self.header_values("set-cookie").next().is_some() {
             report.warn(
@@ -516,9 +548,15 @@ impl Page {
             }
         }
         let compact: String = self.facts.css.chars().filter(|c| !c.is_whitespace()).collect();
-        if ["display:flex", "display:inline-flex", "display:grid", "display:inline-grid", "position:sticky"]
-            .iter()
-            .any(|needle| compact.contains(needle))
+        if [
+            "display:flex",
+            "display:inline-flex",
+            "display:grid",
+            "display:inline-grid",
+            "position:sticky",
+        ]
+        .iter()
+        .any(|needle| compact.contains(needle))
         {
             report.warn(
                 "css-modern-layout",
@@ -527,16 +565,26 @@ impl Page {
             );
         }
         if compact.contains("@font-face") || compact.contains("@import") {
-            report.warn("css-web-font", "@font-face / @import: web fonts and extra style sheets are not wanted here", None);
+            report.warn(
+                "css-web-font",
+                "@font-face / @import: web fonts and extra style sheets are not wanted here",
+                None,
+            );
         }
-        if compact.contains("animation:") || compact.contains("transition:") || compact.contains("@keyframes") {
+        if compact.contains("animation:")
+            || compact.contains("transition:")
+            || compact.contains("@keyframes")
+        {
             report.warn("css-animation", "animations and transitions ghost on e-ink screens", None);
         }
         for (element, px) in &self.facts.fixed_widths {
             if *px > config.viewport_css_px {
                 report.warn(
                     "fixed-width",
-                    format!("fixed width of {px}px exceeds the {}px viewport", config.viewport_css_px),
+                    format!(
+                        "fixed width of {px}px exceeds the {}px viewport",
+                        config.viewport_css_px
+                    ),
                     Some(element),
                 );
             }
@@ -608,12 +656,15 @@ mod tests {
 
     #[test]
     fn pages_that_need_javascript_fail() {
-        let spa = lint(r#"<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"></head>
-            <body><div id="app"></div><script src="/bundle.js"></script></body></html>"#);
+        let spa = lint(
+            r#"<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"></head>
+            <body><div id="app"></div><script src="/bundle.js"></script></body></html>"#,
+        );
         assert!(!spa.passed());
         assert!(spa.has("js-only-page"), "{spa}");
 
-        let onclick = lint(r##"<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"></head><body>
+        let onclick = lint(
+            r##"<!DOCTYPE html><html lang="fr"><head><meta charset="utf-8"></head><body>
             <p>Votre livre vous attend, appuyez sur le bouton pour le recevoir sur la liseuse.</p>
             <button id="download" onclick="go()">Télécharger</button>
             <a id="alt" href="javascript:send()">Envoyer</a>
@@ -621,7 +672,8 @@ mod tests {
             <span id="alt3" onclick="x()">Encore</span>
             <form id="f" onsubmit="return send()"><label>Code <input name="code"></label><input type="submit" value="OK"></form>
             <form id="g" action="/x"><label>Code <input name="code"></label><button type="button">OK</button></form>
-            </body></html>"##);
+            </body></html>"##,
+        );
         assert!(!onclick.passed());
         let js: Vec<_> = onclick.errors().filter(|f| f.code == "js-required").collect();
         let elements: Vec<_> = js.iter().filter_map(|f| f.element.as_deref()).collect();
@@ -630,17 +682,26 @@ mod tests {
         assert!(elements.contains(&"<a id=\"alt2\">"));
         assert!(elements.contains(&"<span id=\"alt3\">"));
         assert!(onclick.errors().any(|f| f.code == "form-action" && f.element.as_deref() == Some("<form id=\"f\">")));
-        assert!(onclick.warnings().any(|f| f.code == "form-no-submit" && f.element.as_deref() == Some("<form id=\"g\">")));
+        assert!(
+            onclick
+                .warnings()
+                .any(|f| f.code == "form-no-submit"
+                    && f.element.as_deref() == Some("<form id=\"g\">"))
+        );
         assert!(onclick.has("js-inline"));
 
-        let module = lint(r#"<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"></head><body>
+        let module = lint(
+            r#"<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"></head><body>
             <p>Some long enough text so the page is not considered empty at all.</p>
-            <script type="module" src="/app.mjs"></script></body></html>"#);
+            <script type="module" src="/app.mjs"></script></body></html>"#,
+        );
         assert!(module.errors().any(|f| f.code == "js-module"), "{module}");
 
-        let notice = lint(r#"<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"></head><body>
+        let notice = lint(
+            r#"<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"></head><body>
             <noscript>Please enable JavaScript to continue.</noscript><a href="/x">Home page link</a>
-            <script src="/app.js"></script></body></html>"#);
+            <script src="/app.js"></script></body></html>"#,
+        );
         assert!(notice.errors().any(|f| f.code == "js-only-page"), "{notice}");
     }
 
@@ -650,34 +711,47 @@ mod tests {
         assert!(report.passed(), "{report}");
         assert_eq!(report.codes(), vec!["js-present"]);
         // JSON-LD and other data blocks are not scripts.
-        let report = lint(&GOOD.replace("</body>", "<script type=\"application/ld+json\">{}</script></body>"));
+        let report = lint(
+            &GOOD.replace("</body>", "<script type=\"application/ld+json\">{}</script></body>"),
+        );
         assert!(report.findings.is_empty(), "{report}");
     }
 
     #[test]
     fn external_resources_weight_lang_and_labels_are_errors() {
-        let report = lint(r#"<!DOCTYPE html><html><head><meta charset="utf-8">
+        let report = lint(
+            r#"<!DOCTYPE html><html><head><meta charset="utf-8">
             <link rel="stylesheet" href="https://fonts.example/css?family=X">
             <style>@font-face{font-family:X;src:url(//cdn.example/x.woff)} .a{display:flex; transition: all 1s}</style></head>
             <body><img src="https://tracker.example/pixel.gif" width="900"><img src="/cover.jpg"><img src="data:image/gif;base64,AAAA">
             <form action="/k"><input name="code" placeholder="Code"><input type="file" name="f" aria-label="File">
             <input type="submit" value="OK"></form>
             <a href="https://store.example/" target="_blank">Store (a link is not a resource)</a>
-            </body></html>"#);
+            </body></html>"#,
+        );
         let external: Vec<_> = report.errors().filter(|f| f.code == "external-resource").collect();
         assert_eq!(external.len(), 3, "{report}");
         assert!(report.errors().any(|f| f.code == "lang-missing"));
         let label = report.errors().find(|f| f.code == "label-missing").unwrap();
         assert!(label.message.contains("placeholder"));
         assert!(report.errors().any(|f| f.code == "form-unsupported"));
-        for code in ["css-modern-layout", "css-web-font", "css-animation", "fixed-width", "link-new-window", "viewport-missing"] {
+        for code in [
+            "css-modern-layout",
+            "css-web-font",
+            "css-animation",
+            "fixed-width",
+            "link-new-window",
+            "viewport-missing",
+        ] {
             assert!(report.warnings().any(|f| f.code == code), "missing {code}: {report}");
         }
         // Errors are listed first.
-        let first_warning = report.findings.iter().position(|f| f.severity == Severity::Warning).unwrap();
+        let first_warning =
+            report.findings.iter().position(|f| f.severity == Severity::Warning).unwrap();
         assert!(report.findings[first_warning..].iter().all(|f| f.severity == Severity::Warning));
 
-        let heavy = Page::from_html("http://ebk.example/", &format!("{GOOD}<!--{}-->", "x".repeat(40_000)));
+        let heavy =
+            Page::from_html("http://ebk.example/", &format!("{GOOD}<!--{}-->", "x".repeat(40_000)));
         let report = heavy.lint(&LintConfig::default());
         assert!(report.errors().any(|f| f.code == "page-weight"), "{report}");
         let relaxed = LintConfig { weight_budget_bytes: 100_000, ..LintConfig::default() };
@@ -696,7 +770,10 @@ mod tests {
         ));
         let contrast: Vec<_> = report.findings.iter().filter(|f| f.code == "contrast").collect();
         let of = |id: &str| {
-            contrast.iter().find(|f| f.element.as_deref() == Some(&format!("<{id}>") as &str)).map(|f| f.severity)
+            contrast
+                .iter()
+                .find(|f| f.element.as_deref() == Some(&format!("<{id}>") as &str))
+                .map(|f| f.severity)
         };
         assert_eq!(of("p id=\"faint\""), Some(Severity::Error), "{report}");
         assert_eq!(of("div id=\"bad-bg\""), Some(Severity::Error));
@@ -722,7 +799,9 @@ mod tests {
             vec![("content-type".to_owned(), "text/html".to_owned())],
             "<!DOCTYPE html><html lang=fr><head></head><body>déjà</body></html>".as_bytes(),
         );
-        assert!(accented.lint(&LintConfig::default()).errors().any(|f| f.code == "charset-missing"));
+        assert!(
+            accented.lint(&LintConfig::default()).errors().any(|f| f.code == "charset-missing")
+        );
     }
 
     #[test]
@@ -751,7 +830,10 @@ mod tests {
             headers(&[
                 ("content-type", "text/html; charset=utf-8"),
                 ("cache-control", "max-age=3600"),
-                ("content-security-policy", "default-src 'self'; script-src 'self' 'unsafe-inline'"),
+                (
+                    "content-security-policy",
+                    "default-src 'self'; script-src 'self' 'unsafe-inline'",
+                ),
                 ("set-cookie", "sid=1"),
             ]),
             GOOD.as_bytes(),

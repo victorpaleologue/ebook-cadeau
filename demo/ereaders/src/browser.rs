@@ -433,11 +433,15 @@ impl EinkBrowser {
                     .filter(|(_, n)| {
                         let label = match n.tag.as_str() {
                             "a" | "button" => page.text_in(&n.text).to_owned(),
-                            "input" => match n.attr("type").unwrap_or("").to_ascii_lowercase().as_str() {
-                                "submit" | "button" | "reset" => n.attr("value").unwrap_or("").to_owned(),
-                                "image" => n.attr("alt").unwrap_or("").to_owned(),
-                                _ => return false,
-                            },
+                            "input" => {
+                                match n.attr("type").unwrap_or("").to_ascii_lowercase().as_str() {
+                                    "submit" | "button" | "reset" => {
+                                        n.attr("value").unwrap_or("").to_owned()
+                                    }
+                                    "image" => n.attr("alt").unwrap_or("").to_owned(),
+                                    _ => return false,
+                                }
+                            }
                             _ => return false,
                         };
                         !wanted.is_empty() && normalise(&label) == wanted
@@ -448,7 +452,9 @@ impl EinkBrowser {
                     0 => return Err(BrowserError::NotFound { query: target.to_owned() }.into()),
                     1 => matches[0],
                     count => {
-                        return Err(BrowserError::Ambiguous { query: target.to_owned(), count }.into());
+                        return Err(
+                            BrowserError::Ambiguous { query: target.to_owned(), count }.into()
+                        );
                     }
                 }
             }
@@ -456,7 +462,8 @@ impl EinkBrowser {
         let node = &page.nodes[node_index];
         let element = node.describe();
         let needs_js = |reason: &str| -> Error {
-            BrowserError::NeedsJavaScript { element: element.clone(), reason: reason.to_owned() }.into()
+            BrowserError::NeedsJavaScript { element: element.clone(), reason: reason.to_owned() }
+                .into()
         };
         let onclick = node.attr("onclick").is_some();
         match node.tag.as_str() {
@@ -530,7 +537,12 @@ impl EinkBrowser {
         }
     }
 
-    fn form_data(&self, form_index: usize, form: &Form, submitter: Option<usize>) -> Vec<(String, String)> {
+    fn form_data(
+        &self,
+        form_index: usize,
+        form: &Form,
+        submitter: Option<usize>,
+    ) -> Vec<(String, String)> {
         let mut pairs = Vec::new();
         for (index, field) in form.fields.iter().enumerate() {
             let Some(name) = field.name.as_deref() else { continue };
@@ -540,12 +552,14 @@ impl EinkBrowser {
             let key = (form_index, index);
             match field.kind {
                 FieldKind::Text | FieldKind::Password | FieldKind::Hidden | FieldKind::Textarea => {
-                    let value = self.typed.get(&key).cloned().unwrap_or_else(|| field.value.clone());
+                    let value =
+                        self.typed.get(&key).cloned().unwrap_or_else(|| field.value.clone());
                     pairs.push((name.to_owned(), value));
                 }
                 FieldKind::Checkbox | FieldKind::Radio => {
                     if self.checked.get(&key).copied().unwrap_or(field.checked) {
-                        let value = if field.value.is_empty() { "on" } else { field.value.as_str() };
+                        let value =
+                            if field.value.is_empty() { "on" } else { field.value.as_str() };
                         pairs.push((name.to_owned(), value.to_owned()));
                     }
                 }
@@ -571,7 +585,11 @@ impl EinkBrowser {
         pairs
     }
 
-    async fn submit_form(&mut self, form_index: usize, submitter: Option<usize>) -> Result<Outcome> {
+    async fn submit_form(
+        &mut self,
+        form_index: usize,
+        submitter: Option<usize>,
+    ) -> Result<Outcome> {
         let page = self.page()?;
         let form = &page.forms()[form_index];
         let what = form.describe();
@@ -595,7 +613,8 @@ impl EinkBrowser {
             return Err(refuse(format!("the action uses the {}: scheme", url.scheme())));
         }
         let pairs = self.form_data(form_index, form, submitter);
-        let encoded = url::form_urlencoded::Serializer::new(String::new()).extend_pairs(&pairs).finish();
+        let encoded =
+            url::form_urlencoded::Serializer::new(String::new()).extend_pairs(&pairs).finish();
         let request = match form.method {
             FormMethod::Post => {
                 if form.enctype != "application/x-www-form-urlencoded" {
@@ -669,7 +688,11 @@ impl EinkBrowser {
         self.handle_response(head, response).await
     }
 
-    async fn handle_response(&mut self, head: Head, response: reqwest::Response) -> Result<Outcome> {
+    async fn handle_response(
+        &mut self,
+        head: Head,
+        response: reqwest::Response,
+    ) -> Result<Outcome> {
         let content_type = head.header("content-type").unwrap_or("").to_owned();
         let essence = content_type.split(';').next().unwrap_or("").trim().to_ascii_lowercase();
         let attachment = head
@@ -706,8 +729,8 @@ impl EinkBrowser {
         }
 
         let file_name = net::response_file_name(&head);
-        let declared =
-            FileFormat::from_media_type(&content_type).or_else(|| FileFormat::from_file_name(&file_name));
+        let declared = FileFormat::from_media_type(&content_type)
+            .or_else(|| FileFormat::from_file_name(&file_name));
         let refuse = |reason: DownloadRefusal| -> Error {
             BrowserError::DownloadRefused {
                 device: self.profile.id,
@@ -758,7 +781,9 @@ impl EinkBrowser {
 /// (research: `ereader-ux.devices.md` §3.1 \[V1\], after send2ereader's Kindle workaround).
 fn is_plain_file_name(name: &str) -> bool {
     !name.is_empty()
-        && name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '"' | '\'' | '(' | ')'))
+        && name.chars().all(|c| {
+            c.is_ascii_alphanumeric() || matches!(c, '.' | '_' | '-' | '"' | '\'' | '(' | ')')
+        })
 }
 
 fn describe_field(field: &crate::page::Field) -> String {

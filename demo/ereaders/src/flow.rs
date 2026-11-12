@@ -117,7 +117,11 @@ fn excerpt(text: &str) -> String {
 ///
 /// Transport errors and broken pages are returned as `Err`; a flow that simply cannot go on
 /// (wrong code, device without a usable delivery) ends with [`FlowEnd::Stopped`].
-pub async fn redeem(browser: &mut EinkBrowser, url: &str, inputs: &RedeemInputs) -> Result<FlowReport> {
+pub async fn redeem(
+    browser: &mut EinkBrowser,
+    url: &str,
+    inputs: &RedeemInputs,
+) -> Result<FlowReport> {
     let start = net::parse_url(url)?;
     let mut steps = Vec::new();
     let mut outcome = browser.open(url).await?;
@@ -152,8 +156,11 @@ pub async fn redeem(browser: &mut EinkBrowser, url: &str, inputs: &RedeemInputs)
                 code_used = true;
                 let submit = has("code-submit");
                 browser.type_into("code-input", code)?;
-                let next =
-                    if submit { browser.click("code-submit").await } else { browser.submit("code-form").await };
+                let next = if submit {
+                    browser.click("code-submit").await
+                } else {
+                    browser.submit("code-form").await
+                };
                 (format!("type the code {code} and continue"), next)
             } else if let (true, false, Some(number)) =
                 (has("pair-input"), pair_used, inputs.pair_number.as_deref())
@@ -161,8 +168,11 @@ pub async fn redeem(browser: &mut EinkBrowser, url: &str, inputs: &RedeemInputs)
                 pair_used = true;
                 let submit = has("pair-submit");
                 browser.type_into("pair-input", number)?;
-                let next =
-                    if submit { browser.click("pair-submit").await } else { browser.submit("pair-form").await };
+                let next = if submit {
+                    browser.click("pair-submit").await
+                } else {
+                    browser.submit("pair-form").await
+                };
                 (format!("type the pair number {number} and continue"), next)
             } else if has("download") && download_refused.is_none() {
                 ("press \"download\"".to_owned(), browser.click("download").await)
@@ -176,7 +186,8 @@ pub async fn redeem(browser: &mut EinkBrowser, url: &str, inputs: &RedeemInputs)
                 (format!("send to {address}"), browser.submit("send-form").await)
             } else {
                 let offers = page.text_of("other-ways").map(excerpt).unwrap_or_default();
-                let mut reason = String::from("nothing on the page can be activated with what was given");
+                let mut reason =
+                    String::from("nothing on the page can be activated with what was given");
                 if let Some(refusal) = download_refused.as_ref().or(redeem_refused.as_ref()) {
                     reason = format!("{refusal}; no other delivery could be used");
                 }
@@ -191,7 +202,9 @@ pub async fn redeem(browser: &mut EinkBrowser, url: &str, inputs: &RedeemInputs)
                     outcome = next;
                 }
                 // The device refuses this delivery: note it and look for another way on the page.
-                Err(err @ (Error::Browser(BrowserError::DownloadRefused { .. }) | Error::Import(_))) => {
+                Err(
+                    err @ (Error::Browser(BrowserError::DownloadRefused { .. }) | Error::Import(_)),
+                ) => {
                     let message = err.to_string();
                     steps.push(step(browser, format!("{action} — refused: {message}"), false));
                     if action.contains("redeem") {

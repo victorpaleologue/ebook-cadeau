@@ -153,7 +153,14 @@ impl MockEbc {
     }
 
     /// Scripts failures: see [`FailRule`].
-    pub fn fail_next(&self, method: &str, suffix: &str, status: u16, times: u32, after_processing: bool) {
+    pub fn fail_next(
+        &self,
+        method: &str,
+        suffix: &str,
+        status: u16,
+        times: u32,
+        after_processing: bool,
+    ) {
         self.inner.lock().unwrap().fail.push(FailRule {
             method: method.to_owned(),
             suffix: suffix.to_owned(),
@@ -213,7 +220,12 @@ impl MockEbc {
     }
 
     /// Sends a signed webhook to a store (§4.4) and returns the store's answer.
-    pub async fn send_webhook(&self, store_base: &str, partner: &str, event: &Value) -> (StatusCode, Value) {
+    pub async fn send_webhook(
+        &self,
+        store_base: &str,
+        partner: &str,
+        event: &Value,
+    ) -> (StatusCode, Value) {
         let secret = self.inner.lock().unwrap().partners[partner].clone();
         let body = serde_json::to_vec(event).unwrap();
         let ts = self.now();
@@ -223,7 +235,13 @@ impl MockEbc {
 }
 
 /// `X-EBC-Signature` per §4.1.
-pub fn sign_request(secret: &str, ts: i64, method: &str, path_and_query: &str, body: &[u8]) -> String {
+pub fn sign_request(
+    secret: &str,
+    ts: i64,
+    method: &str,
+    path_and_query: &str,
+    body: &[u8],
+) -> String {
     let message = format!("{ts}.{method}.{path_and_query}.{}", hex(&Sha256::digest(body)));
     format!("v1={}", hmac_hex(secret, &message))
 }
@@ -272,7 +290,13 @@ async fn handle(
     response
 }
 
-fn respond(mock: &MockEbc, method: &Method, uri: &Uri, headers: &HeaderMap, body: &[u8]) -> Response {
+fn respond(
+    mock: &MockEbc,
+    method: &Method,
+    uri: &Uri,
+    headers: &HeaderMap,
+    body: &[u8],
+) -> Response {
     let header = |name: &str| headers.get(name).and_then(|v| v.to_str().ok());
     let mut inner = mock.inner.lock().unwrap();
 
@@ -305,12 +329,17 @@ fn respond(mock: &MockEbc, method: &Method, uri: &Uri, headers: &HeaderMap, body
             (r.status, r.after_processing)
         });
     if let Some((status, false)) = rule {
-        return error(StatusCode::from_u16(status).unwrap(), "scripted_failure", "scripted failure");
+        return error(
+            StatusCode::from_u16(status).unwrap(),
+            "scripted_failure",
+            "scripted failure",
+        );
     }
 
     // --- idempotency (POST only) ---
     let body_hash = hex(&Sha256::digest(body));
-    let idempotency_key = header("idempotency-key").filter(|_| *method == Method::POST).map(str::to_owned);
+    let idempotency_key =
+        header("idempotency-key").filter(|_| *method == Method::POST).map(str::to_owned);
     if let Some(key) = &idempotency_key
         && let Some((hash, status, stored)) = inner.idempotency.get(&(partner.clone(), key.clone()))
     {
@@ -323,7 +352,9 @@ fn respond(mock: &MockEbc, method: &Method, uri: &Uri, headers: &HeaderMap, body
 
     let (status, value, raw) = route(mock, &mut inner, &partner, method, uri, headers, body);
     if let (Some(key), true, None) = (&idempotency_key, status.is_success(), &raw) {
-        inner.idempotency.insert((partner, key.clone()), (body_hash, status.as_u16(), value.clone()));
+        inner
+            .idempotency
+            .insert((partner, key.clone()), (body_hash, status.as_u16(), value.clone()));
     }
     if let Some((status, true)) = rule {
         return error(StatusCode::from_u16(status).unwrap(), "scripted_failure", "answer lost");
@@ -383,7 +414,8 @@ fn route(
             let Ok(request) = serde_json::from_slice::<Value>(body) else {
                 return fail(StatusCode::BAD_REQUEST, "invalid_json");
             };
-            let text = |pointer: &str| request.pointer(pointer).and_then(Value::as_str).unwrap_or("");
+            let text =
+                |pointer: &str| request.pointer(pointer).and_then(Value::as_str).unwrap_or("");
             if text("/order_ref").is_empty() || text("/book/title").is_empty() {
                 return fail(StatusCode::UNPROCESSABLE_ENTITY, "invalid_gift");
             }
@@ -423,7 +455,8 @@ fn route(
             (StatusCode::CREATED, created, None)
         }
         (_, ["gifts", id, tail @ ..]) => {
-            let Some(gift) = inner.gifts.iter_mut().find(|g| g.id == *id && g.partner == partner) else {
+            let Some(gift) = inner.gifts.iter_mut().find(|g| g.id == *id && g.partner == partner)
+            else {
                 return fail(StatusCode::NOT_FOUND, "unknown_gift");
             };
             match (method.as_str(), tail) {
@@ -445,10 +478,15 @@ fn route(
                 ("GET", ["card.pdf"]) => {
                     let title = format!("Carte {}", gift.order_ref);
                     match inner.card_mode.unwrap_or(CardMode::Sample("card-poche")) {
-                        CardMode::NotImplemented => fail(StatusCode::NOT_IMPLEMENTED, "not_implemented"),
+                        CardMode::NotImplemented => {
+                            fail(StatusCode::NOT_IMPLEMENTED, "not_implemented")
+                        }
                         CardMode::Sample(product) => {
                             let product = ebc_demo_printer::catalog::find(product).unwrap();
-                            let card = SampleCard { title: Some(title), ..SampleCard::for_product(product) };
+                            let card = SampleCard {
+                                title: Some(title),
+                                ..SampleCard::for_product(product)
+                            };
                             (StatusCode::OK, Value::Null, Some(card.to_pdf()))
                         }
                     }
@@ -625,7 +663,11 @@ impl Browser {
     }
 
     pub async fn post(&self, path: &str, form: &[(&str, &str)]) -> Page {
-        let body = reqwest::Url::parse_with_params("http://x/", form).unwrap().query().unwrap_or("").to_owned();
+        let body = reqwest::Url::parse_with_params("http://x/", form)
+            .unwrap()
+            .query()
+            .unwrap_or("")
+            .to_owned();
         let response = self
             .http
             .post(self.absolute(path))
@@ -674,11 +716,13 @@ impl Browser {
     // --- common journeys ---
 
     pub async fn register(&self, email: &str, password: &str) -> Page {
-        self.post("/compte/inscription", &[("email", email), ("password", password), ("next", "/")]).await
+        self.post("/compte/inscription", &[("email", email), ("password", password), ("next", "/")])
+            .await
     }
 
     pub async fn login(&self, email: &str, password: &str) -> Page {
-        self.post("/compte/connexion", &[("email", email), ("password", password), ("next", "/")]).await
+        self.post("/compte/connexion", &[("email", email), ("password", password), ("next", "/")])
+            .await
     }
 
     pub async fn add_to_cart(&self, book: &str) -> Page {
@@ -698,7 +742,11 @@ impl Browser {
 }
 
 /// Checkout fields of a gift printed at home.
-pub fn gift_home<'a>(giver: &'a str, recipient: &'a str, message: &'a str) -> Vec<(&'a str, &'a str)> {
+pub fn gift_home<'a>(
+    giver: &'a str,
+    recipient: &'a str,
+    message: &'a str,
+) -> Vec<(&'a str, &'a str)> {
     vec![
         ("gift", "1"),
         ("giver-name", giver),
@@ -732,7 +780,11 @@ impl Page {
         scraper::Html::parse_document(&self.html())
     }
 
-    fn select_one<T>(&self, selector: &str, f: impl FnOnce(scraper::ElementRef<'_>) -> T) -> Option<T> {
+    fn select_one<T>(
+        &self,
+        selector: &str,
+        f: impl FnOnce(scraper::ElementRef<'_>) -> T,
+    ) -> Option<T> {
         let doc = self.doc();
         let selector = scraper::Selector::parse(selector).unwrap();
         doc.select(&selector).next().map(f)
@@ -778,7 +830,11 @@ impl Page {
 pub fn open_epub(bytes: &[u8]) -> (Vec<String>, HashMap<String, Vec<u8>>) {
     use std::io::Read;
     assert_eq!(&bytes[..4], b"PK\x03\x04", "not a zip");
-    assert_eq!(&bytes[30..58], b"mimetypeapplication/epub+zip", "mimetype must be first and stored");
+    assert_eq!(
+        &bytes[30..58],
+        b"mimetypeapplication/epub+zip",
+        "mimetype must be first and stored"
+    );
     assert_eq!(u16::from_le_bytes([bytes[8], bytes[9]]), 0, "mimetype must not be compressed");
     assert_eq!(u16::from_le_bytes([bytes[28], bytes[29]]), 0, "mimetype must have no extra field");
     let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).unwrap();
@@ -798,7 +854,8 @@ pub fn open_epub(bytes: &[u8]) -> (Vec<String>, HashMap<String, Vec<u8>>) {
     for (name, content) in &files {
         if [".xml", ".opf", ".xhtml", ".ncx"].iter().any(|ext| name.ends_with(ext)) {
             let text = std::str::from_utf8(content).unwrap();
-            let options = resvg::usvg::roxmltree::ParsingOptions { allow_dtd: true, ..Default::default() };
+            let options =
+                resvg::usvg::roxmltree::ParsingOptions { allow_dtd: true, ..Default::default() };
             resvg::usvg::roxmltree::Document::parse_with_options(text, options)
                 .unwrap_or_else(|e| panic!("{name} is not well-formed XML: {e}"));
         }

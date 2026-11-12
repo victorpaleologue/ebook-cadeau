@@ -196,15 +196,47 @@ mod tests {
     #[test]
     fn each_broken_rule_is_reported_with_its_code() {
         let good = SampleCard::for_product(poche());
-        assert_refused(&SampleCard { bleed_mm: 1.0, ..good.clone() }, poche(), "BOX_BLEED_TOO_SMALL");
-        assert_refused(&SampleCard { bleed_mm: 0.0, ..good.clone() }, poche(), "BOX_BLEED_TOO_SMALL");
-        assert_refused(&SampleCard { output_intent: false, ..good.clone() }, poche(), "NO_OUTPUT_INTENT");
-        assert_refused(&SampleCard { image_ppi: Some(72.0), ..good.clone() }, poche(), "IMAGE_LOW_RES");
-        assert_refused(&SampleCard { heavy_ink: true, ..good.clone() }, poche(), "INK_TOTAL_TOO_HIGH");
-        assert_refused(&SampleCard { geometry_keys: false, ..good.clone() }, poche(), "EBC_SPINE_MISSING");
-        assert_refused(&SampleCard { spine_mm: 14.0, ..good.clone() }, poche(), "EBC_SPINE_MISMATCH");
+        assert_refused(
+            &SampleCard { bleed_mm: 1.0, ..good.clone() },
+            poche(),
+            "BOX_BLEED_TOO_SMALL",
+        );
+        assert_refused(
+            &SampleCard { bleed_mm: 0.0, ..good.clone() },
+            poche(),
+            "BOX_BLEED_TOO_SMALL",
+        );
+        assert_refused(
+            &SampleCard { output_intent: false, ..good.clone() },
+            poche(),
+            "NO_OUTPUT_INTENT",
+        );
+        assert_refused(
+            &SampleCard { image_ppi: Some(72.0), ..good.clone() },
+            poche(),
+            "IMAGE_LOW_RES",
+        );
+        assert_refused(
+            &SampleCard { heavy_ink: true, ..good.clone() },
+            poche(),
+            "INK_TOTAL_TOO_HIGH",
+        );
+        assert_refused(
+            &SampleCard { geometry_keys: false, ..good.clone() },
+            poche(),
+            "EBC_SPINE_MISSING",
+        );
+        assert_refused(
+            &SampleCard { spine_mm: 14.0, ..good.clone() },
+            poche(),
+            "EBC_SPINE_MISMATCH",
+        );
         assert_refused(&SampleCard { title: None, ..good.clone() }, poche(), "NO_TITLE");
-        assert_refused(&SampleCard { qr_module_mm: Some(0.25), ..good.clone() }, poche(), "QR_MODULE_TOO_SMALL");
+        assert_refused(
+            &SampleCard { qr_module_mm: Some(0.25), ..good.clone() },
+            poche(),
+            "QR_MODULE_TOO_SMALL",
+        );
         assert_refused(&SampleCard { pages: 1, ..good.clone() }, poche(), "PAGE_COUNT");
         assert_refused(&SampleCard { pages: 3, ..good.clone() }, poche(), "PAGE_COUNT");
         // An image just above the minimum is fine.

@@ -6,7 +6,9 @@
 mod common;
 
 use axum::http::StatusCode;
-use common::{GRANDE_SECRET, Store, T0, World, gift_home, plain_client, post_webhook, sign_request};
+use common::{
+    GRANDE_SECRET, Store, T0, World, gift_home, plain_client, post_webhook, sign_request,
+};
 use ebc_demo_stores::StoreKind;
 use serde_json::{Value, json};
 
@@ -44,13 +46,20 @@ async fn recipient_creates_an_account_and_finds_the_book_on_the_e_reader() {
     let confirm = recipient
         .post(
             "/compte/inscription",
-            &[("email", "sacha@example.org"), ("password", "motdepasse"), ("next", "/cadeau/activer")],
+            &[
+                ("email", "sacha@example.org"),
+                ("password", "motdepasse"),
+                ("next", "/cadeau/activer"),
+            ],
         )
         .await;
     assert_eq!(confirm.path, "/cadeau/activer");
     assert_eq!(confirm.text("activation-account").as_deref(), Some("sacha@example.org"));
     assert!(confirm.has("activate") && !confirm.has("activation-already-owned"));
-    assert!(store.state.library("sacha@example.org").is_empty(), "nothing happens before the click");
+    assert!(
+        store.state.library("sacha@example.org").is_empty(),
+        "nothing happens before the click"
+    );
     assert!(world.ebc.requests_to("POST", "/fulfilled").is_empty());
 
     let done = recipient.post("/cadeau/activer", &[]).await;
@@ -125,7 +134,11 @@ async fn an_existing_customer_signs_in_and_is_warned_about_a_title_they_own() {
     let confirm = recipient
         .post(
             "/compte/connexion",
-            &[("email", "sacha@example.org"), ("password", "motdepasse"), ("next", "/cadeau/activer")],
+            &[
+                ("email", "sacha@example.org"),
+                ("password", "motdepasse"),
+                ("next", "/cadeau/activer"),
+            ],
         )
         .await;
     assert!(confirm.has("activate") && confirm.has("activation-already-owned"));
@@ -135,7 +148,8 @@ async fn an_existing_customer_signs_in_and_is_warned_about_a_title_they_own() {
     assert_eq!(world.ebc.gift(&gift_id).status, "fulfilled");
 
     // Someone already signed in when following the link goes straight to the confirmation.
-    let order = store.browser().buy("lou@example.org", &["le-horla"], &gift_home("Lou", "Sacha", "")).await;
+    let order =
+        store.browser().buy("lou@example.org", &["le-horla"], &gift_home("Lou", "Sacha", "")).await;
     assert!(order.has("gift-status"));
     let confirm = recipient.get(&world.ebc.redirect_url("g_0002")).await;
     assert_eq!(confirm.text("activation-book").as_deref(), Some("Le Horla"));
@@ -174,8 +188,16 @@ async fn the_redirect_signature_is_verified() {
 
     // A signature made with another partner's secret is worthless here.
     let foreign = {
-        let sig = ebc_demo_stores::crypto::redirect_signature(common::SEPTANTE_SECRET, &gift_id, "GE-2026-000001", T0);
-        format!("{}/cadeau/activer?ebc_gift={gift_id}&ebc_order=GE-2026-000001&ebc_ts={T0}&ebc_sig={sig}", store.base)
+        let sig = ebc_demo_stores::crypto::redirect_signature(
+            common::SEPTANTE_SECRET,
+            &gift_id,
+            "GE-2026-000001",
+            T0,
+        );
+        format!(
+            "{}/cadeau/activer?ebc_gift={gift_id}&ebc_order=GE-2026-000001&ebc_ts={T0}&ebc_sig={sig}",
+            store.base
+        )
     };
     assert_eq!(visit(foreign).await.status, StatusCode::FORBIDDEN);
 
@@ -199,7 +221,8 @@ async fn the_redirect_signature_is_verified() {
     assert_eq!(problem(&bare).as_deref(), Some("no_activation"));
 
     // A correctly signed link for a gift this store never sold.
-    let sig = ebc_demo_stores::crypto::redirect_signature(GRANDE_SECRET, "g_9999", "GE-2026-000001", T0);
+    let sig =
+        ebc_demo_stores::crypto::redirect_signature(GRANDE_SECRET, "g_9999", "GE-2026-000001", T0);
     let unknown = format!(
         "{}/cadeau/activer?ebc_gift=g_9999&ebc_order=GE-2026-000001&ebc_ts={T0}&ebc_sig={sig}",
         store.base
@@ -240,7 +263,11 @@ async fn stale_links_are_refused_and_fresh_ones_expire_in_the_session() {
     let confirm = recipient
         .post(
             "/compte/inscription",
-            &[("email", "sacha@example.org"), ("password", "motdepasse"), ("next", "/cadeau/activer")],
+            &[
+                ("email", "sacha@example.org"),
+                ("password", "motdepasse"),
+                ("next", "/cadeau/activer"),
+            ],
         )
         .await;
     assert!(confirm.has("activate"));
@@ -267,12 +294,26 @@ async fn a_gift_goes_to_one_account_only() {
     let sacha = store.browser();
     sacha.get(&link).await;
     sacha
-        .post("/compte/inscription", &[("email", "sacha@example.org"), ("password", "motdepasse"), ("next", "/cadeau/activer")])
+        .post(
+            "/compte/inscription",
+            &[
+                ("email", "sacha@example.org"),
+                ("password", "motdepasse"),
+                ("next", "/cadeau/activer"),
+            ],
+        )
         .await;
     let intruder = store.browser();
     intruder.get(&link).await;
     let confirm = intruder
-        .post("/compte/inscription", &[("email", "intrus@example.org"), ("password", "motdepasse"), ("next", "/cadeau/activer")])
+        .post(
+            "/compte/inscription",
+            &[
+                ("email", "intrus@example.org"),
+                ("password", "motdepasse"),
+                ("next", "/cadeau/activer"),
+            ],
+        )
         .await;
     assert!(confirm.has("activate"));
 
@@ -301,7 +342,14 @@ async fn a_cancelled_gift_cannot_be_activated() {
     let recipient = store.browser();
     recipient.get(&link).await;
     recipient
-        .post("/compte/inscription", &[("email", "sacha@example.org"), ("password", "motdepasse"), ("next", "/cadeau/activer")])
+        .post(
+            "/compte/inscription",
+            &[
+                ("email", "sacha@example.org"),
+                ("password", "motdepasse"),
+                ("next", "/cadeau/activer"),
+            ],
+        )
         .await;
 
     let buyer = store.browser();
@@ -323,7 +371,14 @@ async fn the_book_is_delivered_even_if_the_confirmation_must_be_retried() {
     let recipient = store.browser();
     recipient.get(&world.ebc.redirect_url(&gift_id)).await;
     recipient
-        .post("/compte/inscription", &[("email", "sacha@example.org"), ("password", "motdepasse"), ("next", "/cadeau/activer")])
+        .post(
+            "/compte/inscription",
+            &[
+                ("email", "sacha@example.org"),
+                ("password", "motdepasse"),
+                ("next", "/cadeau/activer"),
+            ],
+        )
         .await;
 
     // eBook Cadeau is down at the moment of activation.
@@ -343,7 +398,11 @@ async fn the_book_is_delivered_even_if_the_confirmation_must_be_retried() {
     assert_eq!(store.snapshot()["gifts"][0]["fulfilment_confirmed"], true);
     assert_eq!(world.ebc.requests_to("POST", "/fulfilled").len(), 2);
     buyer.get(&order_path).await;
-    assert_eq!(world.ebc.requests_to("POST", "/fulfilled").len(), 2, "confirmed once, not on every load");
+    assert_eq!(
+        world.ebc.requests_to("POST", "/fulfilled").len(),
+        2,
+        "confirmed once, not on every load"
+    );
 }
 
 #[tokio::test]
@@ -371,7 +430,8 @@ async fn webhooks_update_the_gift_when_their_signature_is_valid() {
     assert_eq!(store.snapshot()["webhooks"].as_array().unwrap().len(), 1);
 
     // Unknown gifts and unknown event names are acknowledged (so the sender stops retrying).
-    let stranger = json!({"event": "gift.redeemed", "gift_id": "g_4242", "order_ref": "X", "at": T0});
+    let stranger =
+        json!({"event": "gift.redeemed", "gift_id": "g_4242", "order_ref": "X", "at": T0});
     let (status, body) = world.ebc.send_webhook(&store.base, "grande-enseigne", &stranger).await;
     assert_eq!((status, body["known"].clone()), (StatusCode::OK, json!(false)));
     let novel = json!({"event": "gift.teleported", "gift_id": gift_id, "at": T0});
@@ -392,7 +452,9 @@ async fn webhooks_update_the_gift_when_their_signature_is_valid() {
 async fn webhooks_with_a_bad_signature_are_rejected() {
     let world = World::new().await;
     let (store, _, gift_id) = store_with_gift(&world).await;
-    let body = serde_json::to_vec(&json!({"event": "gift.cancelled", "gift_id": gift_id, "at": T0})).unwrap();
+    let body =
+        serde_json::to_vec(&json!({"event": "gift.cancelled", "gift_id": gift_id, "at": T0}))
+            .unwrap();
     let ts = T0.to_string();
     let good = sign_request(GRANDE_SECRET, T0, "POST", "/webhooks/ebc", &body);
     let code = |(status, body): (StatusCode, Value)| {
@@ -401,8 +463,14 @@ async fn webhooks_with_a_bad_signature_are_rejected() {
     let unauthorized = |c: &str| (StatusCode::UNAUTHORIZED, c.to_owned());
 
     // Missing pieces.
-    assert_eq!(code(post_webhook(&store.base, None, Some(&good), body.clone()).await), unauthorized("missing_signature"));
-    assert_eq!(code(post_webhook(&store.base, Some(&ts), None, body.clone()).await), unauthorized("missing_signature"));
+    assert_eq!(
+        code(post_webhook(&store.base, None, Some(&good), body.clone()).await),
+        unauthorized("missing_signature")
+    );
+    assert_eq!(
+        code(post_webhook(&store.base, Some(&ts), None, body.clone()).await),
+        unauthorized("missing_signature")
+    );
     assert_eq!(
         code(post_webhook(&store.base, Some(&ts), Some(&good[3..]), body.clone()).await),
         unauthorized("missing_signature"),
@@ -460,7 +528,8 @@ async fn webhooks_are_not_accepted_without_a_partner_secret() {
         .await;
     let body = b"{}".to_vec();
     let signature = sign_request("", T0, "POST", "/webhooks/ebc", &body);
-    let (status, _) = post_webhook(&store.base, Some(&T0.to_string()), Some(&signature), body).await;
+    let (status, _) =
+        post_webhook(&store.base, Some(&T0.to_string()), Some(&signature), body).await;
     assert_eq!(status, StatusCode::NOT_FOUND, "an empty secret must not validate anything");
 }
 
@@ -469,14 +538,23 @@ async fn both_stores_run_side_by_side_with_separate_state() {
     let world = World::new().await;
     let septante = world.store(StoreKind::Septante).await;
     let grande = world.store(StoreKind::GrandeEnseigne).await;
-    let a = septante.browser().buy("camille@example.org", &["candide"], &gift_home("Camille", "Sacha", "")).await;
-    let b = grande.browser().buy("camille@example.org", &["candide"], &gift_home("Camille", "Sacha", "")).await;
+    let a = septante
+        .browser()
+        .buy("camille@example.org", &["candide"], &gift_home("Camille", "Sacha", ""))
+        .await;
+    let b = grande
+        .browser()
+        .buy("camille@example.org", &["candide"], &gift_home("Camille", "Sacha", ""))
+        .await;
     assert_eq!(a.order_ref(), "SEP-2026-000001");
     assert_eq!(b.order_ref(), "GE-2026-000001");
 
     let gifts = world.ebc.gifts();
     assert_eq!(gifts.len(), 2);
-    assert_eq!((gifts[0].partner.as_str(), gifts[1].partner.as_str()), ("septante", "grande-enseigne"));
+    assert_eq!(
+        (gifts[0].partner.as_str(), gifts[1].partner.as_str()),
+        ("septante", "grande-enseigne")
+    );
     assert_eq!(gifts[0].request["delivery"]["type"], "hosted_file");
     assert_eq!(gifts[1].request["delivery"]["type"], "reseller_redirect");
 

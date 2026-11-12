@@ -125,11 +125,17 @@ fn run(cli: &Cli, out: &mut impl Write) -> Result<ExitCode, String> {
                 if *claims {
                     for claim in profile.claims {
                         let basis = match claim.basis {
-                            Basis::Research { section, grade } => format!("research: {section} [{grade:?}]"),
+                            Basis::Research { section, grade } => {
+                                format!("research: {section} [{grade:?}]")
+                            }
                             Basis::Assumption(why) => format!("ASSUMPTION: {why}"),
                         };
-                        writeln!(out, "    - {:?}: {} — {basis}", claim.capability, claim.statement)
-                            .map_err(io)?;
+                        writeln!(
+                            out,
+                            "    - {:?}: {} — {basis}",
+                            claim.capability, claim.statement
+                        )
+                        .map_err(io)?;
                     }
                 }
             }
@@ -152,7 +158,8 @@ fn run(cli: &Cli, out: &mut impl Write) -> Result<ExitCode, String> {
         }
         Command::Lint { url } => {
             let runtime = runtime()?;
-            let mut browser = EinkBrowser::with_config(profile, config).map_err(|e| e.to_string())?;
+            let mut browser =
+                EinkBrowser::with_config(profile, config).map_err(|e| e.to_string())?;
             let outcome = runtime.block_on(browser.open(url)).map_err(|e| e.to_string())?;
             if !matches!(outcome, Outcome::Page) {
                 return Err("the URL is a download, not a page".to_owned());
@@ -176,21 +183,30 @@ fn run(cli: &Cli, out: &mut impl Write) -> Result<ExitCode, String> {
         }
         Command::Open { url, code, pair, device_email } => {
             let runtime = runtime()?;
-            let mut browser = EinkBrowser::with_config(profile, config).map_err(|e| e.to_string())?;
-            writeln!(out, "device : {} ({})", browser.profile().name, browser.profile().id).map_err(io)?;
+            let mut browser =
+                EinkBrowser::with_config(profile, config).map_err(|e| e.to_string())?;
+            writeln!(out, "device : {} ({})", browser.profile().name, browser.profile().id)
+                .map_err(io)?;
             let inputs = RedeemInputs {
                 code: code.clone(),
                 pair_number: pair.clone(),
                 device_email: device_email.clone(),
             };
-            let report = runtime.block_on(flow::redeem(&mut browser, url, &inputs)).map_err(|e| e.to_string())?;
+            let report = runtime
+                .block_on(flow::redeem(&mut browser, url, &inputs))
+                .map_err(|e| e.to_string())?;
             writeln!(out, "\nsteps").map_err(io)?;
             for (index, step) in report.steps.iter().enumerate() {
                 writeln!(out, "  {}. {}", index + 1, step.action).map_err(io)?;
-                writeln!(out, "     -> HTTP {} {}  [{} taps so far]", step.status, step.url, step.taps_total)
-                    .map_err(io)?;
+                writeln!(
+                    out,
+                    "     -> HTTP {} {}  [{} taps so far]",
+                    step.status, step.url, step.taps_total
+                )
+                .map_err(io)?;
                 if !step.lint_errors.is_empty() {
-                    writeln!(out, "     lint errors: {}", step.lint_errors.join(", ")).map_err(io)?;
+                    writeln!(out, "     lint errors: {}", step.lint_errors.join(", "))
+                        .map_err(io)?;
                 }
             }
             writeln!(out, "\ntaps").map_err(io)?;
@@ -201,12 +217,20 @@ fn run(cli: &Cli, out: &mut impl Write) -> Result<ExitCode, String> {
             writeln!(out, "\nresult").map_err(io)?;
             match &report.end {
                 FlowEnd::Downloaded(entry) => {
-                    writeln!(out, "  downloaded \"{}\" ({}, {} bytes)", entry.title, entry.format, entry.size_bytes)
-                        .map_err(io)?;
+                    writeln!(
+                        out,
+                        "  downloaded \"{}\" ({}, {} bytes)",
+                        entry.title, entry.format, entry.size_bytes
+                    )
+                    .map_err(io)?;
                 }
                 FlowEnd::Licence(file) => {
-                    writeln!(out, "  licence file {} ({}) handed to the reading system", file.file_name, file.format)
-                        .map_err(io)?;
+                    writeln!(
+                        out,
+                        "  licence file {} ({}) handed to the reading system",
+                        file.file_name, file.format
+                    )
+                    .map_err(io)?;
                 }
                 FlowEnd::Sent { message } => writeln!(out, "  sent: {message}").map_err(io)?,
                 FlowEnd::LeftSite { url } => {
@@ -220,7 +244,11 @@ fn run(cli: &Cli, out: &mut impl Write) -> Result<ExitCode, String> {
                     out,
                     "  - \"{}\" by {} [{}] {}",
                     entry.title,
-                    if entry.authors.is_empty() { "unknown".to_owned() } else { entry.authors.join(", ") },
+                    if entry.authors.is_empty() {
+                        "unknown".to_owned()
+                    } else {
+                        entry.authors.join(", ")
+                    },
                     entry.format,
                     entry.file_name
                 )

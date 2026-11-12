@@ -409,10 +409,7 @@ mod tests {
         assert!(g.mark_band_mm() < 1e-9);
         assert!(g.media.contains_rect(&g.bleed, 1e-9));
         // ...and `check_marks_fit` is how a caller finds out.
-        assert!(matches!(
-            crate::check_marks_fit(&f, &p),
-            Err(LayoutError::MarksDoNotFit { .. })
-        ));
+        assert!(matches!(crate::check_marks_fit(&f, &p), Err(LayoutError::MarksDoNotFit { .. })));
         let wider = CardFormat::custom(Size::new(136.5005, 196.0), 10.0).unwrap();
         assert!(matches!(new_page(&wider, &p), Err(LayoutError::DoesNotFit { .. })));
         let taller = CardFormat::custom(Size::new(136.5, 196.001), 10.0).unwrap();
@@ -485,7 +482,8 @@ mod tests {
         for sheet in [Sheet::A4, Sheet::Letter, Sheet::A3, Sheet::Sra3] {
             for w in (50..=300).step_by(25) {
                 for h in (50..=300).step_by(25) {
-                    let f = CardFormat::custom(Size::new(f64::from(w), f64::from(h)), 10.0).unwrap();
+                    let f =
+                        CardFormat::custom(Size::new(f64::from(w), f64::from(h)), 10.0).unwrap();
                     let Ok(g) = page_geometry(&f, &PrintProfile::home(sheet)) else { continue };
                     let s = g.sheet.unwrap();
                     let spread = f.spread();

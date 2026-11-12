@@ -148,7 +148,18 @@ mod tests {
         assert_eq!(parse_color("rgba(10,20,30,0.5)"), Some((10, 20, 30)));
         assert_eq!(parse_color("GREY"), Some((128, 128, 128)));
         assert_eq!(parse_color("#ccc !important"), Some((204, 204, 204)));
-        for bad in ["", "#", "#12", "#gggggg", "rgb(", "rgb(1,2)", "rgb(300,0,0)", "inherit", "#ééé", "#€€"] {
+        for bad in [
+            "",
+            "#",
+            "#12",
+            "#gggggg",
+            "rgb(",
+            "rgb(1,2)",
+            "rgb(300,0,0)",
+            "inherit",
+            "#ééé",
+            "#€€",
+        ] {
             assert_eq!(parse_color(bad), None, "{bad:?}");
         }
         assert_eq!(background_color("url(x.png) no-repeat #000"), Some(BLACK));
@@ -180,7 +191,9 @@ mod tests {
         assert!(hides(&declarations("display: none")));
         assert!(!hides(&declarations("display: block")));
         assert_eq!(
-            urls("a{background:url( 'https://cdn.example/x.png' )} @font-face{src:url(/f.woff)} url("),
+            urls(
+                "a{background:url( 'https://cdn.example/x.png' )} @font-face{src:url(/f.woff)} url("
+            ),
             vec!["https://cdn.example/x.png".to_owned(), "/f.woff".to_owned()]
         );
         assert!(urls("url(").is_empty());

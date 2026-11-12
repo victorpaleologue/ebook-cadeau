@@ -16,7 +16,11 @@ async fn septante_gift_printed_at_home_uses_a_hosted_file() {
     let store = world.store(StoreKind::Septante).await;
     let browser = store.browser();
     let order = browser
-        .buy("camille@example.org", &["candide"], &gift_home("Camille", "Sacha", "Joyeux anniversaire !"))
+        .buy(
+            "camille@example.org",
+            &["candide"],
+            &gift_home("Camille", "Sacha", "Joyeux anniversaire !"),
+        )
         .await;
     assert_eq!(order.status, StatusCode::OK, "{}", order.html());
     let reference = order.order_ref();
@@ -37,10 +41,18 @@ async fn septante_gift_printed_at_home_uses_a_hosted_file() {
     let card = browser.get(&card_href).await;
     assert_eq!(card.status, StatusCode::OK);
     assert_eq!(card.header("content-type"), Some("application/pdf"));
-    assert!(card.header("content-disposition").unwrap().starts_with("attachment; filename=\"carte-"));
+    assert!(
+        card.header("content-disposition").unwrap().starts_with("attachment; filename=\"carte-")
+    );
     assert!(card.body.starts_with(b"%PDF-"));
-    assert_eq!(browser.get(&format!("/commande/{reference}/carte-2.pdf")).await.status, StatusCode::NOT_FOUND);
-    assert_eq!(browser.get(&format!("/commande/{reference}/carte-0.pdf")).await.status, StatusCode::NOT_FOUND);
+    assert_eq!(
+        browser.get(&format!("/commande/{reference}/carte-2.pdf")).await.status,
+        StatusCode::NOT_FOUND
+    );
+    assert_eq!(
+        browser.get(&format!("/commande/{reference}/carte-0.pdf")).await.status,
+        StatusCode::NOT_FOUND
+    );
 
     // The gift is for someone else: nothing lands in the buyer's library.
     assert!(browser.get("/bibliotheque").await.has("library-empty"));
@@ -73,7 +85,10 @@ async fn septante_gift_printed_at_home_uses_a_hosted_file() {
     let watermark = text_of(&files, "OEBPS/watermark.xhtml");
     assert!(watermark.contains("Offert à Sacha par Camille"), "{watermark}");
     assert!(watermark.contains(&reference));
-    assert!(text_of(&files, "OEBPS/package.opf").contains("<meta property=\"demo:licensee\">Offert à Sacha par Camille</meta>"));
+    assert!(
+        text_of(&files, "OEBPS/package.opf")
+            .contains("<meta property=\"demo:licensee\">Offert à Sacha par Camille</meta>")
+    );
 
     let creation = &world.ebc.requests_to("POST", "/gifts")[0];
     assert_eq!(creation.header("idempotency-key"), Some(reference.as_str()));
@@ -113,7 +128,8 @@ async fn gift_status_is_refreshed_from_the_partner_api_on_each_page_load() {
     let world = World::new().await;
     let store = world.store(StoreKind::Septante).await;
     let browser = store.browser();
-    let order = browser.buy("camille@example.org", &["le-horla"], &gift_home("Camille", "Sacha", "")).await;
+    let order =
+        browser.buy("camille@example.org", &["le-horla"], &gift_home("Camille", "Sacha", "")).await;
     let path = order.path.clone();
     assert!(!order.has("gift-message-text"), "no empty quote for an empty message");
     let before = world.ebc.requests_to("GET", "/gifts/g_0001").len();
@@ -148,8 +164,13 @@ async fn posted_card_goes_through_the_printer() {
     let checkout = browser.get("/commande").await;
     assert_eq!(checkout.text("card-post-price").as_deref(), Some("5,90\u{a0}€"));
     assert_eq!(checkout.attr("card-delivery-post", "disabled"), None);
-    assert!(checkout.attr("card-delivery-home", "checked").is_some(), "free home printing is the default");
-    assert!(checkout.has("ship-name") && checkout.has("ship-street") && checkout.has("ship-postcode"));
+    assert!(
+        checkout.attr("card-delivery-home", "checked").is_some(),
+        "free home printing is the default"
+    );
+    assert!(
+        checkout.has("ship-name") && checkout.has("ship-street") && checkout.has("ship-postcode")
+    );
 
     let order = browser.post("/commande/payer", &gift_post("Camille", "Sacha")).await;
     assert_eq!(order.status, StatusCode::OK, "{}", order.html());
@@ -173,7 +194,11 @@ async fn posted_card_goes_through_the_printer() {
         ("Sacha Martin", "12 rue des Lilas")
     );
     assert_eq!(
-        (printed[0].address.postal_code.as_str(), printed[0].address.city.as_str(), printed[0].address.country.as_str()),
+        (
+            printed[0].address.postal_code.as_str(),
+            printed[0].address.city.as_str(),
+            printed[0].address.country.as_str()
+        ),
         ("75011", "Paris", "FR")
     );
     let card = browser.get(&order.attr("card-pdf", "href").unwrap()).await;
@@ -185,7 +210,8 @@ async fn posted_card_goes_through_the_printer() {
     printer.state.advance_all().await;
     assert!(printer.state.orders()[0].callbacks[0].delivered);
     assert_eq!(
-        store.snapshot()["gifts"][0]["print"]["status"], "printing",
+        store.snapshot()["gifts"][0]["print"]["status"],
+        "printing",
         "the callback alone updated the store"
     );
     // …and the order page also polls the printer.
@@ -240,12 +266,17 @@ async fn a_card_the_printer_refuses_is_reported_with_its_findings() {
     world.ebc.set_card_mode(CardMode::Sample("card-a6"));
     let store = world.store_with(StoreKind::Septante, |c| c.with_printer(&printer.base)).await;
     let browser = store.browser();
-    let order = browser.buy("camille@example.org", &["candide"], &gift_post("Camille", "Sacha")).await;
+    let order =
+        browser.buy("camille@example.org", &["candide"], &gift_post("Camille", "Sacha")).await;
     assert_eq!(order.status, StatusCode::OK);
     assert_eq!(order.attr("print-status", "data-status").as_deref(), Some("rejected"));
     assert!(order.text("print-findings").unwrap().contains("BOX_TRIM_SIZE"));
     assert!(order.has("gift-error"));
-    assert_eq!(order.attr("gift-status", "data-status").as_deref(), Some("created"), "the gift itself is fine");
+    assert_eq!(
+        order.attr("gift-status", "data-status").as_deref(),
+        Some("created"),
+        "the gift itself is fine"
+    );
     assert!(order.has("card-pdf"));
     assert!(printer.state.orders().is_empty());
     assert!(!order.has("retry"), "resending the same file would not help");
@@ -273,13 +304,18 @@ async fn post_option_is_unavailable_without_a_reachable_printer() {
     assert!(browser.get("/panier").await.has("line-candide"), "the cart is kept");
 
     // A printer that is configured but down behaves the same.
-    let store = world.store_with(StoreKind::Septante, |c| c.with_printer("http://127.0.0.1:9")).await;
+    let store =
+        world.store_with(StoreKind::Septante, |c| c.with_printer("http://127.0.0.1:9")).await;
     let browser = store.browser();
     browser.register("camille@example.org", "motdepasse").await;
     browser.add_to_cart("candide").await;
     assert!(browser.get("/commande").await.has("card-post-unavailable"));
     let home = browser.post("/commande/payer", &gift_home("Camille", "Sacha", "")).await;
-    assert_eq!(home.attr("gift-status", "data-status").as_deref(), Some("created"), "home printing still works");
+    assert_eq!(
+        home.attr("gift-status", "data-status").as_deref(),
+        Some("created"),
+        "home printing still works"
+    );
 }
 
 #[tokio::test]
@@ -292,7 +328,15 @@ async fn checkout_validates_the_gift_fields() {
     browser.add_to_cart("candide").await;
 
     let missing = browser
-        .post("/commande/payer", &[("gift", "1"), ("giver-name", " "), ("recipient-name", ""), ("card-delivery", "home")])
+        .post(
+            "/commande/payer",
+            &[
+                ("gift", "1"),
+                ("giver-name", " "),
+                ("recipient-name", ""),
+                ("card-delivery", "home"),
+            ],
+        )
         .await;
     assert_eq!(missing.status, StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(missing.count("#checkout-errors li"), 2);
@@ -311,10 +355,22 @@ async fn checkout_validates_the_gift_fields() {
     let mut abroad = gift_post("Camille", "Sacha");
     abroad.retain(|(name, _)| *name != "ship-postcode");
     abroad.push(("ship-postcode", "SW1A 1AA"));
-    assert_eq!(browser.post("/commande/payer", &abroad).await.status, StatusCode::UNPROCESSABLE_ENTITY);
+    assert_eq!(
+        browser.post("/commande/payer", &abroad).await.status,
+        StatusCode::UNPROCESSABLE_ENTITY
+    );
 
-    let unknown_choice =
-        browser.post("/commande/payer", &[("gift", "1"), ("giver-name", "C"), ("recipient-name", "S"), ("card-delivery", "pigeon")]).await;
+    let unknown_choice = browser
+        .post(
+            "/commande/payer",
+            &[
+                ("gift", "1"),
+                ("giver-name", "C"),
+                ("recipient-name", "S"),
+                ("card-delivery", "pigeon"),
+            ],
+        )
+        .await;
     assert_eq!(unknown_choice.status, StatusCode::UNPROCESSABLE_ENTITY);
 
     assert_eq!(store.snapshot()["orders"], json!([]), "nothing was ordered");
@@ -322,7 +378,10 @@ async fn checkout_validates_the_gift_fields() {
 
     // Without the checkbox the gift fields are ignored altogether.
     let plain = browser
-        .post("/commande/payer", &[("giver-name", "Camille"), ("recipient-name", ""), ("card-delivery", "post")])
+        .post(
+            "/commande/payer",
+            &[("giver-name", "Camille"), ("recipient-name", ""), ("card-delivery", "post")],
+        )
         .await;
     assert_eq!(plain.status, StatusCode::OK);
     assert!(plain.has("purchase-done") && !plain.has("gift-status"));
@@ -357,8 +416,13 @@ async fn a_failed_step_can_be_retried_without_creating_anything_twice() {
 
     // The gift creation fails once with a 503.
     world.ebc.fail_next("POST", "/gifts", 503, 1, false);
-    let order = browser.buy("camille@example.org", &["candide"], &gift_home("Camille", "Sacha", "")).await;
-    assert_eq!(order.status, StatusCode::OK, "a partner outage must not break the confirmation page");
+    let order =
+        browser.buy("camille@example.org", &["candide"], &gift_home("Camille", "Sacha", "")).await;
+    assert_eq!(
+        order.status,
+        StatusCode::OK,
+        "a partner outage must not break the confirmation page"
+    );
     let reference = order.order_ref();
     assert_eq!(order.attr("gift-status", "data-status").as_deref(), Some("pending"));
     assert!(order.text("gift-error").unwrap().contains("eBook Cadeau"));
@@ -386,7 +450,8 @@ async fn a_lost_answer_is_recovered_through_the_idempotency_key() {
 
     // eBook Cadeau creates the gift but the answer never arrives (500 after processing).
     world.ebc.fail_next("POST", "/gifts", 500, 1, true);
-    let order = browser.buy("camille@example.org", &["candide"], &gift_home("Camille", "Sacha", "")).await;
+    let order =
+        browser.buy("camille@example.org", &["candide"], &gift_home("Camille", "Sacha", "")).await;
     let reference = order.order_ref();
     assert_eq!(order.attr("gift-status", "data-status").as_deref(), Some("pending"));
     assert_eq!(world.ebc.gifts().len(), 1, "the gift exists on the other side");
@@ -415,10 +480,13 @@ async fn a_lost_answer_is_recovered_through_the_idempotency_key() {
 async fn an_unreachable_partner_api_leaves_a_paid_order_that_can_be_retried() {
     let world = World::new().await;
     let store = world
-        .store_with(StoreKind::GrandeEnseigne, |c| c.with_partner("http://127.0.0.1:9", "grande-enseigne", "x"))
+        .store_with(StoreKind::GrandeEnseigne, |c| {
+            c.with_partner("http://127.0.0.1:9", "grande-enseigne", "x")
+        })
         .await;
     let browser = store.browser();
-    let order = browser.buy("camille@example.org", &["candide"], &gift_home("Camille", "Sacha", "")).await;
+    let order =
+        browser.buy("camille@example.org", &["candide"], &gift_home("Camille", "Sacha", "")).await;
     assert_eq!(order.status, StatusCode::OK);
     assert_eq!(order.attr("gift-status", "data-status").as_deref(), Some("pending"));
     assert!(order.text("gift-error").unwrap().contains("injoignable"));
@@ -444,20 +512,29 @@ async fn requests_with_a_skewed_clock_or_wrong_secret_are_refused_by_the_api() {
         .await;
     let order = late.browser().buy("a@example.org", &["candide"], &gift_home("A", "B", "")).await;
     assert_eq!(order.attr("gift-status", "data-status").as_deref(), Some("pending"));
-    assert!(order.text("gift-error").unwrap().contains("stale_timestamp"), "{:?}", order.text("gift-error"));
+    assert!(
+        order.text("gift-error").unwrap().contains("stale_timestamp"),
+        "{:?}",
+        order.text("gift-error")
+    );
 
     // A store with the wrong secret: 401 bad_signature.
     let wrong = world
-        .store_with(StoreKind::Septante, |c| c.with_partner(&world.ebc.base, "septante", "pas-le-bon-secret"))
+        .store_with(StoreKind::Septante, |c| {
+            c.with_partner(&world.ebc.base, "septante", "pas-le-bon-secret")
+        })
         .await;
     let order = wrong.browser().buy("a@example.org", &["candide"], &gift_home("A", "B", "")).await;
     assert!(order.text("gift-error").unwrap().contains("bad_signature"));
 
     // An unknown partner id.
     let unknown = world
-        .store_with(StoreKind::Septante, |c| c.with_partner(&world.ebc.base, "inconnu", common::SEPTANTE_SECRET))
+        .store_with(StoreKind::Septante, |c| {
+            c.with_partner(&world.ebc.base, "inconnu", common::SEPTANTE_SECRET)
+        })
         .await;
-    let order = unknown.browser().buy("a@example.org", &["candide"], &gift_home("A", "B", "")).await;
+    let order =
+        unknown.browser().buy("a@example.org", &["candide"], &gift_home("A", "B", "")).await;
     assert!(order.text("gift-error").unwrap().contains("unknown_partner"));
 
     assert!(world.ebc.gifts().is_empty() && world.ebc.uploads().is_empty());
@@ -471,7 +548,8 @@ async fn without_a_server_side_card_the_claim_link_and_code_are_shown() {
     let printer = world.printer().await;
     let store = world.store_with(StoreKind::Septante, |c| c.with_printer(&printer.base)).await;
     let browser = store.browser();
-    let order = browser.buy("camille@example.org", &["candide"], &gift_home("Camille", "Sacha", "")).await;
+    let order =
+        browser.buy("camille@example.org", &["candide"], &gift_home("Camille", "Sacha", "")).await;
     assert_eq!(order.attr("gift-status", "data-status").as_deref(), Some("created"));
     assert!(!order.has("card-pdf"));
     assert!(order.text("card-unavailable").unwrap().contains("n'est pas disponible"));
@@ -486,7 +564,9 @@ async fn without_a_server_side_card_the_claim_link_and_code_are_shown() {
     // With a posted card, the printer cannot be given anything: say so, order nothing.
     browser.add_to_cart("le-horla").await;
     let posted = browser.post("/commande/payer", &gift_post("Camille", "Sacha")).await;
-    assert!(posted.has("card-unavailable") && posted.has("gift-error") && !posted.has("print-status"));
+    assert!(
+        posted.has("card-unavailable") && posted.has("gift-error") && !posted.has("print-status")
+    );
     assert!(printer.state.orders().is_empty());
 }
 
@@ -500,7 +580,8 @@ async fn several_books_make_several_gifts() {
     browser.add_to_cart("les-fleurs-du-mal").await;
     let checkout = browser.get("/commande").await;
     assert!(checkout.html().contains("Offrir ces ebooks (une carte par livre)"));
-    let order = browser.post("/commande/payer", &gift_home("Camille", "Sacha", "Bonne lecture")).await;
+    let order =
+        browser.post("/commande/payer", &gift_home("Camille", "Sacha", "Bonne lecture")).await;
     let reference = order.order_ref();
 
     assert_eq!(order.attr("gift-status", "data-status").as_deref(), Some("created"));
@@ -517,7 +598,8 @@ async fn several_books_make_several_gifts() {
         gifts.iter().map(|g| g.order_ref.clone()).collect::<Vec<_>>(),
         [format!("{reference}-1"), format!("{reference}-2")]
     );
-    let titles: Vec<&str> = gifts.iter().map(|g| g.request["book"]["title"].as_str().unwrap()).collect();
+    let titles: Vec<&str> =
+        gifts.iter().map(|g| g.request["book"]["title"].as_str().unwrap()).collect();
     assert_eq!(titles, ["Candide", "Les Fleurs du mal"]);
     let keys: Vec<String> = world
         .ebc
@@ -534,7 +616,8 @@ async fn cancelling_a_gift_voids_the_code_and_refunds_the_order() {
     let world = World::new().await;
     let store = world.store(StoreKind::Septante).await;
     let browser = store.browser();
-    let order = browser.buy("camille@example.org", &["candide"], &gift_home("Camille", "Sacha", "")).await;
+    let order =
+        browser.buy("camille@example.org", &["candide"], &gift_home("Camille", "Sacha", "")).await;
     let reference = order.order_ref();
 
     // The partner API is down: nothing changes and the buyer is told.
@@ -562,7 +645,10 @@ async fn cancelling_a_gift_voids_the_code_and_refunds_the_order() {
     assert_eq!(refused.status, StatusCode::CONFLICT);
     assert!(refused.text("order-notice").unwrap().contains("déjà été utilisé"));
     assert_eq!(world.ebc.gift("g_0002").status, "redeemed");
-    assert!(world.ebc.requests_to("POST", "/g_0002/cancel").is_empty(), "no cancel call for a used gift");
+    assert!(
+        world.ebc.requests_to("POST", "/g_0002/cancel").is_empty(),
+        "no cancel call for a used gift"
+    );
 
     // A plain purchase has nothing to cancel.
     browser.add_to_cart("madame-bovary").await;
@@ -579,7 +665,9 @@ async fn hostile_names_and_messages_are_escaped_everywhere() {
     let giver = "<script>alert('giver')</script>";
     let recipient = "\"><img src=x onerror=alert(1)> & Cie";
     let message = "</blockquote><script>alert(2)</script>\n<b>gras</b> &amp; {{7*7}}";
-    let order = browser.buy("camille@example.org", &["candide"], &gift_home(giver, recipient, message)).await;
+    let order = browser
+        .buy("camille@example.org", &["candide"], &gift_home(giver, recipient, message))
+        .await;
     assert_eq!(order.status, StatusCode::OK, "{}", order.html());
 
     // The page shows the text verbatim and contains no injected element.
@@ -594,7 +682,10 @@ async fn hostile_names_and_messages_are_escaped_everywhere() {
     assert_eq!(order.count("#gift-message-text b"), 0);
     let html = order.html();
     assert!(!html.contains("<script>") && !html.contains("onerror=alert(1)>"));
-    assert!(html.contains("&lt;script&gt;alert(&#39;giver&#39;)&lt;/script&gt;") || html.contains("&lt;script&gt;alert('giver')&lt;/script&gt;"));
+    assert!(
+        html.contains("&lt;script&gt;alert(&#39;giver&#39;)&lt;/script&gt;")
+            || html.contains("&lt;script&gt;alert('giver')&lt;/script&gt;")
+    );
 
     // The partner API receives the raw text, as JSON.
     let creation = world.ebc.requests_to("POST", "/gifts")[0].json();
@@ -614,17 +705,29 @@ async fn hostile_names_and_messages_are_escaped_everywhere() {
     let page = browser
         .post(
             "/commande/payer",
-            &[("gift", "1"), ("giver-name", giver), ("recipient-name", ""), ("gift-message", message), ("card-delivery", "home")],
+            &[
+                ("gift", "1"),
+                ("giver-name", giver),
+                ("recipient-name", ""),
+                ("gift-message", message),
+                ("card-delivery", "home"),
+            ],
         )
         .await;
     assert_eq!(page.status, StatusCode::UNPROCESSABLE_ENTITY);
     assert_eq!(page.attr("giver-name", "value").as_deref(), Some(giver));
-    assert_eq!(page.text("gift-message").as_deref(), Some("</blockquote><script>alert(2)</script> <b>gras</b> &amp; {{7*7}}"));
+    assert_eq!(
+        page.text("gift-message").as_deref(),
+        Some("</blockquote><script>alert(2)</script> <b>gras</b> &amp; {{7*7}}")
+    );
     assert_eq!(page.count("script"), 0);
 
     // Control characters and bidi overrides are dropped, not stored.
     browser
-        .post("/commande/payer", &gift_home("Ca\u{0}mille\u{202e}", "Sa\r\ncha", "ligne 1\r\nligne 2\u{7}"))
+        .post(
+            "/commande/payer",
+            &gift_home("Ca\u{0}mille\u{202e}", "Sa\r\ncha", "ligne 1\r\nligne 2\u{7}"),
+        )
         .await;
     let gift = &world.ebc.gifts()[1].request;
     assert_eq!(gift["giver_name"], "Ca mille");
@@ -667,7 +770,8 @@ async fn septante_can_be_configured_for_the_reseller_redirect() {
         .store_with(StoreKind::Septante, |c| c.with_gift_delivery(GiftDelivery::ResellerRedirect))
         .await;
     let buyer = store.browser();
-    let order = buyer.buy("camille@example.org", &["candide"], &gift_home("Camille", "Sacha", "")).await;
+    let order =
+        buyer.buy("camille@example.org", &["candide"], &gift_home("Camille", "Sacha", "")).await;
     assert_eq!(order.attr("gift-status", "data-status").as_deref(), Some("created"));
     assert!(world.ebc.uploads().is_empty());
     assert_eq!(world.ebc.gift("g_0001").request["delivery"]["type"], "reseller_redirect");
@@ -677,7 +781,14 @@ async fn septante_can_be_configured_for_the_reseller_redirect() {
     let landing = recipient.get(&world.ebc.redirect_url("g_0001")).await;
     assert!(landing.has("register-form") && landing.has("activation-book"));
     let confirm = recipient
-        .post("/compte/inscription", &[("email", "sacha@example.org"), ("password", "motdepasse"), ("next", "/cadeau/activer")])
+        .post(
+            "/compte/inscription",
+            &[
+                ("email", "sacha@example.org"),
+                ("password", "motdepasse"),
+                ("next", "/cadeau/activer"),
+            ],
+        )
         .await;
     assert!(confirm.has("activate"));
     let done = recipient.post("/cadeau/activer", &[]).await;
@@ -686,6 +797,12 @@ async fn septante_can_be_configured_for_the_reseller_redirect() {
     let epub = recipient.get(&href).await;
     let (_, files) = open_epub(&epub.body);
     let watermark = text_of(&files, "OEBPS/watermark.xhtml");
-    assert!(watermark.contains("Offert à Sacha par Camille — compte sacha@example.org"), "{watermark}");
-    assert_eq!(buyer.get(&order.path).await.attr("gift-status", "data-status").as_deref(), Some("fulfilled"));
+    assert!(
+        watermark.contains("Offert à Sacha par Camille — compte sacha@example.org"),
+        "{watermark}"
+    );
+    assert_eq!(
+        buyer.get(&order.path).await.attr("gift-status", "data-status").as_deref(),
+        Some("fulfilled")
+    );
 }

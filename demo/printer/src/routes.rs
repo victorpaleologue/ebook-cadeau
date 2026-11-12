@@ -182,7 +182,8 @@ fn validate(request: OrderRequest) -> Result<ValidOrder, (&'static str, String)>
             "reference must be 1 to 64 characters among A-Z a-z 0-9 - _ .".to_owned(),
         ));
     }
-    let bad_address = |field: &str| ("invalid_address", format!("address.{field} is missing or too long"));
+    let bad_address =
+        |field: &str| ("invalid_address", format!("address.{field} is missing or too long"));
     let address = Address {
         name: clean_field(&request.address.name, 80).ok_or_else(|| bad_address("name"))?,
         line1: clean_field(&request.address.line1, 120).ok_or_else(|| bad_address("line1"))?,
@@ -308,7 +309,11 @@ async fn create_order(
     let request: OrderRequest = match serde_json::from_slice(&order) {
         Ok(request) => request,
         Err(e) => {
-            return error(StatusCode::BAD_REQUEST, "invalid_order", &format!("order is not valid: {e}"));
+            return error(
+                StatusCode::BAD_REQUEST,
+                "invalid_order",
+                &format!("order is not valid: {e}"),
+            );
         }
     };
     let valid = match validate(request) {
@@ -379,9 +384,11 @@ async fn cancel_order(State(state): State<Shared>, Path(id): Path<String>) -> Re
     match state.cancel(&id).await {
         Ok(order) => axum::Json(order_body(&order)).into_response(),
         Err(CancelError::Unknown) => error(StatusCode::NOT_FOUND, "unknown_order", "no such order"),
-        Err(CancelError::TooLate) => {
-            error(StatusCode::CONFLICT, "too_late", "printing has started; the order cannot be cancelled")
-        }
+        Err(CancelError::TooLate) => error(
+            StatusCode::CONFLICT,
+            "too_late",
+            "printing has started; the order cannot be cancelled",
+        ),
     }
 }
 
@@ -396,7 +403,8 @@ async fn test_advance(State(state): State<Shared>) -> Response {
     if !state.config.test_hooks {
         return error(StatusCode::NOT_FOUND, "not_found", "no such resource");
     }
-    let changed: Vec<serde_json::Value> = state.advance_all().await.iter().map(order_body).collect();
+    let changed: Vec<serde_json::Value> =
+        state.advance_all().await.iter().map(order_body).collect();
     axum::Json(changed).into_response()
 }
 
@@ -486,7 +494,9 @@ mod tests {
                 "{bad}"
             );
         }
-        let ok = validate(request(|v| v["callback_url"] = json!("http://127.0.0.1:8101/webhooks/printer?token=abc")));
+        let ok = validate(request(|v| {
+            v["callback_url"] = json!("http://127.0.0.1:8101/webhooks/printer?token=abc")
+        }));
         assert_eq!(
             ok.unwrap().callback_url.as_deref(),
             Some("http://127.0.0.1:8101/webhooks/printer?token=abc")

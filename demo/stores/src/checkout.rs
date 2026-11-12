@@ -83,7 +83,8 @@ pub fn validate(
         ));
     }
     if message.chars().count() > MAX_MESSAGE_CHARS {
-        errors.push(format!("Votre message est trop long ({MAX_MESSAGE_CHARS} caractères au plus)."));
+        errors
+            .push(format!("Votre message est trop long ({MAX_MESSAGE_CHARS} caractères au plus)."));
     } else if message.lines().count() > MAX_MESSAGE_LINES {
         errors.push(format!("Votre message compte trop de lignes ({MAX_MESSAGE_LINES} au plus)."));
     }
@@ -233,7 +234,8 @@ mod tests {
 
     #[test]
     fn names_are_required_and_bounded() {
-        let form = CheckoutForm { giver_name: "  ".into(), recipient_name: String::new(), ..gift_form() };
+        let form =
+            CheckoutForm { giver_name: "  ".into(), recipient_name: String::new(), ..gift_form() };
         assert_eq!(validate(&form, &offer(None)).unwrap_err().len(), 2);
 
         let exactly = CheckoutForm { recipient_name: "é".repeat(MAX_NAME_CHARS), ..gift_form() };

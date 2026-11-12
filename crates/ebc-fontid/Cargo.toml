@@ -26,12 +26,7 @@ synth = []
 # (about 60 KB). Regenerate with `cargo run -p ebc-fontid --example build-index`.
 bundled-index = []
 
-[[example]]
-name = "build-index"
-
-[[example]]
-name = "eval"
-required-features = ["synth"]
+# Examples `build-index` and `eval` are planned (see docs/STATUS.md); not written yet.
 
 [lints]
 workspace = true

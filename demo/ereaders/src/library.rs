@@ -277,7 +277,11 @@ mod tests {
     use super::*;
     use crate::fixtures;
 
-    fn incoming<'a>(bytes: &'a [u8], name: &'a str, declared: Option<FileFormat>) -> IncomingFile<'a> {
+    fn incoming<'a>(
+        bytes: &'a [u8],
+        name: &'a str,
+        declared: Option<FileFormat>,
+    ) -> IncomingFile<'a> {
         IncomingFile { bytes, file_name: name, declared }
     }
 
@@ -324,7 +328,10 @@ mod tests {
             .unwrap_err();
         assert_eq!(
             err,
-            ImportError::UnsupportedFormat { format: FileFormat::Epub, device: "kindle-paperwhite" }
+            ImportError::UnsupportedFormat {
+                format: FileFormat::Epub,
+                device: "kindle-paperwhite"
+            }
         );
         assert!(library.is_empty());
     }
@@ -405,8 +412,7 @@ mod tests {
         let epub = fixtures::epub("T", "A");
         let legacy = DeviceProfile::tolino_legacy_android();
         let mut library = Library::new();
-        let err =
-            library.import(&legacy, incoming(&epub, "t.epub", None), download()).unwrap_err();
+        let err = library.import(&legacy, incoming(&epub, "t.epub", None), download()).unwrap_err();
         assert_eq!(err, ImportError::DamagedOnDevice { device: "tolino-legacy-android" });
         library.import(&legacy, incoming(&epub, "t.epub", None), ImportSource::Sideload).unwrap();
 

@@ -105,11 +105,8 @@ pub(crate) fn parse_url(input: &str) -> Result<Url, NetError> {
     if trimmed.len() > 8192 {
         return Err(invalid("longer than 8192 bytes".to_owned()));
     }
-    let candidate = if trimmed.contains("://") {
-        trimmed.to_owned()
-    } else {
-        format!("http://{trimmed}")
-    };
+    let candidate =
+        if trimmed.contains("://") { trimmed.to_owned() } else { format!("http://{trimmed}") };
     let url = Url::parse(&candidate).map_err(|e| invalid(e.to_string()))?;
     check_scheme(&url)?;
     if url.host_str().is_none_or(str::is_empty) {
@@ -121,7 +118,9 @@ pub(crate) fn parse_url(input: &str) -> Result<Url, NetError> {
 pub(crate) fn check_scheme(url: &Url) -> Result<(), NetError> {
     match url.scheme() {
         "http" | "https" => Ok(()),
-        other => Err(NetError::UnsupportedScheme { url: url.to_string(), scheme: other.to_owned() }),
+        other => {
+            Err(NetError::UnsupportedScheme { url: url.to_string(), scheme: other.to_owned() })
+        }
     }
 }
 
@@ -272,7 +271,8 @@ impl Http {
                 builder = builder.header("cookie", cookie);
             }
             if let Some(body) = &request.body {
-                builder = builder.header("content-type", &body.content_type).body(body.bytes.clone());
+                builder =
+                    builder.header("content-type", &body.content_type).body(body.bytes.clone());
             }
             let url_text = request.url.to_string();
             let sent = tokio::time::timeout(
@@ -292,7 +292,10 @@ impl Http {
                     .headers()
                     .iter()
                     .map(|(name, value)| {
-                        (name.as_str().to_owned(), String::from_utf8_lossy(value.as_bytes()).into_owned())
+                        (
+                            name.as_str().to_owned(),
+                            String::from_utf8_lossy(value.as_bytes()).into_owned(),
+                        )
                     })
                     .collect(),
             };
@@ -376,8 +379,11 @@ impl Http {
                 }
             }
         };
-        match tokio::time::timeout(self.config.request_timeout + Duration::from_millis(250), read_all)
-            .await
+        match tokio::time::timeout(
+            self.config.request_timeout + Duration::from_millis(250),
+            read_all,
+        )
+        .await
         {
             Ok(result) => result,
             Err(_) => Err(NetError::Timeout { url: url.clone() }),
@@ -538,10 +544,16 @@ mod tests {
     fn file_names_come_from_plain_filename_then_the_url() {
         let h = head(
             "http://ebk.example/d/s/Le%20Horla.epub",
-            &[("content-disposition", "attachment; filename=\"le-horla.epub\"; filename*=UTF-8''Le%20Horla%20%C3%A9.epub")],
+            &[(
+                "content-disposition",
+                "attachment; filename=\"le-horla.epub\"; filename*=UTF-8''Le%20Horla%20%C3%A9.epub",
+            )],
         );
         assert_eq!(response_file_name(&h), "le-horla.epub");
-        let h = head("http://ebk.example/d/s/Le%20Horla.epub", &[("content-disposition", "attachment")]);
+        let h = head(
+            "http://ebk.example/d/s/Le%20Horla.epub",
+            &[("content-disposition", "attachment")],
+        );
         assert_eq!(response_file_name(&h), "Le Horla.epub");
         let h = head(
             "http://ebk.example/d/s/x",

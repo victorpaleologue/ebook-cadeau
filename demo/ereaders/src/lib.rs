@@ -63,7 +63,9 @@ pub use error::{
     Result, SyncError,
 };
 pub use format::FileFormat;
-pub use lcp::{LcpReader, LicenceStep, SimulatedLcpReader, SimulatedLicence, SimulatedLicenceBuilder};
+pub use lcp::{
+    LcpReader, LicenceStep, SimulatedLcpReader, SimulatedLicence, SimulatedLicenceBuilder,
+};
 pub use library::{ImportSource, IncomingFile, Library, LibraryEntry};
 pub use lint::{LintConfig, LintFinding, LintReport, Severity};
 pub use mail::{MailDevice, MailDeviceConfig, MailOutcome, MailRecord};
